@@ -11,7 +11,6 @@ import {
   Trash2
 } from 'lucide-react';
 import { formatRelativeTime } from '../utils';
-import { useMobileContext } from '../contexts/MobileContext';
 
 interface Project {
   id: string;
@@ -49,8 +48,7 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   className = '',
 }) => {
   const { t } = useTranslation('pages');
-  const { isMobile } = useMobileContext();
-
+  
   // 渲染项目名称和图标
   const renderProjectName = (project: Project, isCard: boolean = false) => (
     <div className={`${isCard ? 'flex items-start space-x-3' : 'flex items-center'}`}>
