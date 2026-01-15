@@ -36,6 +36,7 @@ import speechToTextRouter from './routes/speechToText';
 import engineRouter from './routes/engine';
 import rulesRouter from './routes/rules';
 import hooksRouter from './routes/hooks';
+import lavsRouter from './routes/lavs';
 import { authMiddleware } from './middleware/auth';
 import { callChainMiddleware } from './middleware/callChain';
 import { requestIdMiddleware } from './middleware/requestId';
@@ -545,6 +546,7 @@ const app: express.Express = express();
   // Protected routes - Require authentication
   app.use('/api/files', authMiddleware, filesRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
+  app.use('/api/agents', authMiddleware, lavsRouter); // LAVS routes (under /api/agents)
   app.use('/api/mcp', authMiddleware, mcpRouter);
   app.use('/api/sessions', authMiddleware, sessionsRouter);
   app.use('/api/settings', authMiddleware, settingsRouter);
