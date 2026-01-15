@@ -472,6 +472,12 @@ export async function buildQueryOptions(
   const currentProjectId = projectPath || cwd;
   await integrateA2AMcpServer(queryOptions, currentProjectId, a2aStreamEnabled ?? false);
 
+  // Integrate LAVS SDK MCP server
+  if (agent.id) {
+    const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
+    await integrateLAVSMcpServer(queryOptions, agent.id);
+  }
+
   // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)
   let frontendToolSessionRef: SessionRef | null = null;
   if (sessionIdForAskUser && agentIdForAskUser) {
