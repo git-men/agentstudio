@@ -3,14 +3,14 @@
     {
       "id": 1,
       "text": "Welcome to LAVS Todo Manager!",
-      "done": false,
+      "done": true,
       "priority": 0,
       "createdAt": "2025-01-15T10:00:00Z"
     },
     {
       "id": 2,
       "text": "Try adding a new todo via AI chat",
-      "done": false,
+      "done": true,
       "priority": 1,
       "createdAt": "2025-01-15T10:01:00Z"
     },
@@ -41,6 +41,13 @@
       "done": false,
       "priority": 0,
       "createdAt": "2026-01-15T09:10:22.489Z"
+    },
+    {
+      "id": 7,
+      "text": "介绍一下 LAVS",
+      "done": false,
+      "priority": 1,
+      "createdAt": "2026-01-19T08:39:58.302Z"
     }
   ]
 }

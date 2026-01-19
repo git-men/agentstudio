@@ -11,14 +11,15 @@ import { createLAVSSdkMcpServer, getLAVSToolNames } from './lavs-sdk-mcp.js';
  *
  * @param queryOptions - The query options object to modify
  * @param agentId - Agent identifier
+ * @param projectPath - Optional project path for data isolation
  * @returns The modified query options (same object reference)
  */
-export async function integrateLAVSMcpServer(queryOptions: any, agentId: string) {
+export async function integrateLAVSMcpServer(queryOptions: any, agentId: string, projectPath?: string) {
   try {
-    console.log(`[LAVS Integration] Checking LAVS for agent: ${agentId}`);
+    console.log(`[LAVS Integration] Checking LAVS for agent: ${agentId}${projectPath ? `, project: ${projectPath}` : ''}`);
 
-    // Create SDK MCP server for LAVS
-    const lavsServer = await createLAVSSdkMcpServer(agentId);
+    // Create SDK MCP server for LAVS (with projectPath for data isolation)
+    const lavsServer = await createLAVSSdkMcpServer(agentId, projectPath);
 
     if (!lavsServer) {
       console.log(`[LAVS Integration] No LAVS configuration found for agent: ${agentId}`);
