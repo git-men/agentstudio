@@ -611,6 +611,11 @@
     if (!window.lavsClient) {
       console.log('⚠️ Running in standalone mode. Creating mock LAVS client.');
 
+      // Get projectPath from URL parameters (passed by LAVSViewContainer)
+      const urlParams = new URLSearchParams(window.location.search);
+      const projectPath = urlParams.get('projectPath');
+      console.log('[MockClient] Project path from URL:', projectPath);
+
       // Create a mock client that uses the actual API
       const mockClient = {
         async call(endpoint, input) {
@@ -618,9 +623,16 @@
           const agentId = 'todo-manager';
           const url = `http://localhost:4936/api/agents/${agentId}/lavs/${endpoint}`;
 
+          const headers = { 'Content-Type': 'application/json' };
+          // Pass projectPath in X-Project-Path header for data isolation
+          if (projectPath) {
+            headers['X-Project-Path'] = projectPath;
+            console.log('[MockClient] Adding X-Project-Path header:', projectPath);
+          }
+
           const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             credentials: 'include',
             body: JSON.stringify(input || {})
           });

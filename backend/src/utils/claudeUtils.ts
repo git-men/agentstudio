@@ -473,9 +473,10 @@ export async function buildQueryOptions(
   await integrateA2AMcpServer(queryOptions, currentProjectId, a2aStreamEnabled ?? false);
 
   // Integrate LAVS SDK MCP server
+  // Pass projectPath for project-level data isolation
   if (agent.id) {
     const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
-    await integrateLAVSMcpServer(queryOptions, agent.id);
+    await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }
 
   // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)

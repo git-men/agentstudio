@@ -159,12 +159,16 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
    * Load local component as iframe
    */
   const loadLocalComponent = async (_path: string) => {
-    console.log('[LAVS] loadLocalComponent called', { path: _path, hasContainer: !!containerRef.current });
+    console.log('[LAVS] loadLocalComponent called', { path: _path, hasContainer: !!containerRef.current, projectPath });
     if (!containerRef.current) return;
 
     // Construct the full URL to the component
     // In development, this will be relative to the agent directory
-    const componentURL = `/api/agents/${agent.id}/lavs-view`;
+    // Pass projectPath in URL for data isolation
+    let componentURL = `/api/agents/${agent.id}/lavs-view`;
+    if (projectPath) {
+      componentURL += `?projectPath=${encodeURIComponent(projectPath)}`;
+    }
     console.log('[LAVS] Loading iframe from:', componentURL);
 
     // Create iframe

@@ -101,9 +101,10 @@ function jsonSchemaToZodShape(schema: any): z.ZodRawShape {
  * Generates tools from agent's lavs.json and creates an in-process MCP server.
  *
  * @param agentId - Agent identifier
+ * @param projectPath - Optional project path for data isolation
  * @returns SDK MCP server instance or null if agent has no LAVS
  */
-export async function createLAVSSdkMcpServer(agentId: string) {
+export async function createLAVSSdkMcpServer(agentId: string, projectPath?: string) {
   try {
     const agentDir = getAgentDirectory(agentId);
     const generator = new LAVSToolGenerator();
@@ -115,11 +116,15 @@ export async function createLAVSSdkMcpServer(agentId: string) {
       return null;
     }
 
-    // Generate tools
-    const generatedTools = await generator.generateTools(agentId, agentDir);
+    // Generate tools (with projectPath for data isolation)
+    const generatedTools = await generator.generateTools(agentId, agentDir, projectPath);
     if (generatedTools.length === 0) {
       console.log(`[LAVS SDK MCP] No LAVS tools generated for agent ${agentId}`);
       return null;
+    }
+
+    if (projectPath) {
+      console.log(`[LAVS SDK MCP] Project path for data isolation: ${projectPath}`);
     }
 
     console.log(`[LAVS SDK MCP] Generating ${generatedTools.length} LAVS tools for agent ${agentId}`);
