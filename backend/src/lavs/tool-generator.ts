@@ -45,11 +45,13 @@ export class LAVSToolGenerator {
    * Generate tools for an agent
    * @param agentId - Agent ID
    * @param agentDir - Agent directory path
+   * @param projectPath - Optional project path for data isolation
    * @returns Array of generated tools
    */
   async generateTools(
     agentId: string,
-    agentDir: string
+    agentDir: string,
+    projectPath?: string
   ): Promise<GeneratedTool[]> {
     try {
       // Load manifest
@@ -67,7 +69,7 @@ export class LAVSToolGenerator {
           continue;
         }
 
-        const tool = this.generateToolForEndpoint(endpoint, manifest, agentId, agentDir);
+        const tool = this.generateToolForEndpoint(endpoint, manifest, agentId, agentDir, projectPath);
         tools.push(tool);
       }
 
@@ -89,7 +91,8 @@ export class LAVSToolGenerator {
     endpoint: Endpoint,
     manifest: LAVSManifest,
     agentId: string,
-    agentDir: string
+    agentDir: string,
+    projectPath?: string
   ): GeneratedTool {
     // Generate tool name (prefix with lavs_ to avoid conflicts)
     const toolName = `lavs_${endpoint.id}`;
@@ -137,6 +140,10 @@ export class LAVSToolGenerator {
           ...(manifest.permissions || {}),
           ...(endpoint.permissions || {}),
         },
+        // Pass projectPath as environment variable for data isolation
+        env: projectPath ? {
+          LAVS_PROJECT_PATH: projectPath,
+        } : undefined,
       };
 
       const result = await executor.execute(

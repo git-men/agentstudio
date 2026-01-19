@@ -364,9 +364,10 @@ export async function buildQueryOptions(
 
   // Integrate LAVS SDK MCP server
   // This automatically registers LAVS endpoints as tools for the agent
+  // Pass projectPath for project-level data isolation
   if (agent.id) {
     const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
-    await integrateLAVSMcpServer(queryOptions, agent.id);
+    await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }
 
   // Integrate AskUserQuestion SDK MCP server
