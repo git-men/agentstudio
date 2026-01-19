@@ -29,6 +29,7 @@ import cloudflareTunnelRouter from './routes/cloudflareTunnel';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import lavsRouter from './routes/lavs';
+import tunnelRouter from './routes/tunnel';
 import { authMiddleware } from './middleware/auth';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
@@ -36,6 +37,7 @@ import { cleanupOrphanedTasks } from './services/a2a/taskCleanup';
 import { initializeScheduler, shutdownScheduler } from './services/schedulerService';
 import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
+import { tunnelService } from './services/tunnelService.js';
 
 dotenv.config();
 
@@ -248,6 +250,15 @@ const app: express.Express = express();
     console.error('[Scheduler] Error initializing scheduler:', error);
   }
 
+  // 4. Tunnel Service: Initialize WebSocket tunnel for external access
+  console.info('[Tunnel] Initializing tunnel service...');
+  try {
+    await tunnelService.initialize(PORT);
+    console.info('[Tunnel] Tunnel service initialized');
+  } catch (error) {
+    console.error('[Tunnel] Error initializing tunnel service:', error);
+  }
+
   // Static files - serve embedded frontend (for npm package) or development frontend
   // Check both npm package location (./public) and development location (../../frontend/dist)
   const fs = await import('fs');
@@ -347,6 +358,7 @@ const app: express.Express = express();
   app.use('/api/cloudflare-tunnel', authMiddleware, cloudflareTunnelRouter); // Cloudflare Tunnel management
   app.use('/api/task-executor', authMiddleware, taskExecutorRouter);
   app.use('/api/version', authMiddleware, versionRouter);
+  app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 
@@ -382,6 +394,14 @@ const app: express.Express = express();
       console.info('[TaskExecutor] Task executor stopped');
     } catch (error) {
       console.error('[TaskExecutor] Error shutting down task executor:', error);
+    }
+
+    // 3. Stop tunnel service
+    try {
+      tunnelService.disconnect();
+      console.info('[Tunnel] Tunnel service stopped');
+    } catch (error) {
+      console.error('[Tunnel] Error shutting down tunnel service:', error);
     }
 
     // Shutdown telemetry (async but we don't wait)
