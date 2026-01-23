@@ -35,7 +35,99 @@ export class AgentStorage {
     return sessionsDir;
   }
 
+  /**
+   * Get the builtin agents source directory
+   * Priority: npm package dir > project dir
+   */
+  private getBuiltinAgentsSourceDir(): string | null {
+    // 1. Check npm package directory (when installed via npm)
+    const npmAgentsDir = path.resolve(__dirname, '../../agents');
+    if (fs.existsSync(npmAgentsDir)) {
+      return npmAgentsDir;
+    }
+    
+    // 2. Check development project directory
+    const cwd = process.cwd();
+    const projectAgentsDir = path.join(cwd, 'agents');
+    if (fs.existsSync(projectAgentsDir)) {
+      return projectAgentsDir;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Copy a directory recursively
+   */
+  private copyDirectory(src: string, dest: string): void {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      
+      if (entry.isDirectory()) {
+        this.copyDirectory(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
+  }
+
+  /**
+   * Initialize built-in agents from source directory and hardcoded list
+   */
   private initializeBuiltinAgents(): void {
+    // 1. Initialize from source agents directory (scripts, views, etc.)
+    const sourceAgentsDir = this.getBuiltinAgentsSourceDir();
+    if (sourceAgentsDir) {
+      try {
+        const agentDirs = fs.readdirSync(sourceAgentsDir, { withFileTypes: true })
+          .filter(dirent => dirent.isDirectory());
+        
+        for (const agentDir of agentDirs) {
+          const agentId = agentDir.name;
+          const srcDir = path.join(sourceAgentsDir, agentId);
+          const destDir = path.join(this.agentsDir, agentId);
+          
+          // Only copy if destination doesn't exist
+          if (!fs.existsSync(destDir)) {
+            console.log(`[AgentStorage] Copying builtin agent: ${agentId} -> ${destDir}`);
+            this.copyDirectory(srcDir, destDir);
+          }
+          
+          // Also create the agent.json config file if it exists in source
+          const sourceAgentConfig = path.join(srcDir, 'agent.json');
+          const destAgentJsonConfig = path.join(this.agentsDir, `${agentId}.json`);
+          
+          if (fs.existsSync(sourceAgentConfig) && !fs.existsSync(destAgentJsonConfig)) {
+            const agentConfig = JSON.parse(fs.readFileSync(sourceAgentConfig, 'utf-8'));
+            const now = new Date().toISOString();
+            const fullAgent: AgentConfig = {
+              version: '1.0.0',
+              maxTurns: 25,
+              permissionMode: 'acceptEdits',
+              author: agentConfig.author || 'AgentStudio System',
+              createdAt: now,
+              updatedAt: now,
+              source: 'local',
+              enabled: true,
+              ...agentConfig
+            } as AgentConfig;
+            
+            this.saveAgent(fullAgent);
+            console.log(`[AgentStorage] Created agent config: ${agentId}.json`);
+          }
+        }
+      } catch (error) {
+        console.error('[AgentStorage] Error initializing builtin agents from source:', error);
+      }
+    }
+
+    // 2. Initialize hardcoded BUILTIN_AGENTS (like claude-code)
     BUILTIN_AGENTS.forEach(agentTemplate => {
       const agentPath = path.join(this.agentsDir, `${agentTemplate.id}.json`);
       if (!fs.existsSync(agentPath)) {

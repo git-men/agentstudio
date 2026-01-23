@@ -24,8 +24,9 @@ function getDataFilePath() {
   const projectPath = process.env.LAVS_PROJECT_PATH;
 
   if (projectPath) {
-    // Use project-specific path: <projectPath>/.agentstudio/todo-manager/todos.json
-    return path.join(projectPath, '.agentstudio', 'todo-manager', 'todos.json');
+    // Use project-specific path: <projectPath>/todos/todos.json
+    // Stored in visible directory for transparency
+    return path.join(projectPath, 'todos', 'todos.json');
   } else {
     // Fallback to agent's data directory (for testing/standalone)
     return path.join(__dirname, '../data/todos.json');

@@ -1,0 +1,322 @@
+{
+  "lavs": "1.0",
+  "name": "jarvis",
+  "version": "1.0.0",
+  "description": "Jarvis 个人秘书 - Todo 管理和日志记录服务",
+
+  "endpoints": [
+    {
+      "id": "listTodos",
+      "method": "query",
+      "description": "列出所有待办事项",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "list"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "status": { "type": "string", "description": "按状态过滤" },
+            "type": { "type": "string", "description": "按类型过滤" },
+            "priority": { "type": "string", "description": "按优先级过滤" }
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": { "$ref": "#/types/Todo" }
+        }
+      }
+    },
+    {
+      "id": "addTodo",
+      "method": "mutation",
+      "description": "添加新待办事项",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "add"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "待办标题" },
+            "description": { "type": "string", "description": "详细描述" },
+            "type": { "type": "string", "enum": ["personal", "delegated", "mixed"] },
+            "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+            "deadline": { "type": "string", "description": "截止时间 (ISO 格式)" },
+            "scheduledTime": { "type": "string", "description": "计划开始时间" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          },
+          "required": ["title"]
+        },
+        "output": { "$ref": "#/types/Todo" }
+      }
+    },
+    {
+      "id": "updateTodo",
+      "method": "mutation",
+      "description": "更新待办事项",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "update"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "待办 ID" },
+            "updates": { "type": "object", "description": "要更新的字段" }
+          },
+          "required": ["id", "updates"]
+        },
+        "output": { "$ref": "#/types/Todo" }
+      }
+    },
+    {
+      "id": "deleteTodo",
+      "method": "mutation",
+      "description": "删除待办事项",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "delete"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "待办 ID" }
+          },
+          "required": ["id"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "success": { "type": "boolean" },
+            "id": { "type": "string" }
+          }
+        }
+      }
+    },
+    {
+      "id": "archiveTodo",
+      "method": "mutation",
+      "description": "归档待办事项",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "archive"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string", "description": "待办 ID" }
+          },
+          "required": ["id"]
+        },
+        "output": { "$ref": "#/types/Todo" }
+      }
+    },
+    {
+      "id": "getStats",
+      "method": "query",
+      "description": "获取待办统计信息",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "stats"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": { "type": "object", "properties": {} },
+        "output": { "$ref": "#/types/Stats" }
+      }
+    },
+    {
+      "id": "checkDue",
+      "method": "query",
+      "description": "检查即将到期和已过期的待办",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "check"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "minutes": { "type": "number", "description": "检查未来多少分钟" }
+          }
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "overdue": { "type": "array", "items": { "$ref": "#/types/Todo" } },
+            "dueSoon": { "type": "array", "items": { "$ref": "#/types/Todo" } }
+          }
+        }
+      }
+    },
+    {
+      "id": "listJournals",
+      "method": "query",
+      "description": "列出日志文件",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "journals"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "limit": { "type": "number", "description": "返回数量限制" }
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": { "$ref": "#/types/Journal" }
+        }
+      }
+    },
+    {
+      "id": "getJournal",
+      "method": "query",
+      "description": "获取指定日期的日志",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "journal-get"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "description": "日期 YYYY-MM-DD" }
+          },
+          "required": ["date"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string" },
+            "content": { "type": "string" },
+            "exists": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    {
+      "id": "saveJournal",
+      "method": "mutation",
+      "description": "保存日志内容",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "journal-save"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "description": "日期 YYYY-MM-DD" },
+            "content": { "type": "string", "description": "日志内容" },
+            "append": { "type": "boolean", "description": "是否追加" }
+          },
+          "required": ["date", "content"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string" },
+            "saved": { "type": "boolean" },
+            "path": { "type": "string" }
+          }
+        }
+      }
+    }
+  ],
+
+  "view": {
+    "component": {
+      "type": "local",
+      "path": "view/index.html"
+    },
+    "fallback": "table",
+    "icon": "calendar-check"
+  },
+
+  "types": {
+    "Todo": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "type": { "type": "string", "enum": ["personal", "delegated", "mixed"] },
+        "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "cancelled", "waiting_confirmation"] },
+        "priority": { "type": "string", "enum": ["high", "medium", "low"] },
+        "deadline": { "type": "string", "format": "date-time" },
+        "scheduledTime": { "type": "string", "format": "date-time" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "assignedAgent": { "type": "string" },
+        "agentProject": { "type": "string" },
+        "executionStrategy": { "type": "string" },
+        "notes": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "title", "status"]
+    },
+    "Stats": {
+      "type": "object",
+      "properties": {
+        "total": { "type": "number" },
+        "pending": { "type": "number" },
+        "in_progress": { "type": "number" },
+        "completed": { "type": "number" },
+        "high_priority": { "type": "number" },
+        "personal": { "type": "number" },
+        "delegated": { "type": "number" }
+      }
+    },
+    "Journal": {
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "path": { "type": "string" },
+        "preview": { "type": "string" }
+      }
+    }
+  },
+
+  "permissions": {
+    "fileAccess": ["./data/**/*", "./journal/**/*"],
+    "networkAccess": false,
+    "maxExecutionTime": 30000
+  }
+}

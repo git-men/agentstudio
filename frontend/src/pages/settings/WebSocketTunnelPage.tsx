@@ -918,6 +918,10 @@ export const WebSocketTunnelPage: React.FC = () => {
               <span className="text-gray-500 dark:text-gray-400">自动连接</span>
               <p className="font-medium text-gray-900 dark:text-white">{config?.enabled ? '是' : '否'}</p>
             </div>
+            <div className="col-span-2">
+              <span className="text-gray-500 dark:text-gray-400">本地转发目标</span>
+              <p className="font-mono font-medium text-gray-900 dark:text-white">http://localhost:{status?.localPort || 4936}</p>
+            </div>
           </div>
 
           {/* Delete Tunnel Button */}

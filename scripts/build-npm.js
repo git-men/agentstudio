@@ -237,6 +237,19 @@ console.log('');
     log('  Created postinstall script', 'yellow');
   });
 
+  // Step 5: Copy builtin agents directory
+  step('Copying builtin agents', () => {
+    const agentsSource = join(rootDir, 'agents');
+    const agentsDest = join(backendDist, 'agents');
+    
+    if (existsSync(agentsSource)) {
+      cpSync(agentsSource, agentsDest, { recursive: true });
+      log(`  Copied agents directory to ${agentsDest}`, 'yellow');
+    } else {
+      log('  No agents directory found, skipping', 'yellow');
+    }
+  });
+
   // Done!
   log('\n✨ Build completed successfully!', 'green');
   log('\nNext steps:', 'blue');
