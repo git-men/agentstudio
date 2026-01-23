@@ -247,6 +247,7 @@ router.post('/:agentId/lavs/:endpoint', async (req, res) => {
 router.get('/:agentId/lavs-view', async (req, res) => {
   try {
     const { agentId } = req.params;
+    const projectPath = req.query.projectPath as string || '';
 
     // Load manifest
     const manifest = await loadAgentManifest(agentId);
@@ -263,7 +264,23 @@ router.get('/:agentId/lavs-view', async (req, res) => {
 
     // Read the HTML file
     const fs = await import('fs/promises');
-    const htmlContent = await fs.readFile(component.path, 'utf-8');
+    let htmlContent = await fs.readFile(component.path, 'utf-8');
+
+    // Inject LAVS context variables into the HTML
+    const lavsContextScript = `<script>
+      window.LAVS_AGENT_ID = "${agentId}";
+      window.LAVS_PROJECT_PATH = "${projectPath.replace(/"/g, '\\"')}";
+    </script>`;
+
+    // Insert script before closing </head> or at the start of <body>
+    if (htmlContent.includes('</head>')) {
+      htmlContent = htmlContent.replace('</head>', `${lavsContextScript}</head>`);
+    } else if (htmlContent.includes('<body>')) {
+      htmlContent = htmlContent.replace('<body>', `<body>${lavsContextScript}`);
+    } else {
+      // Fallback: prepend to content
+      htmlContent = lavsContextScript + htmlContent;
+    }
 
     // Serve as HTML
     res.setHeader('Content-Type', 'text/html');
