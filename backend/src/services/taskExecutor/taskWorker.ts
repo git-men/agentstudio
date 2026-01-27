@@ -90,13 +90,23 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
     const permissionMode = task.permissionMode || 'bypassPermissions';
     addLog('info', 'system', `Permission mode: ${permissionMode}`);
 
+    // Extract MCP tools from agent configuration
+    // MCP tools have the format: mcp__serverName__toolName
+    const mcpTools = agent.allowedTools
+      .filter((tool: any) => tool.enabled && tool.name.startsWith('mcp__'))
+      .map((tool: any) => tool.name);
+
+    if (mcpTools.length > 0) {
+      addLog('info', 'system', `MCP tools from agent config: ${mcpTools.join(', ')}`);
+    }
+
     // Build query options
     addLog('info', 'system', 'Building query options...');
 
     const { queryOptions } = await buildQueryOptions(
       agent,
       task.projectPath,
-      undefined, // mcpTools
+      mcpTools.length > 0 ? mcpTools : undefined, // Pass MCP tools from agent config
       permissionMode,
       modelToUse,
       task.claudeVersionId,
