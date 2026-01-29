@@ -221,10 +221,39 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
-      // Allow any IP address with any port (for embedded mode / internal network deployment)
-      // This is safe because in embedded mode, the frontend is served from the same origin
-      if (origin.match(/^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/)) {
-        return callback(null, true);
+      // For embedded mode: Allow same-origin requests from any host/IP
+      // This allows the frontend (served from the same server) to access the API
+      // Extract protocol, host, and port from origin
+      try {
+        const originUrl = new URL(origin);
+        const serverHost = `${originUrl.protocol}//${originUrl.host}`;
+        
+        // Check if origin matches the server's actual address
+        // In embedded mode, origin should be the same as the server address
+        const serverPort = PORT;
+        const possibleServerUrls = [
+          `http://${HOST}:${serverPort}`,
+          `https://${HOST}:${serverPort}`,
+          `http://localhost:${serverPort}`,
+          `https://localhost:${serverPort}`,
+          `http://127.0.0.1:${serverPort}`,
+          `https://127.0.0.1:${serverPort}`,
+        ];
+
+        // Also check if origin matches any of the server's network interfaces
+        // For 0.0.0.0, allow any IP:port combination that matches the server port
+        if (HOST === '0.0.0.0' || HOST === '::') {
+          if (originUrl.port === serverPort.toString()) {
+            // Same port = likely same-origin request in embedded mode
+            return callback(null, true);
+          }
+        }
+
+        if (possibleServerUrls.includes(serverHost)) {
+          return callback(null, true);
+        }
+      } catch (err) {
+        // Invalid URL, continue to error
       }
 
       const msg = `The CORS policy for this site does not allow access from the specified Origin: ${origin}`;
