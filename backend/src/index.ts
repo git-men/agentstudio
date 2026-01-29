@@ -111,20 +111,18 @@ const app: express.Express = express();
   // Initialize system Claude version if needed
   try {
     const { initializeSystemVersion } = await import('./services/claudeVersionStorage.js');
-    const { exec } = await import('child_process');
-    const { promisify } = await import('util');
-    const execAsync = promisify(exec);
+    const { getSystemClaudeExecutablePath } = await import('./utils/claudeUtils.js');
+    const { SDK_ENGINE } = await import('./config/sdkConfig.js');
 
-    // Try to find Claude executable, but initialize anyway
+    // Try to find Claude executable based on SDK engine
     let claudePath: string | null = null;
     try {
-      const { stdout } = await execAsync('which claude');
-      if (stdout && stdout.trim()) {
-        claudePath = stdout.trim();
-        console.log(`[System] Found Claude CLI at: ${claudePath}`);
+      claudePath = await getSystemClaudeExecutablePath(SDK_ENGINE);
+      if (claudePath) {
+        console.log(`[System] Found ${SDK_ENGINE} CLI at: ${claudePath}`);
       }
     } catch (error) {
-      console.log('[System] Claude CLI not found in PATH, initializing without executable path');
+      console.log(`[System] ${SDK_ENGINE} CLI not found in PATH, initializing without executable path`);
     }
 
     // Initialize system version (with or without executable path)
@@ -220,6 +218,12 @@ const app: express.Express = express();
 
       // Allow 127.0.0.1 with any port for development
       if (origin.match(/^https?:\/\/127\.0\.0\.1(:\d+)?$/)) {
+        return callback(null, true);
+      }
+
+      // Allow any IP address with any port (for embedded mode / internal network deployment)
+      // This is safe because in embedded mode, the frontend is served from the same origin
+      if (origin.match(/^https?:\/\/\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(:\d+)?$/)) {
         return callback(null, true);
       }
 

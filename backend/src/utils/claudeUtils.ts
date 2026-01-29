@@ -27,11 +27,16 @@ const execAsync = promisify(exec);
  *
  * Note: When no executable path is specified, SDK will automatically
  * use its bundled CLI which is always compatible with the SDK version.
+ * 
+ * @param sdkEngine - SDK engine to use (claude-code or claude-internal)
  */
-export async function getSystemClaudeExecutablePath(): Promise<string | null> {
+export async function getSystemClaudeExecutablePath(sdkEngine?: string): Promise<string | null> {
   try {
     const isWindows = process.platform === 'win32';
-    const command = isWindows ? 'where claude' : 'which claude';
+    
+    // Determine which CLI to search for based on SDK engine
+    const cliName = sdkEngine === 'claude-internal' ? 'claude-internal' : 'claude';
+    const command = isWindows ? `where ${cliName}` : `which ${cliName}`;
 
     const { stdout: claudePath } = await execAsync(command);
     if (!claudePath) return null;
@@ -41,7 +46,7 @@ export async function getSystemClaudeExecutablePath(): Promise<string | null> {
     // Skip local node_modules paths - we want global installation
     if (cleanPath.includes('node_modules/.bin') || cleanPath.includes('node_modules\\.bin')) {
       try {
-        const allCommand = isWindows ? 'where claude' : 'which -a claude';
+        const allCommand = isWindows ? `where ${cliName}` : `which -a ${cliName}`;
         const { stdout: allClaudes } = await execAsync(allCommand);
         const claudes = allClaudes.trim().split('\n');
 
@@ -57,19 +62,31 @@ export async function getSystemClaudeExecutablePath(): Promise<string | null> {
       }
     }
 
-    // On Windows, if path ends with .cmd, verify it exists
-    // Otherwise SDK might try to use claude-internal which doesn't exist
+    // On Windows, handle .cmd files
     if (isWindows) {
-      if (!fs.existsSync(cleanPath)) {
-        console.warn(`⚠️  Claude executable not found at: ${cleanPath}`);
+      let pathToCheck = cleanPath;
+      
+      // If path doesn't end with .cmd, try adding it
+      if (!pathToCheck.endsWith('.cmd')) {
+        const cmdPath = `${pathToCheck}.cmd`;
+        if (fs.existsSync(cmdPath)) {
+          pathToCheck = cmdPath;
+          console.log(`📦 Found Windows .cmd wrapper at: ${cmdPath}`);
+          console.log(`   Using SDK bundled CLI for better compatibility`);
+          return null; // Let SDK use bundled CLI
+        }
+      }
+      
+      // Verify the path exists
+      if (!fs.existsSync(pathToCheck)) {
+        console.warn(`⚠️  Claude executable not found at: ${pathToCheck}`);
         console.warn(`   SDK will use bundled CLI instead`);
         return null;
       }
 
-      // If the path points to a .cmd file, SDK should use Node.js to run bundled CLI
-      // Return null to let SDK use its bundled version
-      if (cleanPath.endsWith('.cmd')) {
-        console.log(`📦 Found Windows .cmd wrapper at: ${cleanPath}`);
+      // If the path points to a .cmd file, let SDK use its bundled version
+      if (pathToCheck.endsWith('.cmd')) {
+        console.log(`📦 Found Windows .cmd wrapper at: ${pathToCheck}`);
         console.log(`   Using SDK bundled CLI for better compatibility`);
         return null;
       }
@@ -77,7 +94,7 @@ export async function getSystemClaudeExecutablePath(): Promise<string | null> {
 
     return cleanPath;
   } catch (error) {
-    console.error('Failed to get system claude executable path:', error);
+    console.error(`Failed to get system ${sdkEngine || 'claude'} executable path:`, error);
     return null;
   }
 }
