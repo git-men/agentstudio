@@ -71,9 +71,9 @@ describe('ProjectMetadataStorage - Symlink Resolution', () => {
     it('should convert path with both slashes and dots correctly', () => {
       const realPath = '/Users/test/Desktop/.workspace2.nosync';
       
-      // Claude CLI replaces both '/' and '.' with '-'
+      // Claude CLI replaces '/', '\', '.', ':', ' ' with '-'
       const expectedClaudePath = '-Users-test-Desktop--workspace2-nosync';
-      const convertedPath = realPath.replace(/[\/\.]/g, '-');
+      const convertedPath = realPath.replace(/[\/\\\.:\ ]/g, '-');
       
       expect(convertedPath).toBe(expectedClaudePath);
     });
@@ -82,7 +82,7 @@ describe('ProjectMetadataStorage - Symlink Resolution', () => {
       const regularPath = '/Users/test/projects/myproject';
       
       const expectedClaudePath = '-Users-test-projects-myproject';
-      const convertedPath = regularPath.replace(/[\/\.]/g, '-');
+      const convertedPath = regularPath.replace(/[\/\\\.:\ ]/g, '-');
       
       expect(convertedPath).toBe(expectedClaudePath);
     });
@@ -91,9 +91,29 @@ describe('ProjectMetadataStorage - Symlink Resolution', () => {
       const hiddenDirPath = '/Users/test/.config/claude';
       
       const expectedClaudePath = '-Users-test--config-claude';
-      const convertedPath = hiddenDirPath.replace(/[\/\.]/g, '-');
+      const convertedPath = hiddenDirPath.replace(/[\/\\\.:\ ]/g, '-');
       
       expect(convertedPath).toBe(expectedClaudePath);
+    });
+
+    it('should handle Windows paths correctly', () => {
+      const windowsPath = 'C:\\Users\\talonwang\\claude-code-projects\\default-workspace';
+      
+      // C:\ -> C-- (colon and backslash each become a dash)
+      const expectedClaudePath = 'C--Users-talonwang-claude-code-projects-default-workspace';
+      const convertedPath = windowsPath.replace(/[\/\\\.:\ ]/g, '-');
+      
+      expect(convertedPath).toBe(expectedClaudePath);
+    });
+
+    it('should handle paths with spaces correctly', () => {
+      const macPath = '/Users/kongjie/claude-code-projects/hello world';
+      const expectedMacPath = '-Users-kongjie-claude-code-projects-hello-world';
+      expect(macPath.replace(/[\/\\\.:\ ]/g, '-')).toBe(expectedMacPath);
+
+      const windowsPath = 'C:\\Users\\talonwang\\claude-code-projects\\space demo';
+      const expectedWindowsPath = 'C--Users-talonwang-claude-code-projects-space-demo';
+      expect(windowsPath.replace(/[\/\\\.:\ ]/g, '-')).toBe(expectedWindowsPath);
     });
   });
 

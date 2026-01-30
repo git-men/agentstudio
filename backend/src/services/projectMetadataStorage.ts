@@ -346,8 +346,10 @@ export class ProjectMetadataStorage {
       
       // The session directory name is the encoded project path
       // For example: /Users/kongjie/Desktop/.workspace2.nosync -> -Users-kongjie-Desktop--workspace2-nosync
-      // Claude CLI replaces both '/' and '.' with '-'
-      const encoded = resolvedPath.replace(/[\/\.]/g, '-');
+      // On Windows: C:\Users\talonwang\project -> C--Users-talonwang-project
+      // With spaces: /Users/kongjie/hello world -> -Users-kongjie-hello-world
+      // Claude CLI replaces '/', '\', '.', ':', ' ' with '-'
+      const encoded = resolvedPath.replace(/[\/\\\.:\ ]/g, '-');
       const sessionDir = path.join(this.projectsDir, encoded);
 
       if (fs.existsSync(sessionDir)) {

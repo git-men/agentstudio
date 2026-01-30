@@ -137,8 +137,10 @@ export class SessionManager {
     
     // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
     // to: -Users-kongjie-Desktop--workspace2-nosync
-    // Claude CLI replaces both '/' and '.' with '-'
-    return resolvedPath.replace(/[\/\.]/g, '-');
+    // On Windows: C:\Users\talonwang\project -> C--Users-talonwang-project
+    // With spaces: /Users/kongjie/hello world -> -Users-kongjie-hello-world
+    // Claude CLI replaces '/', '\', '.', ':', ' ' with '-'
+    return resolvedPath.replace(/[\/\\\.:\ ]/g, '-');
   }
 
   /**
