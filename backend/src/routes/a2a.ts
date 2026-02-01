@@ -224,6 +224,16 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       });
     }
 
+    // Extract MCP tools from agent configuration
+    // MCP tools are identified by the naming pattern: mcp__<serverName>__<toolName>
+    const mcpTools = (agentConfig.allowedTools || [])
+      .filter((tool: any) => tool.enabled && tool.name.startsWith('mcp__'))
+      .map((tool: any) => tool.name);
+
+    if (mcpTools.length > 0) {
+      console.info('[A2A] MCP tools found:', { mcpTools });
+    }
+
     // Build query options for Claude using the shared utility
     // This automatically handles A2A SDK MCP server integration
     // Model and provider will be resolved by buildQueryOptions using resolveConfig
@@ -237,7 +247,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         permissionMode: 'default',
       },
       a2aContext.workingDirectory,
-      undefined, // mcpTools
+      mcpTools.length > 0 ? mcpTools : undefined, // Pass extracted MCP tools
       undefined, // permissionMode
       undefined, // model - let resolveConfig determine from project/system defaults
       undefined, // claudeVersion - let resolveConfig determine from agent/project/system
