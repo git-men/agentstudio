@@ -5,3 +5,4 @@ export { AgentChatMobileInput, type AgentChatMobileInputProps } from './AgentCha
 export { AgentInputArea, type AgentInputAreaProps } from './AgentInputArea';
 export { AgentCommandSelector, createAgentCommandSelectorKeyHandler } from './AgentCommandSelector';
 export type { AgentCommandSelectorProps } from './AgentCommandSelector';
+export { EngineSelector } from './EngineSelector';

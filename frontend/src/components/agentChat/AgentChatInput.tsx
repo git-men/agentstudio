@@ -3,6 +3,7 @@ import { Send, Square, Image, Wrench } from 'lucide-react';
 import { UnifiedToolSelector } from '../UnifiedToolSelector';
 import { SettingsDropdown } from '../SettingsDropdown';
 import { useTranslation } from 'react-i18next';
+import type { EngineUICapabilities } from '../../stores/useAgentStore';
 
 export interface AgentChatInputProps {
   inputMessage: string;
@@ -43,6 +44,9 @@ export interface AgentChatInputProps {
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent) => void;
+  
+  /** Engine UI capabilities - controls which UI elements to show */
+  engineUICapabilities?: EngineUICapabilities;
 }
 
 export const AgentChatInput: React.FC<AgentChatInputProps> = ({
@@ -83,8 +87,18 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onPaste,
   onDragOver,
   onDragLeave,
-  onDrop
+  onDrop,
+  engineUICapabilities,
 }) => {
+  // Default capabilities if not provided (Claude engine defaults)
+  const uiCaps = engineUICapabilities || {
+    showMcpToolSelector: true,
+    showImageUpload: true,
+    showPermissionSelector: true,
+    showProviderSelector: true,
+    showModelSelector: true,
+    showEnvVars: true,
+  };
   const { t } = useTranslation('components');
 
   return (
@@ -143,60 +157,64 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               className="hidden"
             />
 
-            {/* Tool selector button */}
-            <div className="relative">
-              <button
-                onClick={() => setShowToolSelector(!showToolSelector)}
-                className={`p-2 transition-colors rounded-lg ${showToolSelector || (selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0))
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                title={t('agentChat.toolSelection')}
-                disabled={isAiTyping}
-              >
-                <Wrench className="w-4 h-4" />
-              </button>
+            {/* Tool selector button - only show if MCP tools are enabled for this engine */}
+            {uiCaps.showMcpToolSelector && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowToolSelector(!showToolSelector)}
+                  className={`p-2 transition-colors rounded-lg ${showToolSelector || (selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0))
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  title={t('agentChat.toolSelection')}
+                  disabled={isAiTyping}
+                >
+                  <Wrench className="w-4 h-4" />
+                </button>
 
-              {/* Display tool count indicator */}
-              {(selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0)) && (
-                <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
-                  {selectedRegularTools.length + (mcpToolsEnabled ? selectedMcpTools.filter(t => t.startsWith('mcp__') && t.split('__').length === 3).length : 0)}
-                </span>
-              )}
+                {/* Display tool count indicator */}
+                {(selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0)) && (
+                  <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
+                    {selectedRegularTools.length + (mcpToolsEnabled ? selectedMcpTools.filter(t => t.startsWith('mcp__') && t.split('__').length === 3).length : 0)}
+                  </span>
+                )}
 
-              {/* Tool selector - using new UnifiedToolSelector */}
-              <UnifiedToolSelector
-                isOpen={showToolSelector}
-                onClose={() => setShowToolSelector(false)}
-                selectedRegularTools={selectedRegularTools}
-                onRegularToolsChange={setSelectedRegularTools}
-                selectedMcpTools={selectedMcpTools}
-                onMcpToolsChange={setSelectedMcpTools}
-                mcpToolsEnabled={mcpToolsEnabled}
-                onMcpEnabledChange={setMcpToolsEnabled}
-                presetTools={agent.allowedTools}
-              />
-            </div>
+                {/* Tool selector - using new UnifiedToolSelector */}
+                <UnifiedToolSelector
+                  isOpen={showToolSelector}
+                  onClose={() => setShowToolSelector(false)}
+                  selectedRegularTools={selectedRegularTools}
+                  onRegularToolsChange={setSelectedRegularTools}
+                  selectedMcpTools={selectedMcpTools}
+                  onMcpToolsChange={setSelectedMcpTools}
+                  mcpToolsEnabled={mcpToolsEnabled}
+                  onMcpEnabledChange={setMcpToolsEnabled}
+                  presetTools={agent.allowedTools}
+                />
+              </div>
+            )}
 
-            {/* Image upload button */}
-            <div className="relative">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className={`p-2 transition-colors rounded-lg ${selectedImages.length > 0
-                  ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                  : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                  }`}
-                title={selectedImages.length > 0 ? t('agentChat.imageSelection') + ` (${t('agentChat.selectedCount', { count: selectedImages.length })})` : t('agentChat.imageSelection')}
-                disabled={isAiTyping}
-              >
-                <Image className="w-4 h-4" />
-              </button>
-              {selectedImages.length > 0 && (
-                <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
-                  {selectedImages.length}
-                </span>
-              )}
-            </div>
+            {/* Image upload button - only show if image upload is enabled for this engine */}
+            {uiCaps.showImageUpload && (
+              <div className="relative">
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-2 transition-colors rounded-lg ${selectedImages.length > 0
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    }`}
+                  title={selectedImages.length > 0 ? t('agentChat.imageSelection') + ` (${t('agentChat.selectedCount', { count: selectedImages.length })})` : t('agentChat.imageSelection')}
+                  disabled={isAiTyping}
+                >
+                  <Image className="w-4 h-4" />
+                </button>
+                {selectedImages.length > 0 && (
+                  <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
+                    {selectedImages.length}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center space-x-2">
@@ -213,6 +231,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               isAiTyping={isAiTyping}
               envVars={envVars}
               onEnvVarsChange={setEnvVars}
+              engineUICapabilities={uiCaps}
             />
 
             {isAiTyping ? (

@@ -30,6 +30,7 @@ import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
 import networkRouter from './routes/network';
+import aguiRouter from './routes/agui';
 import { authMiddleware } from './middleware/auth';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
@@ -40,6 +41,7 @@ import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExe
 import { tunnelService } from './services/tunnelService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
+import { getEngineStatus } from './engines/index.js';
 
 dotenv.config();
 
@@ -131,6 +133,15 @@ const app: express.Express = express();
     console.log(`[System] Initialized Claude version${claudePath ? ` from: ${claudePath}` : ' without executable path'}`);
   } catch (error) {
     console.warn('Failed to initialize system Claude version:', error);
+  }
+
+  // Log engine status
+  try {
+    const engineStatus = getEngineStatus();
+    console.log(`[Engines] Registered engines: ${engineStatus.registeredEngines.join(', ')}`);
+    console.log(`[Engines] Default engine: ${engineStatus.defaultEngine}`);
+  } catch (error) {
+    console.warn('[Engines] Failed to get engine status:', error);
   }
 
   // Middleware
@@ -419,6 +430,26 @@ const app: express.Express = express();
     });
   });
 
+  // AGUI Health check (public endpoint for testing)
+  app.get('/api/agui/health', (req, res) => {
+    try {
+      const engineStatus = getEngineStatus();
+      res.json({
+        status: 'ok',
+        protocol: 'AGUI',
+        timestamp: new Date().toISOString(),
+        engines: engineStatus.registeredEngines,
+        defaultEngine: engineStatus.defaultEngine,
+        activeSessions: engineStatus.totalActiveSessions,
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: 'error',
+        error: 'Failed to get engine status',
+      });
+    }
+  });
+
   // Protected routes - Require authentication
   app.use('/api/files', authMiddleware, filesRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
@@ -439,6 +470,7 @@ const app: express.Express = express();
   app.use('/api/version', authMiddleware, versionRouter);
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
+  app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 

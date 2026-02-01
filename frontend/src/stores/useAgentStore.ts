@@ -1,5 +1,16 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { AgentConfig, AgentMessage, ToolUsageData } from '../types/index.js';
+import type { EngineUICapabilities } from '../hooks/useAGUIChat';
+import { getDefaultUICapabilities } from '../hooks/useAGUIChat';
+
+/**
+ * Engine type for AGUI
+ */
+export type EngineType = 'claude' | 'cursor';
+
+// Re-export for convenience
+export type { EngineUICapabilities } from '../hooks/useAGUIChat';
 
 interface McpStatusData {
   hasError: boolean;
@@ -64,6 +75,15 @@ interface AgentState {
   // Current agent (框架层)
   currentAgent: AgentConfig | null;
   
+  // Engine selection (AGUI)
+  selectedEngine: EngineType;
+  
+  // Engine UI capabilities - controls which UI elements to show
+  engineUICapabilities: EngineUICapabilities;
+  
+  // Engine models - models available for the current engine
+  engineModels: Array<{ id: string; name: string; isVision?: boolean; isThinking?: boolean }>;
+  
   // Chat state (框架层通用聊天)
   messages: AgentMessage[];
   isAiTyping: boolean;
@@ -83,6 +103,9 @@ interface AgentState {
   
   // Actions
   setCurrentAgent: (agent: AgentConfig | null) => void;
+  setSelectedEngine: (engine: EngineType) => void;
+  setEngineUICapabilities: (capabilities: EngineUICapabilities) => void;
+  setEngineModels: (models: Array<{ id: string; name: string; isVision?: boolean; isThinking?: boolean }>) => void;
   
   addMessage: (message: Omit<AgentMessage, 'id' | 'timestamp' | 'agentId'>) => void;
   updateMessage: (messageId: string, updates: Partial<AgentMessage>) => void;
@@ -118,6 +141,9 @@ interface AgentState {
 export const useAgentStore = create<AgentState>((set, get) => ({
   // Initial state
   currentAgent: null,
+  selectedEngine: 'claude' as EngineType,
+  engineUICapabilities: getDefaultUICapabilities('claude'),
+  engineModels: [], // Will be populated when engine info is fetched
   messages: [],
   isAiTyping: false,
   currentSessionId: null,
@@ -143,6 +169,22 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       currentSessionId: null
     } : {})
   })),
+  
+  setSelectedEngine: (engine) => set((state) => ({
+    selectedEngine: engine,
+    // Update UI capabilities when switching engines
+    engineUICapabilities: getDefaultUICapabilities(engine),
+    // Clear session when switching engines
+    ...(state.selectedEngine !== engine ? {
+      messages: [],
+      isAiTyping: false,
+      currentSessionId: null
+    } : {})
+  })),
+  
+  setEngineUICapabilities: (capabilities) => set({ engineUICapabilities: capabilities }),
+  
+  setEngineModels: (models) => set({ engineModels: models }),
   
   addMessage: (message) => set((state) => ({
     messages: [
@@ -298,7 +340,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         ? {
             ...msg,
             messageParts: msg.messageParts?.map((part: any) =>
-              part.type === 'tool' && part.toolData?.id === toolId
+              // Support finding tool by either id or claudeId (for AGUI events)
+              part.type === 'tool' && (part.toolData?.id === toolId || part.toolData?.claudeId === toolId)
                 ? {
                     ...part,
                     toolData: part.toolData ? { ...part.toolData, ...updates } : undefined

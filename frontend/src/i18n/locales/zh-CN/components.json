@@ -1052,6 +1052,84 @@
       "create": "创建版本"
     }
   },
+  "cursorToolRenderer": {
+    "unknownCursorTool": "未知 Cursor 工具: {{toolName}}"
+  },
+  "cursorShellTool": {
+    "exitCode": "退出码: {{code}}",
+    "executionTime": "耗时: {{time}}",
+    "background": "后台运行"
+  },
+  "cursorReadTool": {
+    "totalLines": "总行数: {{lines}}",
+    "fileSize": "文件大小: {{size}}",
+    "readRange": "读取范围: L{{start}}-L{{end}}",
+    "exceededLimit": "超出限制",
+    "isEmpty": "文件为空"
+  },
+  "cursorEditTool": {
+    "filePath": "文件路径",
+    "linesAdded": "行已添加",
+    "linesRemoved": "行已删除",
+    "viewDiff": "查看差异"
+  },
+  "cursorDeleteTool": {
+    "path": "文件路径",
+    "deleteSuccess": "文件已成功删除",
+    "deleteFailed": "删除失败"
+  },
+  "cursorLsTool": {
+    "path": "目录路径",
+    "ignore": "忽略模式",
+    "extensionStats": "文件扩展名统计"
+  },
+  "cursorGlobTool": {
+    "pattern": "匹配模式",
+    "directory": "目标目录",
+    "totalFiles": "共 {{count}} 个文件",
+    "clientTruncated": "结果被截断",
+    "ripgrepTruncated": "ripgrep 截断",
+    "matchedFiles": "匹配的文件",
+    "noFilesFound": "未找到匹配的文件"
+  },
+  "cursorGrepTool": {
+    "pattern": "搜索模式",
+    "path": "搜索路径",
+    "caseInsensitive": "忽略大小写",
+    "multiline": "多行模式",
+    "noMatchesFound": "未找到匹配项"
+  },
+  "cursorTodoTool": {
+    "completed": "已完成",
+    "inProgress": "进行中",
+    "pending": "待处理",
+    "merge": "合并模式",
+    "replace": "替换模式",
+    "noTodos": "暂无待办事项"
+  },
+  "cursorSemSearchTool": {
+    "query": "搜索查询",
+    "targetDirectories": "目标目录",
+    "explanation": "搜索说明",
+    "results": "{{count}} 个结果",
+    "rawResults": "原始结果",
+    "noResults": "未找到结果"
+  },
+  "cursorWebFetchTool": {
+    "url": "URL",
+    "fetchedContent": "获取的内容",
+    "fetchFailed": "获取失败"
+  },
+  "cursorMcpResourcesTool": {
+    "noResources": "暂无 MCP 资源"
+  },
+  "cursorMcpTool": {
+    "server": "服务",
+    "tool": "工具",
+    "parameters": "参数",
+    "result": "执行结果",
+    "error": "执行错误"
+  },
   "a2aManagement": {
     "title": "A2A协议管理",
     "project": "项目",

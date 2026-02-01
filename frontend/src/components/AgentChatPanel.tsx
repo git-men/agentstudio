@@ -694,14 +694,15 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
           </div>
 
           {/* Action Buttons */}
-          <div className="flex space-x-1 flex-shrink-0 ml-2">
-            <button
-              onClick={handleNewSessionWithUI}
-              className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300"
-              title={t('agentChat.newSession')}
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+          <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+            <div className="flex space-x-1">
+              <button
+                onClick={handleNewSessionWithUI}
+                className="p-1.5 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300"
+                title={t('agentChat.newSession')}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
             <div className="relative">
               <button
                 onClick={() => setShowSessions(!showSessions)}
@@ -731,6 +732,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
             >
               <RefreshCw className={`w-4 h-4 ${isLoadingMessages ? 'animate-spin' : ''}`} />
             </button>
+            </div>
           </div>
         </div>
       </div>

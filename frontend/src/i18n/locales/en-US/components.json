@@ -1050,6 +1050,84 @@
       "create": "Create Version"
     }
   },
+  "cursorToolRenderer": {
+    "unknownCursorTool": "Unknown Cursor tool: {{toolName}}"
+  },
+  "cursorShellTool": {
+    "exitCode": "Exit code: {{code}}",
+    "executionTime": "Time: {{time}}",
+    "background": "Background"
+  },
+  "cursorReadTool": {
+    "totalLines": "Total lines: {{lines}}",
+    "fileSize": "File size: {{size}}",
+    "readRange": "Read range: L{{start}}-L{{end}}",
+    "exceededLimit": "Exceeded limit",
+    "isEmpty": "File is empty"
+  },
+  "cursorEditTool": {
+    "filePath": "File path",
+    "linesAdded": "lines added",
+    "linesRemoved": "lines removed",
+    "viewDiff": "View diff"
+  },
+  "cursorDeleteTool": {
+    "path": "File path",
+    "deleteSuccess": "File deleted successfully",
+    "deleteFailed": "Delete failed"
+  },
+  "cursorLsTool": {
+    "path": "Directory path",
+    "ignore": "Ignore patterns",
+    "extensionStats": "Extension statistics"
+  },
+  "cursorGlobTool": {
+    "pattern": "Pattern",
+    "directory": "Target directory",
+    "totalFiles": "{{count}} files total",
+    "clientTruncated": "Results truncated",
+    "ripgrepTruncated": "ripgrep truncated",
+    "matchedFiles": "Matched files",
+    "noFilesFound": "No matching files found"
+  },
+  "cursorGrepTool": {
+    "pattern": "Search pattern",
+    "path": "Search path",
+    "caseInsensitive": "Case insensitive",
+    "multiline": "Multiline mode",
+    "noMatchesFound": "No matches found"
+  },
+  "cursorTodoTool": {
+    "completed": "Completed",
+    "inProgress": "In progress",
+    "pending": "Pending",
+    "merge": "Merge mode",
+    "replace": "Replace mode",
+    "noTodos": "No todos yet"
+  },
+  "cursorSemSearchTool": {
+    "query": "Search query",
+    "targetDirectories": "Target directories",
+    "explanation": "Explanation",
+    "results": "{{count}} results",
+    "rawResults": "Raw results",
+    "noResults": "No results found"
+  },
+  "cursorWebFetchTool": {
+    "url": "URL",
+    "fetchedContent": "Fetched content",
+    "fetchFailed": "Fetch failed"
+  },
+  "cursorMcpResourcesTool": {
+    "noResources": "No MCP resources available"
+  },
+  "cursorMcpTool": {
+    "server": "Server",
+    "tool": "Tool",
+    "parameters": "Parameters",
+    "result": "Result",
+    "error": "Error"
+  },
   "a2aManagement": {
     "title": "A2A Protocol Management",
     "project": "Project",

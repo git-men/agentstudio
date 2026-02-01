@@ -14,13 +14,15 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "list-models": "node scripts/list-models.js"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.46",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-toast": "^1.2.15",
     "@tanstack/react-query": "^5.85.5",
+    "@tdesign-react/chat": "^1.0.1",
     "@types/prismjs": "^1.26.5",
     "ai": "^5.0.22",
     "class-variance-authority": "^0.7.1",
@@ -44,6 +46,7 @@
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
+    "tdesign-react": "^1.16.5",
     "zustand": "^5.0.8"
   },
   "devDependencies": {
