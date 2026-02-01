@@ -45,7 +45,20 @@ const TOOL_ICONS = {
   WebFetch: Globe,
   TodoWrite: CheckSquare,
   WebSearch: Globe,
-  Skill: Sparkles
+  Skill: Sparkles,
+  // Cursor CLI 工具映射
+  lsToolCall: FolderOpen,
+  readToolCall: FileText,
+  editToolCall: Edit3,
+  deleteToolCall: Square,
+  globToolCall: FileSearch,
+  grepToolCall: Search,
+  shellToolCall: Terminal,
+  updateTodosToolCall: CheckSquare,
+  listMcpResourcesToolCall: Plug,
+  webFetchToolCall: Globe,
+  semSearchToolCall: Search,
+  mcpToolCall: Plug,
 };
 
 // 工具颜色映射
@@ -67,7 +80,20 @@ const TOOL_COLORS = {
   WebFetch: 'text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/30',
   TodoWrite: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
   WebSearch: 'text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/30',
-  Skill: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30'
+  Skill: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
+  // Cursor CLI 工具颜色映射
+  lsToolCall: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30',
+  readToolCall: 'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30',
+  editToolCall: 'text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30',
+  deleteToolCall: 'text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-900/30',
+  globToolCall: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
+  grepToolCall: 'text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/30',
+  shellToolCall: 'text-gray-800 dark:text-gray-300 bg-gray-100 dark:bg-gray-700',
+  updateTodosToolCall: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
+  listMcpResourcesToolCall: 'text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/30',
+  webFetchToolCall: 'text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/30',
+  semSearchToolCall: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30',
+  mcpToolCall: 'text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/30',
 };
 
 interface BaseToolProps {
