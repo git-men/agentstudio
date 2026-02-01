@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Clock, Plus, RefreshCw, ChevronDown } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
 import { useAgentSessions, useAgentSessionMessages, useInterruptSession } from '../hooks/useAgents';
@@ -396,6 +396,26 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
       setIsInitializingSession(false);
     }
   };
+
+  // 处理语音转写完成
+  const handleVoiceTranscribed = useCallback((text: string) => {
+    if (text) {
+      // 将转写的文本追加到输入框（如果已有内容，用空格分隔）
+      setInputMessage((prev) => {
+        if (prev.trim()) {
+          return prev + ' ' + text;
+        }
+        return text;
+      });
+      // 聚焦输入框
+      textareaRef.current?.focus();
+    }
+  }, []);
+
+  // 打开语音设置页面
+  const handleOpenVoiceSettings = useCallback(() => {
+    window.open('/settings/voice', '_blank');
+  }, []);
 
   // Use message sender hook (must be after handleNewSession is defined)
   const { isSendDisabled, handleSendMessage } = useMessageSender({
@@ -897,6 +917,10 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
         // Environment Variables
         envVars={envVars}
         onSetEnvVars={setEnvVars}
+
+        // Voice Input
+        onVoiceTranscribed={handleVoiceTranscribed}
+        onOpenVoiceSettings={handleOpenVoiceSettings}
       />
     </div>
   );

@@ -20,7 +20,8 @@
       "suppliers": "Suppliers",
       "memory": "Memory",
       "mcpAdmin": "MCP Admin",
-      "tunnel": "Tunnel"
+      "tunnel": "Tunnel",
+      "voice": "Voice Input"
     }
   },
   "version": {

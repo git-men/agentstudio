@@ -17,7 +17,8 @@ import {
   Clock,
   Key,
   Globe,
-  Puzzle
+  Puzzle,
+  Mic
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -107,6 +108,11 @@ const getNavigationItems = (t: (key: string) => string) => [
         name: t('nav.settingsSubmenu.tunnel'),
         href: '/settings/tunnel',
         icon: Globe,
+      },
+      {
+        name: t('nav.settingsSubmenu.voice'),
+        href: '/settings/voice',
+        icon: Mic,
       },
     ],
   },

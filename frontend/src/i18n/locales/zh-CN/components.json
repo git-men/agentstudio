@@ -1273,5 +1273,17 @@
       "deleteApiKey": "确定要删除这个API密钥吗？此操作不可撤销。",
       "deleteExternalAgent": "确定要删除这个外部Agent吗？此操作不可撤销。"
     }
+  },
+  "voiceInput": {
+    "loading": "加载中...",
+    "notConfigured": "语音服务未配置，点击配置",
+    "processing": "转写中...",
+    "recording": "录音中，点击停止",
+    "recordingHint": "点击停止，右键取消",
+    "start": "点击开始语音输入",
+    "error": "语音输入出错",
+    "permissionDenied": "请允许使用麦克风",
+    "noDevice": "未找到麦克风设备",
+    "tooShort": "录音时间太短"
   }
 }

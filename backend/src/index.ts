@@ -31,6 +31,7 @@ import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
+import speechToTextRouter from './routes/speechToText';
 import { authMiddleware } from './middleware/auth';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
@@ -471,6 +472,7 @@ const app: express.Express = express();
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
+  app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 

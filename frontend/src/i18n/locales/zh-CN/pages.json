@@ -20,7 +20,8 @@
       "suppliers": "供应商管理",
       "memory": "全局记忆",
       "mcpAdmin": "MCP Admin",
-      "tunnel": "隧道接入"
+      "tunnel": "隧道接入",
+      "voice": "语音输入"
     }
   },
   "version": {

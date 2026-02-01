@@ -117,6 +117,10 @@ export interface AgentInputAreaProps {
   
   /** Engine UI capabilities - controls which UI elements to show */
   engineUICapabilities?: EngineUICapabilities;
+
+  // Voice Input
+  onVoiceTranscribed?: (text: string) => void;
+  onOpenVoiceSettings?: () => void;
 }
 
 export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
@@ -191,7 +195,9 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
     isSendDisabled,
     envVars,
     onSetEnvVars,
-    engineUICapabilities
+    engineUICapabilities,
+    onVoiceTranscribed,
+    onOpenVoiceSettings
   } = props;
   
   // Default capabilities if not provided (Claude engine defaults)
@@ -544,6 +550,8 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           envVars={envVars}
           setEnvVars={onSetEnvVars}
           engineUICapabilities={uiCaps}
+          onVoiceTranscribed={onVoiceTranscribed}
+          onOpenVoiceSettings={onOpenVoiceSettings}
         />
       </div>
 

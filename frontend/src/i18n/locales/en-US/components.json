@@ -1271,5 +1271,17 @@
       "deleteApiKey": "Are you sure you want to delete this API key? This action cannot be undone.",
       "deleteExternalAgent": "Are you sure you want to delete this external agent? This action cannot be undone."
     }
+  },
+  "voiceInput": {
+    "loading": "Loading...",
+    "notConfigured": "Voice service not configured, click to configure",
+    "processing": "Transcribing...",
+    "recording": "Recording, click to stop",
+    "recordingHint": "Click to stop, right-click to cancel",
+    "start": "Click to start voice input",
+    "error": "Voice input error",
+    "permissionDenied": "Please allow microphone access",
+    "noDevice": "No microphone device found",
+    "tooShort": "Recording too short"
   }
 }

@@ -1,7 +1,8 @@
-import React, { ChangeEvent } from 'react';
+import React, { ChangeEvent, useCallback } from 'react';
 import { Send, Square, Image, Wrench } from 'lucide-react';
 import { UnifiedToolSelector } from '../UnifiedToolSelector';
 import { SettingsDropdown } from '../SettingsDropdown';
+import { VoiceInputButton } from '../VoiceInputButton';
 import { useTranslation } from 'react-i18next';
 import type { EngineUICapabilities } from '../../stores/useAgentStore';
 
@@ -47,6 +48,9 @@ export interface AgentChatInputProps {
   
   /** Engine UI capabilities - controls which UI elements to show */
   engineUICapabilities?: EngineUICapabilities;
+  // 语音输入
+  onVoiceTranscribed?: (text: string) => void;
+  onOpenVoiceSettings?: () => void;
 }
 
 export const AgentChatInput: React.FC<AgentChatInputProps> = ({
@@ -89,6 +93,8 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onDragLeave,
   onDrop,
   engineUICapabilities,
+  onVoiceTranscribed,
+  onOpenVoiceSettings
 }) => {
   // Default capabilities if not provided (Claude engine defaults)
   const uiCaps = engineUICapabilities || {
@@ -100,6 +106,13 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
     showEnvVars: true,
   };
   const { t } = useTranslation('components');
+
+  // 处理语音转写完成
+  const handleVoiceTranscribed = useCallback((text: string) => {
+    if (onVoiceTranscribed) {
+      onVoiceTranscribed(text);
+    }
+  }, [onVoiceTranscribed]);
 
   return (
     <div
@@ -215,6 +228,13 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                 )}
               </div>
             )}
+
+            {/* Voice input button */}
+            <VoiceInputButton
+              onTranscribed={handleVoiceTranscribed}
+              disabled={isAiTyping}
+              onOpenSettings={onOpenVoiceSettings}
+            />
           </div>
 
           <div className="flex items-center space-x-2">
