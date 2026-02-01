@@ -4,11 +4,14 @@ import { useClaudeVersions } from '../useClaudeVersions';
 export interface UseClaudeVersionManagerProps {
   initialModel?: string;
   initialVersion?: string;
+  /** Skip model validation effect (useful when using a different engine) */
+  skipModelValidation?: boolean;
 }
 
 export const useClaudeVersionManager = ({
   initialModel = 'sonnet',
-  initialVersion
+  initialVersion,
+  skipModelValidation = false,
 }: UseClaudeVersionManagerProps) => {
   // Claude版本数据
   const { data: claudeVersionsData } = useClaudeVersions();
@@ -41,7 +44,10 @@ export const useClaudeVersionManager = ({
   }, [claudeVersionsData, selectedClaudeVersion]);
 
   // 当可用模型变化时，确保当前选择的模型仍然有效
+  // Skip validation when using a different engine (e.g., Cursor)
   useEffect(() => {
+    if (skipModelValidation) return;
+    
     if (availableModels.length > 0) {
       const currentModelValid = availableModels.some(m => m.id === selectedModel);
       if (!currentModelValid) {
@@ -52,7 +58,7 @@ export const useClaudeVersionManager = ({
         setSelectedModel(availableModels[0].id);
       }
     }
-  }, [availableModels, selectedModel, selectedClaudeVersion]);
+  }, [availableModels, selectedModel, selectedClaudeVersion, skipModelValidation]);
 
   // Version change handler
   const handleVersionChange = (versionId: string) => {

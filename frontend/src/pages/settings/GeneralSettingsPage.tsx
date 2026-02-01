@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   Shield,
   AlertCircle,
+  MessageSquare,
 } from 'lucide-react';
 import { useMobileContext } from '../../contexts/MobileContext';
 import { useVersionCheck, useSystemInfo } from '../../hooks/useVersionCheck';
@@ -27,10 +28,13 @@ import { isTelemetryEnabled, setTelemetryEnabled } from '../../components/Teleme
 export const GeneralSettingsPage: React.FC = () => {
   const { t, i18n } = useTranslation('pages');
   const { isMobile } = useMobileContext();
-  
+
   // Theme and language state
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'auto');
   const [language, setLanguage] = useState(i18n.language);
+
+  // Chat panel version state
+  const [chatVersion, setChatVersion] = useState(() => localStorage.getItem('agentstudio:chat-version') || 'original');
 
   // Version check state
   const {
@@ -77,6 +81,11 @@ export const GeneralSettingsPage: React.FC = () => {
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
     i18n.changeLanguage(newLanguage);
+  };
+
+  const handleChatVersionChange = (newVersion: string) => {
+    setChatVersion(newVersion);
+    localStorage.setItem('agentstudio:chat-version', newVersion);
   };
 
   const handleCheckUpdate = () => {
@@ -159,11 +168,10 @@ export const GeneralSettingsPage: React.FC = () => {
                 <button
                   key={option.value}
                   onClick={() => setTheme(option.value)}
-                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-center ${isMobile ? 'flex-row space-x-3' : 'flex-col space-y-2'} transition-all ${
-                    theme === option.value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-                  }`}
+                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-center ${isMobile ? 'flex-row space-x-3' : 'flex-col space-y-2'} transition-all ${theme === option.value
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
                 >
                   <option.icon className={`${isMobile ? 'w-5 h-5' : 'w-6 h-6'}`} />
                   <span className="text-sm font-medium">{option.label}</span>
@@ -187,14 +195,43 @@ export const GeneralSettingsPage: React.FC = () => {
                 <button
                   key={option.value}
                   onClick={() => handleLanguageChange(option.value)}
-                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-center space-x-3 transition-all ${
-                    language === option.value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                      : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-                  }`}
+                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-center space-x-3 transition-all ${language === option.value
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
                 >
                   <span className={`${isMobile ? 'text-xl' : 'text-2xl'}`}>{option.flag}</span>
                   <span className="text-sm font-medium">{option.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Chat Panel Version Selection */}
+          <div>
+            <label className="block font-medium text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
+              <MessageSquare className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+              <span>{t('settings.general.chatVersion.label', 'Chat Panel Version')}</span>
+            </label>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{t('settings.general.chatVersion.description', 'Choose which chat panel implementation to use')}</p>
+            <div className={`${isMobile ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-3'}`}>
+              {[
+                { value: 'original', label: t('settings.general.chatVersion.original', 'Original'), icon: '💬', description: t('settings.general.chatVersion.originalDesc', 'Classic chat interface') },
+                { value: 'agui', label: t('settings.general.chatVersion.agui', 'AGUI (Experimental)'), icon: '🚀', description: t('settings.general.chatVersion.aguiDesc', 'TDesign-based with AGUI protocol') }
+              ].map((option) => (
+                <button
+                  key={option.value}
+                  onClick={() => handleChatVersionChange(option.value)}
+                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-start space-x-3 transition-all text-left ${chatVersion === option.value
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                >
+                  <span className={`${isMobile ? 'text-xl' : 'text-2xl'}`}>{option.icon}</span>
+                  <div>
+                    <span className="text-sm font-medium block">{option.label}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{option.description}</span>
+                  </div>
                 </button>
               ))}
             </div>
@@ -218,7 +255,7 @@ export const GeneralSettingsPage: React.FC = () => {
             {t('settings.systemInfo.checkUpdate')}
           </button>
         </div>
-        
+
         <div className="space-y-4">
           {/* Version Info */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -334,7 +371,7 @@ export const GeneralSettingsPage: React.FC = () => {
             <BarChart3 className="w-5 h-5" />
             {t('settings.telemetry.title', 'Telemetry & Analytics')}
           </h2>
-          
+
           {/* Toggle */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -352,25 +389,22 @@ export const GeneralSettingsPage: React.FC = () => {
             </div>
             <button
               onClick={handleTelemetryToggle}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                isTelemetryOn ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${isTelemetryOn ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
             >
               <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  isTelemetryOn ? 'translate-x-6' : 'translate-x-1'
-                }`}
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${isTelemetryOn ? 'translate-x-6' : 'translate-x-1'
+                  }`}
               />
             </button>
           </div>
         </div>
 
         {/* Status Banner */}
-        <div className={`px-4 py-2 border-t ${
-          isTelemetryOn 
-            ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800' 
-            : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700'
-        }`}>
+        <div className={`px-4 py-2 border-t ${isTelemetryOn
+          ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+          : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-700'
+          }`}>
           <div className="flex items-center gap-2 text-sm">
             {isTelemetryOn ? (
               <>

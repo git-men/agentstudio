@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AgentChatPanel } from '../components/AgentChatPanel';
+import { AGUIChatPanel } from '../components/AGUIChatPanel';
 import { SplitLayout } from '../components/SplitLayout';
 import { RightPanelWrapper } from '../components/RightPanelWrapper';
 import { useAgentStore } from '../stores/useAgentStore';
@@ -9,6 +10,12 @@ import { useAgent } from '../hooks/useAgents';
 import { ProjectSelector } from '../components/ProjectSelector';
 import { getAgentPlugin } from '../agents/registry';
 import { useTabNotification, type TabNotificationStatus } from '../hooks/useTabNotification';
+
+// Chat version type
+type ChatVersion = 'original' | 'agui';
+
+// LocalStorage key for chat version preference
+const CHAT_VERSION_KEY = 'agentstudio:chat-version';
 
 export const ChatPage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -26,6 +33,25 @@ export const ChatPage: React.FC = () => {
   const [lastError, setLastError] = useState<Error | null>(null);
   const [hasSeenCompletion, setHasSeenCompletion] = useState(false);
   const wasAiTypingRef = React.useRef(false);
+
+  // Chat version state with localStorage persistence
+  const [chatVersion, setChatVersion] = useState<ChatVersion>(() => {
+    const saved = localStorage.getItem(CHAT_VERSION_KEY);
+    return (saved === 'agui' || saved === 'original') ? saved : 'original';
+  });
+
+  // Sync chat version when changed from settings page
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === CHAT_VERSION_KEY && e.newValue) {
+        if (e.newValue === 'agui' || e.newValue === 'original') {
+          setChatVersion(e.newValue);
+        }
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const agent = agentData?.agent;
 
@@ -97,7 +123,7 @@ export const ChatPage: React.FC = () => {
       sessionId,
       urlSessionId: searchParams.get('session')
     });
-    
+
     if (agent) {
       console.log('🎯 Setting current agent:', agent.id);
       setCurrentAgent(agent);
@@ -229,7 +255,7 @@ export const ChatPage: React.FC = () => {
   const handleToggleLeftPanel = () => {
     const newHideLeft = !hideLeftPanel;
     setHideLeftPanel(newHideLeft);
-    
+
     // 如果左面板要隐藏，但右面板也是隐藏的，则显示右面板
     if (newHideLeft && hideRightPanel) {
       setHideRightPanel(false);
@@ -240,7 +266,7 @@ export const ChatPage: React.FC = () => {
   const handleToggleRightPanel = () => {
     const newHideRight = !hideRightPanel;
     setHideRightPanel(newHideRight);
-    
+
     // 如果右面板要隐藏，但左面板也是隐藏的，则显示左面板
     if (newHideRight && hideLeftPanel) {
       setHideLeftPanel(false);
@@ -249,6 +275,9 @@ export const ChatPage: React.FC = () => {
 
   // Render layout based on plugin configuration
   const renderLayout = () => {
+    // Select chat panel based on version preference
+    const ChatPanelComponent = chatVersion === 'agui' ? AGUIChatPanel : AgentChatPanel;
+
     // 始终使用分栏布局，右侧根据是否有自定义组件来决定显示内容
     return (
       <SplitLayout
@@ -258,7 +287,7 @@ export const ChatPage: React.FC = () => {
         onToggleRightPanel={handleToggleRightPanel}
         mobileLayout="tabs"
       >
-        <AgentChatPanel agent={agent} projectPath={projectPath || undefined} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
+        <ChatPanelComponent agent={agent} projectPath={projectPath || undefined} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
         <RightPanelWrapper
           agent={agent}
           projectPath={projectPath || undefined}

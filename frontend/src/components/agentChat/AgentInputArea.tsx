@@ -114,6 +114,9 @@ export interface AgentInputAreaProps {
   // Environment Variables
   envVars: Record<string, string>;
   onSetEnvVars: (envVars: Record<string, string>) => void;
+  
+  /** Engine UI capabilities - controls which UI elements to show */
+  engineUICapabilities?: EngineUICapabilities;
 }
 
 export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
@@ -187,8 +190,19 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
     handleCancelDialog,
     isSendDisabled,
     envVars,
-    onSetEnvVars
+    onSetEnvVars,
+    engineUICapabilities
   } = props;
+  
+  // Default capabilities if not provided (Claude engine defaults)
+  const uiCaps = engineUICapabilities || {
+    showMcpToolSelector: true,
+    showImageUpload: true,
+    showPermissionSelector: true,
+    showProviderSelector: true,
+    showModelSelector: true,
+    showEnvVars: true,
+  };
 
   // Handle input changes with command and file selection logic
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -529,6 +543,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           onDrop={handleDrop}
           envVars={envVars}
           setEnvVars={onSetEnvVars}
+          engineUICapabilities={uiCaps}
         />
       </div>
 

@@ -3,12 +3,14 @@ import { useTranslation } from 'react-i18next';
 import { showInfo } from '../../utils/toast';
 import { isCommandTrigger, formatCommandMessage } from '../../utils/commandFormatter';
 import { createCommandHandler, SystemCommand } from '../../utils/commandHandler';
-import { useAgentStore } from '../../stores/useAgentStore';
+import { useAgentStore, type EngineType } from '../../stores/useAgentStore';
 import { useAgentChat } from '../useAgents';
+import { useAGUIChat } from '../useAGUIChat';
 import { useAIStreamHandler, type UseAIStreamHandlerProps } from './useAIStreamHandler';
 import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
+import type { AGUIEvent } from '../../types/aguiTypes';
 
 export interface UseMessageSenderProps {
   agent: AgentConfig;
@@ -94,8 +96,9 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
   } = props;
 
   const { t } = useTranslation('components');
-  const { addMessage, addCommandPartToMessage, addTextPartToMessage } = useAgentStore();
+  const { addMessage, addCommandPartToMessage, addTextPartToMessage, selectedEngine, updateMessage, addToolPartToMessage, updateToolPartInMessage } = useAgentStore();
   const agentChatMutation = useAgentChat();
+  const aguiChat = useAGUIChat();
 
   // Track if this is a compact command for special handling in SSE stream
   const isCompactCommandRef = useRef(false);
@@ -288,24 +291,191 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         ...(mcpToolsEnabled && selectedMcpTools.length > 0 ? selectedMcpTools : [])
       ];
 
-      // Use agent-specific SSE streaming chat - pass null as sessionId if no current session
-      await agentChatMutation.mutateAsync({
-        agentId: agent.id,
-        message: userMessage,
-        images: imageData.length > 0 ? imageData : undefined,
-        context,
-        sessionId: currentSessionId, // Keep existing session or null for new session
-        projectPath,
-        mcpTools: allSelectedTools.length > 0 ? allSelectedTools : undefined,
-        permissionMode,
-        model: selectedModel,
-        claudeVersion: selectedClaudeVersion,
-        envVars,
-        channel: 'web',
-        abortController,
-        onMessage: handleStreamMessage,
-        onError: handleStreamError
-      });
+      if (selectedEngine === 'cursor') {
+        // Cursor Engine: Use AGUI API with simplified stream handling
+        console.log('🚀 [MessageSender] Using Cursor Engine');
+        
+        // Track current message for AGUI events
+        let currentAguiMessageId: string | null = null;
+        let currentTextContent = '';
+        let currentToolCalls = new Map<string, { name: string; args: string }>();
+        
+        // Handle AGUI events
+        const handleAguiEvent = (event: AGUIEvent) => {
+          console.log(`📨 [AGUI] Event: ${event.type}`, event);
+          
+          switch (event.type) {
+            case 'RUN_STARTED':
+              setIsInitializingSession(false);
+              if (event.threadId && event.threadId !== currentSessionId) {
+                setCurrentSessionId(event.threadId);
+                setIsNewSession(true);
+                onSessionChange?.(event.threadId);
+              }
+              break;
+              
+            case 'RUN_FINISHED':
+              setAiTyping(false);
+              setHasSuccessfulResponse(true);
+              break;
+              
+            case 'RUN_ERROR':
+              console.error('[AGUI] Run error:', event.error);
+              addMessage({
+                role: 'assistant',
+                content: `❌ **Error**: ${event.error}`,
+              });
+              setAiTyping(false);
+              break;
+              
+            case 'TEXT_MESSAGE_START':
+              currentAguiMessageId = event.messageId;
+              currentTextContent = '';
+              addMessage({
+                role: 'assistant',
+                content: '',
+              });
+              break;
+              
+            case 'TEXT_MESSAGE_CONTENT':
+              if (currentAguiMessageId) {
+                currentTextContent += event.content;
+                // Find and update the last assistant message
+                const state = useAgentStore.getState();
+                const lastMsg = state.messages[state.messages.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  updateMessage(lastMsg.id, { content: currentTextContent });
+                }
+              }
+              break;
+              
+            case 'TEXT_MESSAGE_END':
+              // Message finalized
+              break;
+              
+            case 'TOOL_CALL_START':
+              currentToolCalls.set(event.toolCallId, {
+                name: event.toolName,
+                args: '',
+              });
+              // Ensure we have an assistant message to add tool to
+              let stateForTool = useAgentStore.getState();
+              let lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
+              
+              // If no assistant message exists, create one first
+              if (!lastMsgForTool || lastMsgForTool.role !== 'assistant') {
+                addMessage({
+                  role: 'assistant',
+                  content: '',
+                });
+                // Refresh state after adding message
+                stateForTool = useAgentStore.getState();
+                lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
+              }
+              
+              // Add tool part to current message
+              if (lastMsgForTool && lastMsgForTool.role === 'assistant') {
+                addToolPartToMessage(lastMsgForTool.id, {
+                  toolName: event.toolName,
+                  toolInput: {},
+                  isExecuting: true,
+                  claudeId: event.toolCallId, // Store toolCallId for later lookup
+                });
+              }
+              break;
+              
+            case 'TOOL_CALL_ARGS':
+              const toolCall = currentToolCalls.get(event.toolCallId);
+              if (toolCall) {
+                toolCall.args += event.args;
+                // Try to parse and update
+                try {
+                  const toolInput = JSON.parse(toolCall.args);
+                  const stateForArgs = useAgentStore.getState();
+                  const lastMsgForArgs = stateForArgs.messages[stateForArgs.messages.length - 1];
+                  if (lastMsgForArgs && lastMsgForArgs.role === 'assistant') {
+                    updateToolPartInMessage(lastMsgForArgs.id, event.toolCallId, { toolInput });
+                  }
+                } catch {
+                  // Args not complete yet
+                }
+              }
+              break;
+              
+            case 'TOOL_CALL_END':
+              const completedTool = currentToolCalls.get(event.toolCallId);
+              if (completedTool) {
+                try {
+                  const toolInput = JSON.parse(completedTool.args);
+                  const stateForEnd = useAgentStore.getState();
+                  const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
+                  if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
+                    updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, { toolInput, isExecuting: false });
+                  }
+                } catch {
+                  // Use empty input
+                  const stateForEnd = useAgentStore.getState();
+                  const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
+                  if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
+                    updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, { isExecuting: false });
+                  }
+                }
+              }
+              break;
+              
+            case 'TOOL_CALL_RESULT':
+              const stateForResult = useAgentStore.getState();
+              const lastMsgForResult = stateForResult.messages[stateForResult.messages.length - 1];
+              if (lastMsgForResult && lastMsgForResult.role === 'assistant') {
+                updateToolPartInMessage(lastMsgForResult.id, event.toolCallId, {
+                  toolResult: event.result,
+                  isError: event.isError || false,
+                  isExecuting: false,
+                });
+              }
+              break;
+          }
+        };
+        
+        await aguiChat.sendMessage({
+          message: userMessage,
+          engineType: 'cursor',
+          workspace: projectPath || '.',
+          sessionId: currentSessionId || undefined, // Convert null to undefined
+          model: selectedModel,
+          abortController,
+          onAguiEvent: handleAguiEvent,
+          onError: (error) => {
+            console.error('[AGUI] Error:', error);
+            addMessage({
+              role: 'assistant',
+              content: `❌ **Error**: ${error.message}`,
+            });
+            setAiTyping(false);
+          },
+        });
+      } else {
+        // Claude Engine: Use original agent chat API
+        console.log('🚀 [MessageSender] Using Claude Engine');
+        
+        await agentChatMutation.mutateAsync({
+          agentId: agent.id,
+          message: userMessage,
+          images: imageData.length > 0 ? imageData : undefined,
+          context,
+          sessionId: currentSessionId,
+          projectPath,
+          mcpTools: allSelectedTools.length > 0 ? allSelectedTools : undefined,
+          permissionMode,
+          model: selectedModel,
+          claudeVersion: selectedClaudeVersion,
+          envVars,
+          channel: 'web',
+          abortController,
+          onMessage: handleStreamMessage,
+          onError: handleStreamError
+        });
+      }
     } catch (error) {
       console.error('Chat error:', error);
       setAiTyping(false);
@@ -356,14 +526,19 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     permissionMode,
     selectedModel,
     selectedClaudeVersion,
+    selectedEngine,
     abortControllerRef,
+    onSessionChange,
     setInputMessage,
     clearImages,
     setSelectedCommand,
     setShowCommandSelector,
     setCommandWarning,
     setIsInitializingSession,
+    setCurrentSessionId,
+    setIsNewSession,
     setAiTyping,
+    setHasSuccessfulResponse,
     handleNewSession,
     isCommandDefined,
     getAllAvailableCommands,
@@ -371,7 +546,11 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     addMessage,
     addCommandPartToMessage,
     addTextPartToMessage,
+    updateMessage,
+    addToolPartToMessage,
+    updateToolPartInMessage,
     agentChatMutation,
+    aguiChat,
     handleStreamMessage,
     handleStreamError,
     resetMessageId,

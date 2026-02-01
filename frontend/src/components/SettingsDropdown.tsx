@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Settings, Zap, Cpu, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EnvVarsConfig } from './EnvVarsConfig';
+import type { EngineUICapabilities } from '../stores/useAgentStore';
 
 interface SettingsDropdownProps {
   permissionMode: 'default' | 'acceptEdits' | 'bypassPermissions';
@@ -17,6 +18,8 @@ interface SettingsDropdownProps {
   envVars: Record<string, string>;
   onEnvVarsChange: (envVars: Record<string, string>) => void;
   className?: string;
+  /** Engine UI capabilities - controls which UI elements to show */
+  engineUICapabilities?: EngineUICapabilities;
 }
 
 export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
@@ -32,11 +35,22 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   isAiTyping,
   envVars,
   onEnvVarsChange,
-  className = ''
+  className = '',
+  engineUICapabilities,
 }) => {
   const { t } = useTranslation('components');
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Default capabilities if not provided (Claude engine defaults)
+  const uiCaps = engineUICapabilities || {
+    showMcpToolSelector: true,
+    showImageUpload: true,
+    showPermissionSelector: true,
+    showProviderSelector: true,
+    showModelSelector: true,
+    showEnvVars: true,
+  };
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -64,8 +78,10 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     onModelChange(model);
   };
 
-  const hasClaudeVersions = claudeVersionsData?.versions && claudeVersionsData.versions.length > 1;
-  const hasMultipleModels = availableModels.length >= 2;
+  const hasClaudeVersions = claudeVersionsData?.versions && claudeVersionsData.versions.length > 1 && uiCaps.showProviderSelector;
+  const hasMultipleModels = availableModels.length >= 2 && uiCaps.showModelSelector;
+  const showPermissionSection = uiCaps.showPermissionSelector;
+  const showEnvVarsSection = uiCaps.showEnvVars;
 
   // Get current model name
   const currentModelName = availableModels.find(m => m.id === selectedModel)?.name || selectedModel;
@@ -89,9 +105,18 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
         title={t('agentChat.settings.title')}
       >
         <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
-          <span className="font-medium">{currentModelName}</span>
-          <span className="text-gray-300 dark:text-gray-600">|</span>
-          <span className="text-gray-500 dark:text-gray-400">{permissionModeLabel}</span>
+          {uiCaps.showModelSelector && (
+            <span className="font-medium">{currentModelName}</span>
+          )}
+          {uiCaps.showModelSelector && uiCaps.showPermissionSelector && (
+            <span className="text-gray-300 dark:text-gray-600">|</span>
+          )}
+          {uiCaps.showPermissionSelector && (
+            <span className="text-gray-500 dark:text-gray-400">{permissionModeLabel}</span>
+          )}
+          {!uiCaps.showModelSelector && !uiCaps.showPermissionSelector && (
+            <span className="text-gray-500 dark:text-gray-400">{t('agentChat.settings.title', 'Settings')}</span>
+          )}
         </div>
         <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
       </button>
@@ -167,7 +192,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
                       <label className="text-xs text-gray-500 dark:text-gray-400 ml-1">
                         {t('agentChat.settings.model')}
                       </label>
-                      <div className="grid grid-cols-1 gap-2">
+                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-1">
                         {availableModels.map(model => (
                           <button
                             key={model.id}
@@ -193,40 +218,48 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
               </div>
             )}
 
-            <div className="h-px bg-gray-100 dark:bg-gray-700" />
+            {/* Permission Mode Section - only show if enabled */}
+            {showPermissionSection && (
+              <>
+                <div className="h-px bg-gray-100 dark:bg-gray-700" />
 
-            {/* Permission Mode Section */}
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                {t('agentChat.settings.permissionMode')}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { value: 'default', label: t('agentChat.permissionMode.default'), icon: Zap },
-                  { value: 'acceptEdits', label: t('agentChat.permissionMode.acceptEdits'), icon: Zap },
-                  { value: 'bypassPermissions', label: t('agentChat.permissionMode.bypassPermissions'), icon: Zap },
-                ].map(option => (
-                  <button
-                    key={option.value}
-                    onClick={() => handlePermissionModeChange(option.value as any)}
-                    className={`flex flex-col items-center justify-center p-2 text-xs rounded-lg border transition-all text-center gap-1.5 h-full ${permissionMode === option.value
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-sm'
-                      : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-600 dark:text-gray-400'
-                      }`}
-                  >
-                    <option.icon className={`w-4 h-4 ${permissionMode === option.value ? 'text-blue-500' : 'text-gray-400'}`} />
-                    <span className="leading-tight">{option.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
+                <div className="space-y-3">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    {t('agentChat.settings.permissionMode')}
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { value: 'default', label: t('agentChat.permissionMode.default'), icon: Zap },
+                      { value: 'acceptEdits', label: t('agentChat.permissionMode.acceptEdits'), icon: Zap },
+                      { value: 'bypassPermissions', label: t('agentChat.permissionMode.bypassPermissions'), icon: Zap },
+                    ].map(option => (
+                      <button
+                        key={option.value}
+                        onClick={() => handlePermissionModeChange(option.value as any)}
+                        className={`flex flex-col items-center justify-center p-2 text-xs rounded-lg border transition-all text-center gap-1.5 h-full ${permissionMode === option.value
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-sm'
+                          : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-600 dark:text-gray-400'
+                          }`}
+                      >
+                        <option.icon className={`w-4 h-4 ${permissionMode === option.value ? 'text-blue-500' : 'text-gray-400'}`} />
+                        <span className="leading-tight">{option.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
 
-            <div className="h-px bg-gray-100 dark:bg-gray-700" />
+            {/* Environment Variables Section - only show if enabled */}
+            {showEnvVarsSection && (
+              <>
+                <div className="h-px bg-gray-100 dark:bg-gray-700" />
 
-            {/* Environment Variables Section */}
-            <div>
-              <EnvVarsConfig envVars={envVars} onChange={onEnvVarsChange} />
-            </div>
+                <div>
+                  <EnvVarsConfig envVars={envVars} onChange={onEnvVarsChange} />
+                </div>
+              </>
+            )}
 
           </div>
         </div>
