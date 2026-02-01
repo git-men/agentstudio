@@ -6,6 +6,7 @@ import { useMobileContext } from '../../contexts/MobileContext';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { AddMarketplaceModal } from './AddMarketplaceModal';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface MarketplacesTabProps {
   marketplaces: PluginMarketplace[];
@@ -32,6 +33,7 @@ export const MarketplacesTab: React.FC<MarketplacesTabProps> = ({
 }) => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -40,8 +42,15 @@ export const MarketplacesTab: React.FC<MarketplacesTabProps> = ({
     marketplace.source.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(t('plugins.marketplaces.confirmDelete', { name }))) {
+  const handleDelete = async (id: string, name: string) => {
+    const confirmed = await confirm({
+      title: t('plugins.marketplaces.confirmDeleteTitle', '确认删除'),
+      message: t('plugins.marketplaces.confirmDelete', { name }),
+      confirmText: t('plugins.marketplaces.delete', '删除'),
+      cancelText: t('plugins.marketplaces.cancel', '取消'),
+      variant: 'danger'
+    });
+    if (confirmed) {
       onRemoveMarketplace(id);
     }
   };

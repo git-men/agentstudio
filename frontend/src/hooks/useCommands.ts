@@ -4,8 +4,15 @@ import { API_BASE, isApiUnavailableError } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 
 
+// API response type with optional engine info
+interface CommandsResponse {
+  commands: SlashCommand[];
+  readOnly?: boolean;
+  engine?: string;
+}
+
 // API functions
-const fetchCommands = async (filter: SlashCommandFilter = {}): Promise<SlashCommand[]> => {
+const fetchCommands = async (filter: SlashCommandFilter = {}): Promise<CommandsResponse> => {
   try {
     const params = new URLSearchParams();
     if (filter.scope && filter.scope !== 'all') params.append('scope', filter.scope);
@@ -16,11 +23,16 @@ const fetchCommands = async (filter: SlashCommandFilter = {}): Promise<SlashComm
     if (!response.ok) {
       throw new Error('Failed to fetch commands');
     }
-    return response.json();
+    const data = await response.json();
+    // Support both old format (array) and new format (object with readOnly flag)
+    if (Array.isArray(data)) {
+      return { commands: data, readOnly: false };
+    }
+    return data;
   } catch (error) {
     // If it's an API unavailable error, return empty data instead of throwing
     if (isApiUnavailableError(error)) {
-      return [];
+      return { commands: [], readOnly: false };
     }
     // For other errors, still throw
     throw error;

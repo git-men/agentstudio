@@ -1,10 +1,12 @@
 import express, { Router } from 'express';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { promisify } from 'util';
 import matter from 'gray-matter';
 import { SlashCommand, SlashCommandCreate, SlashCommandUpdate, SlashCommandFilter } from '../types/commands';
 import { getCommandsDir, getSdkDirName } from '../config/sdkConfig.js';
+import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 const readdir = promisify(fs.readdir);
@@ -25,8 +27,13 @@ const getProjectCommandsDir = (projectPath?: string) => {
   return path.join(process.cwd(), '..', sdkDirName, 'commands');
 };
 
-// Get user commands directory (e.g., ~/.claude/commands)
-const getUserCommandsDir = () => getCommandsDir();
+// Get user commands directory (e.g., ~/.claude/commands or ~/.cursor/commands)
+const getUserCommandsDir = () => {
+  if (isCursorEngine()) {
+    return getEnginePaths().commandsDir;
+  }
+  return getCommandsDir();
+};
 
 // Ensure directory exists
 async function ensureDir(dirPath: string) {
@@ -252,7 +259,12 @@ router.get('/', async (req, res) => {
       return a.name.localeCompare(b.name);
     });
 
-    res.json(commands);
+    // Include readOnly flag for Cursor engine
+    res.json({
+      commands,
+      readOnly: isCursorEngine(),
+      engine: isCursorEngine() ? 'cursor-cli' : 'claude-sdk',
+    });
   } catch (error) {
     console.error('Error listing commands:', error);
     res.status(500).json({ error: 'Failed to list commands' });
@@ -328,6 +340,14 @@ router.get('/:id', async (req, res) => {
 // POST /api/commands - Create new command
 router.post('/', async (req, res) => {
   try {
+    // Check if in read-only mode (Cursor engine)
+    if (isCursorEngine()) {
+      return res.status(403).json({ 
+        error: 'Read-only mode',
+        message: 'Commands are read-only when using Cursor CLI engine',
+      });
+    }
+
     const commandData: SlashCommandCreate = req.body;
     const projectPath = req.query.projectPath as string;
 
@@ -387,6 +407,14 @@ router.post('/', async (req, res) => {
 // PUT /api/commands/:id - Update command
 router.put('/:id', async (req, res) => {
   try {
+    // Check if in read-only mode (Cursor engine)
+    if (isCursorEngine()) {
+      return res.status(403).json({ 
+        error: 'Read-only mode',
+        message: 'Commands are read-only when using Cursor CLI engine',
+      });
+    }
+
     const { id } = req.params;
     const updateData: SlashCommandUpdate = req.body;
     const projectPath = req.query.projectPath as string;
@@ -497,6 +525,14 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/commands/:id - Delete command
 router.delete('/:id', async (req, res) => {
   try {
+    // Check if in read-only mode (Cursor engine)
+    if (isCursorEngine()) {
+      return res.status(403).json({ 
+        error: 'Read-only mode',
+        message: 'Commands are read-only when using Cursor CLI engine',
+      });
+    }
+
     const { id } = req.params;
     const projectPath = req.query.projectPath as string;
     const [scope, ...nameParts] = id.split(':');

@@ -18,11 +18,13 @@ import { showError } from '../utils/toast';
 import { useMobileContext } from '../contexts/MobileContext';
 import { SystemPromptEditor } from '../components/SystemPromptEditor';
 import { ToolsList } from '../components/ToolsList';
+import { useConfirm } from '../hooks/useConfirm';
 
 
 export const AgentsPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const confirm = useConfirm();
   const { data: agentsData, isLoading } = useAgents();
   const updateAgent = useUpdateAgent();
   const deleteAgent = useDeleteAgent();
@@ -265,7 +267,14 @@ Please respond in Chinese unless the user specifically requests another language
       return;
     }
 
-    const confirmed = window.confirm(t('agents.confirmDelete', { name: agent.name }));
+    const confirmed = await confirm({
+      title: t('agents.deleteTitle', '删除确认'),
+      message: t('agents.confirmDelete', { name: agent.name }),
+      confirmText: t('common.delete', '删除'),
+      cancelText: t('common.cancel', '取消'),
+      variant: 'danger'
+    });
+    
     if (!confirmed) {
       console.log('❌ [FRONTEND DEBUG] User cancelled deletion');
       return;

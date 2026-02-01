@@ -45,9 +45,11 @@ import { ScheduledTaskEditor } from '../components/ScheduledTaskEditor';
 import { TaskExecutionHistory } from '../components/TaskExecutionHistory';
 import type { ScheduledTask } from '../types/scheduledTasks';
 import { showSuccess, showError } from '../utils/toast';
+import { useConfirm } from '../hooks/useConfirm';
 
 export const ScheduledTasksPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
   
   const { data: tasks = [], isLoading } = useScheduledTasks();
   const { data: agentsData } = useAgents(true);
@@ -122,7 +124,15 @@ export const ScheduledTasksPage: React.FC = () => {
 
   // Handle delete
   const handleDelete = async (task: ScheduledTask) => {
-    if (!confirm(`确定要删除任务 "${task.name}" 吗？`)) {
+    const confirmed = await confirm({
+      title: '删除确认',
+      message: `确定要删除任务 "${task.name}" 吗？`,
+      confirmText: '删除',
+      cancelText: '取消',
+      variant: 'danger'
+    });
+    
+    if (!confirmed) {
       return;
     }
     try {

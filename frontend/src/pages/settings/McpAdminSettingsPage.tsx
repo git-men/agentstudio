@@ -21,6 +21,7 @@ import {
 import { showError, showSuccess } from '../../utils/toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE } from '../../lib/config';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface AdminApiKey {
   id: string;
@@ -148,6 +149,7 @@ async function fetchConfigSnippet(apiKey: string): Promise<{ cursor: { configStr
 export const McpAdminSettingsPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const queryClient = useQueryClient();
+  const confirm = useConfirm();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showConfigModal, setShowConfigModal] = useState(false);
@@ -319,8 +321,15 @@ export const McpAdminSettingsPage: React.FC = () => {
     toggleKeyMutation.mutate({ keyId: key.id, enabled: !key.enabled });
   };
 
-  const handleRevokeKey = (keyId: string) => {
-    if (confirm(t('settings.mcpAdmin.confirmRevoke'))) {
+  const handleRevokeKey = async (keyId: string) => {
+    const confirmed = await confirm({
+      title: t('settings.mcpAdmin.confirmRevokeTitle', '确认撤销'),
+      message: t('settings.mcpAdmin.confirmRevoke'),
+      confirmText: t('settings.mcpAdmin.revoke', '撤销'),
+      cancelText: t('settings.mcpAdmin.cancel'),
+      variant: 'danger'
+    });
+    if (confirmed) {
       revokeKeyMutation.mutate(keyId);
     }
   };

@@ -7,6 +7,7 @@ import { Toaster } from './components/ui/toaster';
 import { MobileProvider } from './contexts/MobileContext';
 import { TelemetryProvider } from './components/TelemetryProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ConfirmProvider } from './hooks/useConfirm';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -31,6 +32,9 @@ const TelemetrySettingsPage = lazy(() => import('./pages/settings/TelemetrySetti
 const SystemInfoPage = lazy(() => import('./pages/settings/SystemInfoPage').then(module => ({ default: module.SystemInfoPage })));
 const WebSocketTunnelPage = lazy(() => import('./pages/settings/WebSocketTunnelPage').then(module => ({ default: module.WebSocketTunnelPage })));
 const VoiceSettingsPage = lazy(() => import('./pages/settings/VoiceSettingsPage').then(module => ({ default: module.VoiceSettingsPage })));
+const CursorConfigPage = lazy(() => import('./pages/settings/CursorConfigPage').then(module => ({ default: module.CursorConfigPage })));
+const RulesPage = lazy(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
+const HooksPage = lazy(() => import('./pages/HooksPage').then(module => ({ default: module.HooksPage })));
 const CommandsPage = lazy(() => import('./pages/CommandsPage').then(module => ({ default: module.CommandsPage })));
 const SkillsPage = lazy(() => import('./pages/SkillsPage').then(module => ({ default: module.SkillsPage })));
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(module => ({ default: module.PluginsPage })));
@@ -131,6 +135,16 @@ const AppContent: React.FC = () => {
               <Layout><McpPage /></Layout>
             </ProtectedRoute>
           } />
+          <Route path="/rules" element={
+            <ProtectedRoute>
+              <Layout><RulesPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/hooks" element={
+            <ProtectedRoute>
+              <Layout><HooksPage /></Layout>
+            </ProtectedRoute>
+          } />
           <Route path="/skills" element={
             <ProtectedRoute>
               <Layout><SkillsPage /></Layout>
@@ -167,6 +181,7 @@ const AppContent: React.FC = () => {
             <Route path="system-info" element={<SystemInfoPage />} />
             <Route path="tunnel" element={<WebSocketTunnelPage />} />
             <Route path="voice" element={<VoiceSettingsPage />} />
+            <Route path="cursor-config" element={<CursorConfigPage />} />
           </Route>
 
           {/* Toast Test Page */}
@@ -197,8 +212,10 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <MobileProvider>
           <TelemetryProvider>
-            <AppContent />
-            <Toaster />
+            <ConfirmProvider>
+              <AppContent />
+              <Toaster />
+            </ConfirmProvider>
           </TelemetryProvider>
         </MobileProvider>
       </QueryClientProvider>

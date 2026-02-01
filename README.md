@@ -6,7 +6,7 @@
 
 **Agent for Work — Your Local Agent Workspace**
 
-Powered by Claude Agent SDK
+Powered by Claude Agent SDK & Cursor CLI
 
 [![GPL v3 License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://opensource.org/licenses/GPL-3.0)
 [![GitHub stars](https://img.shields.io/github/stars/okguitar/agentstudio.svg)](https://github.com/okguitar/agentstudio/stargazers)
@@ -22,7 +22,16 @@ Powered by Claude Agent SDK
 
 AgentStudio is a **local Agent workspace** running on your computer — a true personal AI assistant. Your data stays completely private, secure, and under your control. It supports scheduled task automation and multi-agent collaboration.
 
-Built on Claude Agent SDK, AgentStudio transforms the CLI experience into a friendly Web interface, making AI agents accessible to everyone, not just developers.
+AgentStudio transforms the CLI experience into a friendly Web interface, making AI agents accessible to everyone, not just developers.
+
+### 🔌 Dual Engine Support
+
+AgentStudio supports two AI engines:
+
+| Engine | Description | Best For |
+|--------|-------------|----------|
+| **Claude Agent SDK** | Full-featured engine with complete read/write capabilities | Power users who need full control |
+| **Cursor CLI** | Read-only integration with Cursor's configuration | Users who manage configs via Cursor IDE |
 
 <div align="center">
 
@@ -68,19 +77,21 @@ agentstudio --help             # Show all commands
 - **Visual tool execution** — See what your Agent is doing in real-time
 - **Built-in file browser** — View project files alongside conversations
 
-### 🧰 Claude Agent SDK Full Stack
+### 🧰 Configuration Management
 
-Everything from Claude Code, and more:
+Manage your AI configurations through a friendly interface:
 
-| Feature | Description |
-|---------|-------------|
-| **MCP** | One-click import of Claude Code MCP configurations |
-| **Skills** | Reusable code skill library |
-| **Commands** | Custom slash commands for quick actions |
-| **Plugin Ecosystem** | Install agents, commands, skills, and MCP servers |
-| **Project Memory** | Each project has independent memory (CLAUDE.md) |
-| **Subagents** | Configure nested AI agents with specific capabilities |
-| **Multi-Model** | Claude, GLM, DeepSeek, Kimi K2, MiniMax, and more |
+| Feature | Claude SDK | Cursor CLI |
+|---------|------------|------------|
+| **MCP** | Full CRUD | Read-only (view `~/.cursor/mcp.json`) |
+| **Rules** | Full CRUD | Read-only (view `~/.cursor/rules/`) |
+| **Commands** | Full CRUD | Read-only (view `~/.cursor/commands/`) |
+| **Skills** | Full CRUD | Read-only (view `~/.cursor/skills/`) |
+| **Hooks** | Full CRUD | Not available |
+| **Plugin Ecosystem** | ✅ | ✅ |
+| **Project Memory** | ✅ | ✅ |
+| **Subagents** | ✅ | ✅ |
+| **Multi-Model** | Claude, GLM, DeepSeek, Kimi K2, MiniMax, and more | Cursor models |
 
 ### ⏰ Scheduled Tasks
 
@@ -161,6 +172,68 @@ cp backend/.env.example backend/.env
 pnpm run dev
 ```
 
+## 🔧 Engine Configuration
+
+AgentStudio supports two AI engines. Choose the one that fits your workflow.
+
+### Selecting an Engine
+
+Set the `ENGINE` environment variable before starting the server:
+
+```bash
+# Use Claude Agent SDK (default, full features)
+ENGINE=claude-sdk pnpm run dev
+
+# Use Cursor CLI (read-only config management)
+ENGINE=cursor-cli pnpm run dev
+```
+
+Or set it in your `backend/.env` file:
+
+```env
+# Choose: claude-sdk or cursor-cli
+ENGINE=claude-sdk
+```
+
+### Engine Comparison
+
+| Feature | Claude SDK | Cursor CLI |
+|---------|------------|------------|
+| **MCP Management** | Create, edit, delete | View only |
+| **Rules Management** | Create, edit, delete | View only |
+| **Commands Management** | Create, edit, delete | View only |
+| **Skills Management** | Create, edit, delete | View only |
+| **Hooks** | ✅ Supported | ❌ Not available |
+| **Provider Selection** | ✅ Multiple providers | ❌ Cursor only |
+| **Config Location** | `~/.claude/` | `~/.cursor/` |
+| **File Extension** | `.md` | `.mdc` |
+
+### When to Use Each Engine
+
+**Claude Agent SDK** is recommended when:
+- You want full control over configurations
+- You need to create/edit MCP servers, rules, commands, skills
+- You want to use Hooks for automation
+- You prefer managing everything through AgentStudio
+
+**Cursor CLI** is recommended when:
+- You primarily use Cursor IDE for configuration
+- You want AgentStudio as a read-only dashboard
+- You need to view your Cursor configurations in a web interface
+- You want to avoid accidental config modifications
+
+### Important Notes
+
+1. **Config Isolation**: Each engine uses its own config directory
+   - Claude SDK: `~/.claude/`
+   - Cursor CLI: `~/.cursor/`
+
+2. **Read-Only Mode**: In Cursor CLI mode, write operations are blocked with a "Read-only mode" indicator
+
+3. **Feature Visibility**: Some features (like Hooks) are automatically hidden in Cursor CLI mode
+
+4. **Switching Engines**: Restart the server when changing engines
+
 ## 🧪 Development
 
 ```bash
@@ -175,7 +248,11 @@ pnpm run build        # Production build
 
 **Frontend:** React 19, TypeScript, Vite, TailwindCSS, Zustand, React Query
 
-**Backend:** Node.js, Express, TypeScript, Claude Agent SDK, JWT
+**Backend:** Node.js, Express, TypeScript, Claude Agent SDK, Cursor CLI, JWT
+
+**Supported Engines:**
+- Claude Agent SDK — Full-featured AI agent capabilities
+- Cursor CLI — Integration with Cursor IDE configurations
 
 ## 🤝 Contributing
 

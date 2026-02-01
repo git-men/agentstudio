@@ -3,7 +3,9 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 import { readFileSync } from 'fs'
 
-const target = 'http://127.0.0.1:4936';
+// Use VITE_API_PORT for proxy target, defaulting to 4936
+const apiPort = process.env.VITE_API_PORT || '4936';
+const target = `http://127.0.0.1:${apiPort}`;
 
 // Get package version
 const getPackageVersion = () => {

@@ -37,10 +37,15 @@ export const CommandsPage: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<SlashCommand | null>(null);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
 
-  const { data: commands = [], isLoading, error, refetch } = useCommands({
+  const { data, isLoading, error, refetch } = useCommands({
     ...filter,
     search: searchTerm.trim() || undefined
   });
+  
+  // Extract commands and readOnly flag from response
+  const commands = data?.commands || [];
+  const readOnly = data?.readOnly || false;
+  const engineType = data?.engine || 'claude-sdk';
 
   const deleteCommand = useDeleteCommand();
 
@@ -119,17 +124,24 @@ export const CommandsPage: React.FC = () => {
             />
           </div>
 
-          {/* Add Button */}
-          <button
-            onClick={() => {
-              setEditingCommand(null);
-              setShowForm(true);
-            }}
-            className={`${isMobile ? 'w-full py-2.5 px-4' : 'flex items-center space-x-2 px-6 py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${isMobile ? 'text-sm' : ''}`}
-          >
-            <Plus className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
-            <span>{t('commands.createButton')}</span>
-          </button>
+          {/* Add Button (hidden in read-only mode) */}
+          {!readOnly ? (
+            <button
+              onClick={() => {
+                setEditingCommand(null);
+                setShowForm(true);
+              }}
+              className={`${isMobile ? 'w-full py-2.5 px-4' : 'flex items-center space-x-2 px-6 py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors ${isMobile ? 'text-sm' : ''}`}
+            >
+              <Plus className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+              <span>{t('commands.createButton')}</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
+              <Eye className="w-4 h-4" />
+              <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -146,7 +158,7 @@ export const CommandsPage: React.FC = () => {
               : t('commands.empty.createFirst')
             }
           </p>
-          {!searchTerm && (
+          {!searchTerm && !readOnly && (
             <button
               onClick={() => {
                 setEditingCommand(null);
@@ -156,6 +168,11 @@ export const CommandsPage: React.FC = () => {
             >
               {t('commands.createButton')}
             </button>
+          )}
+          {readOnly && (
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+              配置来自 ~/.cursor/commands（只读）
+            </p>
           )}
         </div>
       ) : (
@@ -343,7 +360,7 @@ export const CommandsPage: React.FC = () => {
                         </TableCell>
                         <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                           <div className="flex items-center justify-end space-x-2">
-                            {command.source === 'plugin' ? (
+                            {command.source === 'plugin' || readOnly ? (
                               <button
                                 onClick={() => {
                                   setEditingCommand(command);

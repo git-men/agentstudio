@@ -28,6 +28,7 @@ import { useProjects } from '../hooks/useProjects';
 import { showError } from '../utils/toast';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
+import { useConfirm } from '../hooks/useConfirm';
 
 interface Project {
   id: string;
@@ -42,6 +43,7 @@ interface ProjectA2AModalProps {
 
 export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClose }) => {
   const { t } = useTranslation('components');
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'external' | 'tasks' | 'im'>('overview');
 
   // Use A2A management hook
@@ -211,7 +213,14 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
 
   // Handle delete API key
   const handleDeleteApiKey = async (keyId: string) => {
-    if (!confirm(t('a2aManagement.confirmations.deleteApiKey'))) return;
+    const confirmed = await confirm({
+      title: t('a2aManagement.confirmations.deleteApiKeyTitle', '确认删除'),
+      message: t('a2aManagement.confirmations.deleteApiKey'),
+      confirmText: t('a2aManagement.actions.delete', '删除'),
+      cancelText: t('a2aManagement.actions.cancel', '取消'),
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     await deleteApiKey(keyId);
   };
 
@@ -236,7 +245,14 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
 
   // Handle delete external agent
   const handleDeleteExternalAgent = async (index: number) => {
-    if (!confirm(t('a2aManagement.confirmations.deleteExternalAgent'))) return;
+    const confirmed = await confirm({
+      title: t('a2aManagement.confirmations.deleteExternalAgentTitle', '确认删除'),
+      message: t('a2aManagement.confirmations.deleteExternalAgent'),
+      confirmText: t('a2aManagement.actions.delete', '删除'),
+      cancelText: t('a2aManagement.actions.cancel', '取消'),
+      variant: 'danger'
+    });
+    if (!confirmed) return;
     await removeExternalAgent(index);
   };
 

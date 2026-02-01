@@ -9,9 +9,11 @@ import { copyToClipboard } from '../../utils/commandGenerator';
 import { VersionTemplateSelector } from '../../components/settings/version/VersionTemplateSelector';
 import { ClaudeVersionList } from '../../components/settings/version/ClaudeVersionList';
 import { ClaudeVersionForm } from '../../components/settings/version/ClaudeVersionForm';
+import { useConfirm } from '../../hooks/useConfirm';
 
 export const VersionSettingsPage: React.FC = () => {
   const { t } = useTranslation('pages');
+  const confirm = useConfirm();
   
   // Claude版本管理相关状态
   const [isCreating, setIsCreating] = useState(false);
@@ -242,7 +244,15 @@ export const VersionSettingsPage: React.FC = () => {
       return;
     }
 
-    if (confirm(t('settings.supplier.confirmDelete', { alias: version.alias }))) {
+    const confirmed = await confirm({
+      title: t('settings.supplier.deleteTitle', '删除确认'),
+      message: t('settings.supplier.confirmDelete', { alias: version.alias }),
+      confirmText: t('common.delete', '删除'),
+      cancelText: t('common.cancel', '取消'),
+      variant: 'danger'
+    });
+    
+    if (confirmed) {
       try {
         await deleteClaudeVersion.mutateAsync(version.id);
         showSuccess(t('settings.supplier.success.deleteVersion'));

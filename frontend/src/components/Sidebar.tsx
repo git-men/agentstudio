@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -18,15 +18,33 @@ import {
   Key,
   Globe,
   Puzzle,
-  Mic
+  Mic,
+  FileCode,
+  Webhook
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
 import { ServiceManagementModal } from './ServiceManagementModal';
 import { UpdateNotification } from './UpdateNotification';
 import { useMobileContext } from '../contexts/MobileContext';
+import useEngine from '../hooks/useEngine';
+import type { EngineFeatureKey, ConfigCapabilityKey } from '../types/engine';
 
-const getNavigationItems = (t: (key: string) => string) => [
+// Navigation item type with optional engine requirements
+interface NavItem {
+  name: string;
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  submenu?: NavItem[];
+  // Optional: require a feature to be supported
+  requireFeature?: EngineFeatureKey;
+  // Optional: require a config capability
+  requireConfig?: ConfigCapabilityKey;
+  // Optional: require a specific engine type
+  requireEngine?: 'cursor-cli' | 'claude-sdk';
+}
+
+const getNavigationItems = (t: (key: string) => string): NavItem[] => [
   {
     name: t('nav.dashboard'),
     href: '/dashboard',
@@ -41,6 +59,13 @@ const getNavigationItems = (t: (key: string) => string) => [
     name: t('nav.mcp'),
     href: '/mcp',
     icon: Server,
+    requireConfig: 'mcp',
+  },
+  {
+    name: 'Rules', // TODO: Add i18n
+    href: '/rules',
+    icon: FileCode,
+    requireConfig: 'rules',
   },
   {
     name: t('nav.agents'),
@@ -51,6 +76,7 @@ const getNavigationItems = (t: (key: string) => string) => [
     name: t('nav.scheduledTasks'),
     href: '/scheduled-tasks',
     icon: Clock,
+    // Available for both Claude and Cursor engines
   },
   {
     name: t('nav.extensions'),
@@ -61,21 +87,25 @@ const getNavigationItems = (t: (key: string) => string) => [
         name: t('nav.plugins'),
         href: '/plugins',
         icon: Package,
+        requireConfig: 'plugins',
       },
       {
         name: t('nav.commands'),
         href: '/settings/commands',
         icon: Command,
+        requireConfig: 'commands',
       },
       {
         name: t('nav.subagents'),
         href: '/settings/subagents',
         icon: Bot,
+        requireFeature: 'subagents',
       },
       {
         name: t('nav.skills'),
         href: '/skills',
         icon: Zap,
+        requireConfig: 'skills',
       },
     ],
   },
@@ -93,6 +123,7 @@ const getNavigationItems = (t: (key: string) => string) => [
         name: t('nav.settingsSubmenu.suppliers'),
         href: '/settings/suppliers',
         icon: Terminal,
+        requireFeature: 'provider',
       },
       {
         name: t('nav.settingsSubmenu.memory'),
@@ -103,6 +134,7 @@ const getNavigationItems = (t: (key: string) => string) => [
         name: t('nav.settingsSubmenu.mcpAdmin'),
         href: '/settings/mcp-admin',
         icon: Key,
+        // Available for both Claude and Cursor engines
       },
       {
         name: t('nav.settingsSubmenu.tunnel'),
@@ -113,6 +145,19 @@ const getNavigationItems = (t: (key: string) => string) => [
         name: t('nav.settingsSubmenu.voice'),
         href: '/settings/voice',
         icon: Mic,
+        // Available for both Claude and Cursor engines
+      },
+      {
+        name: 'Cursor 配置', // TODO: Add i18n key
+        href: '/settings/cursor-config',
+        icon: Settings,
+        requireEngine: 'cursor-cli',
+      },
+      {
+        name: 'Hooks', // TODO: Add i18n key
+        href: '/hooks',
+        icon: Webhook,
+        requireFeature: 'hooks',
       },
     ],
   },
@@ -133,7 +178,51 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   });
   const [showServiceManagement, setShowServiceManagement] = useState(false);
 
-  const navigationItems = getNavigationItems(t);
+  // Get engine capabilities for filtering navigation items
+  const { isFeatureSupported, isConfigSupported, engineType, isLoading: isEngineLoading } = useEngine();
+
+  // Filter navigation items based on engine capabilities
+  const filterNavItems = (items: NavItem[]): NavItem[] => {
+    return items
+      .filter(item => {
+        // Check engine type requirement
+        if (item.requireEngine && engineType !== item.requireEngine) {
+          return false;
+        }
+        // Check feature requirement
+        if (item.requireFeature && !isFeatureSupported(item.requireFeature)) {
+          return false;
+        }
+        // Check config requirement
+        if (item.requireConfig && !isConfigSupported(item.requireConfig)) {
+          return false;
+        }
+        return true;
+      })
+      .map(item => {
+        // Recursively filter submenus
+        if (item.submenu) {
+          const filteredSubmenu = filterNavItems(item.submenu);
+          // If all submenu items are filtered out, remove the parent too
+          if (filteredSubmenu.length === 0) {
+            return null;
+          }
+          return { ...item, submenu: filteredSubmenu };
+        }
+        return item;
+      })
+      .filter((item): item is NavItem => item !== null);
+  };
+
+  // Get filtered navigation items
+  const navigationItems = useMemo(() => {
+    const allItems = getNavigationItems(t);
+    // Don't filter while engine is loading to prevent flash
+    if (isEngineLoading) {
+      return allItems;
+    }
+    return filterNavItems(allItems);
+  }, [t, isEngineLoading, isFeatureSupported, isConfigSupported, engineType]);
 
   const toggleMenu = (itemKey: string) => {
     setExpandedMenus(prev =>

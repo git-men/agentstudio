@@ -7,6 +7,7 @@ import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { PluginDetailModal } from './PluginDetailModal';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface BrowsePluginsTabProps {
   plugins: AvailablePlugin[];
@@ -33,6 +34,7 @@ export const BrowsePluginsTab: React.FC<BrowsePluginsTabProps> = ({
 }) => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const confirm = useConfirm();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlugin, setSelectedPlugin] = useState<{ marketplace: string; name: string } | null>(null);
   const [showOnlyInstalled, setShowOnlyInstalled] = useState(false);
@@ -60,8 +62,15 @@ export const BrowsePluginsTab: React.FC<BrowsePluginsTabProps> = ({
     });
   };
 
-  const handleUninstall = (plugin: AvailablePlugin) => {
-    if (window.confirm(t('plugins.browse.confirmUninstall', { name: plugin.name }))) {
+  const handleUninstall = async (plugin: AvailablePlugin) => {
+    const confirmed = await confirm({
+      title: t('plugins.browse.confirmUninstallTitle', '确认卸载'),
+      message: t('plugins.browse.confirmUninstall', { name: plugin.name }),
+      confirmText: t('plugins.browse.uninstall', '卸载'),
+      cancelText: t('plugins.browse.cancel', '取消'),
+      variant: 'danger'
+    });
+    if (confirmed) {
       onUninstallPlugin({
         marketplaceName: plugin.marketplaceName,
         pluginName: plugin.name,

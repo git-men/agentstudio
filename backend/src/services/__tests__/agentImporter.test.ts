@@ -159,6 +159,7 @@ describe('AgentImporter', () => {
       const result = await agentImporter.importAgent('test-market', {
         name: 'Inline Agent',
         description: 'An inline agent',
+        source: '', // Empty source indicates inline config
         config: {
           systemPrompt: 'You are an inline agent',
           permissionMode: 'acceptEdits',
@@ -201,7 +202,8 @@ describe('AgentImporter', () => {
       
       const result = await agentImporter.importAgent('test-market', {
         name: 'No Config Agent',
-        description: 'Agent without source or config'
+        description: 'Agent without source or config',
+        source: '' // Empty source to test the validation
       });
       
       expect(result.success).toBe(false);

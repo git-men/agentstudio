@@ -18,9 +18,16 @@ import { ToolsList } from '../ToolsList';
 import { authFetch } from '../../lib/authFetch';
 import { API_BASE } from '../../lib/config';
 import { SkillConfig } from '../../types/skills';
+import useEngine from '../../hooks/useEngine';
+import { useConfirm } from '../../hooks/useConfirm';
+import { showError } from '../../utils/toast';
 
 export const SkillsPage: React.FC = () => {
   const { t } = useTranslation('skills');
+  const { isCursorEngine, engineType } = useEngine();
+  const confirm = useConfirm();
+  const readOnly = isCursorEngine; // Skills are read-only in Cursor mode
+  
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillListItem | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -75,7 +82,15 @@ export const SkillsPage: React.FC = () => {
   };
 
   const handleDeleteSkill = async (skill: SkillListItem) => {
-    if (window.confirm(t('deleteConfirm', { name: skill.name }))) {
+    const confirmed = await confirm({
+      title: t('deleteTitle', '删除确认'),
+      message: t('deleteConfirm', { name: skill.name }),
+      confirmText: t('common.delete', '删除'),
+      cancelText: t('common.cancel', '取消'),
+      variant: 'danger'
+    });
+    
+    if (confirmed) {
       try {
         await deleteSkillMutation.mutateAsync({ 
           skillId: skill.id, 
@@ -83,7 +98,7 @@ export const SkillsPage: React.FC = () => {
         });
       } catch (error) {
         console.error('Failed to delete skill:', error);
-        alert(t('errors.deleteFailed'));
+        showError(t('errors.deleteFailed'));
       }
     }
   };
@@ -129,13 +144,20 @@ export const SkillsPage: React.FC = () => {
               className="pl-10 pr-4 py-3 w-full border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
             />
           </div>
-          <button
-            onClick={handleCreateSkill}
-            className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
-          >
-            <Plus className="w-5 h-5" />
-            <span>{t('createButton')}</span>
-          </button>
+          {!readOnly ? (
+            <button
+              onClick={handleCreateSkill}
+              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap"
+            >
+              <Plus className="w-5 h-5" />
+              <span>{t('createButton')}</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
+              <Eye className="w-4 h-4" />
+              <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+            </div>
+          )}
         </div>
       </div>
 
@@ -154,13 +176,18 @@ export const SkillsPage: React.FC = () => {
           <p className="text-gray-600 dark:text-gray-400 mb-6">
             {searchTerm ? t('adjustSearch') : t('createFirst')}
           </p>
-          {!searchTerm && (
+          {!searchTerm && !readOnly && (
             <button
               onClick={handleCreateSkill}
               className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             >
               {t('createButton')}
             </button>
+          )}
+          {readOnly && (
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+              配置来自 ~/.cursor/skills（只读）
+            </p>
           )}
         </div>
       ) : (
@@ -241,7 +268,7 @@ export const SkillsPage: React.FC = () => {
                   {/* Actions */}
                   <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-32">
                     <div className="flex items-center space-x-2">
-                      {skill.source === 'plugin' ? (
+                      {skill.source === 'plugin' || readOnly ? (
                         <>
                           <button
                             onClick={() => handleViewSkill(skill)}

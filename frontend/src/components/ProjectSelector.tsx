@@ -8,6 +8,7 @@ import { FileBrowser } from './FileBrowser.js';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
+import { useConfirm } from '../hooks/useConfirm';
 
 interface ProjectSelectorProps {
   agent: AgentConfig;
@@ -21,6 +22,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   onClose
 }) => {
   const { t } = useTranslation('components');
+  const confirm = useConfirm();
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showFileBrowser, setShowFileBrowser] = useState(false);
   const [showNewProjectBrowser, setShowNewProjectBrowser] = useState(false);
@@ -150,9 +152,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         setShowImportBrowser(false);
       } else {
         // Directory is not a project yet, ask user if they want to import it
-        const confirmed = window.confirm(
-          t('projectSelector.importConfirmation', { agentName: agent.name, path })
-        );
+        const confirmed = await confirm({
+          title: t('projectSelector.importConfirmationTitle', '导入项目'),
+          message: t('projectSelector.importConfirmation', { agentName: agent.name, path }),
+          confirmText: t('projectSelector.import', '导入'),
+          cancelText: t('projectSelector.cancel', '取消'),
+          variant: 'info'
+        });
 
         if (confirmed) {
           try {
@@ -219,9 +225,13 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         setShowFileBrowser(false);
       } else {
         // Directory is not a project yet, ask user if they want to import it
-        const confirmed = window.confirm(
-          t('projectSelector.importConfirmation', { agentName: agent.name, path })
-        );
+        const confirmed = await confirm({
+          title: t('projectSelector.importConfirmationTitle', '导入项目'),
+          message: t('projectSelector.importConfirmation', { agentName: agent.name, path }),
+          confirmText: t('projectSelector.import', '导入'),
+          cancelText: t('projectSelector.cancel', '取消'),
+          variant: 'info'
+        });
 
         if (confirmed) {
           // Add this directory to agent's projects and select it

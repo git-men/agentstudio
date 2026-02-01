@@ -16,6 +16,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { useMobileContext } from '../../contexts/MobileContext';
+import { useConfirm } from '../../hooks/useConfirm';
 
 interface TunnelConfig {
   hasApiToken: boolean;
@@ -47,6 +48,7 @@ type WizardStep = 'intro' | 'credentials' | 'create' | 'start' | 'done';
 export const CloudflareTunnelPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const confirm = useConfirm();
 
   const [config, setConfig] = useState<TunnelConfig | null>(null);
   const [apiToken, setApiToken] = useState('');
@@ -185,7 +187,14 @@ export const CloudflareTunnelPage: React.FC = () => {
   };
 
   const deleteTunnel = async (tunnelId: string) => {
-    if (!confirm(t('settings.cloudflare.confirmDelete'))) {
+    const confirmed = await confirm({
+      title: t('settings.cloudflare.confirmDeleteTitle', '确认删除'),
+      message: t('settings.cloudflare.confirmDelete'),
+      confirmText: t('settings.cloudflare.delete', '删除'),
+      cancelText: t('settings.cloudflare.cancel', '取消'),
+      variant: 'danger'
+    });
+    if (!confirmed) {
       return;
     }
 

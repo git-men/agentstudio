@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError, showSuccess, showInfo } from '../utils/toast';
+import { useConfirm } from '../hooks/useConfirm';
 import {
   Plus,
   Trash2,
@@ -56,8 +57,11 @@ interface McpServerConfig {
 export const McpPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const confirm = useConfirm();
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [loading, setLoading] = useState(true);
+  const [readOnly, setReadOnly] = useState(false); // Read-only mode for Cursor engine
+  const [engineType, setEngineType] = useState<string>('claude-sdk');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -79,6 +83,9 @@ export const McpPage: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setServers(data.servers || []);
+        // Update readOnly state based on engine
+        setReadOnly(data.readOnly || false);
+        setEngineType(data.engine || 'claude-sdk');
       } else {
         console.error('Failed to load MCP configs:', response.status);
         setServers([]);
@@ -219,7 +226,15 @@ export const McpPage: React.FC = () => {
   };
 
   const handleDeleteServer = async (serverName: string) => {
-    if (window.confirm(t('mcp.confirmDelete', { name: serverName }))) {
+    const confirmed = await confirm({
+      title: t('mcp.deleteTitle', '删除确认'),
+      message: t('mcp.confirmDelete', { name: serverName }),
+      confirmText: t('common.delete', '删除'),
+      cancelText: t('common.cancel', '取消'),
+      variant: 'danger'
+    });
+    
+    if (confirmed) {
       try {
         const response = await authFetch(`${API_BASE}/mcp/${serverName}`, {
           method: 'DELETE'
@@ -516,21 +531,31 @@ export const McpPage: React.FC = () => {
               <Loader2 className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
               <span>{t('mcp.validateAll')}</span>
             </button>
-            <button
-              onClick={handleImportFromClaudeCode}
-              disabled={isImporting}
-              className={`${isMobile ? 'flex-1 px-3 py-2 text-sm' : 'px-5 py-3'} bg-green-600 text-white rounded-lg hover:bg-green-700 hover:shadow-md active:scale-95 transition-all whitespace-nowrap font-medium flex items-center ${isMobile ? 'justify-center' : 'space-x-2'} disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              {isImporting && <Loader2 className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} animate-spin`} />}
-              <span>{isImporting ? t('mcp.import.importing') : t('mcp.import.button')}</span>
-            </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className={`${isMobile ? 'flex-1 px-3 py-2 text-sm' : 'px-6 py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all whitespace-nowrap flex items-center ${isMobile ? 'justify-center' : 'space-x-2'} font-medium`}
-            >
-              <Plus className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
-              <span>{t('mcp.addServer')}</span>
-            </button>
+            {!readOnly && (
+              <>
+                <button
+                  onClick={handleImportFromClaudeCode}
+                  disabled={isImporting}
+                  className={`${isMobile ? 'flex-1 px-3 py-2 text-sm' : 'px-5 py-3'} bg-green-600 text-white rounded-lg hover:bg-green-700 hover:shadow-md active:scale-95 transition-all whitespace-nowrap font-medium flex items-center ${isMobile ? 'justify-center' : 'space-x-2'} disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  {isImporting && <Loader2 className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'} animate-spin`} />}
+                  <span>{isImporting ? t('mcp.import.importing') : t('mcp.import.button')}</span>
+                </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className={`${isMobile ? 'flex-1 px-3 py-2 text-sm' : 'px-6 py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 hover:shadow-md active:scale-95 transition-all whitespace-nowrap flex items-center ${isMobile ? 'justify-center' : 'space-x-2'} font-medium`}
+                >
+                  <Plus className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+                  <span>{t('mcp.addServer')}</span>
+                </button>
+              </>
+            )}
+            {readOnly && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
+                <Eye className="w-4 h-4" />
+                <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -545,13 +570,18 @@ export const McpPage: React.FC = () => {
           <p className={`text-gray-600 dark:text-gray-400 ${isMobile ? 'mb-4' : 'mb-6'}`}>
             {debouncedSearchQuery ? t('mcp.adjustSearch') : t('mcp.addFirstServer')}
           </p>
-          {!debouncedSearchQuery && (
+          {!debouncedSearchQuery && !readOnly && (
             <button
               onClick={() => setShowAddModal(true)}
               className={`${isMobile ? 'px-4 py-2 text-sm' : 'px-6 py-3'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors`}
             >
               {t('mcp.addServer')}
             </button>
+          )}
+          {readOnly && (
+            <p className="text-sm text-yellow-600 dark:text-yellow-400">
+              配置来自 ~/.cursor/mcp.json（只读）
+            </p>
           )}
         </div>
       ) : (
@@ -708,20 +738,24 @@ export const McpPage: React.FC = () => {
                       >
                         <Copy className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleEditServer(server)}
-                        className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-md transition-colors"
-                        title={t('mcp.actions.edit')}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteServer(server.name)}
-                        className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md transition-colors"
-                        title={t('mcp.actions.delete')}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {!readOnly && (
+                        <>
+                          <button
+                            onClick={() => handleEditServer(server)}
+                            className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-md transition-colors"
+                            title={t('mcp.actions.edit')}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteServer(server.name)}
+                            className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md transition-colors"
+                            title={t('mcp.actions.delete')}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -854,7 +888,7 @@ export const McpPage: React.FC = () => {
                         >
                           <Copy className="w-3 h-3" />
                         </button>
-                        {server.source === 'plugin' ? (
+                        {server.source === 'plugin' || readOnly ? (
                           <button
                             onClick={() => handleEditServer(server)}
                             className="inline-flex items-center px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/50 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/70 transition-colors"

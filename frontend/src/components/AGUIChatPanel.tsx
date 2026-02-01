@@ -557,7 +557,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
                     {/* Action Buttons */}
                     <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
-                        {/* Engine Selector */}
+                        {/* Engine Sync (headless - syncs service engine to store) */}
                         <EngineSelector disabled={isAiTyping} />
                         
                         <div className="flex space-x-1">

@@ -32,6 +32,9 @@ import tunnelRouter from './routes/tunnel';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
+import engineRouter from './routes/engine';
+import rulesRouter from './routes/rules';
+import hooksRouter from './routes/hooks';
 import { authMiddleware } from './middleware/auth';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
@@ -41,6 +44,7 @@ import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
+import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { getEngineStatus } from './engines/index.js';
 
@@ -74,8 +78,10 @@ process.on('uncaughtExceptionMonitor', (error: Error, origin: string) => {
   console.error('[Monitor] Stack:', error.stack);
 });
 
-// Log SDK configuration at startup
-logSdkConfig();
+// Initialize and log engine configuration at startup
+initializeEngine();
+logEngineConfig();
+logSdkConfig(); // Keep for backward compatibility
 
 // Get version from package.json (works in both dev and npm package mode)
 const getVersion = () => {
@@ -473,6 +479,9 @@ const app: express.Express = express();
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service
+  app.use('/api/engine', engineRouter); // Engine configuration (public, no auth required)
+  app.use('/api/rules', authMiddleware, rulesRouter); // Rules management (both Claude and Cursor)
+  app.use('/api/hooks', authMiddleware, hooksRouter); // Hooks management (Claude only)
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 

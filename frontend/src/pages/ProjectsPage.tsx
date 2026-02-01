@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
-import { showError } from '../utils/toast';
+import { showError, showSuccess } from '../utils/toast';
 import {
   Plus,
   Search,
@@ -18,6 +18,7 @@ import { ProjectCommandsModal } from '../components/ProjectCommandsModal';
 import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
 import { ProjectA2AModal } from '../components/ProjectA2AModal';
 import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
+import { useConfirm } from '../hooks/useConfirm';
 
 interface Project {
   id: string;
@@ -249,6 +250,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 export const ProjectsPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const { data: agentsData } = useAgents();
+  const confirm = useConfirm();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -371,9 +373,13 @@ export const ProjectsPage: React.FC = () => {
   };
 
   const handleDeleteProject = async (project: Project) => {
-    const confirmed = window.confirm(
-      `${t('projects.deleteConfirm')}\n\n${t('projects.deleteNote')}`
-    );
+    const confirmed = await confirm({
+      title: t('projects.deleteTitle', '删除确认'),
+      message: `${t('projects.deleteConfirm')}\n\n${t('projects.deleteNote')}`,
+      confirmText: t('common.delete', '删除'),
+      cancelText: t('common.cancel', '取消'),
+      variant: 'danger'
+    });
 
     if (confirmed) {
       try {
@@ -508,9 +514,13 @@ export const ProjectsPage: React.FC = () => {
         setImportProjectPath('');
 
         // Show success message and ask if user wants to open the project
-        const shouldOpen = window.confirm(
-          `项目 "${result.project.name}" 导入成功！\n\n是否立即打开该项目？`
-        );
+        const shouldOpen = await confirm({
+          title: '导入成功',
+          message: `项目 "${result.project.name}" 导入成功！\n\n是否立即打开该项目？`,
+          confirmText: '打开项目',
+          cancelText: '稍后',
+          variant: 'info'
+        });
 
         if (shouldOpen) {
           // If there are multiple agents, show agent selection dialog

@@ -19,6 +19,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { showSuccess, showError, showInfo } from '../../utils/toast';
+import { useConfirm } from '../../hooks/useConfirm';
 
 // Tunely (WebSocket) tunnel types
 interface TunnelConfig {
@@ -91,6 +92,8 @@ type TunnelType = 'tunely' | 'cloudflare';
 type CloudflareWizardStep = 'intro' | 'credentials' | 'create' | 'start' | 'done';
 
 export const WebSocketTunnelPage: React.FC = () => {
+  const confirm = useConfirm();
+  
   // Tab state
   const [activeTab, setActiveTab] = useState<TunnelType>('tunely');
 
@@ -524,7 +527,14 @@ export const WebSocketTunnelPage: React.FC = () => {
   };
 
   const deleteCfTunnel = async (tunnelId: string) => {
-    if (!confirm('确定要删除此隧道吗？')) return;
+    const confirmed = await confirm({
+      title: '确认删除',
+      message: '确定要删除此隧道吗？',
+      confirmText: '删除',
+      cancelText: '取消',
+      variant: 'danger'
+    });
+    if (!confirmed) return;
 
     setCfLoading(true);
     setCfError(null);
@@ -765,7 +775,14 @@ export const WebSocketTunnelPage: React.FC = () => {
 
     // Delete tunnel handler
     const handleDeleteTunnel = async () => {
-      if (!window.confirm('确定要删除隧道配置吗？删除后需要重新配置隧道。')) {
+      const confirmed = await confirm({
+        title: '确认删除',
+        message: '确定要删除隧道配置吗？删除后需要重新配置隧道。',
+        confirmText: '删除',
+        cancelText: '取消',
+        variant: 'danger'
+      });
+      if (!confirmed) {
         return;
       }
 

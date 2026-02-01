@@ -6,6 +6,7 @@ import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import { MCP_SERVER_CONFIG_FILE, CLAUDE_AGENT_DIR } from '../config/paths.js';
 import { getSdkConfigPath } from '../config/sdkConfig.js';
+import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
 
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
@@ -38,8 +39,11 @@ export interface McpConfigFile {
   mcpServers: Record<string, Omit<McpServerConfig, 'name'>>;
 }
 
-// Helper function to get MCP config file path
+// Helper function to get MCP config file path (engine-aware)
 const getMcpConfigPath = (): string => {
+  if (isCursorEngine()) {
+    return getEnginePaths().mcpConfigPath;
+  }
   return MCP_SERVER_CONFIG_FILE;
 };
 
@@ -86,10 +90,17 @@ router.get('/', (req, res) => {
     const config = readMcpConfig();
     const servers: McpServerConfig[] = Object.entries(config.mcpServers).map(([name, serverConfig]) => ({
       name,
-      ...serverConfig
+      ...serverConfig,
+      // Add default source for Cursor configs
+      source: serverConfig.source || 'local',
     } as McpServerConfig));
 
-    res.json({ servers });
+    // Include readOnly flag for Cursor engine
+    res.json({ 
+      servers,
+      readOnly: isCursorEngine(),
+      engine: isCursorEngine() ? 'cursor-cli' : 'claude-sdk',
+    });
   } catch (error) {
     console.error('Failed to get MCP configs:', error);
     res.status(500).json({ error: 'Failed to retrieve MCP configurations' });
@@ -99,6 +110,14 @@ router.get('/', (req, res) => {
 // Add or update MCP configuration
 router.post('/', (req, res) => {
   try {
+    // Check if in read-only mode (Cursor engine)
+    if (isCursorEngine()) {
+      return res.status(403).json({ 
+        error: 'Read-only mode',
+        message: 'MCP configuration is read-only when using Cursor CLI engine',
+      });
+    }
+
     const { name, type, ...restConfig } = req.body;
 
     if (!name || !type) {
@@ -187,6 +206,14 @@ router.put('/:name', (req, res) => {
 // Delete MCP configuration
 router.delete('/:name', (req, res) => {
   try {
+    // Check if in read-only mode (Cursor engine)
+    if (isCursorEngine()) {
+      return res.status(403).json({ 
+        error: 'Read-only mode',
+        message: 'MCP configuration is read-only when using Cursor CLI engine',
+      });
+    }
+
     const { name } = req.params;
     const config = readMcpConfig();
     
