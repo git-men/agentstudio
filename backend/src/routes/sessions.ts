@@ -4,6 +4,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { AgentStorage } from '../services/agentStorage';
 import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-history';
+import { readCursorCliSessions, readCursorCliSession } from '../utils/cursorCliHistoryParser.js';
+// IDE Agent parser (preserved for future use)
+// import { readCursorHistorySessions, readCursorSession } from '../utils/cursorIdeAgentParser.js';
 import { sessionManager } from '../services/sessionManager';
 import { getProjectsDir } from '../config/sdkConfig.js';
 
@@ -815,12 +818,13 @@ router.get('/_status', (req, res) => {
 router.get('/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;
-    const { search } = req.query;
+    const { search, engine } = req.query;
     const projectPath = req.query.projectPath as string;
     
     console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
     console.log(`🔍 [DEBUG] Search term: "${search}"`);
     console.log(`🔍 [DEBUG] Project path: "${projectPath}"`);
+    console.log(`🔍 [DEBUG] Engine: "${engine}"`);
     
     // Verify agent exists
     const agent = globalAgentStorage.getAgent(agentId);
@@ -833,23 +837,37 @@ router.get('/:agentId', (req, res) => {
     
     let sessions: any[] = [];
     
-    // If projectPath is provided, read from Claude Code history
+    // If projectPath is provided, read from history based on engine type
     if (projectPath) {
-      console.log('📂 [DEBUG] Reading Claude history sessions for project:', projectPath);
-      const claudeSessions = readClaudeHistorySessions(projectPath);
-      console.log(`📊 [DEBUG] Found ${claudeSessions.length} raw Claude sessions`);
-      
-      sessions = claudeSessions.map((session, index) => {
-        const mappedSession = {
+      if (engine === 'cursor') {
+        // Read from Cursor Agent transcripts
+        console.log('📂 [DEBUG] Reading Cursor history sessions for project:', projectPath);
+        const cursorSessions = readCursorCliSessions(projectPath);
+        console.log(`📊 [DEBUG] Found ${cursorSessions.length} raw Cursor sessions`);
+        
+        sessions = cursorSessions.map((session) => ({
           id: session.id,
-          agentId: agentId, // Associate with current agent
+          agentId: agentId,
           title: session.title,
           createdAt: session.createdAt,
           lastUpdated: session.lastUpdated,
           messageCount: session.messages.length
-        };
-        return mappedSession;
-      });
+        }));
+      } else {
+        // Default: Read from Claude Code history
+        console.log('📂 [DEBUG] Reading Claude history sessions for project:', projectPath);
+        const claudeSessions = readClaudeHistorySessions(projectPath);
+        console.log(`📊 [DEBUG] Found ${claudeSessions.length} raw Claude sessions`);
+        
+        sessions = claudeSessions.map((session) => ({
+          id: session.id,
+          agentId: agentId,
+          title: session.title,
+          createdAt: session.createdAt,
+          lastUpdated: session.lastUpdated,
+          messageCount: session.messages.length
+        }));
+      }
     } else {
       console.log(`📁 [DEBUG] Using project-specific AgentStorage for sessions`);
       // Use project-specific AgentStorage for sessions (existing behavior)
@@ -892,29 +910,45 @@ router.get('/:agentId/:sessionId/messages', (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
     const projectPath = req.query.projectPath as string;
+    const engine = req.query.engine as string;
     
     let session: any = null;
     
-    // If projectPath is provided, read from Claude Code history
+    // If projectPath is provided, read from history based on engine type
     if (projectPath) {
-      console.log('Reading Claude history messages for session:', sessionId, 'in project:', projectPath);
-      const claudeSessions = readClaudeHistorySessions(projectPath);
-      session = claudeSessions.find(s => s.id === sessionId);
-      
-      if (session) {
-        console.log('📨 Found session with', session.messages?.length || 0, 'messages');
-        console.log('📨 First few messages:', session.messages?.slice(0, 3).map((msg: any) => ({
-          role: msg.role,
-          hasMessageParts: !!msg.messageParts,
-          messagePartsCount: msg.messageParts?.length || 0,
-          content: msg.content?.slice(0, 50) + '...'
-        })));
+      if (engine === 'cursor') {
+        // Read from Cursor Agent transcripts
+        console.log('📂 [CURSOR] Reading Cursor history messages for session:', sessionId, 'in project:', projectPath);
+        session = readCursorCliSession(projectPath, sessionId);
         
-        // Add agentId to match expected format
-        session = {
-          ...session,
-          agentId: agentId
-        };
+        if (session) {
+          console.log('📨 [CURSOR] Found session with', session.messages?.length || 0, 'messages');
+          session = {
+            ...session,
+            agentId: agentId
+          };
+        }
+      } else {
+        // Default: Read from Claude Code history
+        console.log('Reading Claude history messages for session:', sessionId, 'in project:', projectPath);
+        const claudeSessions = readClaudeHistorySessions(projectPath);
+        session = claudeSessions.find(s => s.id === sessionId);
+        
+        if (session) {
+          console.log('📨 Found session with', session.messages?.length || 0, 'messages');
+          console.log('📨 First few messages:', session.messages?.slice(0, 3).map((msg: any) => ({
+            role: msg.role,
+            hasMessageParts: !!msg.messageParts,
+            messagePartsCount: msg.messageParts?.length || 0,
+            content: msg.content?.slice(0, 50) + '...'
+          })));
+          
+          // Add agentId to match expected format
+          session = {
+            ...session,
+            agentId: agentId
+          };
+        }
       }
     } else {
       // Use project-specific AgentStorage for sessions (existing behavior)

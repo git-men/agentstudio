@@ -62,6 +62,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     currentSessionId,
     mcpStatus,
     pendingUserQuestion,
+    selectedEngine,
     addMessage,
     interruptAllExecutingTools,
     setAiTyping,
@@ -278,8 +279,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
   }, []);
 
   const interruptSessionMutation = useInterruptSession();
-  const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath);
-  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
+  const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine);
+  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
   const { data: activeSessionsData } = useSessions();
 
   // 当打开会话历史下拉菜单时，自动刷新会话列表

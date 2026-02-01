@@ -94,15 +94,19 @@ export const useDeleteAgent = () => {
   });
 };
 
+// Engine type for session queries
+export type SessionEngineType = 'claude' | 'cursor';
+
 // Agent session hooks
-export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string) => {
+export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, engine?: SessionEngineType) => {
   return useQuery({
-    queryKey: ['agent-sessions', agentId, searchTerm, projectPath],
+    queryKey: ['agent-sessions', agentId, searchTerm, projectPath, engine],
     queryFn: async () => {
       console.log(`🔍 [FRONTEND DEBUG] useAgentSessions called:`, {
         agentId,
         searchTerm,
-        projectPath
+        projectPath,
+        engine
       });
 
       const url = new URL(`${API_BASE}/sessions/${agentId}`);
@@ -111,6 +115,9 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
       }
       if (projectPath) {
         url.searchParams.set('projectPath', projectPath);
+      }
+      if (engine) {
+        url.searchParams.set('engine', engine);
       }
 
       console.log(`🌐 [FRONTEND DEBUG] Fetching sessions from: ${url.toString()}`);
@@ -141,18 +148,19 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
 
 
 // Get agent session messages
-export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string) => {
+export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string, engine?: SessionEngineType) => {
   console.log('🎣 useAgentSessionMessages hook called:', {
     agentId,
     sessionId,
     projectPath,
+    engine,
     enabled: !!agentId && !!sessionId
   });
 
   return useQuery({
-    queryKey: ['agent-session-messages', agentId, sessionId, projectPath],
+    queryKey: ['agent-session-messages', agentId, sessionId, projectPath, engine],
     queryFn: async () => {
-      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath });
+      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath, engine });
 
       if (!sessionId) {
         return { messages: [] };
@@ -161,6 +169,9 @@ export const useAgentSessionMessages = (agentId: string, sessionId: string | nul
       const url = new URL(`${API_BASE}/sessions/${agentId}/${sessionId}/messages`);
       if (projectPath) {
         url.searchParams.set('projectPath', projectPath);
+      }
+      if (engine) {
+        url.searchParams.set('engine', engine);
       }
 
       console.log('🎣 Fetching from URL:', url.toString());

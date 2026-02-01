@@ -301,8 +301,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
     // API hooks
     const interruptSessionMutation = useInterruptSession();
-    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath);
-    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
+    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine);
+    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
     const { data: activeSessionsData } = useSessions();
 
     // Refresh sessions when dropdown opens
