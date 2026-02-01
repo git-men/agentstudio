@@ -1,6 +1,17 @@
 /**
  * Plugin System Frontend Types
+ * Extended with COS/Archive support and AgentStudio agents
  */
+
+/**
+ * Marketplace source types:
+ * - git: Full git repository URL
+ * - github: GitHub shorthand (owner/repo) or full URL
+ * - local: Local directory path
+ * - cos: Tencent Cloud COS URL (bucket/prefix)
+ * - archive: Direct URL to a tar.gz/zip archive
+ */
+export type MarketplaceType = 'git' | 'github' | 'local' | 'cos' | 'archive';
 
 export interface PluginAuthor {
   name: string;
@@ -59,17 +70,25 @@ export interface PluginMarketplace {
   id: string;
   name: string;
   displayName: string;
-  type: 'git' | 'github' | 'local';
+  type: MarketplaceType;
   source: string;
   description?: string;
   path: string;
   pluginCount: number;
+  agentCount?: number; // Number of AgentStudio agents in marketplace
   lastSync?: string;
   owner?: {
     name: string;
     url?: string;
   };
   branch?: string;
+  // Auto-update configuration
+  autoUpdate?: {
+    enabled: boolean;
+    checkInterval: number; // Interval in minutes
+    lastCheck?: string;
+    lastVersion?: string;
+  };
 }
 
 export interface AvailablePlugin {
@@ -96,10 +115,36 @@ export interface AvailablePlugin {
 
 export interface MarketplaceAddRequest {
   name: string;
-  type: 'git' | 'github' | 'local';
+  type: MarketplaceType;
   source: string;
   description?: string;
-  branch?: string;
+  branch?: string; // For git/github
+  // COS-specific options
+  cosConfig?: {
+    secretId?: string;
+    secretKey?: string;
+    region?: string;
+    bucket?: string;
+    prefix?: string;
+  };
+  // Auto-update configuration
+  autoUpdate?: {
+    enabled: boolean;
+    checkInterval?: number; // Interval in minutes (default: 60)
+  };
+}
+
+/**
+ * Auto-update check result
+ */
+export interface MarketplaceUpdateCheckResult {
+  marketplaceId: string;
+  marketplaceName: string;
+  hasUpdate: boolean;
+  localVersion?: string;
+  remoteVersion?: string;
+  checkedAt: string;
+  error?: string;
 }
 
 export interface PluginInstallRequest {

@@ -2,7 +2,7 @@
  * Unit tests for pluginInstaller.ts
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
 import { exec } from 'child_process';
 
@@ -13,6 +13,10 @@ vi.mock('../pluginPaths');
 vi.mock('../pluginParser');
 vi.mock('../pluginSymlink');
 vi.mock('../pluginScanner');
+
+// Mock global fetch
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 describe('PluginInstaller', () => {
   beforeEach(() => {
@@ -310,6 +314,212 @@ describe('PluginInstaller', () => {
       const result = await pluginInstaller.uninstallPlugin('nonexistent', 'test-market');
 
       expect(result).toBe(false);
+    });
+  });
+
+  describe('addMarketplace - COS type', () => {
+    it('should add a COS marketplace', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
+      vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+      
+      // Mock fetch for archive download
+      const mockResponse = {
+        ok: true,
+        body: {
+          [Symbol.asyncIterator]: async function* () {
+            yield Buffer.from('mock archive content');
+          }
+        }
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+      
+      // Mock exec for tar extraction
+      vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
+        if (callback) callback(null, '', '');
+        return {} as any;
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/cos-market');
+      vi.mocked(pluginPaths.listPlugins).mockReturnValue(['plugin1']);
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.addMarketplace({
+        name: 'cos-market',
+        type: 'cos',
+        source: 'https://bucket.cos.region.myqcloud.com/marketplace.tar.gz'
+      });
+
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('addMarketplace - Archive type', () => {
+    it('should add an archive marketplace', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
+      vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+      vi.mocked(fs.readdirSync).mockReturnValue(['single-dir'] as any);
+      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
+      vi.mocked(fs.renameSync).mockReturnValue(undefined);
+      vi.mocked(fs.rmdirSync).mockReturnValue(undefined);
+      vi.mocked(fs.rmSync).mockReturnValue(undefined);
+      
+      // Mock fetch for archive download
+      const mockResponse = {
+        ok: true,
+        body: {
+          [Symbol.asyncIterator]: async function* () {
+            yield Buffer.from('mock archive content');
+          }
+        }
+      };
+      mockFetch.mockResolvedValue(mockResponse);
+      
+      // Mock exec for tar extraction
+      vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
+        if (callback) callback(null, '', '');
+        return {} as any;
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/archive-market');
+      vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.addMarketplace({
+        name: 'archive-market',
+        type: 'archive',
+        source: 'https://example.com/marketplace.tar.gz'
+      });
+
+      expect(result.success).toBe(true);
+    });
+
+    it('should fail if archive download fails', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.rmSync).mockReturnValue(undefined);
+      
+      // Mock fetch to return error
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 404,
+        statusText: 'Not Found'
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/failed-market');
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.addMarketplace({
+        name: 'failed-market',
+        type: 'archive',
+        source: 'https://example.com/nonexistent.tar.gz'
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Failed to download');
+    });
+  });
+
+  describe('checkForUpdates', () => {
+    it('should check for updates in a git marketplace', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        const pathStr = p.toString();
+        return pathStr.includes('.git') || pathStr.includes('marketplace');
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+        name: 'test-market',
+        version: '1.0.0'
+      }));
+      
+      vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
+        const cb = typeof options === 'function' ? options : callback;
+        // Simulate "behind" status
+        if (cmd.includes('git status')) {
+          cb(null, 'Your branch is behind', '');
+        } else {
+          cb(null, '', '');
+        }
+        return {} as any;
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.checkForUpdates('test-market');
+
+      expect(result.marketplaceId).toBe('test-market');
+      expect(result.hasUpdate).toBe(true);
+    });
+
+    it('should report no update when up to date', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        const pathStr = p.toString();
+        return pathStr.includes('.git') || pathStr.includes('marketplace');
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
+        name: 'test-market',
+        version: '1.0.0'
+      }));
+      
+      vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
+        const cb = typeof options === 'function' ? options : callback;
+        // Simulate up-to-date status
+        cb(null, 'Your branch is up to date', '');
+        return {} as any;
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.checkForUpdates('test-market');
+
+      expect(result.hasUpdate).toBe(false);
+    });
+  });
+
+  describe('addMarketplace with autoUpdate config', () => {
+    it('should save autoUpdate configuration', async () => {
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
+      vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+      vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
+        if (callback) callback(null, '', '');
+        return {} as any;
+      });
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/auto-update-market');
+      vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
+
+      const { pluginInstaller } = await import('../pluginInstaller');
+      
+      const result = await pluginInstaller.addMarketplace({
+        name: 'auto-update-market',
+        type: 'github',
+        source: 'test/repo',
+        autoUpdate: {
+          enabled: true,
+          checkInterval: 30
+        }
+      });
+
+      expect(result.success).toBe(true);
+      
+      // Verify metadata was saved with autoUpdate config
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('.agentstudio-metadata.json'),
+        expect.stringContaining('"autoUpdate"')
+      );
     });
   });
 });

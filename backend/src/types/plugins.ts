@@ -1,8 +1,19 @@
 /**
  * Plugin System Types
  * Based on Claude Code plugin specification
+ * Extended with COS/Archive support and AgentStudio agents
  * Storage: ~/.claude/plugins/marketplaces/
  */
+
+/**
+ * Marketplace source types:
+ * - git: Full git repository URL
+ * - github: GitHub shorthand (owner/repo) or full URL
+ * - local: Local directory path
+ * - cos: Tencent Cloud COS URL (bucket/prefix)
+ * - archive: Direct URL to a tar.gz/zip archive
+ */
+export type MarketplaceType = 'git' | 'github' | 'local' | 'cos' | 'archive';
 
 export interface PluginAuthor {
   name: string;
@@ -76,27 +87,63 @@ export interface PluginMarketplace {
   id: string;
   name: string; // Directory name
   displayName: string; // Human readable name
-  type: 'git' | 'github' | 'local';
-  source: string; // URL for git/github, path for local
+  type: MarketplaceType;
+  source: string; // URL for git/github/cos/archive, path for local
   description?: string;
   path: string; // Full path to marketplace directory
   pluginCount: number;
+  agentCount?: number; // Number of AgentStudio agents in marketplace
   lastSync?: string;
   owner?: {
     name: string;
     url?: string;
   };
   branch?: string; // For git repositories
+  // Auto-update configuration
+  autoUpdate?: {
+    enabled: boolean;
+    checkInterval: number; // Interval in minutes (default: 60)
+    lastCheck?: string; // ISO timestamp of last update check
+    lastVersion?: string; // Last known version from remote
+  };
 }
 
 export interface MarketplaceManifest {
   name: string;
+  version?: string; // Marketplace version for update checking
   owner: {
     name: string;
     url?: string;
   };
   description?: string;
   plugins: MarketplacePlugin[];
+  // AgentStudio-specific: agent configurations
+  agents?: MarketplaceAgent[];
+}
+
+/**
+ * AgentStudio-specific agent definition in marketplace
+ * These are imported as AgentConfig in AgentStudio
+ */
+export interface MarketplaceAgent {
+  name: string;
+  source: string; // Relative path to agent.json or inline config
+  description?: string;
+  version?: string;
+  // Inline agent configuration (if source is not provided)
+  config?: {
+    systemPrompt: string | { type: 'preset'; preset: string; append?: string };
+    permissionMode?: string;
+    maxTurns?: number;
+    allowedTools?: Array<{ name: string; enabled: boolean }>;
+    ui?: {
+      icon?: string;
+      headerTitle?: string;
+      headerDescription?: string;
+      welcomeMessage?: string;
+    };
+    tags?: string[];
+  };
 }
 
 export interface MarketplacePlugin {
@@ -143,15 +190,55 @@ export interface PluginInstallResult {
 
 export interface MarketplaceAddRequest {
   name: string;
-  type: 'git' | 'github' | 'local';
+  type: MarketplaceType;
   source: string;
   description?: string;
-  branch?: string;
+  branch?: string; // For git/github
+  // COS-specific options
+  cosConfig?: {
+    secretId?: string; // Optional: use env vars if not provided
+    secretKey?: string;
+    region?: string;
+    bucket?: string;
+    prefix?: string; // Path prefix within bucket
+  };
+  // Auto-update configuration
+  autoUpdate?: {
+    enabled: boolean;
+    checkInterval?: number; // Interval in minutes (default: 60)
+  };
 }
 
 export interface MarketplaceSyncResult {
   success: boolean;
   pluginCount?: number;
+  agentCount?: number; // Number of AgentStudio agents
   error?: string;
   syncedAt: string;
+  // Update check results
+  hasUpdate?: boolean;
+  remoteVersion?: string;
+  localVersion?: string;
+}
+
+/**
+ * Auto-update check result
+ */
+export interface MarketplaceUpdateCheckResult {
+  marketplaceId: string;
+  marketplaceName: string;
+  hasUpdate: boolean;
+  localVersion?: string;
+  remoteVersion?: string;
+  checkedAt: string;
+  error?: string;
+}
+
+/**
+ * Batch update check result
+ */
+export interface MarketplaceUpdateCheckBatchResult {
+  results: MarketplaceUpdateCheckResult[];
+  updatesAvailable: number;
+  checkedAt: string;
 }

@@ -39,6 +39,7 @@ import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
+import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 
 dotenv.config();
 
@@ -325,6 +326,20 @@ const app: express.Express = express();
     console.error('[Tunnel] Error initializing tunnel service:', error);
   }
 
+  // 5. Marketplace Update Service: Initialize background update checker
+  const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES !== 'false'; // Default to true
+  console.info('[MarketplaceUpdate] Initializing marketplace update service...');
+  try {
+    initializeMarketplaceUpdateService({
+      enabled: enableMarketplaceUpdates,
+      defaultCheckInterval: parseInt(process.env.MARKETPLACE_UPDATE_INTERVAL || '60', 10), // Default: 60 minutes
+      autoApplyUpdates: process.env.MARKETPLACE_AUTO_APPLY_UPDATES === 'true', // Default: false
+    });
+    console.info('[MarketplaceUpdate] Marketplace update service initialized');
+  } catch (error) {
+    console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
+  }
+
   // Static files - serve embedded frontend (for npm package) or development frontend
   // Check both npm package location (./public) and development location (../../frontend/dist)
   const fs = await import('fs');
@@ -451,6 +466,14 @@ const app: express.Express = express();
       console.info('[Scheduler] Scheduler stopped');
     } catch (error) {
       console.error('[Scheduler] Error shutting down scheduler:', error);
+    }
+
+    // 2. Stop marketplace update service
+    try {
+      shutdownMarketplaceUpdateService();
+      console.info('[MarketplaceUpdate] Marketplace update service stopped');
+    } catch (error) {
+      console.error('[MarketplaceUpdate] Error shutting down marketplace update service:', error);
     }
 
     // 2. Stop task executor (wait for running tasks to complete or timeout)
