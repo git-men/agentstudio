@@ -19,6 +19,8 @@ import {
   initAskUserQuestionModule
 } from '../services/askUserQuestion/index.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
+import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
+import { formatAguiEventAsSSE, type AGUIEvent } from '../engines/types.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -324,6 +326,7 @@ const ChatRequestSchema = z.object({
   model: z.string().optional(),
   claudeVersion: z.string().optional(), // Claude版本ID
   channel: z.enum(['web', 'slack']).optional().default('web'), // Channel for streaming control
+  outputFormat: z.enum(['default', 'agui']).optional().default('default'), // Output format: default (SDK format) or agui (AGUI protocol)
   context: z.object({
     currentSlide: z.number().optional().nullable(),
     slideContent: z.string().optional(),
@@ -471,8 +474,10 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars } = validation.data;
+    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat } = validation.data;
     let sessionId = initialSessionId;
+    
+    console.log(`📡 Output format: ${outputFormat}`);
 
     console.log('[Backend] Received chat request:', {
       agentId,
@@ -696,6 +701,21 @@ router.post('/chat', async (req, res) => {
 
         // 使用会话的 sendMessage 方法发送消息
         let compactMessageBuffer: any[] = []; // 缓存 compact 相关消息
+
+        // Initialize AGUI adapter if using AGUI output format
+        let aguiAdapter: ClaudeAguiAdapter | null = null;
+        if (outputFormat === 'agui') {
+          aguiAdapter = new ClaudeAguiAdapter(actualSessionId || currentSessionId || undefined);
+          // Send RUN_STARTED event
+          const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
+          try {
+            if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+              res.write(formatAguiEventAsSSE(runStartedEvent));
+            }
+          } catch (writeError) {
+            console.error('Failed to write AGUI RUN_STARTED event:', writeError);
+          }
+        }
 
         const currentRequestId = await claudeSession.sendMessage(userMessage, (sdkMessage: SDKMessage) => {
           if (isSDKSystemMessage(sdkMessage) && sdkMessage.subtype === "init") {
@@ -971,7 +991,16 @@ router.post('/chat', async (req, res) => {
 
           try {
             if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-              res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+              if (outputFormat === 'agui' && aguiAdapter) {
+                // Convert SDK message to AGUI format
+                const aguiEvents = aguiAdapter.convert(sdkMessage as any);
+                for (const event of aguiEvents) {
+                  res.write(formatAguiEventAsSSE(event));
+                }
+              } else {
+                // Default SDK format
+                res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+              }
             }
           } catch (writeError: unknown) {
             console.error('Failed to write SSE data:', writeError);
@@ -1005,6 +1034,20 @@ router.post('/chat', async (req, res) => {
                 }
               } catch (writeError: unknown) {
                 console.error('Failed to write error event:', writeError);
+              }
+            }
+
+            // For AGUI output, send finalize events
+            if (outputFormat === 'agui' && aguiAdapter) {
+              try {
+                const finalEvents = aguiAdapter.finalize();
+                for (const event of finalEvents) {
+                  if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                    res.write(formatAguiEventAsSSE(event));
+                  }
+                }
+              } catch (finalizeError) {
+                console.error('Failed to write AGUI finalize events:', finalizeError);
               }
             }
 
