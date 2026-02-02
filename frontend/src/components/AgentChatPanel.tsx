@@ -27,7 +27,8 @@ import {
 import {
   ChatMessageList,
   AgentInputArea,
-  createAgentCommandSelectorKeyHandler
+  createAgentCommandSelectorKeyHandler,
+  EngineSelector
 } from './agentChat';
 
 interface AgentChatPanelProps {
@@ -716,6 +717,9 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
           {/* Action Buttons */}
           <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
+            {/* Engine Sync (headless - syncs service engine to store) */}
+            <EngineSelector disabled={isAiTyping} />
+            
             <div className="flex space-x-1">
               <button
                 onClick={handleNewSessionWithUI}

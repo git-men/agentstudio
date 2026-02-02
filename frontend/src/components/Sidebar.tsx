@@ -62,12 +62,6 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     requireConfig: 'mcp',
   },
   {
-    name: 'Rules', // TODO: Add i18n
-    href: '/rules',
-    icon: FileCode,
-    requireConfig: 'rules',
-  },
-  {
     name: t('nav.agents'),
     href: '/agents',
     icon: Bot,
@@ -106,6 +100,18 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
         href: '/skills',
         icon: Zap,
         requireConfig: 'skills',
+      },
+      {
+        name: 'Rules', // TODO: Add i18n
+        href: '/rules',
+        icon: FileCode,
+        requireConfig: 'rules',
+      },
+      {
+        name: 'Hooks', // TODO: Add i18n key
+        href: '/hooks',
+        icon: Webhook,
+        requireFeature: 'hooks',
       },
     ],
   },
@@ -152,12 +158,6 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
         href: '/settings/cursor-config',
         icon: Settings,
         requireEngine: 'cursor-cli',
-      },
-      {
-        name: 'Hooks', // TODO: Add i18n key
-        href: '/hooks',
-        icon: Webhook,
-        requireFeature: 'hooks',
       },
     ],
   },
