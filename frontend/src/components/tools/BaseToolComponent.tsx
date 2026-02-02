@@ -143,7 +143,7 @@ export const BaseToolComponent: React.FC<BaseToolProps> = ({
       <div className="border border-gray-200 dark:border-gray-700 rounded-lg bg-gray-50 dark:bg-gray-800 max-w-full">
         {/* 可点击的工具头部 */}
         <div
-          className={`flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${hideToolName ? 'p-2' : 'p-4'
+          className={`flex items-center justify-between cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${hideToolName ? 'px-2 py-1' : 'px-3 py-1.5'
             }`}
           onClick={() => setIsExpanded(!isExpanded)}
         >

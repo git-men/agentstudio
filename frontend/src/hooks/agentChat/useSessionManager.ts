@@ -1,6 +1,18 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAgentStore } from '../../stores/useAgentStore';
+import { useAgentStore, type EngineType } from '../../stores/useAgentStore';
+
+/**
+ * Infer engine type from session ID prefix
+ * - 'cursor-' or 'c-' prefix indicates Cursor engine
+ * - Otherwise defaults to Claude engine
+ */
+const inferEngineFromSessionId = (sessionId: string): EngineType => {
+  if (sessionId.startsWith('cursor-') || sessionId.startsWith('c-')) {
+    return 'cursor';
+  }
+  return 'claude';
+};
 
 export interface UseSessionManagerProps {
   agentId: string;
@@ -33,7 +45,7 @@ export const useSessionManager = ({
   textareaRef
 }: UseSessionManagerProps): UseSessionManagerReturn => {
   const queryClient = useQueryClient();
-  const { setCurrentSessionId, clearMessages } = useAgentStore();
+  const { setCurrentSessionId, clearMessages, setSelectedEngine } = useAgentStore();
 
   // Session state
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -45,6 +57,11 @@ export const useSessionManager = ({
    * Loads messages for the selected session
    */
   const handleSwitchSession = useCallback((sessionId: string) => {
+    // Infer engine type from session ID and update store
+    const inferredEngine = inferEngineFromSessionId(sessionId);
+    setSelectedEngine(inferredEngine);
+    console.log(`[SessionManager] Switching to session ${sessionId}, inferred engine: ${inferredEngine}`);
+    
     setCurrentSessionId(sessionId);
     // Set loading state for message loading
     setIsLoadingMessages(true);
@@ -58,7 +75,7 @@ export const useSessionManager = ({
     // Clear messages first, then invalidate to trigger fresh load
     clearMessages();
     queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, sessionId] });
-  }, [agentId, onSessionChange, setCurrentSessionId, clearMessages, queryClient]);
+  }, [agentId, onSessionChange, setCurrentSessionId, setSelectedEngine, clearMessages, queryClient]);
 
   /**
    * Create a new session

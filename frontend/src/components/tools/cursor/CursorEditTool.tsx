@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseToolComponent, ToolInput } from '../BaseToolComponent';
 import { ChevronDown, ChevronRight, Plus, Minus } from 'lucide-react';
@@ -11,13 +11,44 @@ interface CursorEditToolProps {
 }
 
 /**
+ * Try to parse result from toolResult string (for history messages)
+ */
+function parseToolResult(toolResult: string | undefined): EditToolCallResult | undefined {
+  if (!toolResult) return undefined;
+  
+  try {
+    const parsed = JSON.parse(toolResult);
+    // Check if it's the expected structure
+    if (parsed.success) {
+      return parsed as EditToolCallResult;
+    }
+    // Maybe it's just the success object directly
+    if (parsed.diffString || parsed.linesAdded !== undefined) {
+      return { success: parsed };
+    }
+  } catch {
+    // Not JSON, ignore
+  }
+  return undefined;
+}
+
+/**
  * Cursor 文件编辑工具组件
  */
 export const CursorEditTool: React.FC<CursorEditToolProps> = ({ execution }) => {
   const { t } = useTranslation('components');
   const [showDiff, setShowDiff] = useState(false);
+  const [showRawResult, setShowRawResult] = useState(false);
   const args = getCursorToolArgs(execution, 'editToolCall') as EditToolCallArgs;
-  const result = getCursorToolResult(execution, 'editToolCall') as EditToolCallResult | undefined;
+  
+  // Try to get result from toolUseResult first, then from toolResult string
+  const result = useMemo(() => {
+    const structuredResult = getCursorToolResult(execution, 'editToolCall') as EditToolCallResult | undefined;
+    if (structuredResult?.success) return structuredResult;
+    
+    // Fallback: try to parse from toolResult string
+    return parseToolResult(execution.toolResult);
+  }, [execution]);
 
   // 提取文件名作为副标题
   const getSubtitle = () => {
@@ -109,6 +140,32 @@ export const CursorEditTool: React.FC<CursorEditToolProps> = ({ execution }) => 
             {showDiff && (
               <div className="max-h-64 overflow-auto bg-gray-50 dark:bg-gray-800">
                 {renderDiff(result.success.diffString)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Fallback: 显示原始结果（当没有结构化 diff 时） */}
+        {!result?.success?.diffString && execution.toolResult && (
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+            <div
+              className="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              onClick={() => setShowRawResult(!showRawResult)}
+            >
+              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                {t('cursorEditTool.viewResult', '查看结果')}
+              </span>
+              {showRawResult ? (
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-gray-500" />
+              )}
+            </div>
+            {showRawResult && (
+              <div className="max-h-64 overflow-auto bg-gray-50 dark:bg-gray-800 p-2">
+                <pre className="font-mono text-xs text-gray-600 dark:text-gray-400 whitespace-pre-wrap break-all">
+                  {execution.toolResult}
+                </pre>
               </div>
             )}
           </div>

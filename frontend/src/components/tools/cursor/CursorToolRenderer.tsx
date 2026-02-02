@@ -37,6 +37,7 @@ export const CursorToolRenderer: React.FC<CursorToolRendererProps> = ({ executio
       return <CursorReadTool execution={execution} />;
 
     case 'editToolCall':
+    case 'strReplaceToolCall':  // Cursor uses StrReplace for file edits
       return <CursorEditTool execution={execution} />;
 
     case 'deleteToolCall':
@@ -96,6 +97,7 @@ export function isCursorTool(toolName: string): boolean {
     'lsToolCall',
     'readToolCall',
     'editToolCall',
+    'strReplaceToolCall',  // Cursor uses StrReplace for file edits
     'deleteToolCall',
     'globToolCall',
     'grepToolCall',

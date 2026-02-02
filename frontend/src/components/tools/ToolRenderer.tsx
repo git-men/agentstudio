@@ -30,6 +30,7 @@ import { SkillTool } from './SkillTool';
 import { parseMcpToolName } from './mcpUtils';
 import { BaseToolComponent } from './BaseToolComponent';
 import { CUSTOM_MCP_TOOLS } from './customMcpTools';
+import { CursorToolRenderer, isCursorTool } from './cursor';
 
 interface ToolRendererProps {
   execution: BaseToolExecution;
@@ -59,6 +60,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onAskUser
     }
 
     return <McpTool execution={execution} />;
+  }
+
+  // 检查是否为 Cursor 工具
+  if (isCursorTool(execution.toolName)) {
+    return <CursorToolRenderer execution={execution} />;
   }
 
   switch (execution.toolName) {
