@@ -412,12 +412,25 @@ const app: express.Express = express();
 
   // Health check
   app.get('/api/health', (req, res) => {
-    res.json({
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-      version: VERSION,
-      name: 'agentstudio-backend'
-    });
+    try {
+      const engineStatus = getEngineStatus();
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: VERSION,
+        name: 'agentstudio-backend',
+        engine: engineStatus.defaultEngine || 'unknown',
+        engines: engineStatus.registeredEngines || [],
+      });
+    } catch (error) {
+      // Fallback if engine status is not available
+      res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        version: VERSION,
+        name: 'agentstudio-backend'
+      });
+    }
   });
 
   // A2A Health check (public endpoint, no authentication required)
