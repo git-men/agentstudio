@@ -98,7 +98,7 @@ export const useDeleteAgent = () => {
 export type SessionEngineType = 'claude' | 'cursor';
 
 // Agent session hooks
-export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, engine?: SessionEngineType) => {
+export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, engine?: SessionEngineType, enabled: boolean = true) => {
   return useQuery({
     queryKey: ['agent-sessions', agentId, searchTerm, projectPath, engine],
     queryFn: async () => {
@@ -142,25 +142,39 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
 
       return data;
     },
-    enabled: !!agentId
+    enabled: enabled && !!agentId  // Only fetch when enabled AND agentId is provided
   });
 };
 
 
+// Helper function to infer engine type from session ID
+const inferEngineFromSessionId = (sessionId: string | null): SessionEngineType | undefined => {
+  if (!sessionId) return undefined;
+  // Session IDs starting with 'cursor-' are from Cursor engine
+  if (sessionId.startsWith('cursor-')) return 'cursor';
+  return undefined;
+};
+
 // Get agent session messages
 export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string, engine?: SessionEngineType) => {
+  // Infer engine from session ID if not provided or if session ID suggests a different engine
+  const inferredEngine = inferEngineFromSessionId(sessionId);
+  const effectiveEngine = inferredEngine || engine;
+
   console.log('🎣 useAgentSessionMessages hook called:', {
     agentId,
     sessionId,
     projectPath,
     engine,
+    inferredEngine,
+    effectiveEngine,
     enabled: !!agentId && !!sessionId
   });
 
   return useQuery({
-    queryKey: ['agent-session-messages', agentId, sessionId, projectPath, engine],
+    queryKey: ['agent-session-messages', agentId, sessionId, projectPath, effectiveEngine],
     queryFn: async () => {
-      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath, engine });
+      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath, engine: effectiveEngine });
 
       if (!sessionId) {
         return { messages: [] };
@@ -170,8 +184,8 @@ export const useAgentSessionMessages = (agentId: string, sessionId: string | nul
       if (projectPath) {
         url.searchParams.set('projectPath', projectPath);
       }
-      if (engine) {
-        url.searchParams.set('engine', engine);
+      if (effectiveEngine) {
+        url.searchParams.set('engine', effectiveEngine);
       }
 
       console.log('🎣 Fetching from URL:', url.toString());

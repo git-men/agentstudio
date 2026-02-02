@@ -443,6 +443,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           workspace: projectPath || '.',
           sessionId: currentSessionId || undefined, // Convert null to undefined
           model: selectedModel,
+          images: imageData.length > 0 ? imageData : undefined, // Pass images for Cursor engine
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {

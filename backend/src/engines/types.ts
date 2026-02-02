@@ -16,6 +16,20 @@
 export type EngineType = 'claude' | 'cursor';
 
 /**
+ * Image data for engine requests
+ */
+export interface EngineImageData {
+  /** Unique identifier for the image */
+  id: string;
+  /** Base64 encoded image data (without data URI prefix) */
+  data: string;
+  /** Media type of the image */
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  /** Optional filename */
+  filename?: string;
+}
+
+/**
  * Engine configuration for a chat request
  */
 export interface EngineConfig {
@@ -30,6 +44,9 @@ export interface EngineConfig {
   
   /** Session ID for multi-turn conversations */
   sessionId?: string;
+  
+  /** Images to include in the message */
+  images?: EngineImageData[];
   
   // Claude-specific options
   /** Provider ID (only for Claude engine) */

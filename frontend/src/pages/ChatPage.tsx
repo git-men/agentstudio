@@ -26,7 +26,7 @@ export const ChatPage: React.FC = () => {
   const sessionId = searchParams.get('session');
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
-  const { setCurrentAgent, setCurrentSessionId, isAiTyping } = useAgentStore();
+  const { setCurrentAgent, setCurrentSessionId, isAiTyping, currentSessionId } = useAgentStore();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);
   const [hideRightPanel, setHideRightPanel] = useState(false);
@@ -116,6 +116,9 @@ export const ChatPage: React.FC = () => {
   }, [error]);
 
   // Set current agent when data loads, then set session ID
+  // NOTE: Engine type is determined by the service configuration (EngineSelector),
+  // not by the session ID. If user tries to load a session from a different engine,
+  // it will simply not find the session in the current engine's session list.
   useEffect(() => {
     console.log('🎯 ChatPage agent/session effect:', {
       hasAgent: !!agent,
@@ -127,7 +130,7 @@ export const ChatPage: React.FC = () => {
     if (agent) {
       console.log('🎯 Setting current agent:', agent.id);
       setCurrentAgent(agent);
-      // Set session ID after agent is set to prevent it from being cleared
+      // Set session ID after agent is set
       if (sessionId) {
         console.log('🎯 Setting session ID:', sessionId);
         setCurrentSessionId(sessionId);

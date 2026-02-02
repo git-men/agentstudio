@@ -44,10 +44,16 @@ export const EngineSelector: React.FC<EngineSelectorProps> = ({ disabled: _disab
   } = useAgentStore();
   
   // Sync store engine with service engine
+  // This runs IMMEDIATELY when serviceEngineType is available
+  // The service engine type is the source of truth for which engine to use
   useEffect(() => {
     if (serviceEngineType) {
       const storeEngineType = SERVICE_TO_STORE_ENGINE[serviceEngineType] || 'claude';
+      // Always sync to service engine type - this is the source of truth
+      // Sessions with different engine types (e.g., Claude session on Cursor service)
+      // will be handled by session loading logic, not by overriding the default engine
       if (selectedEngine !== storeEngineType) {
+        console.log(`[EngineSync] Syncing engine from ${selectedEngine} to ${storeEngineType}`);
         setSelectedEngine(storeEngineType);
       }
     }
