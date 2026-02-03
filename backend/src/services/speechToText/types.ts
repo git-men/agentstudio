@@ -4,7 +4,7 @@
  */
 
 // 支持的语音服务供应商
-export type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent';
+export type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent' | 'google';
 
 // 代理配置
 export interface ProxyConfig {
@@ -82,6 +82,7 @@ export interface SpeechToTextServiceConfig {
     groq?: SpeechProviderConfig;
     aliyun?: SpeechProviderConfig;
     tencent?: SpeechProviderConfig;
+    google?: SpeechProviderConfig;
   };
 }
 
@@ -126,6 +127,16 @@ export interface SpeechToTextSettings {
       secretKey: string;
       appId: string;
     };
+    google: {
+      enabled: boolean;
+      apiKey: string;
+      // 代理配置
+      proxy?: {
+        enabled: boolean;
+        type: 'http' | 'https' | 'socks5' | 'env';
+        url?: string;
+      };
+    };
   };
 }
 
@@ -157,6 +168,10 @@ export const DEFAULT_SPEECH_SETTINGS: SpeechToTextSettings = {
       secretId: '',
       secretKey: '',
       appId: '',
+    },
+    google: {
+      enabled: false,
+      apiKey: '',
     },
   },
 };

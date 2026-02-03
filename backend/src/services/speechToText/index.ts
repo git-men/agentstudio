@@ -24,6 +24,7 @@ import {
 } from './providers/openaiCompatible';
 import { createAliyunProvider } from './providers/aliyun';
 import { createTencentProvider } from './providers/tencent';
+import { createGoogleProvider } from './providers/google';
 
 // 配置文件路径
 const CONFIG_DIR = join(homedir(), '.agentstudio');
@@ -115,6 +116,16 @@ export class SpeechToTextService {
         appKey: providers.tencent.appId,
       };
       this.providers.set('tencent', createTencentProvider(config));
+    }
+
+    // Google
+    if (providers.google?.enabled && providers.google.apiKey) {
+      const config: SpeechProviderConfig = {
+        provider: 'google',
+        apiKey: providers.google.apiKey,
+        proxy: providers.google.proxy,
+      };
+      this.providers.set('google', createGoogleProvider(config));
     }
   }
 
@@ -240,3 +251,4 @@ export * from './types';
 export { createOpenAIProvider, createGroqProvider } from './providers/openaiCompatible';
 export { createAliyunProvider } from './providers/aliyun';
 export { createTencentProvider } from './providers/tencent';
+export { createGoogleProvider } from './providers/google';
