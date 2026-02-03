@@ -18,6 +18,7 @@ export { CursorToolRenderer, isCursorTool } from './CursorToolRenderer';
 export { CursorLsTool } from './CursorLsTool';
 export { CursorReadTool } from './CursorReadTool';
 export { CursorEditTool } from './CursorEditTool';
+export { CursorWriteTool } from './CursorWriteTool';
 export { CursorDeleteTool } from './CursorDeleteTool';
 export { CursorGlobTool } from './CursorGlobTool';
 export { CursorGrepTool } from './CursorGrepTool';

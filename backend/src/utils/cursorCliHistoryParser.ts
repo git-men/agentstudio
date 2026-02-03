@@ -335,11 +335,49 @@ function parseBlobData(data: Buffer): ParsedMessage | ToolResultMessage | null {
 }
 
 /**
+ * Tool name mapping from Cursor SDK names to frontend expected names
+ * This ensures tool names match what CursorToolRenderer.tsx expects
+ */
+const CURSOR_TOOL_NAME_MAP: Record<string, string> = {
+  // Standard tools
+  'LS': 'lsToolCall',
+  'Ls': 'lsToolCall',
+  'Read': 'readToolCall',
+  'Write': 'writeToolCall',
+  'Edit': 'editToolCall',
+  'Delete': 'deleteToolCall',
+  'Glob': 'globToolCall',
+  'Grep': 'grepToolCall',
+  'Shell': 'shellToolCall',
+  'WebFetch': 'webFetchToolCall',
+  'SemSearch': 'semSearchToolCall',
+  'ListMcpResources': 'listMcpResourcesToolCall',
+  
+  // Special mappings - Cursor SDK uses different names than frontend expects
+  'TodoWrite': 'updateTodosToolCall',
+  'StrReplace': 'strReplaceToolCall',
+  
+  // MCP tool
+  'Mcp': 'mcpToolCall',
+};
+
+/**
  * Convert tool name to Cursor format (e.g., "Glob" -> "globToolCall")
+ * Uses mapping table for known tools, falls back to camelCase conversion for unknown tools
  */
 function toCursorToolName(toolName: string): string {
-  // Convert first letter to lowercase and add "ToolCall" suffix
-  return toolName.charAt(0).toLowerCase() + toolName.slice(1) + 'ToolCall';
+  // Check mapping table first
+  if (CURSOR_TOOL_NAME_MAP[toolName]) {
+    return CURSOR_TOOL_NAME_MAP[toolName];
+  }
+  
+  // Fallback: convert to camelCase and add ToolCall suffix
+  // Handle all-uppercase names like "LS" -> "ls"
+  const baseName = toolName.length <= 2 
+    ? toolName.toLowerCase() 
+    : toolName.charAt(0).toLowerCase() + toolName.slice(1);
+  
+  return baseName + 'ToolCall';
 }
 
 /**

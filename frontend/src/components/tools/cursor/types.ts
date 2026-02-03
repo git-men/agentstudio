@@ -37,6 +37,7 @@ export type CursorToolName =
   | 'lsToolCall'
   | 'readToolCall'
   | 'editToolCall'
+  | 'writeToolCall'
   | 'deleteToolCall'
   | 'globToolCall'
   | 'grepToolCall'
@@ -56,6 +57,7 @@ export interface CursorToolArgsMap {
   lsToolCall: LsToolCallArgs;
   readToolCall: ReadToolCallArgs;
   editToolCall: EditToolCallArgs;
+  writeToolCall: WriteToolCallArgs;
   deleteToolCall: DeleteToolCallArgs;
   globToolCall: GlobToolCallArgs;
   grepToolCall: GrepToolCallArgs;
@@ -74,6 +76,7 @@ export interface CursorToolResultMap {
   lsToolCall: LsToolCallResult;
   readToolCall: ReadToolCallResult;
   editToolCall: EditToolCallResult;
+  writeToolCall: WriteToolCallResult;
   deleteToolCall: DeleteToolCallResult;
   globToolCall: GlobToolCallResult;
   grepToolCall: GrepToolCallResult;
@@ -150,6 +153,24 @@ export interface EditToolCallResult {
     beforeFullFileContent?: string;
     afterFullFileContent: string;
     message: string;
+  };
+}
+
+// ==================== 3.5 writeToolCall - 文件写入 ====================
+
+export interface WriteToolCallArgs {
+  path: string;
+  contents: string;
+}
+
+export interface WriteToolCallResult {
+  success?: {
+    path: string;
+    message: string;
+  };
+  error?: {
+    path: string;
+    error: string;
   };
 }
 
@@ -413,6 +434,7 @@ export const CURSOR_TOOL_DISPLAY_NAMES: Record<CursorToolName, string> = {
   lsToolCall: 'LS',
   readToolCall: 'Read',
   editToolCall: 'Edit',
+  writeToolCall: 'Write',
   deleteToolCall: 'Delete',
   globToolCall: 'Glob',
   grepToolCall: 'Grep',

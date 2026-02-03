@@ -18,6 +18,7 @@ export function extractCursorToolName(toolCall: Record<string, unknown>): Cursor
     'lsToolCall',
     'readToolCall',
     'editToolCall',
+    'writeToolCall',
     'deleteToolCall',
     'globToolCall',
     'grepToolCall',
@@ -105,6 +106,7 @@ export function getCursorToolDisplayName(toolName: string): string {
     lsToolCall: 'LS',
     readToolCall: 'Read',
     editToolCall: 'Edit',
+    writeToolCall: 'Write',
     strReplaceToolCall: 'StrReplace',  // Cursor uses StrReplace for file edits
     deleteToolCall: 'Delete',
     globToolCall: 'Glob',

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { CursorLsTool } from './CursorLsTool';
 import { CursorReadTool } from './CursorReadTool';
 import { CursorEditTool } from './CursorEditTool';
+import { CursorWriteTool } from './CursorWriteTool';
 import { CursorDeleteTool } from './CursorDeleteTool';
 import { CursorGlobTool } from './CursorGlobTool';
 import { CursorGrepTool } from './CursorGrepTool';
@@ -39,6 +40,9 @@ export const CursorToolRenderer: React.FC<CursorToolRendererProps> = ({ executio
     case 'editToolCall':
     case 'strReplaceToolCall':  // Cursor uses StrReplace for file edits
       return <CursorEditTool execution={execution} />;
+
+    case 'writeToolCall':
+      return <CursorWriteTool execution={execution} />;
 
     case 'deleteToolCall':
       return <CursorDeleteTool execution={execution} />;
@@ -97,6 +101,7 @@ export function isCursorTool(toolName: string): boolean {
     'lsToolCall',
     'readToolCall',
     'editToolCall',
+    'writeToolCall',
     'strReplaceToolCall',  // Cursor uses StrReplace for file edits
     'deleteToolCall',
     'globToolCall',
