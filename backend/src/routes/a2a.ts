@@ -13,9 +13,11 @@
  *
  * All endpoints require API key authentication via Authorization header.
  * 
- * Engine Selection:
- * - If agentType starts with 'cursor' or is 'cursor', uses Cursor engine
- * - Otherwise uses Claude engine (default)
+ * Engine Selection (Priority Order):
+ * 1. Service-level engine configuration (ENGINE=cursor-cli) - uses Cursor for ALL agents
+ * 2. Agent type naming convention:
+ *    - If agentType is 'cursor' or starts with 'cursor-' or ends with ':cursor' -> Cursor
+ *    - Otherwise -> Claude (default)
  */
 
 import express, { Router, Response } from 'express';
@@ -53,6 +55,7 @@ import {
   type CursorA2AConfig,
 } from '../services/a2a/cursorA2aService.js';
 import { CursorA2AAdapter } from '../engines/cursor/a2aAdapter.js';
+import { isCursorEngine } from '../config/engineConfig.js';
 
 const router: Router = express.Router({ mergeParams: true });
 
@@ -84,8 +87,16 @@ function isCursorAgent(agentType: string): boolean {
 
 /**
  * Get engine type for an agent
+ * 
+ * Priority:
+ * 1. Service-level engine configuration (ENGINE=cursor-cli)
+ * 2. Agent type naming convention (agentType contains 'cursor')
  */
 function getEngineType(agentType: string): 'cursor' | 'claude' {
+  // Service-level engine configuration takes precedence
+  if (isCursorEngine()) {
+    return 'cursor';
+  }
   return isCursorAgent(agentType) ? 'cursor' : 'claude';
 }
 
@@ -296,7 +307,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
 
       const cursorConfig: CursorA2AConfig = {
         workspace: a2aContext.workingDirectory,
-        model: (req.body.model as string) || 'auto',
+        model: req.body.model as string | undefined, // Don't default to 'auto', let CLI use its internal settings
         sessionId,
         timeout: (req.body.timeout as number) || 600000,
         requestId: `a2a-${Date.now()}`,

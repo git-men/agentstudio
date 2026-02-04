@@ -90,10 +90,11 @@ export async function executeCursorA2AQuery(
   const events: AGUIEvent[] = [];
 
   // Build engine config
+  // Don't default to 'auto', let CLI use its internal model settings
   const engineConfig: EngineConfig = {
     type: 'cursor',
     workspace,
-    model: model || 'auto',
+    model, // undefined/empty means CLI will use its internal settings
     sessionId,
     timeout: timeout || 600000, // 10 minutes default
   };
@@ -145,10 +146,11 @@ export async function executeCursorA2AStreaming(
   });
 
   // Build engine config
+  // Don't default to 'auto', let CLI use its internal model settings
   const engineConfig: EngineConfig = {
     type: 'cursor',
     workspace,
-    model: model || 'auto',
+    model, // undefined/empty means CLI will use its internal settings
     sessionId,
     timeout: timeout || 600000,
   };

@@ -273,7 +273,7 @@ export class CursorEngine implements IAgentEngine {
     const {
       workspace,
       sessionId: existingSessionId,
-      model = 'sonnet-4.5',
+      model, // Don't set default - let CLI use its internal model settings when undefined
       images,
       timeout = 600000, // 10 minutes default
     } = config;
@@ -303,9 +303,18 @@ export class CursorEngine implements IAgentEngine {
         '--stream-partial-output',
         '--workspace', workspace,
         '--force', // Equivalent to bypassPermissions
-        '--model', model,
         '--approve-mcps', // Auto-approve MCP tools
       ];
+
+      // Only add --model if explicitly specified and not 'auto'
+      // This allows CLI to use its internal model settings
+      console.log(`[CursorEngine] Model parameter received: "${model}" (type: ${typeof model})`);
+      if (model && model !== 'auto') {
+        args.push('--model', model);
+        console.log(`[CursorEngine] Adding --model ${model} to args`);
+      } else {
+        console.log(`[CursorEngine] NOT adding --model, letting CLI use internal settings`);
+      }
 
       // Add session resume if continuing conversation
       if (existingSessionId) {
@@ -425,7 +434,11 @@ export class CursorEngine implements IAgentEngine {
         }
 
         if (code === 0 || !hasError) {
-          resolve({ sessionId });
+          // Use the real session_id from Cursor CLI if available
+          // adapter.getThreadId() will have the CLI's session_id if it was provided in system.init
+          const actualSessionId = adapter.getThreadId();
+          console.log(`[CursorEngine] Returning session_id: ${actualSessionId} (original: ${sessionId})`);
+          resolve({ sessionId: actualSessionId });
         } else {
           reject(new Error(`Cursor agent exited with code ${code}`));
         }
