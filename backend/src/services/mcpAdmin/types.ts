@@ -130,6 +130,8 @@ export type AdminPermission =
   | 'mcp:write'
   | 'system:read'
   | 'system:write'
+  | 'scheduled-tasks:read'
+  | 'scheduled-tasks:write'
   | 'admin:*';
 
 // =============================================================================
