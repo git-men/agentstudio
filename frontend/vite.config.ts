@@ -7,14 +7,15 @@ import { readFileSync } from 'fs'
 const apiPort = process.env.VITE_API_PORT || '4936';
 const target = `http://127.0.0.1:${apiPort}`;
 
-// Get package version
+// Get package version from root package.json (main version source)
 const getPackageVersion = () => {
   try {
-    const packagePath = path.resolve(__dirname, 'package.json');
-    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
-    return packageJson.version;
+    // Read from root package.json to ensure consistent versioning
+    const rootPackagePath = path.resolve(__dirname, '../package.json');
+    const rootPackageJson = JSON.parse(readFileSync(rootPackagePath, 'utf8'));
+    return rootPackageJson.version;
   } catch (error) {
-    console.warn('Could not read version from package.json:', error);
+    console.warn('Could not read version from root package.json:', error);
     return 'unknown';
   }
 };

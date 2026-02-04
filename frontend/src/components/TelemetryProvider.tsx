@@ -12,7 +12,7 @@ import posthog from 'posthog-js';
 // PostHog configuration (hardcoded for distribution)
 const POSTHOG_API_KEY = 'phc_5knpC9zvXXFaTJw4EMwrRBSYHIYW7b8ig6E14N8jYDp';
 const POSTHOG_HOST = 'https://app.posthog.com';
-const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.2.0';
+const APP_VERSION = import.meta.env.VITE_APP_VERSION || '0.3.4';
 
 // Storage key for telemetry settings
 const TELEMETRY_STORAGE_KEY = 'agentstudio_telemetry_enabled';

@@ -19,7 +19,7 @@ const POSTHOG_HOST = 'https://app.posthog.com';
 const TELEMETRY_ENABLED = process.env.TELEMETRY_ENABLED !== 'false';
 
 // App version from package.json
-let APP_VERSION = '0.2.0';
+let APP_VERSION = '0.3.4';
 try {
   const pkgPath = path.join(__dirname, '../../package.json');
   if (fs.existsSync(pkgPath)) {

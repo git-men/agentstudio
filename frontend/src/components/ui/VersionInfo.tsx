@@ -20,7 +20,7 @@ export const VersionInfo: React.FC<VersionInfoProps> = ({
   showIcon = true 
 }) => {
   const [versionInfo, setVersionInfo] = useState<VersionInfo>({
-    frontend: '0.1.0' // default frontend version
+    frontend: '0.3.4' // default frontend version (fallback)
   });
   const [isLoading, setIsLoading] = useState(true);
 
@@ -68,9 +68,9 @@ export const VersionInfo: React.FC<VersionInfoProps> = ({
   const getPackageVersion = () => {
     try {
       // Use the version injected by Vite at build time
-      return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.1.0';
+      return typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.3.4';
     } catch {
-      return '0.1.0';
+      return '0.3.4';
     }
   };
 
