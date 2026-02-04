@@ -10,12 +10,18 @@ import { useAgent } from '../hooks/useAgents';
 import { ProjectSelector } from '../components/ProjectSelector';
 import { getAgentPlugin } from '../agents/registry';
 import { useTabNotification, type TabNotificationStatus } from '../hooks/useTabNotification';
+import { useEngine } from '../hooks/useEngine';
 
 // Chat version type
 type ChatVersion = 'original' | 'agui';
 
 // LocalStorage key for chat version preference
 const CHAT_VERSION_KEY = 'agentstudio:chat-version';
+
+// Get default chat version based on engine type
+function getDefaultChatVersion(isCursorEngine: boolean): ChatVersion {
+  return isCursorEngine ? 'agui' : 'original';
+}
 
 export const ChatPage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -27,6 +33,7 @@ export const ChatPage: React.FC = () => {
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
   const { setCurrentAgent, setCurrentSessionId, isAiTyping, currentSessionId } = useAgentStore();
+  const { isCursorEngine, isLoading: isEngineLoading } = useEngine();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);
   const [hideRightPanel, setHideRightPanel] = useState(false);
@@ -35,10 +42,24 @@ export const ChatPage: React.FC = () => {
   const wasAiTypingRef = React.useRef(false);
 
   // Chat version state with localStorage persistence
+  // Initial value: use saved preference, or fallback to 'original' until engine loads
   const [chatVersion, setChatVersion] = useState<ChatVersion>(() => {
     const saved = localStorage.getItem(CHAT_VERSION_KEY);
     return (saved === 'agui' || saved === 'original') ? saved : 'original';
   });
+
+  // Set default chat version based on engine type when engine loads
+  // Only applies if user hasn't explicitly set a preference
+  useEffect(() => {
+    if (!isEngineLoading) {
+      const saved = localStorage.getItem(CHAT_VERSION_KEY);
+      if (!saved) {
+        // User hasn't set a preference, use engine-based default
+        const defaultVersion = getDefaultChatVersion(isCursorEngine);
+        setChatVersion(defaultVersion);
+      }
+    }
+  }, [isEngineLoading, isCursorEngine]);
 
   // Sync chat version when changed from settings page
   useEffect(() => {

@@ -153,12 +153,6 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
         icon: Mic,
         // Available for both Claude and Cursor engines
       },
-      {
-        name: 'Cursor 配置', // TODO: Add i18n key
-        href: '/settings/cursor-config',
-        icon: Settings,
-        requireEngine: 'cursor-cli',
-      },
     ],
   },
 ];
@@ -342,7 +336,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
           className="flex items-center space-x-3 w-full text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg p-2"
         >
           <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <img src="/cc-studio.png" alt="Agent Studio" className="w-10 h-10" />
+            <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="Agent Studio" className="w-10 h-10" />
           </div>
           <div className="flex flex-col min-w-0">
             <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">Agent Studio</h1>
