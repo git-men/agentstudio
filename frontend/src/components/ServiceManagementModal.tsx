@@ -253,7 +253,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
       // If this is the current service, redirect to login
       if (serviceId === currentService?.id) {
         onClose();
-        window.location.href = '/login';
+        window.location.href = import.meta.env.BASE_URL + 'login';
       }
     }
   };

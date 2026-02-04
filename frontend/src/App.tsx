@@ -100,7 +100,7 @@ const AppContent: React.FC = () => {
   }, []);
 
   return (
-    <Router>
+    <Router basename={import.meta.env.BASE_URL}>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           {/* Public routes */}

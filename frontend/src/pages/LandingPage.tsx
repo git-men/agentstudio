@@ -53,7 +53,7 @@ const LandingPage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <img src="/cc-studio.png" alt="AgentStudio" className="w-8 h-8" />
+              <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="AgentStudio" className="w-8 h-8" />
               <span className="text-xl font-semibold text-gray-900 dark:text-white">AgentStudio</span>
             </div>
             <div className="flex items-center space-x-4">
@@ -159,7 +159,7 @@ const LandingPage: React.FC = () => {
             <div className="group">
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
                 <img
-                  src="/screenshot-chat.png"
+                  src={`${import.meta.env.BASE_URL}screenshot-chat.png`}
                   alt={t('landing.preview.chatAlt')}
                   className="w-full h-auto"
                 />
@@ -170,7 +170,7 @@ const LandingPage: React.FC = () => {
             <div className="group">
               <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
                 <img
-                  src="/screenshot-mcp.png"
+                  src={`${import.meta.env.BASE_URL}screenshot-mcp.png`}
                   alt={t('landing.preview.mcpAlt')}
                   className="w-full h-auto"
                 />
@@ -519,7 +519,7 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center space-x-3 mb-4">
-                <img src="/cc-studio.png" alt="AgentStudio" className="w-8 h-8" />
+                <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="AgentStudio" className="w-8 h-8" />
                 <span className="text-xl font-semibold text-white">AgentStudio</span>
               </div>
               <p className="text-gray-400 mb-4 max-w-md">
@@ -577,7 +577,7 @@ const LandingPage: React.FC = () => {
               {/* QR Code */}
               <div className="flex justify-center">
                 <img
-                  src="/wechat-qr-code.png"
+                  src={`${import.meta.env.BASE_URL}wechat-qr-code.png`}
                   alt="WeChat QR Code"
                   className="w-64 h-64 object-contain border border-gray-200 dark:border-gray-700 rounded-lg"
                 />
