@@ -234,6 +234,11 @@ export interface A2AApiKeyRegistry {
 // ============================================================================
 
 /**
+ * Supported engine types for A2A agents
+ */
+export type A2AEngineType = 'claude' | 'cursor';
+
+/**
  * Mapping between A2A agent ID and internal project/agent identifiers
  */
 export interface AgentMapping {
@@ -243,6 +248,12 @@ export interface AgentMapping {
     workingDirectory: string;
     createdAt: string;
     lastAccessedAt: string;
+    /** 
+     * Optional explicit engine type. If not set, engine is determined by agentType:
+     * - agentType starts with 'cursor' or equals 'cursor' -> cursor engine
+     * - otherwise -> claude engine (default)
+     */
+    engineType?: A2AEngineType;
 }
 
 /**
@@ -264,6 +275,10 @@ export interface A2AMessageRequest {
     message: string;
     context?: Record<string, unknown>;
     sessionId?: string;
+    /** Model to use (optional, engine-specific) */
+    model?: string;
+    /** Request timeout in milliseconds */
+    timeout?: number;
 }
 
 /**
@@ -275,6 +290,12 @@ export interface A2AMessageResponse {
     metadata?: {
         processingTimeMs?: number;
         tokensUsed?: number;
+        /** Task ID (Cursor engine) */
+        taskId?: string;
+        /** Context ID (Cursor engine) */
+        contextId?: string;
+        /** Engine type used */
+        engineType?: A2AEngineType;
         [key: string]: any;
     };
 }

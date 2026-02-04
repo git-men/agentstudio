@@ -355,3 +355,236 @@ describe('agentCardService - Agent Card Generation', () => {
     });
   });
 });
+
+// =============================================================================
+// Cursor Agent Card Generation Tests
+// =============================================================================
+
+describe('agentCardService - Cursor Engine Support', () => {
+  // Import dynamically to allow mocking
+  const createTestProjectContext = (overrides?: Partial<ProjectContext>): ProjectContext => ({
+    projectId: 'proj-cursor-123',
+    projectName: 'Cursor Test Project',
+    workingDirectory: '/test/cursor/project',
+    a2aAgentId: 'a2a-cursor-uuid',
+    baseUrl: 'https://agentstudio.cc',
+    ...overrides,
+  });
+
+  describe('generateCursorAgentCard()', () => {
+    it('should generate valid Cursor Agent Card with all required fields', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+
+      // Check A2A protocol required fields
+      expect(agentCard.name).toBe('Cursor Agent');
+      expect(agentCard.description).toContain('Cursor CLI');
+      expect(agentCard.version).toBe('1.0.0');
+      expect(agentCard.url).toBe('https://agentstudio.cc/a2a/a2a-cursor-uuid');
+      expect(Array.isArray(agentCard.skills)).toBe(true);
+      expect(Array.isArray(agentCard.securitySchemes)).toBe(true);
+    });
+
+    it('should include Cursor-specific skills', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+      const skillNames = agentCard.skills.map(s => s.name);
+
+      // Cursor should have these built-in skills
+      expect(skillNames).toContain('code-editing');
+      expect(skillNames).toContain('file-operations');
+      expect(skillNames).toContain('code-search');
+      expect(skillNames).toContain('coding-assistant');
+    });
+
+    it('should include terminal-execution skill when codeExecution is enabled', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+      const skillNames = agentCard.skills.map(s => s.name);
+
+      // Terminal execution should be included (Cursor CLI supports it)
+      expect(skillNames).toContain('terminal-execution');
+    });
+
+    it('should include security scheme for API key authentication', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+
+      expect(agentCard.securitySchemes).toHaveLength(1);
+      expect(agentCard.securitySchemes[0]).toMatchObject({
+        type: 'apiKey',
+        in: 'header',
+        name: 'Authorization',
+        scheme: 'bearer',
+      });
+    });
+
+    it('should include project context with engine type cursor', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+
+      expect(agentCard.context).toMatchObject({
+        a2aAgentId: 'a2a-cursor-uuid',
+        projectId: 'proj-cursor-123',
+        projectName: 'Cursor Test Project',
+        workingDirectory: '/test/cursor/project',
+        agentType: 'cursor',
+        agentCategory: 'builtin',
+        engineType: 'cursor',
+      });
+    });
+
+    it('should include supported models list', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+
+      expect(agentCard.context.supportedModels).toBeDefined();
+      expect(Array.isArray(agentCard.context.supportedModels)).toBe(true);
+      expect(agentCard.context.supportedModels.length).toBeGreaterThan(0);
+
+      // Each model should have id and name
+      const firstModel = agentCard.context.supportedModels[0];
+      expect(firstModel).toHaveProperty('id');
+      expect(firstModel).toHaveProperty('name');
+    });
+
+    it('should include engine capabilities', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateCursorAgentCard(projectContext);
+
+      expect(agentCard.context.engineCapabilities).toBeDefined();
+      expect(agentCard.context.engineCapabilities).toMatchObject({
+        streaming: true,
+        thinking: true,
+        vision: true,
+        codeExecution: true,
+        multiTurn: true,
+      });
+    });
+  });
+
+  describe('generateAgentCardByEngine()', () => {
+    it('should return Cursor Agent Card when engineType is cursor', async () => {
+      const { generateAgentCardByEngine } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      const agentCard = generateAgentCardByEngine('cursor', projectContext);
+
+      expect(agentCard.name).toBe('Cursor Agent');
+      expect(agentCard.context.engineType).toBe('cursor');
+    });
+
+    it('should return Claude Agent Card when engineType is claude', async () => {
+      const { generateAgentCardByEngine } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+      
+      const agentConfig: AgentConfig = {
+        id: 'test-claude-agent',
+        name: 'Test Claude Agent',
+        description: 'A test Claude agent',
+        version: '1.0.0',
+        systemPrompt: 'You are a test agent',
+        maxTurns: 25,
+        permissionMode: 'acceptEdits' as const,
+        allowedTools: [{ name: 'read_file', enabled: true }],
+        ui: {
+          icon: '🤖',
+          headerTitle: 'Test',
+          headerDescription: 'Test agent',
+        },
+        author: 'Test',
+        tags: ['test'],
+        createdAt: '2025-01-01T00:00:00.000Z',
+        updatedAt: '2025-01-01T00:00:00.000Z',
+        enabled: true,
+        source: 'local' as const,
+      };
+
+      const agentCard = generateAgentCardByEngine('claude', projectContext, agentConfig);
+
+      expect(agentCard.name).toBe('Test Claude Agent');
+      expect(agentCard.context.agentType).toBe('test-claude-agent');
+    });
+
+    it('should throw error when Claude engine requires missing agentConfig', async () => {
+      const { generateAgentCardByEngine } = await import('../agentCardService.js');
+      const projectContext = createTestProjectContext();
+
+      expect(() => generateAgentCardByEngine('claude', projectContext, null)).toThrow(
+        'AgentConfig is required for Claude engine'
+      );
+    });
+  });
+
+  describe('Cursor skills schema validation', () => {
+    it('should have valid inputSchema for code-editing skill', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const agentCard = generateCursorAgentCard(createTestProjectContext());
+
+      const codeEditSkill = agentCard.skills.find(s => s.name === 'code-editing');
+      expect(codeEditSkill).toBeDefined();
+      expect(codeEditSkill!.inputSchema).toBeDefined();
+      expect(codeEditSkill!.inputSchema.type).toBe('object');
+      expect(codeEditSkill!.inputSchema.properties).toHaveProperty('instruction');
+      expect(codeEditSkill!.inputSchema.required).toContain('instruction');
+    });
+
+    it('should have valid inputSchema for file-operations skill', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const agentCard = generateCursorAgentCard(createTestProjectContext());
+
+      const fileOpsSkill = agentCard.skills.find(s => s.name === 'file-operations');
+      expect(fileOpsSkill).toBeDefined();
+      expect(fileOpsSkill!.inputSchema).toBeDefined();
+      expect(fileOpsSkill!.inputSchema.properties).toHaveProperty('operation');
+      expect(fileOpsSkill!.inputSchema.required).toContain('operation');
+    });
+
+    it('should have valid inputSchema for terminal-execution skill', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const agentCard = generateCursorAgentCard(createTestProjectContext());
+
+      const terminalSkill = agentCard.skills.find(s => s.name === 'terminal-execution');
+      expect(terminalSkill).toBeDefined();
+      expect(terminalSkill!.inputSchema).toBeDefined();
+      expect(terminalSkill!.inputSchema.properties).toHaveProperty('command');
+      expect(terminalSkill!.inputSchema.required).toContain('command');
+    });
+
+    it('should have valid inputSchema for code-search skill', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const agentCard = generateCursorAgentCard(createTestProjectContext());
+
+      const searchSkill = agentCard.skills.find(s => s.name === 'code-search');
+      expect(searchSkill).toBeDefined();
+      expect(searchSkill!.inputSchema).toBeDefined();
+      expect(searchSkill!.inputSchema.properties).toHaveProperty('query');
+      expect(searchSkill!.inputSchema.required).toContain('query');
+    });
+
+    it('should have valid inputSchema for coding-assistant skill', async () => {
+      const { generateCursorAgentCard } = await import('../agentCardService.js');
+      const agentCard = generateCursorAgentCard(createTestProjectContext());
+
+      const assistantSkill = agentCard.skills.find(s => s.name === 'coding-assistant');
+      expect(assistantSkill).toBeDefined();
+      expect(assistantSkill!.inputSchema).toBeDefined();
+      expect(assistantSkill!.inputSchema.properties).toHaveProperty('question');
+      expect(assistantSkill!.inputSchema.required).toContain('question');
+    });
+  });
+});

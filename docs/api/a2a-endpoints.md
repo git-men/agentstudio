@@ -15,22 +15,25 @@ This document provides comprehensive documentation for AgentStudio's A2A (Agent-
 ## Table of Contents
 
 1. [Authentication](#authentication)
-2. [Core A2A Endpoints](#core-a2a-endpoints)
+2. [Engine Types](#engine-types)
+   - [Claude Engine (Default)](#claude-engine-default)
+   - [Cursor Engine](#cursor-engine)
+3. [Core A2A Endpoints](#core-a2a-endpoints)
    - [GET Agent Card](#get-agent-card)
    - [POST Message (Synchronous)](#post-message-synchronous)
    - [POST Task (Asynchronous)](#post-task-asynchronous)
    - [GET Task Status](#get-task-status)
    - [DELETE Task (Cancel)](#delete-task-cancel)
-3. [Configuration Endpoints](#configuration-endpoints)
+4. [Configuration Endpoints](#configuration-endpoints)
    - [GET A2A Config](#get-a2a-config)
    - [PUT A2A Config](#put-a2a-config)
-4. [API Key Management](#api-key-management)
+5. [API Key Management](#api-key-management)
    - [POST Generate API Key](#post-generate-api-key)
    - [DELETE Revoke API Key](#delete-revoke-api-key)
    - [POST Rotate API Key](#post-rotate-api-key)
-5. [Health Check](#health-check)
-6. [Error Codes Reference](#error-codes-reference)
-7. [Rate Limiting](#rate-limiting)
+6. [Health Check](#health-check)
+7. [Error Codes Reference](#error-codes-reference)
+8. [Rate Limiting](#rate-limiting)
 
 ---
 
@@ -54,6 +57,82 @@ curl -H "Authorization: Bearer agt_proj_abc123_4f3a2c1b9e8d7f6a5b4c3d2e1f0a9b8c"
   "error": "Invalid or missing API key",
   "code": "INVALID_API_KEY"
 }
+```
+
+---
+
+## Engine Types
+
+AgentStudio's A2A implementation supports multiple backend engines. The engine type is automatically determined based on the `agentType` configuration.
+
+### Claude Engine (Default)
+
+The default engine uses Claude SDK for agent communication. This is suitable for agents that require Claude's capabilities.
+
+**Engine Selection**: Used when `agentType` does NOT start with `cursor`
+
+**Features**:
+- Full Claude SDK integration
+- MCP tool support
+- Session management and resume
+- Multi-turn conversations
+
+### Cursor Engine
+
+The Cursor engine uses Cursor CLI for agent communication. This is suitable for coding-focused tasks and IDE integration.
+
+**Engine Selection**: Used when `agentType`:
+- Equals `cursor`
+- Starts with `cursor-` (e.g., `cursor-code`, `cursor-agent`)
+- Ends with `:cursor` suffix
+
+**Features**:
+- Code editing and file operations
+- Terminal command execution
+- Codebase navigation and search
+- Streaming output with A2A protocol format
+
+**Cursor-Specific Request Parameters**:
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | string | Cursor model to use (e.g., `auto`, `sonnet-4.5`, `opus-4.5`) |
+| `timeout` | number | Request timeout in milliseconds (default: 600000) |
+
+**Example Request (Cursor Engine)**:
+```bash
+curl -X POST \
+  "https://api.agentstudio.cc/a2a/{cursor-agent-id}/messages" \
+  -H "Authorization: Bearer agt_proj_abc123_xxx" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "Fix the bug in the login function",
+    "model": "sonnet-4.5",
+    "timeout": 300000
+  }'
+```
+
+**Cursor Agent Card Skills**:
+
+Cursor agents expose the following built-in skills:
+- `code-editing`: Read, write, and modify code files
+- `file-operations`: File system operations (read, write, create, search, list)
+- `terminal-execution`: Execute shell commands
+- `code-search`: Search patterns and navigate codebase
+- `coding-assistant`: General coding guidance and explanations
+
+**Streaming Response Format (Cursor)**:
+
+When using streaming mode with Cursor engine, responses follow the A2A JSON-RPC 2.0 streaming format:
+
+```
+data: {"jsonrpc":"2.0","id":"xxx","result":{"kind":"status-update","taskId":"...","contextId":"...","status":{"state":"working"}}}
+
+data: {"jsonrpc":"2.0","id":"xxx","result":{"kind":"message","role":"agent","messageId":"...","parts":[{"kind":"text","text":"I'll fix the bug..."}]}}
+
+data: {"jsonrpc":"2.0","id":"xxx","result":{"kind":"artifact-update","taskId":"...","artifact":{"artifactId":"tool-xxx","name":"Tool: edit_file",...}}}
+
+data: {"jsonrpc":"2.0","id":"xxx","result":{"kind":"status-update","taskId":"...","status":{"state":"completed"},"final":true}}
 ```
 
 ---

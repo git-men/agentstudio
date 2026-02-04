@@ -41,9 +41,6 @@ importers:
       bcryptjs:
         specifier: ^2.4.3
         version: 2.4.3
-      better-sqlite3:
-        specifier: ^12.6.2
-        version: 12.6.2
       commander:
         specifier: ^11.1.0
         version: 11.1.0
@@ -147,6 +144,9 @@ importers:
       '@vitest/ui':
         specifier: ^2.1.0
         version: 2.1.9(vitest@2.1.9)
+      better-sqlite3:
+        specifier: ^12.6.2
+        version: 12.6.2
       eslint:
         specifier: ^9.37.0
         version: 9.37.0(jiti@1.21.7)
