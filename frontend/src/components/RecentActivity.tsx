@@ -23,7 +23,7 @@ export const RecentActivity: React.FC = () => {
   const { data: sessionsData } = useSessions();
 
   const projects = projectsData?.projects || [];
-  const commands = commandsData || [];
+  const commands = commandsData?.commands || [];
   const sessions = sessionsData?.sessions || [];
 
   // Combine and sort activities - filter out items without valid timestamps

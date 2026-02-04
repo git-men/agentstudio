@@ -8,7 +8,7 @@
 import { useCallback } from 'react';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
-import type { AGUIEvent, AGUIEventType } from '../types/aguiTypes';
+import type { AGUIEvent } from '../types/aguiTypes';
 
 /**
  * Engine type
@@ -275,15 +275,12 @@ export const useAGUIChat = () => {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        let _currentEventType: string | null = null;
-
         for (const line of lines) {
           // Skip empty lines and comments
           if (!line.trim() || line.startsWith(':')) continue;
 
-          // Parse SSE event type
+          // Skip SSE event type line (we parse from data)
           if (line.startsWith('event:')) {
-            _currentEventType = line.slice(6).trim();
             continue;
           }
 

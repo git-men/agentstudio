@@ -5,7 +5,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ModelsPage from '../ModelsPage';
 
 // Mock fetch
-global.fetch = async (url: string) => {
+global.fetch = async (input: RequestInfo | URL) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : (input as Request).url;
   if (url.includes('/api/agui/engines')) {
     return {
       ok: true,

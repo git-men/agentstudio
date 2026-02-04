@@ -32,7 +32,7 @@ export const ChatPage: React.FC = () => {
   const sessionId = searchParams.get('session');
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
-  const { setCurrentAgent, setCurrentSessionId, isAiTyping, currentSessionId } = useAgentStore();
+  const { setCurrentAgent, setCurrentSessionId, isAiTyping } = useAgentStore();
   const { isCursorEngine, isLoading: isEngineLoading } = useEngine();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);

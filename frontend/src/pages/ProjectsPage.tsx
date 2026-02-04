@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
-import { showError, showSuccess } from '../utils/toast';
+import { showError } from '../utils/toast';
 import {
   Plus,
   Search,

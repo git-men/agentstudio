@@ -32,7 +32,6 @@ export const VoiceInputButton: React.FC<VoiceInputButtonProps> = ({
   const [showTooltip, setShowTooltip] = useState(false);
 
   const {
-    status,
     isRecording,
     isProcessing,
     error,

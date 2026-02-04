@@ -13,6 +13,7 @@ import {
   extractCommandSearch,
   type CommandType
 } from '../../utils/commandFormatter';
+import type { EngineUICapabilities } from '../../hooks/useAGUIChat';
 
 export interface AgentInputAreaProps {
   // Basic state

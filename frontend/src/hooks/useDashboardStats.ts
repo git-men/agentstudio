@@ -32,7 +32,7 @@ export const useDashboardStats = () => {
 
   const agents = agentsData?.agents || [];
   const projects = projectsData?.projects || [];
-  const commands = commandsData || [];
+  const commands = commandsData?.commands || [];
   const sessions = sessionsData?.sessions || [];
 
   const stats: DashboardStats = {

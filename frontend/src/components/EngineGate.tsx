@@ -5,7 +5,7 @@
  * Use these to show/hide UI elements based on what the current engine supports.
  */
 
-import React, { ReactNode } from 'react';
+import { ReactNode } from 'react';
 import useEngine from '../hooks/useEngine';
 import type { EngineFeatureKey, ConfigCapabilityKey, ConfigScope } from '../types/engine';
 

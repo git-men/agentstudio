@@ -27,6 +27,7 @@ export enum AGUIEventType {
   TOOL_CALL_START = 'TOOL_CALL_START',
   TOOL_CALL_ARGS = 'TOOL_CALL_ARGS',
   TOOL_CALL_END = 'TOOL_CALL_END',
+  TOOL_CALL_RESULT = 'TOOL_CALL_RESULT',
 
   // State management events
   STATE_SNAPSHOT = 'STATE_SNAPSHOT',
@@ -110,6 +111,7 @@ export interface AGUIThinkingEndEvent extends AGUIBaseEvent {
 export interface AGUIToolCallStartEvent extends AGUIBaseEvent {
   type: AGUIEventType.TOOL_CALL_START;
   toolId: string;
+  toolCallId: string; // Alias for toolId for compatibility
   toolName: string;
 }
 
@@ -117,6 +119,7 @@ export interface AGUIToolCallStartEvent extends AGUIBaseEvent {
 export interface AGUIToolCallArgsEvent extends AGUIBaseEvent {
   type: AGUIEventType.TOOL_CALL_ARGS;
   toolId: string;
+  toolCallId: string; // Alias for toolId for compatibility
   args: string; // Partial JSON string
 }
 
@@ -124,7 +127,17 @@ export interface AGUIToolCallArgsEvent extends AGUIBaseEvent {
 export interface AGUIToolCallEndEvent extends AGUIBaseEvent {
   type: AGUIEventType.TOOL_CALL_END;
   toolId: string;
+  toolCallId: string; // Alias for toolId for compatibility
   result?: unknown;
+  isError?: boolean;
+}
+
+/** TOOL_CALL_RESULT event */
+export interface AGUIToolCallResultEvent extends AGUIBaseEvent {
+  type: AGUIEventType.TOOL_CALL_RESULT;
+  toolId: string;
+  toolCallId: string; // Alias for toolId for compatibility
+  result: unknown;
   isError?: boolean;
 }
 
@@ -171,6 +184,7 @@ export type AGUIEvent =
   | AGUIToolCallStartEvent
   | AGUIToolCallArgsEvent
   | AGUIToolCallEndEvent
+  | AGUIToolCallResultEvent
   | AGUIMessagesSnapshotEvent
   | AGUIStateSnapshotEvent
   | AGUIStateDeltaEvent

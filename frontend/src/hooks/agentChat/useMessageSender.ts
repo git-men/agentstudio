@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { showInfo } from '../../utils/toast';
 import { isCommandTrigger, formatCommandMessage } from '../../utils/commandFormatter';
 import { createCommandHandler, SystemCommand } from '../../utils/commandHandler';
-import { useAgentStore, type EngineType } from '../../stores/useAgentStore';
+import { useAgentStore } from '../../stores/useAgentStore';
 import { useAgentChat } from '../useAgents';
 import { useAGUIChat } from '../useAGUIChat';
 import { useAIStreamHandler, type UseAIStreamHandlerProps } from './useAIStreamHandler';

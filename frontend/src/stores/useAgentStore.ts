@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
 import type { AgentConfig, AgentMessage, ToolUsageData } from '../types/index.js';
 import type { EngineUICapabilities } from '../hooks/useAGUIChat';
 import { getDefaultUICapabilities } from '../hooks/useAGUIChat';

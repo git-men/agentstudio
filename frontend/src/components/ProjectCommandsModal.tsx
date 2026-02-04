@@ -49,10 +49,11 @@ export const ProjectCommandsModal: React.FC<ProjectCommandsModalProps> = ({
   const [editingCommand, setEditingCommand] = useState<SlashCommand | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<SlashCommand | null>(null);
 
-  const { data: commands = [], isLoading, error, refetch } = useProjectCommands({
+  const { data: commandsData, isLoading, error, refetch } = useProjectCommands({
     projectId: project.id,
     search: searchTerm.trim() || undefined
   });
+  const commands = commandsData?.commands ?? [];
 
   const deleteCommand = useDeleteProjectCommand(project.id);
 
