@@ -18,6 +18,41 @@ import type {
 } from '../types.js';
 
 /**
+ * Convert snake_case keys to camelCase
+ */
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Convert all keys in an object from snake_case to camelCase
+ * Also handles arrays containing objects
+ */
+function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    const camelKey = snakeToCamel(key);
+    const value = obj[key];
+    
+    if (Array.isArray(value)) {
+      // Handle arrays - convert objects within arrays
+      result[camelKey] = value.map(item => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          return convertKeysToCamelCase(item as Record<string, unknown>);
+        }
+        return item;
+      });
+    } else if (value && typeof value === 'object') {
+      // Recursively convert nested objects
+      result[camelKey] = convertKeysToCamelCase(value as Record<string, unknown>);
+    } else {
+      result[camelKey] = value;
+    }
+  }
+  return result;
+}
+
+/**
  * Adapter state for tracking message/tool call context
  */
 interface AdapterState {
@@ -286,15 +321,20 @@ export class CursorAguiAdapter {
       const toolCall = data.tool_call || {};
       
       // Find the specific tool type (readToolCall, writeToolCall, etc.)
+      // Keep the full xxxToolCall format for frontend CursorToolRenderer
       let toolName = 'unknown';
       let toolArgs = {};
       let toolId = uuidv4();
 
       for (const key of Object.keys(toolCall)) {
         if (key.endsWith('ToolCall') || key.endsWith('_tool_call')) {
-          toolName = key.replace('ToolCall', '').replace('_tool_call', '');
+          // Keep the full tool name format (e.g., "readToolCall" not "read")
+          // Convert snake_case to camelCase if needed
+          toolName = key.replace('_tool_call', 'ToolCall');
           const toolData = toolCall[key];
-          toolArgs = toolData.args || toolData.input || {};
+          const rawArgs = toolData.args || toolData.input || {};
+          // Convert snake_case keys to camelCase for frontend compatibility
+          toolArgs = convertKeysToCamelCase(rawArgs);
           toolId = toolData.id || toolId;
           break;
         }
@@ -430,19 +470,27 @@ export class CursorAguiAdapter {
     // Start tool call
     this.state.currentToolCallId = toolCallId;
 
+    // Convert tool name to Cursor format if needed (e.g., "Read" -> "readToolCall")
+    let toolName = data.name || 'unknown';
+    if (!toolName.endsWith('ToolCall')) {
+      toolName = toolName.charAt(0).toLowerCase() + toolName.slice(1) + 'ToolCall';
+    }
+
     events.push({
       type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
       toolCallId,
-      toolName: data.name,
+      toolName,
       timestamp,
     });
 
     // Send tool arguments
     if (data.input) {
+      // Convert snake_case keys to camelCase for frontend compatibility
+      const convertedInput = convertKeysToCamelCase(data.input);
       events.push({
         type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
         toolCallId,
-        args: JSON.stringify(data.input),
+        args: JSON.stringify(convertedInput),
         timestamp,
       });
     }

@@ -36,6 +36,7 @@ import {
     createAgentCommandSelectorKeyHandler,
     EngineSelector
 } from './agentChat';
+import useEngine from '../hooks/useEngine';
 
 
 interface AGUIChatPanelProps {
@@ -57,6 +58,9 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
     const { isMobile } = useMobileContext();
+    
+    // Get engine type from service - this is the source of truth
+    const { engineType: serviceEngineType } = useEngine();
 
     // Refs
     const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -301,7 +305,18 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
     // API hooks
     const interruptSessionMutation = useInterruptSession();
-    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine);
+    
+    // Check if engine has synced - only fetch sessions when selectedEngine matches service engine
+    // This prevents fetching with wrong engine type (e.g., fetching claude sessions when service is cursor)
+    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor'> = {
+        'cursor-cli': 'cursor',
+        'claude-sdk': 'claude',
+    };
+    const expectedEngine = serviceEngineType ? SERVICE_TO_STORE_ENGINE[serviceEngineType] : undefined;
+    // Only fetch when: 1) service engine is loaded AND 2) selectedEngine matches expected engine
+    const isEngineSynced = !!expectedEngine && selectedEngine === expectedEngine;
+    
+    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine, isEngineSynced);
     const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
     const { data: activeSessionsData } = useSessions();
 
@@ -549,7 +564,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             AGUI
                         </span>
                         {projectPath && (
-                            <span className="text-sm opacity-75 font-normal truncate" title={projectPath}>
+                            <span className="text-sm text-gray-600 dark:text-gray-300 font-normal truncate" title={projectPath}>
                                 {projectPath.split('/').pop() || projectPath}
                             </span>
                         )}

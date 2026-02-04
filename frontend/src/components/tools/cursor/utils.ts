@@ -105,6 +105,7 @@ export function getCursorToolDisplayName(toolName: string): string {
     lsToolCall: 'LS',
     readToolCall: 'Read',
     editToolCall: 'Edit',
+    strReplaceToolCall: 'StrReplace',  // Cursor uses StrReplace for file edits
     deleteToolCall: 'Delete',
     globToolCall: 'Glob',
     grepToolCall: 'Grep',

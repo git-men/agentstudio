@@ -24,17 +24,33 @@ import {
 import { useMobileContext } from '../../contexts/MobileContext';
 import { useVersionCheck, useSystemInfo } from '../../hooks/useVersionCheck';
 import { isTelemetryEnabled, setTelemetryEnabled } from '../../components/TelemetryProvider';
+import { useEngine } from '../../hooks/useEngine';
 
 export const GeneralSettingsPage: React.FC = () => {
   const { t, i18n } = useTranslation('pages');
   const { isMobile } = useMobileContext();
+  const { isCursorEngine, isLoading: isEngineLoading } = useEngine();
 
   // Theme and language state
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'auto');
   const [language, setLanguage] = useState(i18n.language);
 
   // Chat panel version state
+  // Initial value: use saved preference, or fallback to 'original' until engine loads
   const [chatVersion, setChatVersion] = useState(() => localStorage.getItem('agentstudio:chat-version') || 'original');
+
+  // Set default chat version based on engine type when engine loads
+  // Only applies if user hasn't explicitly set a preference
+  useEffect(() => {
+    if (!isEngineLoading) {
+      const saved = localStorage.getItem('agentstudio:chat-version');
+      if (!saved) {
+        // User hasn't set a preference, use engine-based default
+        const defaultVersion = isCursorEngine ? 'agui' : 'original';
+        setChatVersion(defaultVersion);
+      }
+    }
+  }, [isEngineLoading, isCursorEngine]);
 
   // Version check state
   const {

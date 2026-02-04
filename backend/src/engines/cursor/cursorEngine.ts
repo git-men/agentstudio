@@ -15,8 +15,10 @@ import type {
   EngineCapabilities,
   AGUIEvent,
   ModelInfo,
+  EngineImageData,
 } from '../types.js';
 import { CursorAguiAdapter } from './aguiAdapter.js';
+import { saveImageToHiddenDir } from '../../utils/sessionUtils.js';
 
 // Cache for Cursor models
 let cachedModels: ModelInfo[] | null = null;
@@ -212,6 +214,55 @@ export class CursorEngine implements IAgentEngine {
   }
 
   /**
+   * Process images for Cursor CLI
+   * Since Cursor CLI doesn't support direct image input via stdin,
+   * we save images to a hidden directory and replace placeholders with @path references
+   * 
+   * @param message - Original message with [imageN] placeholders
+   * @param images - Array of image data
+   * @param workspace - Working directory
+   * @returns Processed message with @path references
+   */
+  private processImagesForCursor(
+    message: string,
+    images: EngineImageData[] | undefined,
+    workspace: string
+  ): string {
+    if (!images || images.length === 0) {
+      return message;
+    }
+
+    console.log(`[CursorEngine] Processing ${images.length} images for Cursor CLI`);
+    let processedMessage = message;
+
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const imageIndex = i + 1;
+      const placeholder = `[image${imageIndex}]`;
+
+      try {
+        // Save image to hidden directory and get relative path
+        const imagePath = saveImageToHiddenDir(
+          image.data,
+          image.mediaType,
+          imageIndex,
+          workspace
+        );
+        console.log(`[CursorEngine] Saved image ${imageIndex} to: ${imagePath}`);
+
+        // Replace placeholder with @path reference
+        // This allows Cursor's model to read the file
+        processedMessage = processedMessage.replace(placeholder, `@${imagePath}`);
+      } catch (error) {
+        console.error(`[CursorEngine] Failed to save image ${imageIndex}:`, error);
+        // If save fails, keep the placeholder
+      }
+    }
+
+    return processedMessage;
+  }
+
+  /**
    * Send a message using Cursor CLI
    */
   async sendMessage(
@@ -223,6 +274,7 @@ export class CursorEngine implements IAgentEngine {
       workspace,
       sessionId: existingSessionId,
       model = 'sonnet-4.5',
+      images,
       timeout = 600000, // 10 minutes default
     } = config;
 
@@ -232,8 +284,11 @@ export class CursorEngine implements IAgentEngine {
     // Create AGUI adapter
     const adapter = new CursorAguiAdapter(sessionId);
 
+    // Process images: save to hidden directory and replace placeholders with @path
+    const processedMessage = this.processImagesForCursor(message, images, workspace);
+
     // Send RUN_STARTED event
-    onAguiEvent(adapter.createRunStarted({ message, workspace, model }));
+    onAguiEvent(adapter.createRunStarted({ message: processedMessage, workspace, model }));
 
     return new Promise((resolve, reject) => {
       // Find cursor command
@@ -254,11 +309,17 @@ export class CursorEngine implements IAgentEngine {
 
       // Add session resume if continuing conversation
       if (existingSessionId) {
-        args.push('--resume', existingSessionId);
+        // Strip 'cursor-' prefix if present (added by AgentStudio for internal tracking)
+        // Cursor CLI uses raw UUID for session IDs
+        const actualSessionId = existingSessionId.startsWith('cursor-') ? existingSessionId.slice(7) : existingSessionId;
+        args.push('--resume', actualSessionId);
       }
 
       console.log(`[CursorEngine] Executing: ${cursorCmd} ${args.join(' ')}`);
       console.log(`[CursorEngine] Working directory: ${workspace}`);
+      if (images && images.length > 0) {
+        console.log(`[CursorEngine] Processed ${images.length} images, message placeholders replaced with @path references`);
+      }
 
       // Spawn cursor process
       const cursorProcess = spawn(cursorCmd, args, {
@@ -305,8 +366,8 @@ export class CursorEngine implements IAgentEngine {
         reject(new Error('Cursor command timed out'));
       }, timeout);
 
-      // Write message to stdin
-      cursorProcess.stdin?.write(message + '\n');
+      // Write processed message (with @path references) to stdin
+      cursorProcess.stdin?.write(processedMessage + '\n');
       cursorProcess.stdin?.end();
       console.log(`[CursorEngine] Message written to stdin for session ${sessionId}`);
 

@@ -32,6 +32,7 @@ interface ServiceWithStatus extends BackendService {
   isOnline?: boolean;
   version?: string;
   backendName?: string;
+  engine?: string;
   isTesting?: boolean;
 }
 
@@ -87,6 +88,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
               isOnline: true,
               version: data.version,
               backendName: data.name,
+              engine: data.engine,
               isTesting: false
             };
           } else {
@@ -136,6 +138,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
             isOnline: true,
             version: data.version,
             backendName: data.name,
+            engine: data.engine,
             isTesting: false
           } : s)
         );
@@ -250,7 +253,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
       // If this is the current service, redirect to login
       if (serviceId === currentService?.id) {
         onClose();
-        window.location.href = '/login';
+        window.location.href = import.meta.env.BASE_URL + 'login';
       }
     }
   };
@@ -483,6 +486,11 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
                           <div className="flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-500">
                             {service.version && (
                               <span>{t('serviceManagementModal.version')}: v{service.version}</span>
+                            )}
+                            {service.engine && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                                {service.engine === 'cursor-cli' ? 'Cursor' : service.engine === 'claude-sdk' ? 'Claude' : service.engine}
+                              </span>
                             )}
                             {service.backendName && (
                               <span>{service.backendName}</span>

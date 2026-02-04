@@ -12,7 +12,116 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as crypto from 'crypto';
-import Database from 'better-sqlite3';
+import { execSync } from 'child_process';
+
+/**
+ * Image data structure for message images
+ */
+interface MessageImage {
+  id: string;
+  data: string;  // base64 encoded
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  filename?: string;
+}
+
+/**
+ * Extract image references from message content and load image data
+ * Looks for @.agentstudio-images/xxx.png patterns and reads the actual files
+ * 
+ * @param content - Message content that may contain @path references
+ * @param projectPath - Project path where .agentstudio-images directory is located
+ * @returns Array of image data objects
+ */
+function extractAndLoadImages(content: string, projectPath: string): MessageImage[] {
+  const images: MessageImage[] = [];
+  
+  // Match @.agentstudio-images/imageN_timestamp.ext patterns
+  const imagePathRegex = /@(\.agentstudio-images\/image\d+_\d+\.(png|jpg|jpeg|gif|webp))/gi;
+  let match;
+  let index = 0;
+  
+  while ((match = imagePathRegex.exec(content)) !== null) {
+    const relativePath = match[1];
+    const fullPath = path.join(projectPath, relativePath);
+    
+    try {
+      if (fs.existsSync(fullPath)) {
+        const imageBuffer = fs.readFileSync(fullPath);
+        const base64Data = imageBuffer.toString('base64');
+        const ext = path.extname(fullPath).toLowerCase().slice(1);
+        
+        // Map extension to media type
+        const mediaTypeMap: Record<string, MessageImage['mediaType']> = {
+          'png': 'image/png',
+          'jpg': 'image/jpeg',
+          'jpeg': 'image/jpeg',
+          'gif': 'image/gif',
+          'webp': 'image/webp'
+        };
+        
+        const mediaType = mediaTypeMap[ext] || 'image/png';
+        
+        images.push({
+          id: `img_${index}_${Date.now()}`,
+          data: base64Data,
+          mediaType,
+          filename: path.basename(fullPath)
+        });
+        
+        index++;
+      }
+    } catch (error) {
+      console.warn(`[CursorCLI] Failed to load image from ${fullPath}:`, error);
+    }
+  }
+  
+  return images;
+}
+
+/**
+ * Execute SQLite query using native sqlite3 CLI
+ * This properly handles WAL mode which sql.js doesn't support
+ */
+function executeSqliteQuery(dbPath: string, query: string): string {
+  try {
+    // Use -json for structured output, fall back to raw if not available
+    const result = execSync(`sqlite3 -json "${dbPath}" "${query}"`, {
+      encoding: 'utf-8',
+      maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large results
+    });
+    return result;
+  } catch (error) {
+    console.error('[CursorCLI] SQLite query failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Execute SQLite query and return raw blob data as hex
+ */
+function executeSqliteBlobQuery(dbPath: string, query: string): Array<{ id: string; data: string }> {
+  try {
+    // Use hex() to convert blob to hex string for safe transport
+    const result = execSync(`sqlite3 "${dbPath}" "${query}"`, {
+      encoding: 'utf-8',
+      maxBuffer: 50 * 1024 * 1024,
+    });
+    
+    // Parse pipe-separated output: id|hex_data
+    const lines = result.trim().split('\n').filter(line => line.length > 0);
+    return lines.map(line => {
+      const pipeIndex = line.indexOf('|');
+      if (pipeIndex === -1) return { id: line, data: '' };
+      return {
+        id: line.substring(0, pipeIndex),
+        data: line.substring(pipeIndex + 1),
+      };
+    });
+  } catch (error) {
+    console.error('[CursorCLI] SQLite blob query failed:', error);
+    return [];
+  }
+}
 
 // Types for CLI session parsing
 export interface CursorCliMessage {
@@ -21,6 +130,7 @@ export interface CursorCliMessage {
   content: string;
   timestamp: number;
   messageParts: CursorCliMessagePart[];
+  images?: MessageImage[];  // Images loaded from @.agentstudio-images/ references
 }
 
 export interface CursorCliMessagePart {
@@ -33,6 +143,7 @@ export interface CursorCliMessagePart {
     toolName: string;
     toolInput: Record<string, unknown>;
     toolResult?: string;
+    toolUseResult?: Record<string, unknown>; // Object format for frontend components
     isError?: boolean;
   };
 }
@@ -54,16 +165,43 @@ interface SessionMeta {
   createdAt: number;
 }
 
-interface MessageContent {
-  type: string;
-  text?: string;
+interface MessageContentText {
+  type: 'text';
+  text: string;
 }
+
+interface MessageContentToolCall {
+  type: 'tool-call';
+  toolCallId: string;
+  toolName: string;
+  args: Record<string, unknown>;
+}
+
+interface MessageContentToolResult {
+  type: 'tool-result';
+  toolName: string;
+  result: unknown;
+  isError?: boolean;
+}
+
+type MessageContent = MessageContentText | MessageContentToolCall | MessageContentToolResult | { type: string; text?: string };
 
 interface ParsedMessage {
   id?: string;
-  role: 'user' | 'assistant' | 'system';
+  role: 'user' | 'assistant' | 'system' | 'tool';
   content: string | MessageContent[];
   providerOptions?: unknown;
+}
+
+interface ToolResultMessage {
+  role: 'tool';
+  id: string;
+  content: Array<{
+    type: 'tool-result';
+    toolName: string;
+    result: unknown;
+    isError?: boolean;
+  }>;
 }
 
 /**
@@ -125,6 +263,26 @@ function cleanUserQuery(text: string): string {
 }
 
 /**
+ * Parse text content and extract thinking blocks
+ * Returns { thinking: string | null, text: string }
+ */
+function parseThinkingContent(text: string): { thinking: string | null; text: string } {
+  // Match <think>...</think> or <thinking>...</thinking> blocks
+  const thinkingMatch = text.match(/<think(?:ing)?>\s*([\s\S]*?)\s*<\/think(?:ing)?>/);
+  
+  if (thinkingMatch) {
+    const thinking = thinkingMatch[1].trim();
+    // Remove thinking block from text
+    const remainingText = text
+      .replace(/<think(?:ing)?>\s*[\s\S]*?\s*<\/think(?:ing)?>/g, '')
+      .trim();
+    return { thinking, text: remainingText };
+  }
+  
+  return { thinking: null, text };
+}
+
+/**
  * Extract a clean title from user message, skipping system info
  */
 function extractSessionTitle(messages: CursorCliMessage[], sessionId: string, metaName?: string): string {
@@ -154,36 +312,19 @@ function extractSessionTitle(messages: CursorCliMessage[], sessionId: string, me
 /**
  * Parse blob data to extract JSON messages
  */
-function parseBlobData(data: Buffer): ParsedMessage | null {
+function parseBlobData(data: Buffer): ParsedMessage | ToolResultMessage | null {
   try {
-    // Convert buffer to string and try to find JSON
+    // Convert buffer to string
     const dataStr = data.toString('utf-8');
     
-    // Try to find JSON objects in the data
-    // Look for patterns like {"role":... or {"id":...
-    const jsonMatches = dataStr.match(/\{[^{}]*"role"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
-    
-    if (jsonMatches) {
-      for (const match of jsonMatches) {
-        try {
-          const parsed = JSON.parse(match);
-          if (parsed.role && (parsed.role === 'user' || parsed.role === 'assistant' || parsed.role === 'system')) {
-            return parsed as ParsedMessage;
-          }
-        } catch {
-          // Try next match
-        }
-      }
-    }
-    
-    // Try parsing the entire buffer as JSON
+    // Try parsing as JSON first
     try {
       const parsed = JSON.parse(dataStr);
       if (parsed.role) {
-        return parsed as ParsedMessage;
+        return parsed;
       }
     } catch {
-      // Not valid JSON
+      // Not valid JSON, continue
     }
     
     return null;
@@ -193,9 +334,116 @@ function parseBlobData(data: Buffer): ParsedMessage | null {
 }
 
 /**
- * Parse a single CLI session from SQLite database
+ * Convert tool name to Cursor format (e.g., "Glob" -> "globToolCall")
  */
-function parseCliSession(sessionDir: string, sessionId: string): CursorCliSession | null {
+function toCursorToolName(toolName: string): string {
+  // Convert first letter to lowercase and add "ToolCall" suffix
+  return toolName.charAt(0).toLowerCase() + toolName.slice(1) + 'ToolCall';
+}
+
+/**
+ * Convert snake_case keys to camelCase
+ */
+function snakeToCamel(str: string): string {
+  return str.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+}
+
+/**
+ * Convert all keys in an object from snake_case to camelCase
+ * Also handles arrays containing objects
+ */
+function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const key of Object.keys(obj)) {
+    const camelKey = snakeToCamel(key);
+    const value = obj[key];
+    
+    if (Array.isArray(value)) {
+      // Handle arrays - convert objects within arrays
+      result[camelKey] = value.map(item => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) {
+          return convertKeysToCamelCase(item as Record<string, unknown>);
+        }
+        return item;
+      });
+    } else if (value && typeof value === 'object') {
+      // Recursively convert nested objects
+      result[camelKey] = convertKeysToCamelCase(value as Record<string, unknown>);
+    } else {
+      result[camelKey] = value;
+    }
+  }
+  return result;
+}
+
+/**
+ * Extract tool calls from message content
+ * @param content - Array of message content items
+ * @param isUserMessage - Whether this is a user message (to clean <user_query> tags)
+ */
+function extractToolCalls(content: MessageContent[], isUserMessage: boolean = false): CursorCliMessagePart[] {
+  const parts: CursorCliMessagePart[] = [];
+  let order = 0;
+  
+  for (const item of content) {
+    if (item.type === 'text' && 'text' in item && item.text) {
+      // Clean user query tags if this is a user message
+      let textContent = isUserMessage ? cleanUserQuery(item.text) : item.text;
+      // Skip empty text after cleaning
+      if (!textContent.trim()) continue;
+      
+      // For assistant messages, check for thinking blocks
+      if (!isUserMessage) {
+        const { thinking, text } = parseThinkingContent(textContent);
+        
+        // Add thinking part if present
+        if (thinking) {
+          parts.push({
+            id: `part_thinking_${order}`,
+            type: 'thinking',
+            content: thinking,
+            order: order++
+          });
+        }
+        
+        // Update textContent to the remaining text
+        textContent = text;
+        
+        // Skip if no remaining text
+        if (!textContent.trim()) continue;
+      }
+      
+      parts.push({
+        id: `part_text_${order}`,
+        type: 'text',
+        content: textContent,
+        order: order++
+      });
+    } else if (item.type === 'tool-call' && 'toolCallId' in item) {
+      parts.push({
+        id: item.toolCallId,
+        type: 'tool',
+        order: order++,
+        toolData: {
+          id: item.toolCallId,
+          toolName: toCursorToolName(item.toolName), // Convert to Cursor tool name format (e.g., "globToolCall")
+          toolInput: convertKeysToCamelCase(item.args || {}), // Convert snake_case to camelCase
+        }
+      });
+    }
+  }
+  
+  return parts;
+}
+
+/**
+ * Parse a single CLI session from SQLite database
+ * 
+ * @param sessionDir - Path to the session directory containing store.db
+ * @param sessionId - Session ID
+ * @param projectPath - Optional project path for loading image references
+ */
+async function parseCliSession(sessionDir: string, sessionId: string, projectPath?: string): Promise<CursorCliSession | null> {
   const dbPath = path.join(sessionDir, 'store.db');
   
   if (!fs.existsSync(dbPath)) {
@@ -203,65 +451,215 @@ function parseCliSession(sessionDir: string, sessionId: string): CursorCliSessio
   }
   
   try {
-    const db = new Database(dbPath, { readonly: true });
+    // Use native sqlite3 CLI to properly handle WAL mode
+    // sql.js doesn't support WAL and would miss recent changes
     
     // Get meta information
-    const metaRow = db.prepare('SELECT value FROM meta WHERE key = 0').get() as { value: string } | undefined;
+    // The value in meta table is stored as a hex-encoded JSON string
+    const metaValue = execSync(`sqlite3 "${dbPath}" "SELECT value FROM meta WHERE key = 0"`, {
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+    }).trim();
     
-    if (!metaRow) {
-      db.close();
+    if (!metaValue) {
       return null;
     }
     
-    // Decode hex-encoded meta value
-    const metaHex = metaRow.value;
-    const metaJson = Buffer.from(metaHex, 'hex').toString('utf-8');
+    // Decode hex-encoded meta value (stored as hex string in the database)
+    const metaJson = Buffer.from(metaValue, 'hex').toString('utf-8');
     const meta: SessionMeta = JSON.parse(metaJson);
     
-    // Get all blobs
-    const blobs = db.prepare('SELECT id, data FROM blobs').all() as { id: string; data: Buffer }[];
+    // Get all blobs with hex-encoded data
+    const blobRows = executeSqliteBlobQuery(dbPath, 'SELECT id, hex(data) FROM blobs');
     
-    db.close();
+    // Convert hex strings to Buffer
+    const blobs: { id: string; data: Buffer }[] = blobRows.map(row => ({
+      id: row.id,
+      data: Buffer.from(row.data, 'hex'),
+    }));
     
-    // Parse messages from blobs
-    const messages: CursorCliMessage[] = [];
+    // Parse messages from blobs - use Map to deduplicate by message id
+    const messageMap = new Map<string, CursorCliMessage>();
+    const toolResults = new Map<string, { toolName: string; result: unknown; isError?: boolean }>();
     let messageIndex = 0;
     
+    // Track seen content to deduplicate messages with same content
+    const seenContent = new Set<string>();
+    
+    // First pass: collect all messages and tool results
     for (const blob of blobs) {
       const parsed = parseBlobData(blob.data);
+      if (!parsed) continue;
       
-      if (parsed && (parsed.role === 'user' || parsed.role === 'assistant')) {
-        const textContent = extractTextContent(parsed.content);
+      // Handle tool results
+      if (parsed.role === 'tool' && 'id' in parsed) {
+        const toolMsg = parsed as ToolResultMessage;
+        if (Array.isArray(toolMsg.content)) {
+          for (const item of toolMsg.content) {
+            if (item.type === 'tool-result') {
+              toolResults.set(toolMsg.id, {
+                toolName: item.toolName,
+                result: item.result,
+                isError: item.isError
+              });
+            }
+          }
+        }
+        continue;
+      }
+      
+      // Skip system messages
+      if (parsed.role === 'system') continue;
+      
+      // Handle user and assistant messages
+      if (parsed.role === 'user' || parsed.role === 'assistant') {
+        // Generate a unique message ID using blob.id (from database)
+        // This ensures each blob is processed independently
+        const msgId = `${parsed.role}_${blob.id}`;
         
-        // Skip empty content
-        if (!textContent) {
+        // Skip if we already have this exact message (by message ID)
+        if (messageMap.has(msgId)) continue;
+        
+        let textContent = '';
+        let messageParts: CursorCliMessagePart[] = [];
+        
+        const isUserMessage = parsed.role === 'user';
+        
+        if (Array.isArray(parsed.content)) {
+          // Extract text content and tool calls from content array
+          // Pass isUserMessage to clean <user_query> tags
+          messageParts = extractToolCalls(parsed.content as MessageContent[], isUserMessage);
+          textContent = messageParts
+            .filter(p => p.type === 'text' && p.content)
+            .map(p => p.content)
+            .join('\n');
+        } else if (typeof parsed.content === 'string') {
+          // For string content, clean user query tags if needed
+          let rawContent = isUserMessage ? cleanUserQuery(parsed.content) : parsed.content;
+          
+          if (rawContent) {
+            // For assistant messages, parse thinking blocks
+            if (!isUserMessage) {
+              const { thinking, text } = parseThinkingContent(rawContent);
+              
+              if (thinking) {
+                messageParts.push({
+                  id: `part_thinking_${messageIndex}`,
+                  type: 'thinking',
+                  content: thinking,
+                  order: messageParts.length
+                });
+              }
+              
+              textContent = text;
+            } else {
+              textContent = rawContent;
+            }
+            
+            if (textContent) {
+              messageParts.push({
+                id: `part_${messageIndex}_0`,
+                type: 'text',
+                content: textContent,
+                order: messageParts.length
+              });
+            }
+          }
+        }
+        
+        // textContent is already cleaned, use it directly
+        const cleanedContent = textContent;
+        
+        // Skip if no meaningful content (no text, no thinking, no tool calls)
+        const hasToolCalls = messageParts.some(p => p.type === 'tool');
+        const hasThinking = messageParts.some(p => p.type === 'thinking');
+        if (!cleanedContent && !hasToolCalls && !hasThinking) {
           continue;
         }
         
-        // Clean up user queries
-        const cleanedContent = parsed.role === 'user' ? cleanUserQuery(textContent) : textContent;
-        
-        // Skip if content is too short or looks like metadata
-        if (cleanedContent.length < 2) {
+        // Skip system info in user messages
+        if (parsed.role === 'user' && 
+            (cleanedContent.startsWith('<user_info>') || 
+             cleanedContent.startsWith('<rules>') ||
+             cleanedContent.includes('<user_info>'))) {
           continue;
         }
         
-        messages.push({
-          id: parsed.id || `msg_${sessionId}_${messageIndex}`,
+        // Create content hash for deduplication (based on role + text content + tool calls)
+        const toolCallIds = messageParts
+          .filter(p => p.type === 'tool' && p.toolData)
+          .map(p => p.toolData!.id)
+          .sort()
+          .join(',');
+        const contentHash = `${parsed.role}:${cleanedContent.substring(0, 200)}:${toolCallIds}`;
+        
+        // Skip if we've already seen this exact content
+        if (seenContent.has(contentHash)) {
+          continue;
+        }
+        seenContent.add(contentHash);
+        
+        // For user messages, try to extract and load image references
+        let images: MessageImage[] | undefined;
+        if (parsed.role === 'user' && projectPath && cleanedContent.includes('@.agentstudio-images/')) {
+          images = extractAndLoadImages(cleanedContent, projectPath);
+          if (images.length > 0) {
+            console.log(`📷 [CursorCLI] Loaded ${images.length} image(s) for user message`);
+          }
+        }
+        
+        messageMap.set(msgId, {
+          id: msgId,
           role: parsed.role,
           content: cleanedContent,
           timestamp: meta.createdAt + (messageIndex * 1000),
-          messageParts: [{
+          messageParts: messageParts.length > 0 ? messageParts : [{
             id: `part_${messageIndex}_0`,
             type: 'text',
             content: cleanedContent,
             order: 0
-          }]
+          }],
+          images  // Include loaded images if any
         });
         
         messageIndex++;
       }
     }
+    
+    // Second pass: attach tool results to tool calls
+    for (const message of messageMap.values()) {
+      for (const part of message.messageParts) {
+        if (part.type === 'tool' && part.toolData) {
+          const result = toolResults.get(part.toolData.id);
+          if (result) {
+            part.toolData.toolResult = typeof result.result === 'string' 
+              ? result.result 
+              : JSON.stringify(result.result);
+            
+            // Also set toolUseResult as object with camelCase keys for frontend components
+            if (result.result && typeof result.result === 'object') {
+              part.toolData.toolUseResult = convertKeysToCamelCase(result.result as Record<string, unknown>);
+            } else if (typeof result.result === 'string') {
+              // Try to parse string as JSON
+              try {
+                const parsed = JSON.parse(result.result);
+                if (typeof parsed === 'object' && parsed !== null) {
+                  part.toolData.toolUseResult = convertKeysToCamelCase(parsed);
+                }
+              } catch {
+                // Not JSON, leave toolUseResult undefined
+              }
+            }
+            
+            part.toolData.isError = result.isError;
+          }
+        }
+      }
+    }
+    
+    // Convert map to array and sort by timestamp
+    const messages = Array.from(messageMap.values())
+      .sort((a, b) => a.timestamp - b.timestamp);
     
     if (messages.length === 0) {
       return null;
@@ -291,7 +689,7 @@ function parseCliSession(sessionDir: string, sessionId: string): CursorCliSessio
 /**
  * Read all Cursor CLI sessions for a project
  */
-export function readCursorCliSessions(projectPath: string): CursorCliSession[] {
+export async function readCursorCliSessions(projectPath: string): Promise<CursorCliSession[]> {
   try {
     const workspaceHash = getWorkspaceHash(projectPath);
     const chatsDir = path.join(getCursorChatsDir(), workspaceHash);
@@ -316,7 +714,7 @@ export function readCursorCliSessions(projectPath: string): CursorCliSession[] {
     
     for (const sessionId of sessionDirs) {
       const sessionDir = path.join(chatsDir, sessionId);
-      const session = parseCliSession(sessionDir, sessionId);
+      const session = await parseCliSession(sessionDir, sessionId);
       
       if (session) {
         sessions.push(session);
@@ -341,17 +739,22 @@ export function readCursorCliSessions(projectPath: string): CursorCliSession[] {
 /**
  * Read a single Cursor CLI session by ID
  */
-export function readCursorCliSession(projectPath: string, sessionId: string): CursorCliSession | null {
+export async function readCursorCliSession(projectPath: string, sessionId: string): Promise<CursorCliSession | null> {
   try {
     const workspaceHash = getWorkspaceHash(projectPath);
-    const sessionDir = path.join(getCursorChatsDir(), workspaceHash, sessionId);
+    
+    // Strip 'cursor-' prefix if present (added by AgentStudio for internal tracking)
+    const actualSessionId = sessionId.startsWith('cursor-') ? sessionId.slice(7) : sessionId;
+    const sessionDir = path.join(getCursorChatsDir(), workspaceHash, actualSessionId);
     
     if (!fs.existsSync(sessionDir)) {
       console.log(`❌ [CURSOR CLI] Session directory not found: ${sessionDir}`);
       return null;
     }
     
-    return parseCliSession(sessionDir, sessionId);
+    // Pass projectPath for loading image references
+    // Use original sessionId (with prefix) to maintain consistency
+    return await parseCliSession(sessionDir, sessionId, projectPath);
     
   } catch (error) {
     console.error(`Failed to read Cursor CLI session ${sessionId}:`, error);

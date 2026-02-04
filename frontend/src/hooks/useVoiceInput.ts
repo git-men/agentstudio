@@ -15,7 +15,7 @@ export type VoiceInputStatus =
   | 'error'; // 错误
 
 // 语音服务供应商
-export type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent';
+export type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent' | 'google';
 
 // 服务状态
 export interface VoiceServiceStatus {

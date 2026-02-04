@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { useBackendServices } from '../hooks/useBackendServices';
@@ -20,6 +20,7 @@ export function LoginPage() {
     removeService
   } = useBackendServices();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [showServiceManagement, setShowServiceManagement] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
@@ -61,9 +62,10 @@ export function LoginPage() {
             setAutoLoginAttempted(true);
             const loginSuccess = await loginWithoutPassword();
             if (loginSuccess && isMounted) {
-              // Use window.location.href to force a full page reload
-              // This ensures API_BASE is re-initialized from localStorage
-              window.location.href = from;
+              // Use navigate with reload to ensure API_BASE is re-initialized
+              // while respecting the router's basename
+              navigate(from, { replace: true });
+              window.location.reload();
             }
           }
         } else {
@@ -161,9 +163,10 @@ export function LoginPage() {
 
     const success = await login(password);
     if (success) {
-      // Use window.location.href instead of navigate to force a full page reload
-      // This ensures API_BASE is re-initialized from localStorage with the correct service URL
-      window.location.href = from;
+      // Use navigate with reload to ensure API_BASE is re-initialized
+      // while respecting the router's basename
+      navigate(from, { replace: true });
+      window.location.reload();
     }
   };
 
@@ -244,8 +247,9 @@ export function LoginPage() {
                 onClick={async () => {
                   const success = await loginWithoutPassword();
                   if (success) {
-                    // Use window.location.href to force a full page reload
-                    window.location.href = from;
+                    // Use navigate with reload while respecting router's basename
+                    navigate(from, { replace: true });
+                    window.location.reload();
                   }
                 }}
                 disabled={isLoading}

@@ -48,12 +48,22 @@ router.get('/test', (_req, res) => {
 // Validation Schemas
 // =============================================================================
 
+// Image schema for AGUI requests
+const ImageSchema = z.object({
+  id: z.string(),
+  data: z.string(), // base64 encoded image data (without data URI prefix)
+  mediaType: z.enum(['image/jpeg', 'image/png', 'image/gif', 'image/webp']),
+  filename: z.string().optional(),
+});
+
 const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
   engineType: z.enum(['claude', 'cursor'] as const).optional().default('claude'),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
   model: z.string().optional(),
+  // Images (for cursor engine, will be saved to workspace and referenced via @path)
+  images: z.array(ImageSchema).optional(),
   // Claude-specific options
   providerId: z.string().optional(),
   permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
@@ -150,6 +160,7 @@ router.post('/chat', async (req, res) => {
       workspace: rawWorkspace,
       sessionId,
       model,
+      images,
       providerId,
       permissionMode,
       mcpTools,
@@ -242,6 +253,7 @@ router.post('/chat', async (req, res) => {
             workspace: resolvedWorkspace,
             sessionId,
             model,
+            images,
             timeout,
           },
           onAguiEvent

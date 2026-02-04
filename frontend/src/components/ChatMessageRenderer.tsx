@@ -58,6 +58,24 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
     
     return (
       <div className="space-y-3">
+        {/* Render images from message.images (e.g., loaded from session history) */}
+        {message.images && message.images.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {message.images.map((image) => {
+              const imageUrl = `data:${image.mediaType};base64,${image.data}`;
+              return (
+                <img
+                  key={image.id}
+                  src={imageUrl}
+                  alt={image.filename || 'Image'}
+                  className="max-w-32 max-h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => openImagePreview(imageUrl)}
+                  title={image.filename || 'Click to preview'}
+                />
+              );
+            })}
+          </div>
+        )}
         {sortedParts.map((part) => {
           if (part.type === 'command' && part.content) {
             // 分离命令名和参数

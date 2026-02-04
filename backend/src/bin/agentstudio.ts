@@ -172,17 +172,61 @@ program
 
       console.log('\n📦 Upgrading to the latest version...');
       
-      // Detect package manager and upgrade
-      const npmUserAgent = process.env.npm_config_user_agent || '';
+      // Detect package manager from installation path
+      // Priority: 1. Current executable path, 2. Service plist path, 3. npm_config_user_agent, 4. default npm
+      const detectPackageManager = (): 'pnpm' | 'yarn' | 'npm' => {
+        // Check current executable path (most reliable)
+        const execPath = process.argv[1] || '';
+        if (execPath.includes('/pnpm/') || execPath.includes('\\pnpm\\')) {
+          return 'pnpm';
+        }
+        if (execPath.includes('/yarn/') || execPath.includes('\\yarn\\')) {
+          return 'yarn';
+        }
+        
+        // Check service plist path if on macOS
+        if (platform() === 'darwin') {
+          try {
+            const plistPath = path.join(homedir(), 'Library', 'LaunchAgents', `com.${SERVICE_NAME}.daemon.plist`);
+            if (existsSync(plistPath)) {
+              const plistContent = readFileSync(plistPath, 'utf8');
+              if (plistContent.includes('/pnpm/')) {
+                return 'pnpm';
+              }
+              if (plistContent.includes('/yarn/')) {
+                return 'yarn';
+              }
+            }
+          } catch {
+            // Ignore plist read errors
+          }
+        }
+        
+        // Check npm_config_user_agent (works when run via package manager)
+        const npmUserAgent = process.env.npm_config_user_agent || '';
+        if (npmUserAgent.includes('pnpm')) {
+          return 'pnpm';
+        }
+        if (npmUserAgent.includes('yarn')) {
+          return 'yarn';
+        }
+        
+        // Default to npm
+        return 'npm';
+      };
+      
+      const packageManager = detectPackageManager();
       let upgradeCommand: string;
 
-      if (npmUserAgent.includes('pnpm')) {
+      if (packageManager === 'pnpm') {
         upgradeCommand = 'pnpm add -g agentstudio@latest';
-      } else if (npmUserAgent.includes('yarn')) {
+      } else if (packageManager === 'yarn') {
         upgradeCommand = 'yarn global add agentstudio@latest';
       } else {
         upgradeCommand = 'npm install -g agentstudio@latest';
       }
+      
+      console.log(`   Detected package manager: ${packageManager}`);
 
       console.log(`   Running: ${upgradeCommand}`);
       

@@ -19,7 +19,7 @@ import { authFetch } from '../../lib/authFetch';
 import { API_BASE } from '../../lib/config';
 
 // 供应商类型
-type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent';
+type SpeechProvider = 'openai' | 'groq' | 'aliyun' | 'tencent' | 'google';
 
 // 设置类型
 interface SpeechToTextSettings {
@@ -50,6 +50,10 @@ interface SpeechToTextSettings {
       secretKey: string;
       appId: string;
     };
+    google: {
+      enabled: boolean;
+      apiKey: string;
+    };
   };
 }
 
@@ -77,6 +81,11 @@ const PROVIDER_INFO: Record<
     name: '腾讯云语音识别',
     description: '国内访问快，支持多种语言',
     docsUrl: 'https://cloud.tencent.com/document/product/1093',
+  },
+  google: {
+    name: 'Google Cloud Speech-to-Text',
+    description: '高质量语音识别，支持 125+ 语言和变体',
+    docsUrl: 'https://cloud.google.com/speech-to-text/docs',
   },
 };
 
@@ -535,6 +544,80 @@ export const VoiceSettingsPage: React.FC = () => {
     </div>
   );
 
+  // 渲染 Google Cloud 配置
+  const renderGoogleConfig = (config: {
+    enabled: boolean;
+    apiKey: string;
+  }) => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <label className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={config.enabled}
+            onChange={(e) =>
+              updateSettings('providers.google.enabled', e.target.checked)
+            }
+            className="rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500"
+          />
+          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            启用
+          </span>
+        </label>
+
+        {config.enabled && (
+          <button
+            onClick={() => testProvider('google')}
+            disabled={testingProvider === 'google'}
+            className="flex items-center space-x-1 px-3 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+          >
+            {testingProvider === 'google' ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
+              <TestTube className="w-4 h-4" />
+            )}
+            <span>测试</span>
+          </button>
+        )}
+      </div>
+
+      {config.enabled && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              API Key
+            </label>
+            <div className="relative">
+              <input
+                type={showSecrets['google.apiKey'] ? 'text' : 'password'}
+                value={config.apiKey}
+                onChange={(e) =>
+                  updateSettings('providers.google.apiKey', e.target.value)
+                }
+                placeholder="AIza..."
+                className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={() => toggleShowSecret('google.apiKey')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                {showSecrets['google.apiKey'] ? (
+                  <EyeOff className="w-4 h-4" />
+                ) : (
+                  <Eye className="w-4 h-4" />
+                )}
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              在 Google Cloud Console 创建 API Key，并启用 Speech-to-Text API
+            </p>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -745,6 +828,29 @@ export const VoiceSettingsPage: React.FC = () => {
               </a>
             </div>
             {renderTencentConfig(settings.providers.tencent)}
+          </div>
+
+          {/* Google */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-medium text-gray-900 dark:text-white">
+                  {PROVIDER_INFO.google.name}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {PROVIDER_INFO.google.description}
+                </p>
+              </div>
+              <a
+                href={PROVIDER_INFO.google.docsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+              >
+                文档
+              </a>
+            </div>
+            {renderGoogleConfig(settings.providers.google)}
           </div>
         </div>
       )}

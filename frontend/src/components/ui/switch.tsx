@@ -1,40 +1,47 @@
-import * as React from 'react';
-import { cn } from '../../lib/utils';
+import * as React from "react"
 
-interface SwitchProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  checked?: boolean;
-  onCheckedChange?: (checked: boolean) => void;
+export interface SwitchProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type' | 'onChange'> {
+  checked?: boolean
+  onCheckedChange?: (checked: boolean) => void
 }
 
-const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
-  ({ className, checked = false, onCheckedChange, ...props }, ref) => {
+const Switch = React.forwardRef<HTMLInputElement, SwitchProps>(
+  ({ className, checked, onCheckedChange, disabled, ...props }, ref) => {
+    const handleChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+      onCheckedChange?.(event.target.checked)
+    }
+
     return (
-      <button
-        ref={ref}
-        role="switch"
-        aria-checked={checked}
-        type="button"
-        className={cn(
-          'peer inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors',
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-          'disabled:cursor-not-allowed disabled:opacity-50',
-          checked ? 'bg-primary' : 'bg-input',
-          className
-        )}
-        onClick={() => onCheckedChange?.(!checked)}
-        {...props}
+      <label
+        className={`relative inline-flex items-center cursor-pointer ${disabled ? 'cursor-not-allowed opacity-50' : ''}`}
       >
-        <span
-          className={cn(
-            'pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform',
-            checked ? 'translate-x-5' : 'translate-x-0'
-          )}
+        <input
+          type="checkbox"
+          ref={ref}
+          checked={checked}
+          onChange={handleChange}
+          disabled={disabled}
+          className="sr-only peer"
+          {...props}
         />
-      </button>
-    );
+        <div
+          className={`
+            w-11 h-6 bg-gray-200 dark:bg-gray-700 
+            peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-500 peer-focus:ring-offset-2
+            dark:peer-focus:ring-offset-gray-800
+            rounded-full peer 
+            peer-checked:after:translate-x-full peer-checked:after:border-white 
+            after:content-[''] after:absolute after:top-[2px] after:left-[2px] 
+            after:bg-white after:border-gray-300 after:border after:rounded-full 
+            after:h-5 after:w-5 after:transition-all 
+            peer-checked:bg-blue-600 dark:peer-checked:bg-blue-500
+            ${className || ''}
+          `}
+        />
+      </label>
+    )
   }
-);
+)
+Switch.displayName = "Switch"
 
-Switch.displayName = 'Switch';
-
-export { Switch };
+export { Switch }

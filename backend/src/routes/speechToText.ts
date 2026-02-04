@@ -222,6 +222,10 @@ function sanitizeSettings(settings: SpeechToTextSettings): SpeechToTextSettings 
         secretKey: sanitize(settings.providers.tencent.secretKey),
         appId: sanitize(settings.providers.tencent.appId),
       },
+      google: {
+        ...settings.providers.google,
+        apiKey: sanitize(settings.providers.google.apiKey),
+      },
     },
   };
 }

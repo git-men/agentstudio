@@ -50,6 +50,7 @@
     "posthog-node": "^5.21.1",
     "proper-lockfile": "^4.1.2",
     "socks-proxy-agent": "^8.0.5",
+    "sql.js": "^1.13.0",
     "tunely": "^0.2.1",
     "undici": "^7.16.0",
     "zod": "^3.22.2"
@@ -57,7 +58,6 @@
   "devDependencies": {
     "@eslint/js": "^9.37.0",
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.13",
     "@types/express": "^4.17.17",
     "@types/fs-extra": "^11.0.1",

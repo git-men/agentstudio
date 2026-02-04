@@ -815,7 +815,7 @@ router.get('/_status', (req, res) => {
 });
 
 // GET /api/sessions/:agentId - Get agent sessions
-router.get('/:agentId', (req, res) => {
+router.get('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
     const { search, engine } = req.query;
@@ -842,7 +842,7 @@ router.get('/:agentId', (req, res) => {
       if (engine === 'cursor') {
         // Read from Cursor Agent transcripts
         console.log('📂 [DEBUG] Reading Cursor history sessions for project:', projectPath);
-        const cursorSessions = readCursorCliSessions(projectPath);
+        const cursorSessions = await readCursorCliSessions(projectPath);
         console.log(`📊 [DEBUG] Found ${cursorSessions.length} raw Cursor sessions`);
         
         sessions = cursorSessions.map((session) => ({
@@ -906,7 +906,7 @@ router.get('/:agentId', (req, res) => {
 });
 
 // GET /api/sessions/:agentId/:sessionId/messages - Get session messages
-router.get('/:agentId/:sessionId/messages', (req, res) => {
+router.get('/:agentId/:sessionId/messages', async (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
     const projectPath = req.query.projectPath as string;
@@ -919,7 +919,7 @@ router.get('/:agentId/:sessionId/messages', (req, res) => {
       if (engine === 'cursor') {
         // Read from Cursor Agent transcripts
         console.log('📂 [CURSOR] Reading Cursor history messages for session:', sessionId, 'in project:', projectPath);
-        session = readCursorCliSession(projectPath, sessionId);
+        session = await readCursorCliSession(projectPath, sessionId);
         
         if (session) {
           console.log('📨 [CURSOR] Found session with', session.messages?.length || 0, 'messages');

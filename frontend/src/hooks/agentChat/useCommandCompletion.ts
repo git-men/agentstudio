@@ -77,20 +77,26 @@ export const useCommandCompletion = ({
   ];
 
   // Fetch commands for keyboard navigation (with search filter)
-  const { data: userCommandsFiltered = [], error: userCommandsError } = useCommands({
+  const { data: userCommandsFilteredData, error: userCommandsError } = useCommands({
     scope: 'user',
     search: commandSearch
   });
-  const { data: projectCommandsFiltered = [], error: projectCommandsError } = useProjectCommands({
+  const { data: projectCommandsFilteredData, error: projectCommandsError } = useProjectCommands({
     projectId: projectPath || '',
     search: commandSearch
   });
 
   // Fetch complete command lists for detection (without search filter)
-  const { data: userCommands = [] } = useCommands({ scope: 'user' });
-  const { data: projectCommands = [] } = useProjectCommands({
+  const { data: userCommandsData } = useCommands({ scope: 'user' });
+  const { data: projectCommandsData } = useProjectCommands({
     projectId: projectPath || ''
   });
+
+  // Extract commands arrays from response objects
+  const userCommandsFiltered = userCommandsFilteredData?.commands || [];
+  const projectCommandsFiltered = projectCommandsFilteredData?.commands || [];
+  const userCommands = userCommandsData?.commands || [];
+  const projectCommands = projectCommandsData?.commands || [];
 
   // Helper function to check if a command is defined
   const isCommandDefined = useCallback((commandName: string) => {

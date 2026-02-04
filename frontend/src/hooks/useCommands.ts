@@ -147,9 +147,9 @@ export const useDeleteCommand = () => {
 };
 
 // Project-specific commands
-const fetchProjectCommands = async (projectIdentifier: string, filter: Omit<SlashCommandFilter, 'scope'> = {}): Promise<SlashCommand[]> => {
+const fetchProjectCommands = async (projectIdentifier: string, filter: Omit<SlashCommandFilter, 'scope'> = {}): Promise<CommandsResponse> => {
   if (!projectIdentifier) {
-    return [];
+    return { commands: [], readOnly: false };
   }
 
   let projectPath: string;
@@ -182,7 +182,12 @@ const fetchProjectCommands = async (projectIdentifier: string, filter: Omit<Slas
   if (!response.ok) {
     throw new Error('Failed to fetch project commands');
   }
-  return response.json();
+  const data = await response.json();
+  // Support both old format (array) and new format (object with readOnly flag)
+  if (Array.isArray(data)) {
+    return { commands: data, readOnly: false };
+  }
+  return data;
 };
 
 export const useProjectCommands = (filter: { projectId: string; search?: string }) => {

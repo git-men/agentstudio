@@ -98,7 +98,7 @@ export const HomePage: React.FC = () => {
               <h3 className="text-xl font-medium text-gray-900 mb-2">{t('noAgentsTitle')}</h3>
               <p className="text-gray-600 mb-6">{t('noAgentsDescription')}</p>
               <button
-                onClick={() => window.location.href = '/agents'}
+                onClick={() => window.location.href = import.meta.env.BASE_URL + 'agents'}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
               >
                 {t('manageAgents')}
@@ -115,7 +115,7 @@ export const HomePage: React.FC = () => {
                     <div className="text-4xl">{agent.ui.icon}</div>
                     <div className="flex space-x-1">
                       <button
-                        onClick={() => window.location.href = '/agents'}
+                        onClick={() => window.location.href = import.meta.env.BASE_URL + 'agents'}
                         className="text-blue-600 hover:bg-blue-50 p-1 rounded"
                         title={t('editAgent')}
                       >

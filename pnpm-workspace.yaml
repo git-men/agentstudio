@@ -1,3 +1,8 @@
 packages:
-  - 'frontend'
-  - 'backend'
+  - frontend
+  - backend
+
+ignoredBuiltDependencies:
+  - better-sqlite3
+
+onlyBuiltDependencies: better-sqlite3
