@@ -236,7 +236,8 @@ function extractTextContent(content: string | MessageContent[]): string {
   
   if (Array.isArray(content)) {
     return content
-      .filter(c => c.type === 'text' && c.text)
+      .filter((c): c is MessageContentText | { type: string; text: string } => 
+        c.type === 'text' && 'text' in c && typeof c.text === 'string')
       .map(c => c.text)
       .join('\n');
   }
