@@ -482,7 +482,7 @@ export class ClaudeAguiAdapter {
     }
 
     // Close any open thinking/tool blocks
-    for (const [index, block] of this.state.activeBlocks) {
+    for (const [_index, block] of this.state.activeBlocks) {
       if (block.type === 'thinking') {
         events.push({
           type: 'THINKING_END' as AGUIEventType.THINKING_END,

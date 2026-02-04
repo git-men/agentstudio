@@ -854,7 +854,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     const fileType = getFileType(activeTab.name);
 
     switch (fileType) {
-      case 'image':
+      case 'image': {
         // 创建一个专门用于二进制文件的URL
         const imageParams = new URLSearchParams();
         imageParams.append('path', activeTab.path);
@@ -866,6 +866,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         const imageUrl = `${API_BASE}/files/read?${imageParams.toString()}`;
         
         return <SimpleImagePreview imageUrl={imageUrl} fileName={activeTab.name} />;
+      }
 
       case 'text':
         if (!fileContentData) {

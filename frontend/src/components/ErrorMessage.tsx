@@ -1,6 +1,22 @@
 import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, AlertCircle, Copy, CheckCircle } from 'lucide-react';
 
+// Enhanced error interface for network and API errors
+interface EnhancedError extends Error {
+  requestUrl?: string;
+  requestMethod?: string;
+  requestBody?: unknown;
+  statusCode?: number;
+  statusText?: string;
+  url?: string;
+  timestamp?: number;
+  isNetworkError?: boolean;
+  isTimeout?: boolean;
+  isAbortError?: boolean;
+  originalError?: unknown;
+  type?: string;
+}
+
 interface ErrorMessageProps {
   error: string | Error | { message: string; details?: unknown; stack?: string };
   title?: string;
@@ -19,8 +35,8 @@ export const ErrorMessage: React.FC<ErrorMessageProps> = ({
   const getErrorInfo = () => {
     if (error instanceof Error) {
       // Extract enhanced error properties if they exist
-      const enhancedError = error as any;
-      const details: Record<string, any> = {
+      const enhancedError = error as EnhancedError;
+      const details: Record<string, unknown> = {
         stack: error.stack || '',
         name: error.name
       };
@@ -45,8 +61,8 @@ export const ErrorMessage: React.FC<ErrorMessageProps> = ({
         raw: error
       };
     } else if (typeof error === 'object' && error !== null) {
-      const errorObj = error as any;
-      const details: Record<string, any> = {};
+      const errorObj = error as Record<string, unknown>;
+      const details: Record<string, unknown> = {};
       
       // Extract all possible error properties
       Object.keys(errorObj).forEach(key => {
@@ -99,15 +115,15 @@ export const ErrorMessage: React.FC<ErrorMessageProps> = ({
           {typeof errorInfo.raw === 'object' && errorInfo.raw && 'requestUrl' in errorInfo.raw && (
             <div className="mt-1 text-xs text-red-500 dark:text-red-400">
               {('requestUrl' in errorInfo.raw && errorInfo.raw.requestUrl) && (
-                <span>Request: {('requestMethod' in errorInfo.raw ? errorInfo.raw.requestMethod : 'POST') || 'POST'} {(errorInfo.raw as any).requestUrl}</span>
+                <span>Request: {('requestMethod' in errorInfo.raw ? (errorInfo.raw as EnhancedError).requestMethod : 'POST') || 'POST'} {(errorInfo.raw as EnhancedError).requestUrl}</span>
               )}
               {('statusCode' in errorInfo.raw && errorInfo.raw.statusCode) && (
-                <span className="ml-2">Status: {(errorInfo.raw as any).statusCode}</span>
+                <span className="ml-2">Status: {(errorInfo.raw as EnhancedError).statusCode}</span>
               )}
-              {'isNetworkError' in errorInfo.raw && (errorInfo.raw as any).isNetworkError && (
+              {'isNetworkError' in errorInfo.raw && (errorInfo.raw as EnhancedError).isNetworkError && (
                 <span className="ml-2">• Network Error</span>
               )}
-              {'isTimeout' in errorInfo.raw && (errorInfo.raw as any).isTimeout && (
+              {'isTimeout' in errorInfo.raw && (errorInfo.raw as EnhancedError).isTimeout && (
                 <span className="ml-2">• Request Timeout</span>
               )}
             </div>

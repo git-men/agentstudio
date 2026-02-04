@@ -55,7 +55,7 @@ export const BackendServiceSwitcher: React.FC<BackendServiceSwitcherProps> = ({ 
       });
 
       return response.ok;
-    } catch (error) {
+    } catch {
       return false;
     } finally {
       setIsTesting(false);

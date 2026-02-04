@@ -57,7 +57,7 @@ export const BackendOnboardingWizard: React.FC<BackendOnboardingWizardProps> = (
           setStep('found');
           return;
         }
-      } catch (error) {
+      } catch {
         // Continue to next URL
       }
     }

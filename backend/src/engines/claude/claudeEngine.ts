@@ -385,8 +385,8 @@ export class ClaudeEngine implements IAgentEngine {
 
       console.log(`[ClaudeEngine] User message built, sending to Claude SDK...`);
 
-      // Track if we've received stream events
-      let hasReceivedStreamEvents = false;
+      // Track if we've received stream events (kept for debugging)
+      let _hasReceivedStreamEvents = false;
       let finalSessionId = actualSessionId || tempSessionId;
       let resultReceived = false;
 
@@ -418,7 +418,7 @@ export class ClaudeEngine implements IAgentEngine {
             console.log(`[ClaudeEngine] Converted to ${aguiEvents.length} AGUI events`);
 
             if (aguiEvents.length > 0) {
-              hasReceivedStreamEvents = true;
+              _hasReceivedStreamEvents = true;
             }
 
             // Send each AGUI event

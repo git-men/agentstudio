@@ -27,7 +27,7 @@ const getVersion = (): string => {
       const packageJson = JSON.parse(readFileSync(devPackagePath, 'utf8'));
       return packageJson.version || '0.1.0';
     }
-  } catch (error) {
+  } catch {
     console.warn('Could not read version from package.json');
   }
   return '0.1.0';
@@ -263,7 +263,7 @@ program
                 console.log('   Version check skipped (may require terminal restart)');
               }
             }
-          } catch (error) {
+          } catch {
             console.log('⚠️  Warning: Could not verify installation');
             console.log('   Please restart your terminal and run: agentstudio --version');
           }

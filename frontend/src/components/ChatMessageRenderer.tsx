@@ -102,6 +102,50 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 <CompactSummary content={part.content} />
               </div>
             );
+          } else if (part.type === 'text' && part.content && part.content.includes('unknown')) {
+            // Handle legacy thinking content that was saved as "unknown" type
+            // Check if the content contains thinking-related markers
+            const isThinkingContent = part.content.includes('"type":"thinking"') || 
+                                    part.content.includes('"thinking"') ||
+                                    part.content.includes('thinking');
+            
+            if (isThinkingContent) {
+              // Extract thinking content from the serialized data
+              let thinkingText = part.content;
+              
+              // Try to parse if it looks like JSON and extract thinking content
+              try {
+                if (part.content.includes('"thinking":')) {
+                  const match = part.content.match(/"thinking":"([^"]+)"/);
+                  if (match && match[1]) {
+                    thinkingText = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                  }
+                }
+              } catch (e) {
+                // If parsing fails, use the original content
+                console.warn('Failed to parse thinking content:', e);
+              }
+              
+              return (
+                <details key={part.id} className="my-2">
+                  <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
+                    💭 思考过程... (历史消息)
+                  </summary>
+                  <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+                    <div className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap break-words leading-relaxed italic">
+                      {thinkingText}
+                    </div>
+                  </div>
+                </details>
+              );
+            } else {
+              // For other unknown types, render as text
+              return (
+                <div key={part.id}>
+                  <MarkdownMessage content={part.content} isUserMessage={message.role === 'user'} />
+                </div>
+              );
+            }
           } else if (part.type === 'text' && part.content) {
             return (
               <div key={part.id}>
@@ -148,50 +192,6 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 />
               </div>
             );
-          } else if (part.type === 'text' && part.content && part.content.includes('unknown')) {
-            // Handle legacy thinking content that was saved as "unknown" type
-            // Check if the content contains thinking-related markers
-            const isThinkingContent = part.content.includes('"type":"thinking"') || 
-                                    part.content.includes('"thinking"') ||
-                                    part.content.includes('thinking');
-            
-            if (isThinkingContent) {
-              // Extract thinking content from the serialized data
-              let thinkingText = part.content;
-              
-              // Try to parse if it looks like JSON and extract thinking content
-              try {
-                if (part.content.includes('"thinking":')) {
-                  const match = part.content.match(/"thinking":"([^"]+)"/);
-                  if (match && match[1]) {
-                    thinkingText = match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
-                  }
-                }
-              } catch (e) {
-                // If parsing fails, use the original content
-                console.warn('Failed to parse thinking content:', e);
-              }
-              
-              return (
-                <details key={part.id} className="my-2">
-                  <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
-                    💭 思考过程... (历史消息)
-                  </summary>
-                  <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                    <div className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap break-words leading-relaxed italic">
-                      {thinkingText}
-                    </div>
-                  </div>
-                </details>
-              );
-            } else {
-              // For other unknown types, render as text
-              return (
-                <div key={part.id}>
-                  <MarkdownMessage content={part.content} isUserMessage={message.role === 'user'} />
-                </div>
-              );
-            }
           }
           return null;
         })}
@@ -278,7 +278,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
               toolUseResult={tool.toolUseResult}
               isError={tool.isError}
               isExecuting={tool.isExecuting}
-              claudeId={(tool as any).claudeId}
+              claudeId={tool.claudeId}
               onAskUserQuestionSubmit={onAskUserQuestionSubmit}
             />
           ))}

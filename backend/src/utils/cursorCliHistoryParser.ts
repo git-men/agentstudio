@@ -621,7 +621,7 @@ async function parseCliSession(sessionDir: string, sessionId: string, projectPat
             .join('\n');
         } else if (typeof parsed.content === 'string') {
           // For string content, clean user query tags if needed
-          let rawContent = isUserMessage ? cleanUserQuery(parsed.content) : parsed.content;
+          const rawContent = isUserMessage ? cleanUserQuery(parsed.content) : parsed.content;
           
           if (rawContent) {
             // For assistant messages, parse thinking blocks

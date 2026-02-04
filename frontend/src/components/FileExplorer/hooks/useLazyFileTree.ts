@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { TreeApi, NodeApi } from 'react-arborist';
 import { useFileTree, type FileSystemItem } from '../../../hooks/useFileSystem';
 import { API_BASE } from '../../../lib/config';
 import { authFetch } from '../../../lib/authFetch';
@@ -19,7 +20,7 @@ export const useLazyFileTree = ({ projectPath, showHiddenFiles }: UseLazyFileTre
   // 防抖状态 - 防止双重触发
   const [lastToggleTime, setLastToggleTime] = useState<Record<string, number>>({});
   
-  const treeApiRef = useRef<any>(null);
+  const treeApiRef = useRef<TreeApi<FileTreeItem> | null>(null);
 
   // 使用文件树 hook，懒加载根目录
   const { 
@@ -178,7 +179,7 @@ export const useLazyFileTree = ({ projectPath, showHiddenFiles }: UseLazyFileTre
   }, [refetchTree]);
 
   // 处理目录展开/收起
-  const handleDirectoryToggle = useCallback((node: any) => {
+  const handleDirectoryToggle = useCallback((node: NodeApi<FileTreeItem>) => {
     // 防抖处理 - 防止短时间内重复触发
     const currentTime = Date.now();
     const lastTime = lastToggleTime[node.data.path] || 0;
@@ -254,7 +255,7 @@ export const useLazyFileTree = ({ projectPath, showHiddenFiles }: UseLazyFileTre
     handleDirectoryToggle,
     
     // 工具
-    setTreeApi: (api: any) => { treeApiRef.current = api; },
+    setTreeApi: (api: TreeApi<FileTreeItem> | null) => { treeApiRef.current = api; },
     initialOpenState
   };
 };

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // 临时调试脚本：检查 SessionManager 状态
 const { sessionManager } = require('./dist/services/sessionManager');
 

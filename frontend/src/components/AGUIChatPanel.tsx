@@ -589,7 +589,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                         }`}
                 >
                     <ChatMessageRenderer
-                        message={message as any}
+                        // AgentMessage and ChatMessage have compatible shapes for rendering
+                        message={message as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
                         onAskUserQuestionSubmit={handleAskUserQuestionSubmit}
                     />
                 </div>

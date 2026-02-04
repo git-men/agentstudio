@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-unused-vars */
 // 全面的会话检查脚本
 const fs = require('fs');
 const path = require('path');

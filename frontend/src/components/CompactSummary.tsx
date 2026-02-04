@@ -4,7 +4,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { useTranslation } from 'react-i18next';
 
 interface CompactSummaryProps {
-  content: string | any;
+  content: string | unknown;
 }
 
 export const CompactSummary: React.FC<CompactSummaryProps> = ({ content }) => {

@@ -15,7 +15,7 @@ import os from 'os';
 import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const _dirname = path.dirname(__filename);  // eslint-disable-line @typescript-eslint/no-unused-vars
 
 // 简化的 AgentStorage 类，避免复杂的依赖
 class SimpleAgentStorage {

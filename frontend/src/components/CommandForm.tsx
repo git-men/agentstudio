@@ -44,8 +44,15 @@ export const CommandForm: React.FC<CommandFormProps> = ({
   const [selectedMcpTools, setSelectedMcpTools] = useState<string[]>([]);
   const [mcpToolsEnabled, setMcpToolsEnabled] = useState(false);
 
-  const createCommand = projectId ? useCreateProjectCommand(projectId) : useCreateCommand();
-  const updateCommand = projectId ? useUpdateProjectCommand(projectId) : useUpdateCommand();
+  // Always call all hooks unconditionally (React hooks rules)
+  const createProjectCmd = useCreateProjectCommand(projectId || '');
+  const createUserCmd = useCreateCommand();
+  const updateProjectCmd = useUpdateProjectCommand(projectId || '');
+  const updateUserCmd = useUpdateCommand();
+  
+  // Select the appropriate hook result based on whether we have a projectId
+  const createCommand = projectId ? createProjectCmd : createUserCmd;
+  const updateCommand = projectId ? updateProjectCmd : updateUserCmd;
 
   const isEditing = !!command;
 
