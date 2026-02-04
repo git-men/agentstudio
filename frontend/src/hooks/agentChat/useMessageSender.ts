@@ -298,7 +298,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         // Track current message for AGUI events
         let currentAguiMessageId: string | null = null;
         let currentTextContent = '';
-        let currentToolCalls = new Map<string, { name: string; args: string }>();
+        const currentToolCalls = new Map<string, { name: string; args: string }>();
         
         // Handle AGUI events
         const handleAguiEvent = (event: AGUIEvent) => {

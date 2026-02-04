@@ -275,7 +275,6 @@ export const useAGUIChat = () => {
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         let _currentEventType: string | null = null;
 
         for (const line of lines) {
