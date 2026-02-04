@@ -449,13 +449,14 @@ describe('agentCardService - Cursor Engine Support', () => {
       const projectContext = createTestProjectContext();
 
       const agentCard = generateCursorAgentCard(projectContext);
+      const context = agentCard.context as any;
 
-      expect(agentCard.context.supportedModels).toBeDefined();
-      expect(Array.isArray(agentCard.context.supportedModels)).toBe(true);
-      expect(agentCard.context.supportedModels.length).toBeGreaterThan(0);
+      expect(context.supportedModels).toBeDefined();
+      expect(Array.isArray(context.supportedModels)).toBe(true);
+      expect(context.supportedModels.length).toBeGreaterThan(0);
 
       // Each model should have id and name
-      const firstModel = agentCard.context.supportedModels[0];
+      const firstModel = context.supportedModels[0];
       expect(firstModel).toHaveProperty('id');
       expect(firstModel).toHaveProperty('name');
     });
@@ -465,9 +466,10 @@ describe('agentCardService - Cursor Engine Support', () => {
       const projectContext = createTestProjectContext();
 
       const agentCard = generateCursorAgentCard(projectContext);
+      const context = agentCard.context as any;
 
-      expect(agentCard.context.engineCapabilities).toBeDefined();
-      expect(agentCard.context.engineCapabilities).toMatchObject({
+      expect(context.engineCapabilities).toBeDefined();
+      expect(context.engineCapabilities).toMatchObject({
         streaming: true,
         thinking: true,
         vision: true,
@@ -483,9 +485,10 @@ describe('agentCardService - Cursor Engine Support', () => {
       const projectContext = createTestProjectContext();
 
       const agentCard = generateAgentCardByEngine('cursor', projectContext);
+      const context = agentCard.context as any;
 
       expect(agentCard.name).toBe('Cursor Agent');
-      expect(agentCard.context.engineType).toBe('cursor');
+      expect(context.engineType).toBe('cursor');
     });
 
     it('should return Claude Agent Card when engineType is claude', async () => {

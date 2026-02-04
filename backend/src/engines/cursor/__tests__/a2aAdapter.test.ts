@@ -16,6 +16,10 @@ import {
 } from '../a2aAdapter.js';
 import type { AGUIEvent } from '../../types.js';
 
+// Helper to create AGUI events with correct typing
+const createEvent = (type: string, props?: Record<string, any>): AGUIEvent => 
+  ({ type, ...props } as AGUIEvent);
+
 describe('CursorA2AAdapter', () => {
   let adapter: CursorA2AAdapter;
 
@@ -46,7 +50,7 @@ describe('CursorA2AAdapter', () => {
 
   describe('convertEvent - RUN_STARTED', () => {
     it('should emit status-update with working state', () => {
-      const event: AGUIEvent = { type: 'RUN_STARTED' };
+      const event = createEvent('RUN_STARTED');
       const responses = adapter.convertEvent(event);
 
       expect(responses).toHaveLength(1);
@@ -65,13 +69,10 @@ describe('CursorA2AAdapter', () => {
   describe('convertEvent - TEXT_MESSAGE flow', () => {
     it('should accumulate text content across TEXT_MESSAGE events', () => {
       // Start message
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START', messageId: 'msg-1' } as AGUIEvent);
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START', { messageId: 'msg-1' }));
 
       // Add content incrementally
-      const contentResponse1 = adapter.convertEvent({
-        type: 'TEXT_MESSAGE_CONTENT',
-        content: 'Hello ',
-      } as AGUIEvent);
+      const contentResponse1 = adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'Hello ' }));
 
       expect(contentResponse1).toHaveLength(1);
       const msg1 = contentResponse1[0].result as A2AMessage;
@@ -84,10 +85,7 @@ describe('CursorA2AAdapter', () => {
       });
 
       // Add more content
-      const contentResponse2 = adapter.convertEvent({
-        type: 'TEXT_MESSAGE_CONTENT',
-        content: 'World!',
-      } as AGUIEvent);
+      const contentResponse2 = adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'World!' }));
 
       const msg2 = contentResponse2[0].result as A2AMessage;
       expect(msg2.parts[0]).toMatchObject({
@@ -97,7 +95,7 @@ describe('CursorA2AAdapter', () => {
       });
 
       // End message
-      const endResponse = adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
+      const endResponse = adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
       expect(endResponse).toHaveLength(1);
       const finalMsg = endResponse[0].result as A2AMessage;
@@ -110,8 +108,8 @@ describe('CursorA2AAdapter', () => {
     });
 
     it('should handle empty content gracefully', () => {
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START' } as AGUIEvent);
-      const response = adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START'));
+      const response = adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
       // No message emitted for empty content
       expect(response).toHaveLength(0);
@@ -121,11 +119,10 @@ describe('CursorA2AAdapter', () => {
   describe('convertEvent - TOOL_CALL flow', () => {
     it('should emit artifact updates for tool calls', () => {
       // Start tool call
-      const startResponse = adapter.convertEvent({
-        type: 'TOOL_CALL_START',
+      const startResponse = adapter.convertEvent(createEvent('TOOL_CALL_START', {
         toolCallId: 'tool-1',
         toolName: 'read_file',
-      } as AGUIEvent);
+      }));
 
       expect(startResponse).toHaveLength(1);
       const startArtifact = startResponse[0].result as A2ATaskArtifactUpdateEvent;
@@ -141,13 +138,10 @@ describe('CursorA2AAdapter', () => {
       });
 
       // Add arguments
-      adapter.convertEvent({
-        type: 'TOOL_CALL_ARGS',
-        args: '{"path": "/test/file.ts"}',
-      } as AGUIEvent);
+      adapter.convertEvent(createEvent('TOOL_CALL_ARGS', { args: '{"path": "/test/file.ts"}' }));
 
       // End tool call
-      const endResponse = adapter.convertEvent({ type: 'TOOL_CALL_END' } as AGUIEvent);
+      const endResponse = adapter.convertEvent(createEvent('TOOL_CALL_END'));
 
       expect(endResponse).toHaveLength(1);
       const endArtifact = endResponse[0].result as A2ATaskArtifactUpdateEvent;
@@ -162,12 +156,11 @@ describe('CursorA2AAdapter', () => {
       });
 
       // Tool result
-      const resultResponse = adapter.convertEvent({
-        type: 'TOOL_CALL_RESULT',
+      const resultResponse = adapter.convertEvent(createEvent('TOOL_CALL_RESULT', {
         toolCallId: 'tool-1',
         result: '{"content": "file contents"}',
         isError: false,
-      } as AGUIEvent);
+      }));
 
       expect(resultResponse).toHaveLength(1);
       const resultArtifact = resultResponse[0].result as A2ATaskArtifactUpdateEvent;
@@ -185,18 +178,16 @@ describe('CursorA2AAdapter', () => {
     });
 
     it('should handle tool errors correctly', () => {
-      adapter.convertEvent({
-        type: 'TOOL_CALL_START',
+      adapter.convertEvent(createEvent('TOOL_CALL_START', {
         toolCallId: 'tool-2',
         toolName: 'execute_command',
-      } as AGUIEvent);
+      }));
 
-      const resultResponse = adapter.convertEvent({
-        type: 'TOOL_CALL_RESULT',
+      const resultResponse = adapter.convertEvent(createEvent('TOOL_CALL_RESULT', {
         toolCallId: 'tool-2',
         result: 'Command failed: permission denied',
         isError: true,
-      } as AGUIEvent);
+      }));
 
       const resultArtifact = resultResponse[0].result as A2ATaskArtifactUpdateEvent;
       expect(resultArtifact.artifact.parts[0]).toMatchObject({
@@ -212,11 +203,11 @@ describe('CursorA2AAdapter', () => {
   describe('convertEvent - RUN_FINISHED', () => {
     it('should emit completed status with final message', () => {
       // Add some message content first
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START', messageId: 'msg-1' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_CONTENT', content: 'Task done!' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START', { messageId: 'msg-1' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'Task done!' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
-      const response = adapter.convertEvent({ type: 'RUN_FINISHED' } as AGUIEvent);
+      const response = adapter.convertEvent(createEvent('RUN_FINISHED'));
 
       expect(response).toHaveLength(1);
       const status = response[0].result as A2ATaskStatusUpdateEvent;
@@ -232,11 +223,10 @@ describe('CursorA2AAdapter', () => {
 
   describe('convertEvent - RUN_ERROR', () => {
     it('should emit failed status with error message', () => {
-      const response = adapter.convertEvent({
-        type: 'RUN_ERROR',
+      const response = adapter.convertEvent(createEvent('RUN_ERROR', {
         error: 'Something went wrong',
         code: 'EXECUTION_ERROR',
-      } as AGUIEvent);
+      }));
 
       expect(response).toHaveLength(1);
       const status = response[0].result as A2ATaskStatusUpdateEvent;
@@ -252,10 +242,9 @@ describe('CursorA2AAdapter', () => {
 
   describe('convertEvent - THINKING events', () => {
     it('should emit thinking content as internal artifact', () => {
-      const response = adapter.convertEvent({
-        type: 'THINKING_CONTENT',
+      const response = adapter.convertEvent(createEvent('THINKING_CONTENT', {
         content: 'Let me analyze this...',
-      } as AGUIEvent);
+      }));
 
       expect(response).toHaveLength(1);
       const artifact = response[0].result as A2ATaskArtifactUpdateEvent;
@@ -272,8 +261,8 @@ describe('CursorA2AAdapter', () => {
     });
 
     it('should not emit for THINKING_START and THINKING_END', () => {
-      const startResponse = adapter.convertEvent({ type: 'THINKING_START' } as AGUIEvent);
-      const endResponse = adapter.convertEvent({ type: 'THINKING_END' } as AGUIEvent);
+      const startResponse = adapter.convertEvent(createEvent('THINKING_START'));
+      const endResponse = adapter.convertEvent(createEvent('THINKING_END'));
 
       expect(startResponse).toHaveLength(0);
       expect(endResponse).toHaveLength(0);
@@ -282,11 +271,10 @@ describe('CursorA2AAdapter', () => {
 
   describe('convertEvent - RAW', () => {
     it('should pass through raw events as artifacts', () => {
-      const response = adapter.convertEvent({
-        type: 'RAW',
+      const response = adapter.convertEvent(createEvent('RAW', {
         source: 'cursor',
         event: { type: 'system', action: 'init' },
-      } as AGUIEvent);
+      }));
 
       expect(response).toHaveLength(1);
       const artifact = response[0].result as A2ATaskArtifactUpdateEvent;
@@ -305,11 +293,11 @@ describe('CursorA2AAdapter', () => {
   describe('createTask', () => {
     it('should create a complete A2A Task object', () => {
       // Simulate a complete flow
-      adapter.convertEvent({ type: 'RUN_STARTED' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START', messageId: 'msg-1' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_CONTENT', content: 'Result' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
-      adapter.convertEvent({ type: 'RUN_FINISHED' } as AGUIEvent);
+      adapter.convertEvent(createEvent('RUN_STARTED'));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START', { messageId: 'msg-1' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'Result' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
+      adapter.convertEvent(createEvent('RUN_FINISHED'));
 
       const task = adapter.createTask();
 
@@ -324,19 +312,17 @@ describe('CursorA2AAdapter', () => {
     });
 
     it('should include artifacts when tool calls were made', () => {
-      adapter.convertEvent({ type: 'RUN_STARTED' } as AGUIEvent);
-      adapter.convertEvent({
-        type: 'TOOL_CALL_START',
+      adapter.convertEvent(createEvent('RUN_STARTED'));
+      adapter.convertEvent(createEvent('TOOL_CALL_START', {
         toolCallId: 'tool-1',
         toolName: 'test_tool',
-      } as AGUIEvent);
-      adapter.convertEvent({
-        type: 'TOOL_CALL_RESULT',
+      }));
+      adapter.convertEvent(createEvent('TOOL_CALL_RESULT', {
         toolCallId: 'tool-1',
         result: 'success',
         isError: false,
-      } as AGUIEvent);
-      adapter.convertEvent({ type: 'RUN_FINISHED' } as AGUIEvent);
+      }));
+      adapter.convertEvent(createEvent('RUN_FINISHED'));
 
       const task = adapter.createTask();
 
@@ -347,13 +333,13 @@ describe('CursorA2AAdapter', () => {
 
   describe('getResponseText', () => {
     it('should return concatenated text from all agent messages', () => {
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START', messageId: 'msg-1' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_CONTENT', content: 'First ' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START', { messageId: 'msg-1' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'First ' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_START', messageId: 'msg-2' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_CONTENT', content: 'Second' } as AGUIEvent);
-      adapter.convertEvent({ type: 'TEXT_MESSAGE_END' } as AGUIEvent);
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_START', { messageId: 'msg-2' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'Second' }));
+      adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
       const text = adapter.getResponseText();
       expect(text).toBe('First \nSecond');
@@ -387,11 +373,11 @@ describe('CursorA2AAdapter', () => {
 describe('convertAGUIEventsToA2A', () => {
   it('should convert a batch of events', () => {
     const events: AGUIEvent[] = [
-      { type: 'RUN_STARTED' },
-      { type: 'TEXT_MESSAGE_START', messageId: 'msg-1' } as AGUIEvent,
-      { type: 'TEXT_MESSAGE_CONTENT', content: 'Hello' } as AGUIEvent,
-      { type: 'TEXT_MESSAGE_END' } as AGUIEvent,
-      { type: 'RUN_FINISHED' },
+      createEvent('RUN_STARTED'),
+      createEvent('TEXT_MESSAGE_START', { messageId: 'msg-1' }),
+      createEvent('TEXT_MESSAGE_CONTENT', { content: 'Hello' }),
+      createEvent('TEXT_MESSAGE_END'),
+      createEvent('RUN_FINISHED'),
     ];
 
     const responses = convertAGUIEventsToA2A(events, {
@@ -412,7 +398,7 @@ describe('convertAGUIEventsToA2A', () => {
   });
 
   it('should use provided task/context IDs', () => {
-    const events: AGUIEvent[] = [{ type: 'RUN_STARTED' }];
+    const events: AGUIEvent[] = [createEvent('RUN_STARTED')];
 
     const responses = convertAGUIEventsToA2A(events, {
       taskId: 'custom-task',
