@@ -53,6 +53,85 @@ function convertKeysToCamelCase(obj: Record<string, unknown>): Record<string, un
 }
 
 /**
+ * Normalize MCP tool names to match frontend expected format
+ * 
+ * Cursor CLI outputs MCP tools as: mcp_ServerName_toolNameToolCall (single underscores)
+ * Frontend expects: mcp__ServerName__toolName (double underscores, no ToolCall suffix)
+ * 
+ * Examples:
+ * - mcp_GitKraken_git_statusToolCall -> mcp__GitKraken__git_status
+ * - mcp_GitKraken_git_log_or_diffToolCall -> mcp__GitKraken__git_log_or_diff
+ */
+function normalizeMcpToolName(toolName: string): string {
+  // Check if this is an MCP tool (starts with mcp_ but not mcp__)
+  if (!toolName.startsWith('mcp_') || toolName.startsWith('mcp__')) {
+    return toolName;
+  }
+  
+  // Remove ToolCall suffix if present
+  let normalized = toolName;
+  if (normalized.endsWith('ToolCall')) {
+    normalized = normalized.slice(0, -8); // Remove 'ToolCall'
+  }
+  
+  // Parse: mcp_ServerName_toolName -> mcp__ServerName__toolName
+  // The server name is typically PascalCase (e.g., GitKraken)
+  // The tool name can have underscores (e.g., git_status, git_log_or_diff)
+  
+  // Find the first underscore after 'mcp_' to get server name
+  const afterMcp = normalized.slice(4); // Remove 'mcp_'
+  
+  // Server name is typically the first PascalCase word
+  // Look for pattern: ServerName_rest where ServerName is PascalCase
+  const match = afterMcp.match(/^([A-Z][a-zA-Z]*)_(.+)$/);
+  
+  if (match) {
+    const [, serverName, toolName] = match;
+    return `mcp__${serverName}__${toolName}`;
+  }
+  
+  // Fallback: just convert single underscores to double after mcp
+  // This handles edge cases
+  return 'mcp__' + afterMcp.replace(/_/, '__');
+}
+
+/**
+ * Normalize tool arguments to match frontend expected schema
+ * Maps Cursor CLI parameter names to the expected frontend parameter names
+ * 
+ * Known mismatches:
+ * - lsToolCall: Cursor uses 'targetDirectory', frontend expects 'path'
+ * - shellToolCall: Cursor uses 'isBackground', frontend expects 'wait' (inverted logic)
+ */
+function normalizeToolArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...args };
+  
+  switch (toolName) {
+    case 'lsToolCall':
+      // Map targetDirectory -> path
+      if ('targetDirectory' in normalized && !('path' in normalized)) {
+        normalized.path = normalized.targetDirectory;
+      }
+      // Ensure ignore array exists
+      if (!('ignore' in normalized)) {
+        normalized.ignore = [];
+      }
+      break;
+      
+    case 'shellToolCall':
+      // Map isBackground -> wait (inverted logic)
+      // isBackground: true means wait: false (don't wait for completion)
+      // isBackground: false means wait: true (wait for completion)
+      if ('isBackground' in normalized && !('wait' in normalized)) {
+        normalized.wait = !normalized.isBackground;
+      }
+      break;
+  }
+  
+  return normalized;
+}
+
+/**
  * Adapter state for tracking message/tool call context
  */
 interface AdapterState {
@@ -342,10 +421,13 @@ export class CursorAguiAdapter {
           // Keep the full tool name format (e.g., "readToolCall" not "read")
           // Convert snake_case to camelCase if needed
           toolName = key.replace('_tool_call', 'ToolCall');
+          // Normalize MCP tool names to frontend expected format (mcp__Server__tool)
+          toolName = normalizeMcpToolName(toolName);
           const toolData = toolCall[key];
           const rawArgs = toolData.args || toolData.input || {};
           // Convert snake_case keys to camelCase for frontend compatibility
-          toolArgs = convertKeysToCamelCase(rawArgs);
+          // Then normalize to match frontend expected parameter names
+          toolArgs = normalizeToolArgs(toolName, convertKeysToCamelCase(rawArgs));
           toolId = toolData.id || toolId;
           break;
         }
@@ -486,6 +568,8 @@ export class CursorAguiAdapter {
     if (!toolName.endsWith('ToolCall')) {
       toolName = toolName.charAt(0).toLowerCase() + toolName.slice(1) + 'ToolCall';
     }
+    // Normalize MCP tool names to frontend expected format (mcp__Server__tool)
+    toolName = normalizeMcpToolName(toolName);
 
     events.push({
       type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
@@ -497,7 +581,8 @@ export class CursorAguiAdapter {
     // Send tool arguments
     if (data.input) {
       // Convert snake_case keys to camelCase for frontend compatibility
-      const convertedInput = convertKeysToCamelCase(data.input);
+      // Then normalize to match frontend expected parameter names
+      const convertedInput = normalizeToolArgs(toolName, convertKeysToCamelCase(data.input));
       events.push({
         type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
         toolCallId,

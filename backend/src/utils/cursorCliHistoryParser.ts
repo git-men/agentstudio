@@ -381,6 +381,49 @@ function toCursorToolName(toolName: string): string {
 }
 
 /**
+ * Normalize MCP tool names to match frontend expected format
+ * 
+ * Cursor CLI outputs MCP tools as: mcp_ServerName_toolNameToolCall (single underscores)
+ * Frontend expects: mcp__ServerName__toolName (double underscores, no ToolCall suffix)
+ * 
+ * Examples:
+ * - mcp_GitKraken_git_statusToolCall -> mcp__GitKraken__git_status
+ * - mcp_GitKraken_git_log_or_diffToolCall -> mcp__GitKraken__git_log_or_diff
+ */
+function normalizeMcpToolName(toolName: string): string {
+  // Check if this is an MCP tool (starts with mcp_ but not mcp__)
+  if (!toolName.startsWith('mcp_') || toolName.startsWith('mcp__')) {
+    return toolName;
+  }
+  
+  // Remove ToolCall suffix if present
+  let normalized = toolName;
+  if (normalized.endsWith('ToolCall')) {
+    normalized = normalized.slice(0, -8); // Remove 'ToolCall'
+  }
+  
+  // Parse: mcp_ServerName_toolName -> mcp__ServerName__toolName
+  // The server name is typically PascalCase (e.g., GitKraken)
+  // The tool name can have underscores (e.g., git_status, git_log_or_diff)
+  
+  // Find the first underscore after 'mcp_' to get server name
+  const afterMcp = normalized.slice(4); // Remove 'mcp_'
+  
+  // Server name is typically the first PascalCase word
+  // Look for pattern: ServerName_rest where ServerName is PascalCase
+  const match = afterMcp.match(/^([A-Z][a-zA-Z]*)_(.+)$/);
+  
+  if (match) {
+    const [, serverName, mcpToolName] = match;
+    return `mcp__${serverName}__${mcpToolName}`;
+  }
+  
+  // Fallback: just convert single underscores to double after mcp
+  // This handles edge cases
+  return 'mcp__' + afterMcp.replace(/_/, '__');
+}
+
+/**
  * Convert snake_case keys to camelCase
  */
 function snakeToCamel(str: string): string {
@@ -459,13 +502,17 @@ function extractToolCalls(content: MessageContent[], isUserMessage: boolean = fa
         order: order++
       });
     } else if (item.type === 'tool-call' && 'toolCallId' in item) {
+      // Convert to Cursor tool name format, then normalize MCP tools to frontend format
+      const cursorToolName = toCursorToolName(item.toolName);
+      const normalizedToolName = normalizeMcpToolName(cursorToolName);
+      
       parts.push({
         id: item.toolCallId,
         type: 'tool',
         order: order++,
         toolData: {
           id: item.toolCallId,
-          toolName: toCursorToolName(item.toolName), // Convert to Cursor tool name format (e.g., "globToolCall")
+          toolName: normalizedToolName,
           toolInput: convertKeysToCamelCase(item.args || {}), // Convert snake_case to camelCase
         }
       });
