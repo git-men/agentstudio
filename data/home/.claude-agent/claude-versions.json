@@ -1,0 +1,32 @@
+{
+  "versions": [
+    {
+      "id": "claude",
+      "name": "claude",
+      "alias": "system",
+      "description": "系统默认的 Claude 供应商（需要配置 API 密钥）",
+      "isDefault": true,
+      "isSystem": true,
+      "environmentVariables": {},
+      "models": [
+        {
+          "id": "sonnet",
+          "name": "Sonnet",
+          "isVision": true,
+          "description": "Claude 3.5 Sonnet - 平衡性能和成本的模型"
+        },
+        {
+          "id": "opus",
+          "name": "Opus",
+          "isVision": true,
+          "description": "Claude 3 Opus - 最强大的模型"
+        }
+      ],
+      "createdAt": "2026-02-04T08:46:21.497Z",
+      "updatedAt": "2026-02-04T08:48:53.843Z",
+      "executablePath": ""
+    }
+  ],
+  "defaultVersionId": "claude",
+  "_needsSave": false
+}

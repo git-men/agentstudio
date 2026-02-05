@@ -101,6 +101,9 @@ importers:
       undici:
         specifier: ^7.16.0
         version: 7.16.0
+      uuid:
+        specifier: ^9.0.1
+        version: 9.0.1
       zod:
         specifier: ^3.22.2
         version: 3.25.76
@@ -168,9 +171,6 @@ importers:
       typescript-eslint:
         specifier: ^8.46.1
         version: 8.46.1(eslint@9.37.0(jiti@1.21.7))(typescript@5.9.3)
-      uuid:
-        specifier: ^9.0.1
-        version: 9.0.1
       vitest:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@20.19.21)(@vitest/ui@2.1.9)(jsdom@26.1.0)

@@ -1,169 +1,247 @@
 # Docker Deployment Guide
 
-AgentStudio can be deployed as a single Docker container that includes both the frontend and backend.
+AgentStudio can be deployed as a Docker container with multiple runtime options.
 
-## Building the Docker Image
+## Quick Start (Default: Bun Runtime)
 
 ```bash
+# Build Docker image (uses Bun for faster runtime)
 docker build -t agentstudio:latest .
-```
 
-This will build a complete image containing:
-- Frontend (React + Vite)
-- Backend (Node.js + Express)
-- All dependencies and configurations
-
-## Running with Docker Compose (Recommended)
-
-1. **Create environment file** (optional):
-   ```bash
-   cp backend/.env.example backend/.env
-   # Edit backend/.env and add your API keys
-   ```
-
-2. **Start the service**:
-   ```bash
-   docker-compose up -d
-   ```
-
-3. **Access the application**:
-   - Open browser: http://localhost:4936
-   - The frontend and API are both served from the same port
-
-4. **Check logs**:
-   ```bash
-   docker-compose logs -f agentstudio
-   ```
-
-5. **Stop the service**:
-   ```bash
-   docker-compose down
-   ```
-
-## Running with Docker directly
-
-```bash
+# Run with mounted HOME directory
 docker run -d \
   --name agentstudio \
   -p 4936:4936 \
   -e ANTHROPIC_API_KEY=your_key_here \
-  -v agentstudio_data:/app/data \
+  -v $(pwd)/data/home:/home/agentstudio \
   agentstudio:latest
 ```
 
-Then open http://localhost:4936 in your browser.
+## Runtime Options
+
+| Dockerfile | Runtime | Build | Memory | Startup | Use Case |
+|-----------|---------|-------|--------|---------|----------|
+| `Dockerfile` | **Bun** | Docker | 6GB+ | **Fast** | Default, recommended |
+| `Dockerfile.node` | Node.js | Docker | 6GB+ | Normal | Full compatibility |
+| `Dockerfile.prebuilt` | Node.js | Local | 2GB | Normal | Development |
+| `Dockerfile.npm` | Node.js | NPM | 2GB | Normal | Quick deploy |
+
+### Using Node.js Runtime
+
+```bash
+docker build -f Dockerfile.node -t agentstudio:node .
+docker run -d --name agentstudio -p 4936:4936 agentstudio:node
+```
+
+## Docker Compose Usage
+
+### Using Source Build (default)
+
+```bash
+# Set your user ID to avoid permission issues (optional)
+export USER_ID=$(id -u)
+export GROUP_ID=$(id -g)
+
+# Start
+docker-compose up -d
+
+# View logs
+docker-compose logs -f agentstudio
+
+# Stop
+docker-compose down
+```
+
+### Using NPM Build
+
+```bash
+# Start with npm profile
+docker-compose --profile npm up -d agentstudio-npm
+```
+
+## Mounting Local Directory as HOME
+
+The container supports mounting a local directory as the user's HOME directory, which allows:
+- Data persistence across container restarts
+- Easy backup of all configurations
+- Sharing data between host and container
+
+### Examples
+
+**Mount entire HOME (recommended):**
+```bash
+docker run -d \
+  --name agentstudio \
+  -p 4936:4936 \
+  -v /path/to/local/home:/home/agentstudio \
+  agentstudio:latest
+```
+
+**Mount specific directories:**
+```bash
+docker run -d \
+  --name agentstudio \
+  -p 4936:4936 \
+  -v ./data/agent-studio:/home/agentstudio/.agent-studio \
+  -v ./data/claude:/home/agentstudio/.claude \
+  agentstudio:latest
+```
+
+**With docker-compose.yml:**
+```yaml
+services:
+  agentstudio:
+    image: agentstudio:latest
+    volumes:
+      # Option 1: Mount entire home
+      - ./data/home:/home/agentstudio
+      
+      # Option 2: Mount specific directories
+      # - ./data/agent-studio:/home/agentstudio/.agent-studio
+      # - ./data/claude:/home/agentstudio/.claude
+```
+
+### Environment Variable
+
+You can also set the home directory path via environment variable:
+
+```bash
+export AGENTSTUDIO_HOME=/path/to/local/home
+docker-compose up -d
+```
 
 ## Environment Variables
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | Optional* |
-| `OPENAI_API_KEY` | OpenAI API key | Optional* |
-| `PORT` | Backend port (default: 4936) | No |
-| `NODE_ENV` | Environment mode | No |
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ANTHROPIC_API_KEY` | Anthropic API key for Claude models | - |
+| `OPENAI_API_KEY` | OpenAI API key | - |
+| `PORT` | Backend port | 4936 |
+| `NODE_ENV` | Environment mode | production |
+| `USER_ID` | Container user ID (build arg) | 1000 |
+| `GROUP_ID` | Container group ID (build arg) | 1000 |
+| `AGENTSTUDIO_HOME` | Local directory to mount as HOME | ./data/home |
 
-*At least one AI provider API key is required.
+## Build Comparison
 
-## Volume Mounts
-
-- `/app/data`: Directory for agent configurations, session data, and other persistent files
-
-**Important**: The `/app/data` volume ensures your data persists across container restarts and updates.
-
-## Health Check
-
-The container includes a health check endpoint at `/api/health` that runs every 30 seconds.
-
-Check container health:
-```bash
-docker ps
-# Look for "healthy" status
-```
-
-## Accessing the Application
-
-Once running, AgentStudio will be available at:
-- **Frontend**: http://localhost (port 80)
-- **API**: http://localhost/api (proxied by nginx) or http://localhost:4936/api (direct)
-- **Health check**: http://localhost:4936/api/health
-
-The frontend is served by nginx on port 80, and the backend API runs on port 4936. Nginx proxies `/api/*` requests to the backend automatically.
+| Feature | From Source | From NPM |
+|---------|-------------|----------|
+| Build time | Longer (requires local build) | Shorter |
+| Image size | Smaller | Larger |
+| Customization | Full control | Limited |
+| Development | Better for dev | Better for deployment |
+| Prerequisites | `pnpm run build` | None |
 
 ## Troubleshooting
 
-### Build fails with TypeScript errors
+### Permission Issues with Mounted Volumes
 
-Clean the project and rebuild:
+If you encounter permission issues, match the container user ID with your host user:
+
 ```bash
-# Clean build artifacts
-find . -name "*.tsbuildinfo" -delete
-rm -rf shared/dist backend/dist
-
-# Rebuild
-docker build -t agentstudio-backend:latest .
+# Build with your user ID
+docker build \
+  --build-arg USER_ID=$(id -u) \
+  --build-arg GROUP_ID=$(id -g) \
+  -t agentstudio:latest .
 ```
 
-### Container exits immediately
+### Container Exits Immediately
 
 Check logs for errors:
 ```bash
-docker logs agentstudio-backend
+docker logs agentstudio
 ```
 
 Common issues:
 - Missing API keys
-- Port 4936 already in use
-- Invalid .env file
+- Port already in use
+- Invalid volume mount paths
 
-### Port already in use
+### Build Fails with Memory Error
 
-Change the port mapping in docker-compose.yml:
-```yaml
-ports:
-  - "5000:4936"  # Use port 5000 instead
+If Docker build fails with exit code 137 (OOM), use the source build approach:
+
+```bash
+# Build locally (more memory available)
+pnpm run build
+
+# Then build Docker image (just copies files)
+docker build -t agentstudio:latest .
+```
+
+## Health Check
+
+The container includes a health check at `/api/health`:
+
+```bash
+# Check container health
+docker ps
+# Look for "healthy" status
+
+# Manual check
+curl http://localhost:4936/api/health
 ```
 
 ## Data Persistence
 
-### How Docker Container Data Works
+### Container Data Directories
 
-**Container Stop/Start** (data is preserved):
-```bash
-docker stop agentstudio   # Stop the container
-docker start agentstudio  # Start it again - all data is still there
+```
+/home/agentstudio/
+├── .agent-studio/      # AgentStudio data
+│   ├── data/           # Application data
+│   ├── config/         # Configuration files
+│   ├── logs/           # Log files
+│   └── backup/         # Backup files
+├── .claude/            # Claude configurations
+│   └── projects/       # Project-specific data
+└── .claude-agent/      # Claude agent data
 ```
 
-**Container Removal** (data is lost without volumes):
+### Backup
+
 ```bash
-docker rm agentstudio  # ⚠️ This deletes the container and its data
+# Backup mounted home directory
+tar czf agentstudio-backup.tar.gz ./data/home/
+
+# Restore
+tar xzf agentstudio-backup.tar.gz
 ```
 
-**Using Volumes** (recommended - data persists):
-- The docker-compose.yml file already configures a volume at `/app/data`
-- Data is stored on the host machine
-- Survives container removal and updates
-- Can be backed up separately
+## Architecture
 
-### Backing Up Data
-
-```bash
-# Backup volume data
-docker run --rm -v agentstudio_data:/data -v $(pwd):/backup ubuntu tar czf /backup/agentstudio-backup.tar.gz -C /data .
-
-# Restore volume data
-docker run --rm -v agentstudio_data:/data -v $(pwd):/backup ubuntu tar xzf /backup/agentstudio-backup.tar.gz -C /data
+```
+┌─────────────────────────────────────────────┐
+│         Docker Container                     │
+│                                              │
+│  ┌────────────────────────────────────────┐ │
+│  │  Node.js Backend (port 4936)           │ │
+│  │  - Express API server                  │ │
+│  │  - Serves frontend static files        │ │
+│  │  - Manages all application logic       │ │
+│  └────────────────────────────────────────┘ │
+│                  │                           │
+│                  ↓                           │
+│  ┌────────────────────────────────────────┐ │
+│  │  Mounted Volume (/home/agentstudio)    │ │
+│  │  - All user data and configurations    │ │
+│  │  - Persists on host filesystem         │ │
+│  └────────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+         ↑
+    Port 4936
+   (Frontend + API)
 ```
 
 ## Production Deployment
 
-For production deployments:
-
-1. **Use specific image tags**:
+1. **Use specific image tags:**
    ```bash
-   docker build -t agentstudio:v1.0.0 .
+   docker build -t agentstudio:v0.3.4 .
    ```
 
-2. **Set resource limits** in docker-compose.yml:
+2. **Set resource limits:**
    ```yaml
    services:
      agentstudio:
@@ -174,19 +252,19 @@ For production deployments:
              memory: 2G
    ```
 
-3. **Use secrets for API keys**:
+3. **Use secrets for API keys:**
    ```yaml
    services:
      agentstudio:
        secrets:
          - anthropic_api_key
-
+   
    secrets:
      anthropic_api_key:
        external: true
    ```
 
-4. **Enable logging**:
+4. **Enable logging:**
    ```yaml
    services:
      agentstudio:
@@ -196,75 +274,3 @@ For production deployments:
            max-size: "10m"
            max-file: "3"
    ```
-
-## Updating the Application
-
-1. Pull latest changes from git
-2. Rebuild the image:
-   ```bash
-   docker build -t agentstudio:latest .
-   ```
-3. Restart the service (data will be preserved):
-   ```bash
-   docker-compose down
-   docker-compose up -d
-   ```
-
-## Cleaning Up
-
-Remove containers, images, and volumes:
-```bash
-# Stop and remove containers (data in volumes is preserved)
-docker-compose down
-
-# Remove the image
-docker rmi agentstudio:latest
-
-# Remove volumes (⚠️ This deletes all data permanently!)
-docker volume rm agentstudio_data
-
-# Complete cleanup (everything)
-docker-compose down -v
-docker rmi agentstudio:latest
-```
-
-## Architecture
-
-The Docker container runs two services:
-- **Nginx**: Serves the React frontend and proxies API requests
-- **Node.js Backend**: Handles API requests and manages data
-
-```
-┌─────────────────────────────────────────────┐
-│         Docker Container                     │
-│                                              │
-│  ┌────────────────────────────────────────┐ │
-│  │  Nginx (port 80)                       │ │
-│  │  - Serves frontend static files        │ │
-│  │  - Proxies /api/* to backend           │ │
-│  └────────────────────────────────────────┘ │
-│                  │                           │
-│                  │ proxy /api/*              │
-│                  ↓                           │
-│  ┌────────────────────────────────────────┐ │
-│  │  Backend (port 4936)                   │ │
-│  │  - Express API server                  │ │
-│  │  - Manages authentication & sessions   │ │
-│  └────────────────────────────────────────┘ │
-│                  │                           │
-│                  ↓                           │
-│  ┌────────────────────────────────────────┐ │
-│  │  Persistent Volume (/app/data)         │ │
-│  │  - Agent configurations                │ │
-│  │  - Session data                        │ │
-│  │  - Application state                   │ │
-│  └────────────────────────────────────────┘ │
-└─────────────────────────────────────────────┘
-         ↑                    ↑
-    Port 80              Port 4936
-   (Frontend)          (API - optional)
-```
-
-**Access Points:**
-- Port 80: Frontend UI (recommended for users)
-- Port 4936: Backend API (optional, for direct API access)

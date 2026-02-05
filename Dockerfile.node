@@ -1,25 +1,23 @@
 # =============================================================================
-# AgentStudio Docker Image - Bun Runtime (Hybrid Build)
+# AgentStudio Docker Image - Full Build from Source
 # =============================================================================
-# This Dockerfile uses:
-#   - Node.js for building (better compatibility with Vite)
-#   - Bun for running (faster startup, lower memory)
+# This Dockerfile builds AgentStudio completely inside Docker
 # 
-# Benefits:
-#   - Faster startup time with Bun runtime
-#   - Full compatibility with build tools (Vite, TypeScript)
-#   - Lower memory usage in production
+# Requirements:
+#   - Docker with at least 4GB memory (6GB recommended)
+#   - For Colima: colima start --memory 6
 #
 # Usage:
-#   docker build -f Dockerfile.bun -t agentstudio:bun .
-#   docker run -d -p 4936:4936 -v ./data/home:/home/agentstudio agentstudio:bun
+#   docker build -t agentstudio:latest .
+#   docker run -d -p 4936:4936 -v ./data/home:/home/agentstudio agentstudio:latest
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Stage 1: Build Stage (Node.js for compatibility)
+# Stage 1: Build Stage
 # -----------------------------------------------------------------------------
 FROM node:20-slim AS builder
 
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     python3 \
     make \
@@ -28,82 +26,103 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Install pnpm
 RUN npm install -g pnpm@10
 
 WORKDIR /build
 
+# Copy package files first for better layer caching
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY frontend/package.json ./frontend/
 COPY backend/package.json ./backend/
 
+# Install all dependencies (including devDependencies for build)
 RUN pnpm install --frozen-lockfile || pnpm install
 
+# Copy source code
 COPY frontend ./frontend
 COPY backend ./backend
 COPY tsconfig.json ./
 
+# Build with memory optimization
+# NODE_OPTIONS limits V8 heap size to prevent OOM
 ENV NODE_OPTIONS="--max-old-space-size=3072"
 
+# Build frontend
 RUN cd frontend && pnpm run build
+
+# Build backend
 RUN cd backend && pnpm run build
 
 # -----------------------------------------------------------------------------
-# Stage 2: Production Stage (Bun for performance)
+# Stage 2: Production Stage
 # -----------------------------------------------------------------------------
-FROM oven/bun:1-slim AS production
+FROM node:20-slim AS production
 
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Create non-root user
-# oven/bun:1-slim may have existing users, handle gracefully
+# Install pnpm (needed for workspace install)
+RUN npm install -g pnpm@10
+
+# Create non-root user with configurable UID/GID
+# Note: node:20-slim has uid 1000 as 'node' user, so we rename it
 ARG USER_ID=1000
 ARG GROUP_ID=1000
-RUN (groupadd -g ${GROUP_ID} agentstudio 2>/dev/null || groupmod -n agentstudio $(getent group ${GROUP_ID} | cut -d: -f1) 2>/dev/null || true) && \
-    (useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash agentstudio 2>/dev/null || \
-     (usermod -l agentstudio -d /home/agentstudio -m $(getent passwd ${USER_ID} | cut -d: -f1) 2>/dev/null && \
-      mkdir -p /home/agentstudio && chown ${USER_ID}:${GROUP_ID} /home/agentstudio) || true)
+RUN if [ "${USER_ID}" = "1000" ]; then \
+        usermod -l agentstudio -d /home/agentstudio -m node && \
+        groupmod -n agentstudio node; \
+    else \
+        groupadd -g ${GROUP_ID} agentstudio 2>/dev/null || true && \
+        useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash agentstudio 2>/dev/null || true; \
+    fi
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY --from=builder /build/package.json /build/pnpm-lock.yaml* ./
+# Copy package files for production install
+COPY --from=builder /build/package.json /build/pnpm-workspace.yaml /build/pnpm-lock.yaml* ./
 COPY --from=builder /build/frontend/package.json ./frontend/
 COPY --from=builder /build/backend/package.json ./backend/
 
-# Copy built artifacts
+# Copy built artifacts from builder stage
 COPY --from=builder /build/frontend/dist ./frontend/dist
 COPY --from=builder /build/backend/dist ./backend/dist
 
-# Install production dependencies with Bun
+# Install production dependencies only
 WORKDIR /app/backend
-RUN bun install --production
+RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
 
 # Setup frontend static files
 RUN mkdir -p /app/backend/public && \
     cp -r /app/frontend/dist/* /app/backend/public/
 
-# Create data directories (use UID/GID instead of username for reliability)
+# Create data directories with correct permissions
 RUN mkdir -p /home/agentstudio/.agent-studio/{logs,data,config,backup} && \
     mkdir -p /home/agentstudio/.claude/projects && \
-    chown -R ${USER_ID}:${GROUP_ID} /home/agentstudio && \
-    chown -R ${USER_ID}:${GROUP_ID} /app
+    chown -R agentstudio:agentstudio /home/agentstudio && \
+    chown -R agentstudio:agentstudio /app
 
+# Switch to non-root user
 USER agentstudio
 
+# Set environment variables
 ENV NODE_ENV=production \
     PORT=4936 \
     HOME=/home/agentstudio
 
 WORKDIR /app/backend
 
+# Expose port
 EXPOSE 4936
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:${PORT}/api/health || exit 1
 
-# Run with Bun (faster startup, lower memory)
-CMD ["bun", "run", "dist/index.js"]
+# Start the application
+CMD ["node", "dist/index.js"]

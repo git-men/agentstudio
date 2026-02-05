@@ -8,6 +8,11 @@ import { verifyToken } from '../utils/jwt';
  * 2. Query parameter "token=<token>" (for EventSource/SSE connections)
  */
 export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+  // Skip authentication if NO_AUTH is enabled (development only)
+  if (process.env.NO_AUTH === 'true') {
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   const queryToken = req.query.token as string | undefined;
 

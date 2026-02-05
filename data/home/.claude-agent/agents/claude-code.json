@@ -1,0 +1,88 @@
+{
+  "version": "1.0.0",
+  "permissionMode": "acceptEdits",
+  "author": "AgentStudio System",
+  "createdAt": "2026-02-04T08:46:21.369Z",
+  "updatedAt": "2026-02-04T08:46:21.370Z",
+  "id": "claude-code",
+  "name": "Claude Code",
+  "description": "Claude Code 系统默认助手，基于 Claude Code SDK 的全功能开发助手",
+  "systemPrompt": {
+    "type": "preset",
+    "preset": "claude_code"
+  },
+  "allowedTools": [
+    {
+      "name": "Write",
+      "enabled": true
+    },
+    {
+      "name": "Read",
+      "enabled": true
+    },
+    {
+      "name": "Edit",
+      "enabled": true
+    },
+    {
+      "name": "Glob",
+      "enabled": true
+    },
+    {
+      "name": "Bash",
+      "enabled": true
+    },
+    {
+      "name": "Task",
+      "enabled": true
+    },
+    {
+      "name": "WebFetch",
+      "enabled": true
+    },
+    {
+      "name": "WebSearch",
+      "enabled": true
+    },
+    {
+      "name": "TodoWrite",
+      "enabled": true
+    },
+    {
+      "name": "NotebookEdit",
+      "enabled": true
+    },
+    {
+      "name": "KillShell",
+      "enabled": true
+    },
+    {
+      "name": "BashOutput",
+      "enabled": true
+    },
+    {
+      "name": "SlashCommand",
+      "enabled": true
+    },
+    {
+      "name": "ExitPlanMode",
+      "enabled": true
+    },
+    {
+      "name": "Skill",
+      "enabled": true
+    }
+  ],
+  "ui": {
+    "icon": "🔧",
+    "headerTitle": "Claude Code",
+    "headerDescription": "基于 Claude Code SDK 的系统默认助手"
+  },
+  "tags": [
+    "development",
+    "code",
+    "system"
+  ],
+  "enabled": true,
+  "source": "local"
+}

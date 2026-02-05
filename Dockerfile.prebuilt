@@ -1,0 +1,79 @@
+# =============================================================================
+# AgentStudio Docker Image - Pre-built Version
+# =============================================================================
+# This Dockerfile uses pre-built artifacts from local build
+# 
+# Usage:
+#   1. Build locally first: pnpm run build
+#   2. Build Docker image:  docker build -f Dockerfile.prebuilt -t agentstudio:latest .
+#   3. Run: docker run -d -p 4936:4936 -v ./data/home:/home/agentstudio agentstudio:latest
+#
+# Advantages:
+#   - Fast build (no compilation inside Docker)
+#   - Works with limited Docker memory
+#   - Good for development iteration
+# =============================================================================
+
+FROM node:20-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install pnpm
+RUN npm install -g pnpm@10
+
+# Create non-root user
+# Note: node:20-slim has uid 1000 as 'node' user, so we rename it
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN if [ "${USER_ID}" = "1000" ]; then \
+        usermod -l agentstudio -d /home/agentstudio -m node && \
+        groupmod -n agentstudio node; \
+    else \
+        groupadd -g ${GROUP_ID} agentstudio 2>/dev/null || true && \
+        useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash agentstudio 2>/dev/null || true; \
+    fi
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY frontend/package.json ./frontend/
+COPY backend/package.json ./backend/
+
+# Copy pre-built artifacts (requires: pnpm run build)
+COPY frontend/dist ./frontend/dist
+COPY backend/dist ./backend/dist
+
+# Install production dependencies
+WORKDIR /app/backend
+RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+
+# Setup frontend static files
+RUN mkdir -p /app/backend/public && \
+    cp -r /app/frontend/dist/* /app/backend/public/
+
+# Setup directories
+RUN mkdir -p /home/agentstudio/.agent-studio/{logs,data,config,backup} && \
+    mkdir -p /home/agentstudio/.claude/projects && \
+    chown -R agentstudio:agentstudio /home/agentstudio && \
+    chown -R agentstudio:agentstudio /app
+
+USER agentstudio
+
+ENV NODE_ENV=production \
+    PORT=4936 \
+    HOME=/home/agentstudio
+
+WORKDIR /app/backend
+
+EXPOSE 4936
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:${PORT}/api/health || exit 1
+
+CMD ["node", "dist/index.js"]

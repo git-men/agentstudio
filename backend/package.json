@@ -53,6 +53,7 @@
     "sql.js": "^1.13.0",
     "tunely": "^0.2.1",
     "undici": "^7.16.0",
+    "uuid": "^9.0.1",
     "zod": "^3.22.2"
   },
   "devDependencies": {
@@ -77,7 +78,6 @@
     "tsx": "^4.20.6",
     "typescript": "^5.1.6",
     "typescript-eslint": "^8.46.1",
-    "uuid": "^9.0.1",
     "vitest": "^2.1.0"
   },
   "author": "okguitar <okguitar@gmail.com>",
