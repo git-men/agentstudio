@@ -275,8 +275,18 @@ export class CursorEngine implements IAgentEngine {
       sessionId: existingSessionId,
       model, // Don't set default - let CLI use its internal model settings when undefined
       images,
-      timeout = 600000, // 10 minutes default
     } = config;
+
+    // Timeout: only when explicitly set via config.timeout or env CURSOR_CHAT_TIMEOUT_MS. Default: no timeout.
+    const envTimeout = typeof process.env.CURSOR_CHAT_TIMEOUT_MS === 'string'
+      ? parseInt(process.env.CURSOR_CHAT_TIMEOUT_MS, 10)
+      : NaN;
+    const timeoutMs =
+      typeof config.timeout === 'number' && config.timeout > 0
+        ? config.timeout
+        : Number.isNaN(envTimeout) || envTimeout <= 0
+          ? undefined
+          : envTimeout;
 
     // Create session ID
     const sessionId = existingSessionId || `cursor-${uuidv4()}`;
@@ -360,20 +370,24 @@ export class CursorEngine implements IAgentEngine {
       };
       this.activeSessions.set(sessionId, session);
 
-      // Set up timeout
-      const timeoutId = setTimeout(() => {
-        console.log(`[CursorEngine] Session ${sessionId} timed out`);
-        cursorProcess.kill('SIGTERM');
-        this.activeSessions.delete(sessionId);
-        
-        onAguiEvent(adapter.createRunError('Cursor command timed out', 'TIMEOUT'));
-        const finalEvents = adapter.finalize();
-        for (const event of finalEvents) {
-          onAguiEvent(event);
-        }
-        
-        reject(new Error('Cursor command timed out'));
-      }, timeout);
+      // Set up timeout only when explicitly configured; default is no timeout
+      let timeoutId: NodeJS.Timeout | undefined;
+      if (timeoutMs !== undefined) {
+        console.log(`[CursorEngine] Session ${sessionId} timeout set to ${timeoutMs}ms (${timeoutMs / 60000} min)`);
+        timeoutId = setTimeout(() => {
+          console.log(`[CursorEngine] Session ${sessionId} timed out after ${timeoutMs}ms`);
+          cursorProcess.kill('SIGTERM');
+          this.activeSessions.delete(sessionId);
+          onAguiEvent(adapter.createRunError('Cursor command timed out', 'TIMEOUT'));
+          const finalEvents = adapter.finalize();
+          for (const event of finalEvents) {
+            onAguiEvent(event);
+          }
+          reject(new Error('Cursor command timed out'));
+        }, timeoutMs);
+      } else {
+        console.log(`[CursorEngine] Session ${sessionId} no timeout (run until process exits)`);
+      }
 
       // Write processed message (with @path references) to stdin
       cursorProcess.stdin?.write(processedMessage + '\n');
@@ -414,7 +428,7 @@ export class CursorEngine implements IAgentEngine {
 
       // Handle process exit
       cursorProcess.on('close', (code, signal) => {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         this.activeSessions.delete(sessionId);
 
         console.log(`[CursorEngine] Process exited with code ${code}, signal ${signal}`);
@@ -446,7 +460,7 @@ export class CursorEngine implements IAgentEngine {
 
       // Handle process errors
       cursorProcess.on('error', (error) => {
-        clearTimeout(timeoutId);
+        if (timeoutId) clearTimeout(timeoutId);
         this.activeSessions.delete(sessionId);
 
         console.error('[CursorEngine] Process error:', error);
