@@ -48,7 +48,7 @@ function findCursorCommand(): string {
 
   // Try to find in PATH using which
   try {
-    const result = execSync('which cursor', { stdio: 'pipe' }).toString().trim();
+    const result = execSync('which agent', { stdio: 'pipe' }).toString().trim();
     if (result) {
       console.log(`[CursorEngine] Found cursor in PATH: ${result}`);
       return result;
@@ -57,8 +57,8 @@ function findCursorCommand(): string {
     // cursor not in PATH
   }
 
-  console.warn('[CursorEngine] Cursor command not found, using default "cursor"');
-  return 'cursor';
+  console.warn('[CursorEngine] Cursor command not found, using default "agent"');
+  return 'agent';
 }
 
 /**
