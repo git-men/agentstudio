@@ -434,6 +434,18 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 });
               }
               break;
+            
+            case 'CUSTOM': {
+              // Handle session ID sync from Cursor CLI
+              const customEvent = event as { name?: string; data?: { sessionId?: string } };
+              if (customEvent.name === 'session_id_updated' && customEvent.data?.sessionId) {
+                const cliSessionId = customEvent.data.sessionId;
+                console.log(`🔄 [AGUI] Session ID updated from CLI: ${cliSessionId}`);
+                setCurrentSessionId(cliSessionId);
+                onSessionChange?.(cliSessionId);
+              }
+              break;
+            }
           }
         };
         

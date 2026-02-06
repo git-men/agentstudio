@@ -147,26 +147,17 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
 };
 
 
-// Helper function to infer engine type from session ID
-const inferEngineFromSessionId = (sessionId: string | null): SessionEngineType | undefined => {
-  if (!sessionId) return undefined;
-  // Session IDs starting with 'cursor-' are from Cursor engine
-  if (sessionId.startsWith('cursor-')) return 'cursor';
-  return undefined;
-};
-
 // Get agent session messages
+// Engine type is now explicitly passed via the `engine` parameter (from store's selectedEngine).
+// Session IDs no longer carry engine-specific prefixes.
 export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string, engine?: SessionEngineType) => {
-  // Infer engine from session ID if not provided or if session ID suggests a different engine
-  const inferredEngine = inferEngineFromSessionId(sessionId);
-  const effectiveEngine = inferredEngine || engine;
+  const effectiveEngine = engine;
 
   console.log('🎣 useAgentSessionMessages hook called:', {
     agentId,
     sessionId,
     projectPath,
     engine,
-    inferredEngine,
     effectiveEngine,
     enabled: !!agentId && !!sessionId
   });

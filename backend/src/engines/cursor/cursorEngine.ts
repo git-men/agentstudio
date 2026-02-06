@@ -288,8 +288,8 @@ export class CursorEngine implements IAgentEngine {
           ? undefined
           : envTimeout;
 
-    // Create session ID
-    const sessionId = existingSessionId || `cursor-${uuidv4()}`;
+    // Create session ID (temporary; will be replaced by CLI's real session_id from system.init)
+    const sessionId = existingSessionId || uuidv4();
 
     // Create AGUI adapter
     const adapter = new CursorAguiAdapter(sessionId);
@@ -328,8 +328,7 @@ export class CursorEngine implements IAgentEngine {
 
       // Add session resume if continuing conversation
       if (existingSessionId) {
-        // Strip 'cursor-' prefix if present (added by AgentStudio for internal tracking)
-        // Cursor CLI uses raw UUID for session IDs
+        // Strip 'cursor-' prefix if present (backward compatibility with old session IDs)
         const actualSessionId = existingSessionId.startsWith('cursor-') ? existingSessionId.slice(7) : existingSessionId;
         args.push('--resume', actualSessionId);
       }

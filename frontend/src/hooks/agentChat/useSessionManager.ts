@@ -1,18 +1,13 @@
 import { useState, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAgentStore, type EngineType } from '../../stores/useAgentStore';
+import { useAgentStore } from '../../stores/useAgentStore';
 
 /**
- * Infer engine type from session ID prefix
- * - 'cursor-' or 'c-' prefix indicates Cursor engine
- * - Otherwise defaults to Claude engine
+ * NOTE: Engine type is now tracked via the store's `selectedEngine` field.
+ * Session IDs no longer carry engine-specific prefixes.
+ * This function is kept for backward compatibility with old 'cursor-' prefixed sessions
+ * but falls back to the current selectedEngine from the store.
  */
-const inferEngineFromSessionId = (sessionId: string): EngineType => {
-  if (sessionId.startsWith('cursor-') || sessionId.startsWith('c-')) {
-    return 'cursor';
-  }
-  return 'claude';
-};
 
 export interface UseSessionManagerProps {
   agentId: string;
@@ -45,7 +40,7 @@ export const useSessionManager = ({
   textareaRef
 }: UseSessionManagerProps): UseSessionManagerReturn => {
   const queryClient = useQueryClient();
-  const { setCurrentSessionId, clearMessages, setSelectedEngine } = useAgentStore();
+  const { setCurrentSessionId, clearMessages } = useAgentStore();
 
   // Session state
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
@@ -57,10 +52,10 @@ export const useSessionManager = ({
    * Loads messages for the selected session
    */
   const handleSwitchSession = useCallback((sessionId: string) => {
-    // Infer engine type from session ID and update store
-    const inferredEngine = inferEngineFromSessionId(sessionId);
-    setSelectedEngine(inferredEngine);
-    console.log(`[SessionManager] Switching to session ${sessionId}, inferred engine: ${inferredEngine}`);
+    // Engine type is already tracked in the store's selectedEngine field.
+    // No longer inferred from session ID prefix.
+    // Backward compat: old 'cursor-' prefixed sessions still work (backend strips prefix)
+    console.log(`[SessionManager] Switching to session ${sessionId}`);
     
     setCurrentSessionId(sessionId);
     // Set loading state for message loading
@@ -75,7 +70,7 @@ export const useSessionManager = ({
     // Clear messages first, then invalidate to trigger fresh load
     clearMessages();
     queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, sessionId] });
-  }, [agentId, onSessionChange, setCurrentSessionId, setSelectedEngine, clearMessages, queryClient]);
+  }, [agentId, onSessionChange, setCurrentSessionId, clearMessages, queryClient]);
 
   /**
    * Create a new session

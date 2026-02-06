@@ -219,9 +219,20 @@ export class CursorAguiAdapter {
     const events: AGUIEvent[] = [];
 
     if (data.subtype === 'init') {
-      // Extract session_id if present
+      // Extract session_id if present and notify frontend of the real session ID
       if (data.session_id) {
+        const oldThreadId = this.threadId;
         this.setThreadId(data.session_id);
+        console.log(`[CursorAguiAdapter] Session ID updated: ${oldThreadId} -> ${data.session_id}`);
+        
+        // Emit CUSTOM event to sync the real CLI session_id to the frontend
+        events.push({
+          type: 'CUSTOM' as AGUIEventType.CUSTOM,
+          name: 'session_id_updated',
+          data: { sessionId: data.session_id },
+          threadId: data.session_id,
+          timestamp,
+        });
       }
       console.log(`[CursorAguiAdapter] System init - model: ${data.model || 'unknown'}`);
     }
