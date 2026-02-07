@@ -47,6 +47,7 @@ import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { getEngineStatus } from './engines/index.js';
+import gitVersionsRouter from './routes/gitVersions';
 
 dotenv.config();
 
@@ -520,6 +521,7 @@ const app: express.Express = express();
   app.use('/api/commands', authMiddleware, commandsRouter);
   app.use('/api/subagents', authMiddleware, subagentsRouter);
   app.use('/api/projects', authMiddleware, projectsRouter);
+  app.use('/api/projects/:projectId/versions', authMiddleware, gitVersionsRouter);
   app.use('/api/a2a', authMiddleware, a2aManagementRouter); // A2A management routes with user auth
   app.use('/api/skills', authMiddleware, skillsRouter);
   app.use('/api/plugins', authMiddleware, pluginsRouter);

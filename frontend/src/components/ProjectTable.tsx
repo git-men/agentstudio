@@ -11,7 +11,8 @@ import {
   Trash2,
   ChevronDown,
   Shield,
-  Settings
+  Settings,
+  GitBranch,
 } from 'lucide-react';
 import { formatRelativeTime } from '../utils';
 import { API_BASE } from '../lib/config';
@@ -53,6 +54,7 @@ interface ProjectTableProps {
   onCommandManagement: (project: Project) => void;
   onSubAgentManagement: (project: Project) => void;
   onA2AManagement: (project: Project) => void;
+  onVersionManagement: (project: Project) => void;
   onSettings: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
   onAgentChanged?: (projectId: string, newAgent: Agent) => void;
@@ -67,6 +69,7 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   onCommandManagement,
   onSubAgentManagement,
   onA2AManagement,
+  onVersionManagement,
   onSettings,
   onDeleteProject,
   onAgentChanged,
@@ -210,6 +213,13 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
         <Shield className="w-3.5 h-3.5" />
       </button>
       <button
+        onClick={() => onVersionManagement(project)}
+        className="p-1.5 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-md transition-colors"
+        title="版本管理"
+      >
+        <GitBranch className="w-3.5 h-3.5" />
+      </button>
+      <button
         onClick={() => onSettings(project)}
         className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-md transition-colors"
         title="项目设置"
@@ -304,6 +314,13 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
                     title="A2A Protocol 管理"
                   >
                     <Shield className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => onVersionManagement(project)}
+                    className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-md transition-colors"
+                    title="版本管理"
+                  >
+                    <GitBranch className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => onSettings(project)}
