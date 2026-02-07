@@ -61,7 +61,7 @@ function detectEngineType(): ServiceEngineType {
     return 'claude-sdk';
   }
   
-  return 'claude-sdk'; // Default
+  return 'cursor-cli'; // Default
 }
 
 /**
