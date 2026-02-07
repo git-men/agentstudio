@@ -54,28 +54,68 @@ dotenv.config();
 // Global Error Handlers - Prevent process crashes
 // ============================================================================
 
+// EPIPE Guard: Prevent infinite loop when stdout/stderr pipes are broken.
+// When the launching terminal is closed, stdout/stderr become broken pipes.
+// Any console.log/error call will then throw EPIPE, and if an uncaughtException
+// handler also uses console.error, it creates an infinite recursion:
+//   uncaughtException → console.error() → EPIPE → uncaughtException → ...
+// These handlers silently swallow EPIPE errors on stdout/stderr to break the cycle.
+process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+  // For non-EPIPE errors, we can't safely write to stdout, so just ignore
+});
+process.stderr.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+  // For non-EPIPE errors, we can't safely write to stderr, so just ignore
+});
+
+// Safe logging helper: writes to stderr only if the stream is still writable.
+// Falls back silently if the pipe is broken, preventing EPIPE cascades.
+function safeErrorLog(...args: unknown[]): void {
+  try {
+    if (process.stderr.writable) {
+      console.error(...args);
+    }
+  } catch {
+    // If writing fails (e.g., EPIPE), silently ignore to prevent recursion
+  }
+}
+
 // Handle uncaught exceptions
-process.on('uncaughtException', (error: Error) => {
-  console.error('[Fatal] Uncaught Exception:', error);
-  console.error('[Fatal] Stack:', error.stack);
+process.on('uncaughtException', (error: Error & { code?: string }) => {
+  // Silently ignore EPIPE errors to prevent infinite recursion.
+  // EPIPE occurs when stdout/stderr pipes are broken (e.g., terminal closed).
+  if (error.code === 'EPIPE') {
+    return;
+  }
+  safeErrorLog('[Fatal] Uncaught Exception:', error);
+  safeErrorLog('[Fatal] Stack:', error.stack);
   // Don't exit the process - log and continue
   // This prevents the entire server from crashing due to a single unhandled error
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason: any, promise: Promise<any>) => {
-  console.error('[Fatal] Unhandled Promise Rejection at:', promise);
-  console.error('[Fatal] Reason:', reason);
+  // Silently ignore EPIPE-related rejections
+  if (reason && (reason.code === 'EPIPE' || (reason instanceof Error && (reason as any).code === 'EPIPE'))) {
+    return;
+  }
+  safeErrorLog('[Fatal] Unhandled Promise Rejection at:', promise);
+  safeErrorLog('[Fatal] Reason:', reason);
   // Don't exit the process - log and continue
   // This is especially important for MCP fetch operations and other async code
 });
 
 // Handle uncaught exceptions in async functions
-process.on('uncaughtExceptionMonitor', (error: Error, origin: string) => {
-  console.error('[Monitor] Uncaught Exception Monitor triggered');
-  console.error('[Monitor] Origin:', origin);
-  console.error('[Monitor] Error:', error);
-  console.error('[Monitor] Stack:', error.stack);
+process.on('uncaughtExceptionMonitor', (error: Error & { code?: string }, origin: string) => {
+  // Skip EPIPE errors in monitor as well
+  if (error.code === 'EPIPE') {
+    return;
+  }
+  safeErrorLog('[Monitor] Uncaught Exception Monitor triggered');
+  safeErrorLog('[Monitor] Origin:', origin);
+  safeErrorLog('[Monitor] Error:', error);
+  safeErrorLog('[Monitor] Stack:', error.stack);
 });
 
 // Initialize and log engine configuration at startup

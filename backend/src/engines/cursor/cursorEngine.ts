@@ -273,7 +273,7 @@ export class CursorEngine implements IAgentEngine {
     const {
       workspace,
       sessionId: existingSessionId,
-      model, // Don't set default - let CLI use its internal model settings when undefined
+      model,
       images,
     } = config;
 
@@ -288,14 +288,77 @@ export class CursorEngine implements IAgentEngine {
           ? undefined
           : envTimeout;
 
+    // Process images: save to hidden directory and replace placeholders with @path
+    const processedMessage = this.processImagesForCursor(message, images, workspace);
+
+    // Try with --resume first if sessionId provided
+    if (existingSessionId) {
+      try {
+        const result = await this.executeCursorCommand(
+          processedMessage,
+          workspace,
+          model,
+          images,
+          timeoutMs,
+          existingSessionId,
+          true, // useResume
+          onAguiEvent
+        );
+        return result;
+      } catch (error) {
+        // Check if this is a resume failure (session not found)
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('exited with code') || errorMessage.includes('resume')) {
+          console.log(`[CursorEngine] Resume failed for session ${existingSessionId}, retrying without --resume`);
+          // Retry without --resume - create a new session
+          const result = await this.executeCursorCommand(
+            processedMessage,
+            workspace,
+            model,
+            images,
+            timeoutMs,
+            undefined, // No sessionId = new session
+            false, // Don't use resume
+            onAguiEvent
+          );
+          return result;
+        }
+        // Re-throw other errors
+        throw error;
+      }
+    }
+
+    // No existing session, create new one
+    return this.executeCursorCommand(
+      processedMessage,
+      workspace,
+      model,
+      images,
+      timeoutMs,
+      undefined,
+      false,
+      onAguiEvent
+    );
+  }
+
+  /**
+   * Execute Cursor CLI command (internal implementation)
+   */
+  private executeCursorCommand(
+    processedMessage: string,
+    workspace: string,
+    model: string | undefined,
+    images: EngineImageData[] | undefined,
+    timeoutMs: number | undefined,
+    existingSessionId: string | undefined,
+    useResume: boolean,
+    onAguiEvent: (event: AGUIEvent) => void
+  ): Promise<{ sessionId: string }> {
     // Create session ID (temporary; will be replaced by CLI's real session_id from system.init)
     const sessionId = existingSessionId || uuidv4();
 
     // Create AGUI adapter
     const adapter = new CursorAguiAdapter(sessionId);
-
-    // Process images: save to hidden directory and replace placeholders with @path
-    const processedMessage = this.processImagesForCursor(message, images, workspace);
 
     // Send RUN_STARTED event
     onAguiEvent(adapter.createRunStarted({ message: processedMessage, workspace, model }));
@@ -326,11 +389,12 @@ export class CursorEngine implements IAgentEngine {
         console.log(`[CursorEngine] NOT adding --model, letting CLI use internal settings`);
       }
 
-      // Add session resume if continuing conversation
-      if (existingSessionId) {
+      // Add session resume if continuing conversation and useResume is true
+      if (existingSessionId && useResume) {
         // Strip 'cursor-' prefix if present (backward compatibility with old session IDs)
         const actualSessionId = existingSessionId.startsWith('cursor-') ? existingSessionId.slice(7) : existingSessionId;
         args.push('--resume', actualSessionId);
+        console.log(`[CursorEngine] Attempting to resume session: ${actualSessionId}`);
       }
 
       console.log(`[CursorEngine] Executing: ${cursorCmd} ${args.join(' ')}`);
@@ -395,9 +459,11 @@ export class CursorEngine implements IAgentEngine {
 
       let buffer = '';
       let hasError = false;
+      let hasOutput = false;
 
       // Process stdout line by line
       cursorProcess.stdout?.on('data', (data: Buffer) => {
+        hasOutput = true;
         buffer += data.toString();
         const lines = buffer.split('\n');
         buffer = lines.pop() || ''; // Keep incomplete line in buffer
@@ -430,10 +496,11 @@ export class CursorEngine implements IAgentEngine {
         if (timeoutId) clearTimeout(timeoutId);
         this.activeSessions.delete(sessionId);
 
-        console.log(`[CursorEngine] Process exited with code ${code}, signal ${signal}`);
+        console.log(`[CursorEngine] Process exited with code ${code}, signal ${signal}, hasOutput: ${hasOutput}`);
 
         // Process any remaining buffer
         if (buffer.trim()) {
+          hasOutput = true;
           const events = adapter.parseStreamLine(buffer);
           for (const event of events) {
             onAguiEvent(event);
@@ -444,6 +511,14 @@ export class CursorEngine implements IAgentEngine {
         const finalEvents = adapter.finalize();
         for (const event of finalEvents) {
           onAguiEvent(event);
+        }
+
+        // If we used --resume and got no output with non-zero exit code,
+        // this is likely a session-not-found error - let the caller retry
+        if (code !== 0 && useResume && !hasOutput) {
+          console.log(`[CursorEngine] Resume failed with no output, session may not exist`);
+          reject(new Error(`Cursor agent exited with code ${code} (resume may have failed)`));
+          return;
         }
 
         if (code === 0 || !hasError) {
