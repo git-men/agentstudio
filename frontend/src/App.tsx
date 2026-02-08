@@ -44,6 +44,7 @@ const ModelsPage = lazy(() => import('./pages/ModelsPage').then(module => ({ def
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.default })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
 const ToastTestPage = lazy(() => import('./pages/ToastTestPage').then(module => ({ default: module.ToastTestPage })));
+const SessionObserverDemo = lazy(() => import('./pages/SessionObserverDemo'));
 
 // 加载中组件
 const LoadingFallback = () => (
@@ -188,6 +189,13 @@ const AppContent: React.FC = () => {
           <Route path="/toast-test" element={
             <ProtectedRoute>
               <Layout><ToastTestPage /></Layout>
+            </ProtectedRoute>
+          } />
+
+          {/* Session Observer Demo */}
+          <Route path="/demo/observe" element={
+            <ProtectedRoute>
+              <SessionObserverDemo />
             </ProtectedRoute>
           } />
 
