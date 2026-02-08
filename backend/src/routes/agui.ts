@@ -527,8 +527,9 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
 router.get('/sessions/:sessionId/observe', (req, res) => {
   const { sessionId } = req.params;
   const clientId = (req.query.clientId as string) || randomUUID();
+  const userId = req.headers['x-openid'] as string | undefined;
 
-  console.log(`👁️ [AGUI] Observe request for session ${sessionId} from client ${clientId}`);
+  console.log(`👁️ [AGUI] Observe request for session ${sessionId} from client ${clientId}${userId ? ` user ${userId}` : ''}`);
 
   // Set up SSE headers
   res.setHeader('Content-Type', 'text/event-stream');
@@ -542,6 +543,17 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
 
   // Send initial connected event
   res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, clientId, timestamp: Date.now() })}\n\n`);
+
+  // 通知 AS-Mate 主进程: SSE 客户端连接
+  if (userId) {
+    fetch('http://127.0.0.1:3000/internal/connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'connect', user_id: userId }),
+    }).catch((err) => {
+      console.error(`[AGUI] Failed to notify connect for user ${userId}:`, err);
+    });
+  }
 
   // Subscribe to session events
   const unsubscribe = sessionEventBus.subscribe(sessionId, clientId, (event: SessionEvent) => {
@@ -580,6 +592,16 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
     isConnectionClosed = true;
     clearInterval(heartbeatInterval);
     unsubscribe();
+
+    if (userId) {
+      fetch('http://127.0.0.1:3000/internal/connection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'disconnect', user_id: userId }),
+      }).catch((err) => {
+        console.error(`[AGUI] Failed to notify disconnect for user ${userId}:`, err);
+      });
+    }
   });
 
   res.on('error', () => {
