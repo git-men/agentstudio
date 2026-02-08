@@ -65,16 +65,38 @@ function detectEngineType(): ServiceEngineType {
 }
 
 /**
- * Validate engine type
+ * Validate and normalize engine type
+ * Supports case-insensitive matching and common aliases
  */
 function validateEngineType(engine: string): ServiceEngineType {
   const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk'];
-  if (!validEngines.includes(engine as ServiceEngineType)) {
-    console.warn(`⚠️  Invalid ENGINE="${engine}", falling back to "claude-sdk"`);
-    console.warn(`⚠️  Supported engines: ${validEngines.join(', ')}`);
-    return 'claude-sdk';
+  const normalized = engine.trim().toLowerCase();
+
+  // 直接匹配
+  if (validEngines.includes(normalized as ServiceEngineType)) {
+    return normalized as ServiceEngineType;
   }
-  return engine as ServiceEngineType;
+
+  // 常见别名映射
+  const aliasMap: Record<string, ServiceEngineType> = {
+    'cursor': 'cursor-cli',
+    'cursor_cli': 'cursor-cli',
+    'cursorcli': 'cursor-cli',
+    'claude': 'claude-sdk',
+    'claude_sdk': 'claude-sdk',
+    'claudesdk': 'claude-sdk',
+    'claude-code': 'claude-sdk',
+  };
+
+  const mapped = aliasMap[normalized];
+  if (mapped) {
+    console.log(`🔧 Engine alias "${engine}" resolved to "${mapped}"`);
+    return mapped;
+  }
+
+  console.warn(`⚠️  Invalid ENGINE="${engine}", falling back to "claude-sdk"`);
+  console.warn(`⚠️  Supported engines: ${validEngines.join(', ')}`);
+  return 'claude-sdk';
 }
 
 // =============================================================================
