@@ -12,7 +12,7 @@
  * Usage:
  * - Environment variable: ENGINE=cursor-cli
  * - Command line argument: --engine=cursor-cli
- * - Default: cursor-cli (consistent with as-mate)
+ * - Default: claude-sdk
  */
 
 import * as path from 'path';
@@ -61,7 +61,7 @@ function detectEngineType(): ServiceEngineType {
     return 'claude-sdk';
   }
   
-  return 'cursor-cli'; // Default
+  return 'claude-sdk'; // Default
 }
 
 /**
@@ -70,9 +70,9 @@ function detectEngineType(): ServiceEngineType {
 function validateEngineType(engine: string): ServiceEngineType {
   const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk'];
   if (!validEngines.includes(engine as ServiceEngineType)) {
-    console.warn(`⚠️  Invalid ENGINE="${engine}", falling back to "cursor-cli"`);
+    console.warn(`⚠️  Invalid ENGINE="${engine}", falling back to "claude-sdk"`);
     console.warn(`⚠️  Supported engines: ${validEngines.join(', ')}`);
-    return 'cursor-cli';
+    return 'claude-sdk';
   }
   return engine as ServiceEngineType;
 }
