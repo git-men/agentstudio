@@ -225,14 +225,17 @@ export class CursorA2AAdapter {
         break;
 
       case 'TEXT_MESSAGE_CONTENT':
-        // Accumulate text content
+        // Accumulate text content and emit only the DELTA (not the full accumulated text)
+        // This avoids massive duplication: previously each partial message contained
+        // the entire accumulated text from the beginning, causing the same content
+        // to be sent O(n²) times instead of O(n).
         const content = (event as any).content || '';
         this.state.accumulatedText += content;
         
-        // Emit incremental message update
-        if (this.state.currentMessageId) {
+        // Emit incremental delta update (only the new content)
+        if (this.state.currentMessageId && content) {
           responses.push(this.createStreamingResponse(
-            this.createMessage('agent', this.state.accumulatedText, {
+            this.createMessage('agent', content, {
               messageId: this.state.currentMessageId,
               isPartial: true,
             })
@@ -241,17 +244,18 @@ export class CursorA2AAdapter {
         break;
 
       case 'TEXT_MESSAGE_END':
-        // Finalize the message
+        // Finalize the message - save to history for the RUN_FINISHED status-update
+        // Don't emit a separate message here to avoid sending the full text again
+        // (all content was already streamed as deltas in TEXT_MESSAGE_CONTENT events,
+        // and the final complete message will be included in RUN_FINISHED status-update)
         if (this.state.currentMessageId && this.state.accumulatedText) {
           const message = this.createMessage('agent', this.state.accumulatedText, {
             messageId: this.state.currentMessageId,
             isPartial: false,
           });
           
-          // Add to history
+          // Add to history (used by RUN_FINISHED and getResponseText)
           this.state.history.push(message);
-          
-          responses.push(this.createStreamingResponse(message));
         }
         this.state.currentMessageId = null;
         break;
