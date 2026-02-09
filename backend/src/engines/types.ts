@@ -174,6 +174,9 @@ export enum AGUIEventType {
   // Special Events
   RAW = 'RAW',
   CUSTOM = 'CUSTOM',
+
+  // Version Control Events
+  AUTO_VERSION_CREATED = 'AUTO_VERSION_CREATED',
 }
 
 /**
@@ -323,6 +326,22 @@ export interface AGUICustomEvent extends AGUIBaseEvent {
 }
 
 /**
+ * AUTO_VERSION_CREATED event
+ * Emitted when a version is auto-committed (e.g., after a vibeGaming AI response)
+ */
+export interface AGUIAutoVersionCreatedEvent extends AGUIBaseEvent {
+  type: AGUIEventType.AUTO_VERSION_CREATED;
+  /** Version info returned by the git version service */
+  version: {
+    tag: string;
+    hash: string;
+    message: string;
+  };
+  agentId?: string;
+  sessionId?: string;
+}
+
+/**
  * Union type for all AGUI events
  */
 export type AGUIEvent =
@@ -340,7 +359,8 @@ export type AGUIEvent =
   | AGUIToolCallEndEvent
   | AGUIToolCallResultEvent
   | AGUIRawEvent
-  | AGUICustomEvent;
+  | AGUICustomEvent
+  | AGUIAutoVersionCreatedEvent;
 
 // =============================================================================
 // Engine Interface

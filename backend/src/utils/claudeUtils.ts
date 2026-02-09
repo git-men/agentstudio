@@ -8,7 +8,7 @@
 import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import { VIBE_GAMING_CLARIFYING_PROMPT } from '../prompts/vibeGamingPrompt.js';
-import { GAME_DEV_SYSTEM_PROMPT } from '../prompts/gameDevSystemPrompt.js';
+import { buildGameDevSystemPrompt } from '../prompts/gameDevSystemPrompt.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -316,10 +316,11 @@ export async function buildQueryOptions(
   const vibeGaming = scene === 'vibeGaming';
   let finalSystemPrompt: SystemPrompt = agent.systemPrompt;
   if (vibeGaming) {
-    // Build the extra prompt content: game-dev rules + clarifying prompt
+    // Build the extra prompt content: game-dev rules (with projectPath) + clarifying prompt
     const extraParts: string[] = [];
-    if (GAME_DEV_SYSTEM_PROMPT.trim()) {
-      extraParts.push(GAME_DEV_SYSTEM_PROMPT);
+    const gameDevPrompt = buildGameDevSystemPrompt(projectPath);
+    if (gameDevPrompt.trim()) {
+      extraParts.push(gameDevPrompt);
     }
     if (VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
       extraParts.push(VIBE_GAMING_CLARIFYING_PROMPT);
