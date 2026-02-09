@@ -531,7 +531,7 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
 router.get('/sessions/:sessionId/observe', (req, res) => {
   const { sessionId } = req.params;
   const clientId = (req.query.clientId as string) || randomUUID();
-  const userId = req.headers['x-openid'] as string | undefined;
+  const userId = req.headers['x-sandboxproxy-auth-oid'] as string | undefined;
 
   console.log(`👁️ [AGUI] Observe request for session ${sessionId} from client ${clientId}${userId ? ` user ${userId}` : ''}`);
 
