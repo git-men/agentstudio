@@ -20,7 +20,7 @@ import {
 } from '../services/askUserQuestion/index.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
-import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent, type AGUIAutoVersionCreatedEvent } from '../engines/types.js';
+import { formatAguiEventAsSSE, AGUIEventType, type AGUIAutoVersionCreatedEvent } from '../engines/types.js';
 import { createVersion } from '../services/gitVersionService.js';
 
 // 类型守卫函数
