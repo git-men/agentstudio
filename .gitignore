@@ -68,3 +68,4 @@ specs/
 .playwright-mcp/
 # Telemetry data
 backend/.telemetry/
+backend/config.local.json
