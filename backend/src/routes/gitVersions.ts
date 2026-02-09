@@ -113,7 +113,7 @@ router.post('/', async (req: express.Request<VersionParams>, res) => {
       return res.status(400).json({ error: 'Version slot must be an integer between 1 and 5' });
     }
 
-    const result = await createVersion(projectPath, message.trim());
+    const result = await createVersion(projectPath, message.trim(), slotNumber);
     
     console.log(`[GitVersion] Created version ${result.tag} for project: ${projectPath}`);
     res.json({

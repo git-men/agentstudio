@@ -137,7 +137,8 @@ async function getNextVersionNumber(projectPath: string): Promise<number> {
  */
 export async function createVersion(
   projectPath: string,
-  message: string
+  message: string,
+  slot: number
 ): Promise<CreateVersionResult> {
   // Validate project path exists
   if (!fs.existsSync(projectPath)) {
@@ -171,16 +172,14 @@ export async function createVersion(
     // Has staged changes - proceed with commit
   }
 
-  // Get the next version number
-  const versionNumber = await getNextVersionNumber(projectPath);
-  const tag = `v${versionNumber}`;
+  const tag = resolveSlotTag(slot);
 
   // Commit
-  const commitMessage = message || `Version ${versionNumber}`;
+  const commitMessage = message || `Version ${tag}`;
   await git(projectPath, ['commit', '-m', commitMessage, '--allow-empty']);
 
   // Tag
-  await git(projectPath, ['tag', '-a', tag, '-m', commitMessage]);
+  await git(projectPath, ['tag', '-a', '-f', tag, '-m', commitMessage]);
 
   // Get the commit hash
   const hash = await git(projectPath, ['rev-parse', 'HEAD']);
