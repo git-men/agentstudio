@@ -40,7 +40,6 @@ export const ProjectVersionModal: React.FC<ProjectVersionModalProps> = ({
   onClose,
 }) => {
   const [newVersionMessage, setNewVersionMessage] = useState('');
-  const [newVersionSlot, setNewVersionSlot] = useState(1);
   const [showConfirmCheckout, setShowConfirmCheckout] = useState<string | null>(null);
   const [showConfirmDelete, setShowConfirmDelete] = useState<string | null>(null);
 
@@ -64,7 +63,6 @@ export const ProjectVersionModal: React.FC<ProjectVersionModalProps> = ({
       const result = await createVersion.mutateAsync({
         projectId,
         message: newVersionMessage.trim(),
-        slot: newVersionSlot,
       });
       showSuccess(`版本 ${result.version.tag} 创建成功`);
       setNewVersionMessage('');
@@ -184,18 +182,6 @@ export const ProjectVersionModal: React.FC<ProjectVersionModalProps> = ({
         {/* Create New Version */}
         <div className="p-4 border-b border-gray-200 dark:border-gray-700">
           <div className="flex gap-3">
-            <select
-              value={newVersionSlot}
-              onChange={(e) => setNewVersionSlot(Number(e.target.value))}
-              className="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-              aria-label="选择版本槽位"
-            >
-              <option value={1}>slot1</option>
-              <option value={2}>slot2</option>
-              <option value={3}>slot3</option>
-              <option value={4}>slot4</option>
-              <option value={5}>slot5</option>
-            </select>
             <input
               type="text"
               value={newVersionMessage}
