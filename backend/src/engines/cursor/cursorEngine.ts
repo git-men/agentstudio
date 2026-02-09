@@ -111,7 +111,11 @@ export class CursorEngine implements IAgentEngine {
    * Get supported models for Cursor engine
    * Fetches from CLI cache or executes `cursor agent --list-models`
    */
-  getSupportedModels(): ModelInfo[] {
+  async getSupportedModels(): Promise<ModelInfo[]> {
+    return this.getSupportedModelsSync();
+  }
+
+  private getSupportedModelsSync(): ModelInfo[] {
     // Check cache first
     const now = Date.now();
     if (cachedModels && (now - modelsCacheTime) < MODEL_CACHE_TTL) {

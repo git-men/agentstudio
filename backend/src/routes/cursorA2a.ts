@@ -109,7 +109,7 @@ router.get('/.well-known/agent.json', async (req: A2ARequest, res: Response) => 
     };
 
     // Generate Cursor Agent Card
-    const agentCard = generateCursorAgentCard(projectContext);
+    const agentCard = await generateCursorAgentCard(projectContext);
 
     console.info('[CursorA2A] Agent Card served:', {
       a2aAgentId: a2aContext.a2aAgentId,

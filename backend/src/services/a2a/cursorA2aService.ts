@@ -215,8 +215,8 @@ export interface CursorAgentCardContext {
 /**
  * Generate an A2A Agent Card for Cursor engine
  */
-export function generateCursorAgentCard(context: CursorAgentCardContext) {
-  const models = cursorEngine.getSupportedModels();
+export async function generateCursorAgentCard(context: CursorAgentCardContext) {
+  const models = await cursorEngine.getSupportedModels();
   const capabilities = cursorEngine.capabilities;
 
   return {

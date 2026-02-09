@@ -384,7 +384,7 @@ export interface IAgentEngine {
   /**
    * Get supported models for this engine
    */
-  getSupportedModels(): ModelInfo[];
+  getSupportedModels(): Promise<ModelInfo[]>;
   
   /**
    * Get active session count

@@ -15,11 +15,13 @@ import type { A2AMessage } from '../../../engines/cursor/a2aAdapter.js';
 vi.mock('../../../engines/cursor/index.js', () => ({
   cursorEngine: {
     sendMessage: vi.fn(),
-    getSupportedModels: vi.fn(() => [
-      { id: 'auto', name: 'Auto' },
-      { id: 'gpt-4', name: 'GPT-4' },
-      { id: 'claude-3-opus', name: 'Claude 3 Opus' },
-    ]),
+    getSupportedModels: vi.fn(() =>
+      Promise.resolve([
+        { id: 'auto', name: 'Auto' },
+        { id: 'gpt-4', name: 'GPT-4' },
+        { id: 'claude-3-opus', name: 'Claude 3 Opus' },
+      ])
+    ),
     capabilities: {
       streaming: true,
       thinking: true,
@@ -349,7 +351,7 @@ describe('generateCursorAgentCard', () => {
       baseUrl: 'https://example.com',
     };
 
-    const card = generateCursorAgentCard(context);
+    const card = await generateCursorAgentCard(context);
 
     // Check required fields
     expect(card.name).toBe('Cursor Agent');
@@ -381,7 +383,7 @@ describe('generateCursorAgentCard', () => {
   it('should include all expected skills', async () => {
     const { generateCursorAgentCard } = await import('../cursorA2aService.js');
 
-    const card = generateCursorAgentCard({
+    const card = await generateCursorAgentCard({
       a2aAgentId: 'agent-123',
       projectId: 'proj-456',
       projectName: 'Test Project',
@@ -401,7 +403,7 @@ describe('generateCursorAgentCard', () => {
   it('should include supported models from cursor engine', async () => {
     const { generateCursorAgentCard } = await import('../cursorA2aService.js');
 
-    const card = generateCursorAgentCard({
+    const card = await generateCursorAgentCard({
       a2aAgentId: 'agent-123',
       projectId: 'proj-456',
       projectName: 'Test Project',

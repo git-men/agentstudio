@@ -273,11 +273,11 @@ function toolToSkill(tool: AgentTool): Skill | null {
  * @param projectContext - Project-specific context
  * @returns Complete Agent Card for Cursor engine
  */
-export function generateCursorAgentCard(
+export async function generateCursorAgentCard(
   projectContext: ProjectContext
-): AgentCard {
+): Promise<AgentCard> {
   const capabilities = cursorEngine.capabilities;
-  const models = cursorEngine.getSupportedModels();
+  const models = await cursorEngine.getSupportedModels();
 
   // Generate Cursor-specific skills
   const skills = generateCursorSkills(capabilities);
@@ -511,11 +511,11 @@ export function getEngineTypeFromContext(
 /**
  * Generate Agent Card based on engine type
  */
-export function generateAgentCardByEngine(
+export async function generateAgentCardByEngine(
   engineType: 'claude' | 'cursor',
   projectContext: ProjectContext,
   agentConfig?: AgentConfig | null
-): AgentCard {
+): Promise<AgentCard> {
   if (engineType === 'cursor') {
     return generateCursorAgentCard(projectContext);
   }

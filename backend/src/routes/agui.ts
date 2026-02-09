@@ -84,20 +84,24 @@ const ChatRequestSchema = z.object({
  * 
  * List all available engines and their capabilities
  */
-router.get('/engines', (_req, res) => {
+router.get('/engines', async (_req, res) => {
   try {
     const engines = engineManager.getRegisteredEngines();
     const capabilities = engineManager.getAllEngineCapabilities();
     const defaultEngine = engineManager.getDefaultEngineType();
 
-    res.json({
-      engines: engines.map(type => ({
+    const enginesWithModels = await Promise.all(
+      engines.map(async (type) => ({
         type,
         isDefault: type === defaultEngine,
         capabilities: capabilities[type],
-        models: engineManager.getSupportedModels(type),
+        models: await engineManager.getSupportedModels(type),
         activeSessions: engineManager.getActiveSessionCountByEngine()[type],
-      })),
+      }))
+    );
+
+    res.json({
+      engines: enginesWithModels,
       defaultEngine,
       totalActiveSessions: engineManager.getTotalActiveSessionCount(),
     });
@@ -112,7 +116,7 @@ router.get('/engines', (_req, res) => {
  * 
  * Get detailed information about a specific engine
  */
-router.get('/engines/:type', (req, res) => {
+router.get('/engines/:type', async (req, res) => {
   try {
     const engineType = req.params.type as EngineType;
     
@@ -121,7 +125,7 @@ router.get('/engines/:type', (req, res) => {
     }
 
     const capabilities = engineManager.getEngineCapabilities(engineType);
-    const models = engineManager.getSupportedModels(engineType);
+    const models = await engineManager.getSupportedModels(engineType);
     const activeSessions = engineManager.getActiveSessionCountByEngine()[engineType];
 
     res.json({

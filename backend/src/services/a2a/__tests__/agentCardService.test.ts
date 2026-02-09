@@ -376,7 +376,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
 
       // Check A2A protocol required fields
       expect(agentCard.name).toBe('Cursor Agent');
@@ -391,7 +391,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
       const skillNames = agentCard.skills.map(s => s.name);
 
       // Cursor should have these built-in skills
@@ -405,7 +405,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
       const skillNames = agentCard.skills.map(s => s.name);
 
       // Terminal execution should be included (Cursor CLI supports it)
@@ -416,7 +416,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
 
       expect(agentCard.securitySchemes).toHaveLength(1);
       expect(agentCard.securitySchemes[0]).toMatchObject({
@@ -431,7 +431,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
 
       expect(agentCard.context).toMatchObject({
         a2aAgentId: 'a2a-cursor-uuid',
@@ -448,7 +448,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
       const context = agentCard.context as any;
 
       expect(context.supportedModels).toBeDefined();
@@ -465,7 +465,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateCursorAgentCard(projectContext);
+      const agentCard = await generateCursorAgentCard(projectContext);
       const context = agentCard.context as any;
 
       expect(context.engineCapabilities).toBeDefined();
@@ -484,7 +484,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateAgentCardByEngine } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      const agentCard = generateAgentCardByEngine('cursor', projectContext);
+      const agentCard = await generateAgentCardByEngine('cursor', projectContext);
       const context = agentCard.context as any;
 
       expect(agentCard.name).toBe('Cursor Agent');
@@ -517,7 +517,7 @@ describe('agentCardService - Cursor Engine Support', () => {
         source: 'local' as const,
       };
 
-      const agentCard = generateAgentCardByEngine('claude', projectContext, agentConfig);
+      const agentCard = await generateAgentCardByEngine('claude', projectContext, agentConfig);
 
       expect(agentCard.name).toBe('Test Claude Agent');
       expect(agentCard.context.agentType).toBe('test-claude-agent');
@@ -527,16 +527,16 @@ describe('agentCardService - Cursor Engine Support', () => {
       const { generateAgentCardByEngine } = await import('../agentCardService.js');
       const projectContext = createTestProjectContext();
 
-      expect(() => generateAgentCardByEngine('claude', projectContext, null)).toThrow(
-        'AgentConfig is required for Claude engine'
-      );
+      await expect(
+        generateAgentCardByEngine('claude', projectContext, null)
+      ).rejects.toThrow('AgentConfig is required for Claude engine');
     });
   });
 
   describe('Cursor skills schema validation', () => {
     it('should have valid inputSchema for code-editing skill', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
-      const agentCard = generateCursorAgentCard(createTestProjectContext());
+      const agentCard = await generateCursorAgentCard(createTestProjectContext());
 
       const codeEditSkill = agentCard.skills.find(s => s.name === 'code-editing');
       expect(codeEditSkill).toBeDefined();
@@ -548,7 +548,7 @@ describe('agentCardService - Cursor Engine Support', () => {
 
     it('should have valid inputSchema for file-operations skill', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
-      const agentCard = generateCursorAgentCard(createTestProjectContext());
+      const agentCard = await generateCursorAgentCard(createTestProjectContext());
 
       const fileOpsSkill = agentCard.skills.find(s => s.name === 'file-operations');
       expect(fileOpsSkill).toBeDefined();
@@ -559,7 +559,7 @@ describe('agentCardService - Cursor Engine Support', () => {
 
     it('should have valid inputSchema for terminal-execution skill', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
-      const agentCard = generateCursorAgentCard(createTestProjectContext());
+      const agentCard = await generateCursorAgentCard(createTestProjectContext());
 
       const terminalSkill = agentCard.skills.find(s => s.name === 'terminal-execution');
       expect(terminalSkill).toBeDefined();
@@ -570,7 +570,7 @@ describe('agentCardService - Cursor Engine Support', () => {
 
     it('should have valid inputSchema for code-search skill', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
-      const agentCard = generateCursorAgentCard(createTestProjectContext());
+      const agentCard = await generateCursorAgentCard(createTestProjectContext());
 
       const searchSkill = agentCard.skills.find(s => s.name === 'code-search');
       expect(searchSkill).toBeDefined();
@@ -581,7 +581,7 @@ describe('agentCardService - Cursor Engine Support', () => {
 
     it('should have valid inputSchema for coding-assistant skill', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
-      const agentCard = generateCursorAgentCard(createTestProjectContext());
+      const agentCard = await generateCursorAgentCard(createTestProjectContext());
 
       const assistantSkill = agentCard.skills.find(s => s.name === 'coding-assistant');
       expect(assistantSkill).toBeDefined();

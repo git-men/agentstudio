@@ -19,6 +19,7 @@ import { sessionManager } from '../../services/sessionManager.js';
 import { buildQueryOptions } from '../../utils/claudeUtils.js';
 import { handleSessionManagement, buildUserMessageContent } from '../../utils/sessionUtils.js';
 import { AgentStorage } from '../../services/agentStorage.js';
+import { getDefaultVersionId, getVersionByIdInternal } from '../../services/claudeVersionStorage.js';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 
 // Agent storage for getting agent configurations
@@ -85,10 +86,129 @@ export class ClaudeEngine implements IAgentEngine {
   };
 
   /**
-   * Get supported models for Claude engine
+   * Get supported models for Claude engine.
+   * 1. Try GET {ANTHROPIC_BASE_URL}/v1/models (OpenAI/Claude compatible list).
+   * 2. On failure: use default provider's models from claudeVersionStorage.
+   * 3. Final fallback: hardcoded list.
    */
-  getSupportedModels(): ModelInfo[] {
-    // These are the default models; actual models come from providers
+  async getSupportedModels(): Promise<ModelInfo[]> {
+    const fromApi = await this.fetchModelsFromApi();
+    if (fromApi.length > 0) return fromApi;
+
+    const fromProvider = await this.getModelsFromDefaultProvider();
+    if (fromProvider.length > 0) return fromProvider;
+
+    return this.getHardcodedModels();
+  }
+
+  private async fetchModelsFromApi(): Promise<ModelInfo[]> {
+    const baseUrl = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
+    const url = `${baseUrl}/v1/models`;
+
+    const apiKey =
+      process.env.ANTHROPIC_API_KEY ||
+      process.env.ANTHROPIC_AUTH_TOKEN ||
+      (await this.getApiKeyFromDefaultProvider());
+
+    if (!apiKey) {
+      console.warn('[ClaudeEngine] No API key for /v1/models (ANTHROPIC_API_KEY or default provider)');
+      return [];
+    }
+
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10_000);
+
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!res.ok) {
+        console.warn(`[ClaudeEngine] /v1/models returned ${res.status}`);
+        return [];
+      }
+
+      const json = (await res.json()) as {
+        data?: Array<{
+          id: string;
+          object?: string;
+          created?: number;
+          created_at?: string;
+          display_name?: string;
+          name?: string;
+          owned_by?: string;
+        }>;
+        object?: string;
+      };
+
+      const data = json?.data;
+      if (!Array.isArray(data) || data.length === 0) return [];
+
+      const models: ModelInfo[] = data.map((m) => {
+        const name =
+          m.display_name ?? (m as { name?: string }).name ?? m.id;
+        const isThinking = name.toLowerCase().includes('thinking');
+        return {
+          id: m.id,
+          name,
+          isVision: true,
+          isThinking,
+          description: m.owned_by ? `${m.owned_by}: ${name}` : undefined,
+        };
+      });
+
+      console.log(`[ClaudeEngine] Fetched ${models.length} models from ${url}`);
+      return models;
+    } catch (error) {
+      console.warn('[ClaudeEngine] Failed to fetch models from API:', error);
+      return [];
+    }
+  }
+
+  private async getApiKeyFromDefaultProvider(): Promise<string | null> {
+    try {
+      const versionId = await getDefaultVersionId();
+      if (!versionId) return null;
+      const version = await getVersionByIdInternal(versionId);
+      const env = version?.environmentVariables ?? {};
+      return env.ANTHROPIC_API_KEY ?? env.ANTHROPIC_AUTH_TOKEN ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async getModelsFromDefaultProvider(): Promise<ModelInfo[]> {
+    try {
+      const versionId = await getDefaultVersionId();
+      if (!versionId) return [];
+      const version = await getVersionByIdInternal(versionId);
+      if (!version?.models?.length) return [];
+
+      const models: ModelInfo[] = version.models.map((m) => ({
+        id: m.id,
+        name: m.name,
+        isVision: m.isVision ?? true,
+        isThinking: (m.name || '').toLowerCase().includes('thinking'),
+        description: m.description,
+      }));
+      console.log(`[ClaudeEngine] Using ${models.length} models from default provider (${version.alias})`);
+      return models;
+    } catch (error) {
+      console.warn('[ClaudeEngine] Failed to get models from default provider:', error);
+      return [];
+    }
+  }
+
+  private getHardcodedModels(): ModelInfo[] {
+    console.log('[ClaudeEngine] Using hardcoded model list');
     return [
       { id: 'sonnet', name: 'Claude Sonnet', isVision: true },
       { id: 'sonnet-thinking', name: 'Claude Sonnet (Thinking)', isVision: true, isThinking: true },

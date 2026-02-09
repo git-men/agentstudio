@@ -86,7 +86,7 @@ class EngineManager {
   /**
    * Get supported models for an engine
    */
-  getSupportedModels(type: EngineType): ModelInfo[] {
+  async getSupportedModels(type: EngineType): Promise<ModelInfo[]> {
     const engine = this.getEngine(type);
     return engine.getSupportedModels();
   }

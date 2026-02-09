@@ -179,7 +179,7 @@ router.get('/.well-known/agent-card.json', async (req: A2ARequest, res: Response
     
     if (engineType === 'cursor') {
       // Generate Cursor Agent Card
-      agentCard = generateCursorAgentCard(projectContext);
+      agentCard = await generateCursorAgentCard(projectContext);
       
       console.info('[A2A] Cursor Agent Card generated:', {
         a2aAgentId: a2aContext.a2aAgentId,
