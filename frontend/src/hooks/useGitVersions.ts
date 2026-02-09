@@ -75,15 +75,14 @@ const fetchVersionStatus = async (projectId: string): Promise<VersionStatus> => 
 
 const createVersionApi = async (
   projectId: string,
-  message: string,
-  slot: number
+  message: string
 ): Promise<CreateVersionResult> => {
   const response = await authFetch(
     `${API_BASE}/api/projects/${encodeURIComponent(projectId)}/versions`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, slot }),
+      body: JSON.stringify({ message }),
     }
   );
 
@@ -178,15 +177,8 @@ export const useCreateVersion = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({
-      projectId,
-      message,
-      slot,
-    }: {
-      projectId: string;
-      message: string;
-      slot: number;
-    }) => createVersionApi(projectId, message, slot),
+    mutationFn: ({ projectId, message }: { projectId: string; message: string }) =>
+      createVersionApi(projectId, message),
     onSuccess: (_, variables) => {
       // Invalidate both versions list and status
       queryClient.invalidateQueries({ queryKey: ['versions', variables.projectId] });
