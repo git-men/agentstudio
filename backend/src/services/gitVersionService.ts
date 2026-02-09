@@ -31,6 +31,7 @@ export interface VersionInfo {
   message: string;
   date: string;
   hash: string;
+  commitHash: string;
   isCurrent: boolean;
 }
 
@@ -46,6 +47,7 @@ export interface VersionStatus {
 export interface CreateVersionResult {
   tag: string;
   hash: string;
+  commitHash: string;
   message: string;
 }
 
@@ -104,11 +106,23 @@ async function initGitRepo(projectPath: string): Promise<void> {
   await git(projectPath, ['config', 'user.email', 'agentstudio@local']);
 }
 
-function resolveSlotTag(slot: number): string {
-  if (!Number.isInteger(slot) || slot < 1 || slot > 5) {
-    throw new Error('Invalid slot. Slot must be an integer between 1 and 5.');
+/**
+ * Get the next version number (auto-increment)
+ */
+async function getNextVersionNumber(projectPath: string): Promise<number> {
+  try {
+    const output = await git(projectPath, ['tag', '--list', 'v*', '--sort=-version:refname']);
+    if (!output) return 1;
+
+    const tags = output.split('\n').filter(t => /^v\d+$/.test(t));
+    if (tags.length === 0) return 1;
+
+    // Extract the highest version number
+    const maxVersion = Math.max(...tags.map(t => parseInt(t.substring(1), 10)));
+    return maxVersion + 1;
+  } catch {
+    return 1;
   }
-  return `slot${slot}`;
 }
 
 /**
@@ -116,11 +130,22 @@ function resolveSlotTag(slot: number): string {
  */
 export async function createVersion(
   projectPath: string,
-  message: string,
-  slot: number
+  message: string
 ): Promise<CreateVersionResult> {
   // Validate project path exists
   if (!fs.existsSync(projectPath)) {
+    let realPath: string | null = null;
+    try {
+      realPath = fs.realpathSync(projectPath);
+    } catch {
+      realPath = null;
+    }
+    console.error('[GitVersion] createVersion: project path missing', {
+      projectPath,
+      cwd: process.cwd(),
+      realPath,
+      exists: false,
+    });
     throw new Error(`Project path does not exist: ${projectPath}`);
   }
 
@@ -151,19 +176,56 @@ export async function createVersion(
     // Has staged changes - proceed with commit
   }
 
-  const tag = resolveSlotTag(slot);
+  // Get the next version number
+  const versionNumber = await getNextVersionNumber(projectPath);
+  const tag = `v${versionNumber}`;
 
   // Commit
-  const commitMessage = message || `Version ${tag}`;
+  const commitMessage = message || `Version ${versionNumber}`;
   await git(projectPath, ['commit', '-m', commitMessage, '--allow-empty']);
 
   // Tag
-  await git(projectPath, ['tag', '-a', '-f', tag, '-m', commitMessage]);
+  await git(projectPath, ['tag', '-a', tag, '-m', commitMessage]);
 
   // Get the commit hash
-  const hash = await git(projectPath, ['rev-parse', 'HEAD']);
+  const commitHash = await git(projectPath, ['rev-parse', 'HEAD']);
 
-  return { tag, hash, message: commitMessage };
+  return { tag, hash: commitHash, commitHash, message: commitMessage };
+}
+
+/**
+ * Create a tag for the current HEAD without creating a new commit
+ */
+export async function createTagOnly(
+  projectPath: string,
+  tag: string,
+  message?: string
+): Promise<CreateVersionResult> {
+  if (!fs.existsSync(projectPath)) {
+    throw new Error(`Project path does not exist: ${projectPath}`);
+  }
+
+  const initialized = await isGitInitialized(projectPath);
+  if (!initialized) {
+    throw new Error('Project has no version history');
+  }
+
+  try {
+    await git(projectPath, ['rev-parse', 'HEAD']);
+  } catch {
+    throw new Error('No commits to tag');
+  }
+
+  if (!tag || typeof tag !== 'string' || !tag.trim()) {
+    throw new Error('Tag is required');
+  }
+  const normalizedTag = tag.trim();
+  const tagMessage = message || `Tag ${normalizedTag}`;
+
+  await git(projectPath, ['tag', '-a', '-f', normalizedTag, '-m', tagMessage]);
+
+  const commitHash = await git(projectPath, ['rev-parse', 'HEAD']);
+  return { tag: normalizedTag, hash: commitHash, commitHash, message: tagMessage };
 }
 
 /**
@@ -178,8 +240,9 @@ export async function listVersions(projectPath: string): Promise<VersionInfo[]> 
   try {
     // Get all version tags with their info
     const output = await git(projectPath, [
-      'tag', '--list', 'slot*',
-      '--sort=refname',
+      'tag', '--list', 'v*',
+      '--list', 'slot*',
+      '--sort=-version:refname',
       '--format=%(refname:short)%09%(objectname:short)%09%(creatordate:iso)%09%(contents:subject)'
     ]);
 
@@ -201,25 +264,26 @@ export async function listVersions(projectPath: string): Promise<VersionInfo[]> 
         return {
           tag: tag || '',
           hash: hash || '',
+          commitHash: '',
           date: date || '',
           message: messageParts.join('\t') || '',
           isCurrent: false, // Will be set below
         };
       })
-      .filter(v => /^slot[1-5]$/.test(v.tag));
+      .filter(v => /^v\d+$/.test(v.tag) || /^slot\d+$/.test(v.tag));
 
     // Determine which version is current (find tag that points to HEAD)
-    if (currentHash) {
-      for (const version of versions) {
-        try {
-          const tagHash = await git(projectPath, ['rev-parse', '--short', `${version.tag}^{commit}`]);
-          if (tagHash === currentHash) {
-            version.isCurrent = true;
-            break;
-          }
-        } catch {
-          // Skip if tag can't be resolved
+    for (const version of versions) {
+      try {
+        const tagHash = await git(projectPath, ['rev-parse', '--short', `${version.tag}`]);
+        const tagCommitHash = await git(projectPath, ['rev-parse', '--short', `${version.tag}^{commit}`]);
+        version.hash = tagHash;
+        version.commitHash = tagCommitHash;
+        if (currentHash && tagCommitHash === currentHash) {
+          version.isCurrent = true;
         }
+      } catch {
+        // Skip if tag can't be resolved
       }
     }
 
@@ -248,9 +312,9 @@ export async function getVersionStatus(projectPath: string): Promise<VersionStat
   // Count version tags
   let totalVersions = 0;
   try {
-    const tagsOutput = await git(projectPath, ['tag', '--list', 'slot*']);
+    const tagsOutput = await git(projectPath, ['tag', '--list', 'v*']);
     if (tagsOutput) {
-      totalVersions = tagsOutput.split('\n').filter(t => /^slot[1-5]$/.test(t)).length;
+      totalVersions = tagsOutput.split('\n').filter(t => /^v\d+$/.test(t)).length;
     }
   } catch {
     // No tags
@@ -276,7 +340,7 @@ export async function getVersionStatus(projectPath: string): Promise<VersionStat
   let currentVersion: string | null = null;
   try {
     const currentTag = await git(projectPath, ['describe', '--tags', '--exact-match', 'HEAD']);
-    if (/^slot[1-5]$/.test(currentTag)) {
+    if (/^v\d+$/.test(currentTag)) {
       currentVersion = currentTag;
     }
   } catch {
@@ -294,6 +358,21 @@ export async function getVersionStatus(projectPath: string): Promise<VersionStat
 }
 
 /**
+ * Get current HEAD commit hash
+ */
+export async function getCurrentCommitHash(projectPath: string): Promise<string> {
+  const initialized = await isGitInitialized(projectPath);
+  if (!initialized) {
+    throw new Error('Project has no version history');
+  }
+  try {
+    return await git(projectPath, ['rev-parse', 'HEAD']);
+  } catch {
+    throw new Error('No commits found');
+  }
+}
+
+/**
  * Checkout a specific version
  */
 export async function checkoutVersion(
@@ -307,7 +386,7 @@ export async function checkoutVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
+  if (!/^v\d+$/.test(tag)) {
     throw new Error(`Invalid version tag: ${tag}`);
   }
 
@@ -360,7 +439,7 @@ export async function deleteVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
+  if (!/^v\d+$/.test(tag)) {
     throw new Error(`Invalid version tag: ${tag}`);
   }
 

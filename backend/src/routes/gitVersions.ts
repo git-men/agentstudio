@@ -6,11 +6,14 @@
  */
 
 import express from 'express';
+import path from 'path';
 import { ProjectMetadataStorage } from '../services/projectMetadataStorage';
 import {
   createVersion,
+  createTagOnly,
   listVersions,
   getVersionStatus,
+  getCurrentCommitHash,
   checkoutVersion,
   deleteVersion,
 } from '../services/gitVersionService';
@@ -29,6 +32,7 @@ const projectStorage = new ProjectMetadataStorage();
  */
 function resolveProjectPath(projectId: string): string {
   const decodedPath = decodeURIComponent(projectId);
+  const normalizedPath = path.isAbsolute(decodedPath) ? decodedPath : `/${decodedPath}`;
   
   // Try to look up the project to get the real path
   const project = projectStorage.getProject(decodedPath);
@@ -37,7 +41,7 @@ function resolveProjectPath(projectId: string): string {
   }
 
   // Fallback: use decoded path directly
-  return decodedPath;
+  return normalizedPath;
 }
 
 // ========================================
@@ -71,24 +75,40 @@ router.get('/status', async (req: express.Request<VersionParams>, res) => {
 });
 
 // ========================================
+// GET /api/projects/:projectId/versions/commit
+// Get current HEAD commit hash
+// ========================================
+router.get('/commit', async (req: express.Request<VersionParams>, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.projectId);
+    const commitHash = await getCurrentCommitHash(projectPath);
+    res.json({ commitHash });
+  } catch (error: any) {
+    console.error('[GitVersion] Error getting current commit hash:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to get current commit hash' });
+  }
+});
+
+// ========================================
 // POST /api/projects/:projectId/versions
 // Create a new version
-// Body: { message: string, slot: number }
+// Body: { message: string }
 // ========================================
 router.post('/', async (req: express.Request<VersionParams>, res) => {
   try {
     const projectPath = resolveProjectPath(req.params.projectId);
-    const { message, slot } = req.body;
+    console.log('[GitVersion] createVersion request', {
+      projectId: req.params.projectId,
+      decodedProjectId: decodeURIComponent(req.params.projectId),
+      resolvedProjectPath: projectPath,
+    });
+    const { message } = req.body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Version message is required' });
     }
-    const slotNumber = Number(slot);
-    if (!Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 5) {
-      return res.status(400).json({ error: 'Version slot must be an integer between 1 and 5' });
-    }
 
-    const result = await createVersion(projectPath, message.trim(), slotNumber);
+    const result = await createVersion(projectPath, message.trim());
     
     console.log(`[GitVersion] Created version ${result.tag} for project: ${projectPath}`);
     res.json({
@@ -103,6 +123,36 @@ router.post('/', async (req: express.Request<VersionParams>, res) => {
     }
     
     res.status(500).json({ error: error.message || 'Failed to create version' });
+  }
+});
+
+// ========================================
+// POST /api/projects/:projectId/versions/tag
+// Create a tag for current HEAD without creating a commit
+// Body: { message?: string }
+// ========================================
+router.post('/tag', async (req: express.Request<VersionParams>, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.projectId);
+    const { tag, message } = req.body;
+
+    if (!tag || typeof tag !== 'string' || !tag.trim()) {
+      return res.status(400).json({ error: 'Tag is required' });
+    }
+    if (message !== undefined && typeof message !== 'string') {
+      return res.status(400).json({ error: 'Tag message must be a string' });
+    }
+
+    const result = await createTagOnly(projectPath, tag.trim(), message?.trim());
+
+    console.log(`[GitVersion] Created tag ${result.tag} for project: ${projectPath}`);
+    res.json({
+      success: true,
+      version: result,
+    });
+  } catch (error: any) {
+    console.error('[GitVersion] Error creating tag:', error.message);
+    res.status(500).json({ error: error.message || 'Failed to create tag' });
   }
 });
 
