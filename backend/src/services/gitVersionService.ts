@@ -106,11 +106,23 @@ async function initGitRepo(projectPath: string): Promise<void> {
   await git(projectPath, ['config', 'user.email', 'agentstudio@local']);
 }
 
-function resolveSlotTag(slot: number): string {
-  if (!Number.isInteger(slot) || slot < 1 || slot > 5) {
-    throw new Error('Invalid slot. Slot must be an integer between 1 and 5.');
+/**
+ * Get the next version number (auto-increment)
+ */
+async function getNextVersionNumber(projectPath: string): Promise<number> {
+  try {
+    const output = await git(projectPath, ['tag', '--list', 'v*', '--sort=-version:refname']);
+    if (!output) return 1;
+
+    const tags = output.split('\n').filter(t => /^v\d+$/.test(t));
+    if (tags.length === 0) return 1;
+
+    // Extract the highest version number
+    const maxVersion = Math.max(...tags.map(t => parseInt(t.substring(1), 10)));
+    return maxVersion + 1;
+  } catch {
+    return 1;
   }
-  return `slot${slot}`;
 }
 
 /**
@@ -118,8 +130,7 @@ function resolveSlotTag(slot: number): string {
  */
 export async function createVersion(
   projectPath: string,
-  message: string,
-  slot: number
+  message: string
 ): Promise<CreateVersionResult> {
   // Validate project path exists
   if (!fs.existsSync(projectPath)) {
@@ -165,14 +176,16 @@ export async function createVersion(
     // Has staged changes - proceed with commit
   }
 
-  const tag = resolveSlotTag(slot);
+  // Get the next version number
+  const versionNumber = await getNextVersionNumber(projectPath);
+  const tag = `v${versionNumber}`;
 
   // Commit
-  const commitMessage = message || `Version ${tag}`;
+  const commitMessage = message || `Version ${versionNumber}`;
   await git(projectPath, ['commit', '-m', commitMessage, '--allow-empty']);
 
   // Tag
-  await git(projectPath, ['tag', '-a', '-f', tag, '-m', commitMessage]);
+  await git(projectPath, ['tag', '-a', tag, '-m', commitMessage]);
 
   // Get the commit hash
   const commitHash = await git(projectPath, ['rev-parse', 'HEAD']);
@@ -299,9 +312,9 @@ export async function getVersionStatus(projectPath: string): Promise<VersionStat
   // Count version tags
   let totalVersions = 0;
   try {
-    const tagsOutput = await git(projectPath, ['tag', '--list', 'slot*']);
+    const tagsOutput = await git(projectPath, ['tag', '--list', 'v*']);
     if (tagsOutput) {
-      totalVersions = tagsOutput.split('\n').filter(t => /^slot[1-5]$/.test(t)).length;
+      totalVersions = tagsOutput.split('\n').filter(t => /^v\d+$/.test(t)).length;
     }
   } catch {
     // No tags
@@ -327,7 +340,7 @@ export async function getVersionStatus(projectPath: string): Promise<VersionStat
   let currentVersion: string | null = null;
   try {
     const currentTag = await git(projectPath, ['describe', '--tags', '--exact-match', 'HEAD']);
-    if (/^slot[1-5]$/.test(currentTag)) {
+    if (/^v\d+$/.test(currentTag)) {
       currentVersion = currentTag;
     }
   } catch {
@@ -373,7 +386,7 @@ export async function checkoutVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
+  if (!/^v\d+$/.test(tag)) {
     throw new Error(`Invalid version tag: ${tag}`);
   }
 
@@ -426,7 +439,7 @@ export async function deleteVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
+  if (!/^v\d+$/.test(tag)) {
     throw new Error(`Invalid version tag: ${tag}`);
   }
 
