@@ -30,15 +30,6 @@ export class ClaudeSession {
   // 并发控制：标记会话是否正在处理请求
   private isProcessing = false;
 
-  // Request timeout: auto-clean stuck requests (default 10 minutes)
-  private static readonly REQUEST_TIMEOUT_MS = 10 * 60 * 1000;
-  private requestTimeoutTimer: NodeJS.Timeout | null = null;
-  private requestStartTime: number = 0;
-
-  // Heartbeat: periodic logging during processing gaps (every 30 seconds)
-  private static readonly HEARTBEAT_INTERVAL_MS = 30 * 1000;
-  private heartbeatTimer: NodeJS.Timeout | null = null;
-
   constructor(agentId: string, options: Options, resumeSessionId?: string, claudeVersionId?: string, modelId?: string) {
     console.log(`🔧 [DEBUG] ClaudeSession constructor started for agent: ${agentId}, resumeSessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId}`);
     this.agentId = agentId;
@@ -213,9 +204,6 @@ export class ClaudeSession {
     const requestId = `req_${this.nextRequestId++}_${Date.now()}`;
     this.responseCallbacks.set(requestId, responseCallback);
 
-    // Start request timeout and heartbeat timers
-    this.startRequestTimers(requestId);
-
     // 确保后台响应处理器已启动（简单版本，因为并发控制在上一层）
     if (!this.isBackgroundRunning) {
       this.startBackgroundResponseHandler();
@@ -261,14 +249,7 @@ export class ClaudeSession {
         // 分发响应给对应的请求
         if (currentRequestId && this.responseCallbacks.has(currentRequestId)) {
           const callback = this.responseCallbacks.get(currentRequestId)!;
-
-          try {
-            callback(sdkMessage);
-          } catch (callbackError) {
-            console.error(`❌ Callback error for request ${currentRequestId} in agent ${this.agentId}:`, callbackError);
-            // Don't re-throw: allow the background handler to continue processing
-            // so we can still receive the result event and properly clean up.
-          }
+          callback(sdkMessage);
 
           // 如果是 result 事件，该请求完成，从队列中移除
           if (sdkMessage.type === 'result') {
@@ -276,7 +257,6 @@ export class ClaudeSession {
             this.responseCallbacks.delete(currentRequestId);
             // 清除处理中标记，允许新的请求
             this.isProcessing = false;
-            this.clearRequestTimers();
             console.log(`🔓 Session unlocked for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
           }
         }
@@ -333,35 +313,20 @@ export class ClaudeSession {
       this.isActive = false;
       // 清除处理中标记
       this.isProcessing = false;
-      this.clearRequestTimers();
     } finally {
       this.isBackgroundRunning = false;
       // 确保处理中标记被清除（以防上面的 catch 没有执行到）
       this.isProcessing = false;
-      this.clearRequestTimers();
     }
   }
 
   /**
    * 取消指定请求的回调
-   * If the cancelled request is the currently active one (first in the map),
-   * also reset isProcessing to unlock the session for new requests.
    */
   cancelRequest(requestId: string): void {
     if (this.responseCallbacks.has(requestId)) {
-      // Check if this is the currently active request (first in the map)
-      const requestIds = Array.from(this.responseCallbacks.keys());
-      const isActiveRequest = requestIds.length > 0 && requestIds[0] === requestId;
-
       this.responseCallbacks.delete(requestId);
       console.log(`🧹 Cleaned up request callback: ${requestId}`);
-
-      // If this was the active request, unlock the session
-      if (isActiveRequest) {
-        this.isProcessing = false;
-        this.clearRequestTimers();
-        console.log(`🔓 Session unlocked for agent: ${this.agentId} after cancelling active request: ${requestId}`);
-      }
     }
   }
 
@@ -439,8 +404,6 @@ export class ClaudeSession {
     }
 
     this.isActive = false;
-    this.isProcessing = false;
-    this.clearRequestTimers();
 
     // 清理所有待处理的回调，避免在关闭过程中继续处理响应
     const pendingCallbacks = this.responseCallbacks.size;
@@ -454,51 +417,5 @@ export class ClaudeSession {
     await new Promise(resolve => setTimeout(resolve, 100));
 
     console.log(`✅ Claude session closed for agent: ${this.agentId}`);
-  }
-
-  /**
-   * Start request timeout and heartbeat timers when a request begins processing.
-   * If the request doesn't complete within REQUEST_TIMEOUT_MS, it is automatically
-   * cleaned up to prevent the session from being permanently locked.
-   */
-  private startRequestTimers(requestId: string): void {
-    this.requestStartTime = Date.now();
-
-    // Clear any existing timers (safety)
-    this.clearRequestTimers();
-
-    // Request timeout timer
-    this.requestTimeoutTimer = setTimeout(() => {
-      const elapsedMs = Date.now() - this.requestStartTime;
-      console.error(`⏰ Request ${requestId} timed out after ${Math.round(elapsedMs / 1000)}s for agent: ${this.agentId}. Auto-cleaning stuck request.`);
-
-      // Clean up the stuck request
-      if (this.responseCallbacks.has(requestId)) {
-        this.responseCallbacks.delete(requestId);
-      }
-      this.isProcessing = false;
-      this.clearRequestTimers();
-      console.log(`🔓 Session force-unlocked for agent: ${this.agentId} due to request timeout`);
-    }, ClaudeSession.REQUEST_TIMEOUT_MS);
-
-    // Heartbeat timer - log periodic status while request is active
-    this.heartbeatTimer = setInterval(() => {
-      const elapsedSec = Math.round((Date.now() - this.requestStartTime) / 1000);
-      console.log(`💓 [Heartbeat] Agent: ${this.agentId}, request: ${requestId}, processing for ${elapsedSec}s, pending callbacks: ${this.responseCallbacks.size}`);
-    }, ClaudeSession.HEARTBEAT_INTERVAL_MS);
-  }
-
-  /**
-   * Clear request timeout and heartbeat timers when a request completes or is cancelled.
-   */
-  private clearRequestTimers(): void {
-    if (this.requestTimeoutTimer) {
-      clearTimeout(this.requestTimeoutTimer);
-      this.requestTimeoutTimer = null;
-    }
-    if (this.heartbeatTimer) {
-      clearInterval(this.heartbeatTimer);
-      this.heartbeatTimer = null;
-    }
   }
 }
