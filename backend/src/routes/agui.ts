@@ -546,10 +546,17 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
 
   // 通知 AS-Mate 主进程: SSE 客户端连接
   if (userId) {
+    const connectPayload = { type: 'connect', user_id: userId };
+    console.log(`[AGUI] Notifying AS-Mate connect: ${JSON.stringify(connectPayload)}`);
     fetch('http://127.0.0.1:3000/internal/connection', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'connect', user_id: userId }),
+      body: JSON.stringify(connectPayload),
+    }).then((resp) => {
+      console.log(`[AGUI] AS-Mate connect response: status=${resp.status} for user=${userId}`);
+      return resp.text();
+    }).then((body) => {
+      console.log(`[AGUI] AS-Mate connect response body: ${body}`);
     }).catch((err) => {
       console.error(`[AGUI] Failed to notify connect for user ${userId}:`, err);
     });
@@ -594,10 +601,17 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
     unsubscribe();
 
     if (userId) {
+      const disconnectPayload = { type: 'disconnect', user_id: userId };
+      console.log(`[AGUI] Notifying AS-Mate disconnect: ${JSON.stringify(disconnectPayload)}`);
       fetch('http://127.0.0.1:3000/internal/connection', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ type: 'disconnect', user_id: userId }),
+        body: JSON.stringify(disconnectPayload),
+      }).then((resp) => {
+        console.log(`[AGUI] AS-Mate disconnect response: status=${resp.status} for user=${userId}`);
+        return resp.text();
+      }).then((body) => {
+        console.log(`[AGUI] AS-Mate disconnect response body: ${body}`);
       }).catch((err) => {
         console.error(`[AGUI] Failed to notify disconnect for user ${userId}:`, err);
       });
