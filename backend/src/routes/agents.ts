@@ -1115,6 +1115,28 @@ router.post('/chat', async (req, res) => {
               }
             }
 
+            // Auto-commit for vibeGaming scene
+            if (scene === 'vibeGaming' && projectPath && resultMsg.subtype === 'success') {
+              try {
+                const versionResult = await createVersion(projectPath, `Auto-save after AI response`);
+                console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${projectPath}`);
+
+                // Notify frontend about the new version via SSE before closing
+                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                  res.write(`data: ${JSON.stringify({
+                    type: 'auto_version_created',
+                    version: versionResult,
+                    timestamp: Date.now(),
+                    agentId,
+                    sessionId: actualSessionId || currentSessionId
+                  })}\n\n`);
+                }
+              } catch (error: any) {
+                // Don't fail the whole request if auto-commit fails (e.g., no changes to commit)
+                console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
+              }
+            }
+            
             // For AGUI output, send finalize events
             if (outputFormat === 'agui' && aguiAdapter) {
               try {
