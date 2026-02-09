@@ -92,7 +92,7 @@ router.get('/commit', async (req: express.Request<VersionParams>, res) => {
 // ========================================
 // POST /api/projects/:projectId/versions
 // Create a new version
-// Body: { message: string, slot: number }
+// Body: { message: string }
 // ========================================
 router.post('/', async (req: express.Request<VersionParams>, res) => {
   try {
@@ -102,17 +102,13 @@ router.post('/', async (req: express.Request<VersionParams>, res) => {
       decodedProjectId: decodeURIComponent(req.params.projectId),
       resolvedProjectPath: projectPath,
     });
-    const { message, slot } = req.body;
+    const { message } = req.body;
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Version message is required' });
     }
-    const slotNumber = Number(slot);
-    if (!Number.isInteger(slotNumber) || slotNumber < 1 || slotNumber > 5) {
-      return res.status(400).json({ error: 'Version slot must be an integer between 1 and 5' });
-    }
 
-    const result = await createVersion(projectPath, message.trim(), slotNumber);
+    const result = await createVersion(projectPath, message.trim());
     
     console.log(`[GitVersion] Created version ${result.tag} for project: ${projectPath}`);
     res.json({
