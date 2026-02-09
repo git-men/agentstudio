@@ -1136,7 +1136,7 @@ router.post('/chat', async (req, res) => {
                 console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
               }
             }
-            
+
             // For AGUI output, send finalize events
             if (outputFormat === 'agui' && aguiAdapter) {
               try {
