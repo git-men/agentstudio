@@ -77,6 +77,8 @@ const ChatRequestSchema = z.object({
   envVars: z.record(z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
+  // Scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
+  scene: z.string().optional(),
 });
 
 // =============================================================================
@@ -176,6 +178,7 @@ router.post('/chat', async (req, res) => {
       mcpTools,
       envVars,
       timeout,
+      scene,
     } = validation.data;
 
     // Resolve workspace: if it's a project name, get the actual path
@@ -304,6 +307,7 @@ router.post('/chat', async (req, res) => {
             envVars,
             channel: 'web',
             outputFormat: 'agui',
+            scene,
           },
         };
         

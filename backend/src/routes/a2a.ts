@@ -435,6 +435,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
     // This automatically handles A2A SDK MCP server integration
     // Model and provider will be resolved by buildQueryOptions using resolveConfig
     // which prioritizes: channel > agent > project > system default
+    // A2A calls are always standalone (no session continuity), so vibeGaming is true
     const { queryOptions } = await buildQueryOptions(
       {
         systemPrompt: agentConfig.systemPrompt || undefined,
@@ -448,7 +449,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       undefined, // permissionMode
       undefined, // model - let resolveConfig determine from project/system defaults
       undefined, // claudeVersion - let resolveConfig determine from agent/project/system
-      undefined  // defaultEnv
+      undefined, // defaultEnv
+      undefined, // userEnv
+      undefined, // sessionIdForAskUser
+      undefined, // agentIdForAskUser
+      undefined, // a2aStreamEnabled
+      undefined  // scene
     );
 
     // Override specific options for A2A

@@ -7,6 +7,7 @@
 
 import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
+import { VIBE_GAMING_CLARIFYING_PROMPT } from '../prompts/vibeGamingPrompt.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -188,6 +189,7 @@ export async function getDefaultClaudeVersionEnv(): Promise<Record<string, strin
  * @param sessionIdForAskUser - Optional session ID for AskUserQuestion MCP tool（用于路由用户通知）
  * @param agentIdForAskUser - Optional agent ID for AskUserQuestion MCP tool
  * @param a2aStreamEnabled - Optional flag to enable streaming for A2A external agent calls (default: false)
+ * @param scene - Optional scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
  * @returns Query options and optional sessionRef for dynamic session ID updates
  */
 export interface BuildQueryOptionsResult {
@@ -206,7 +208,8 @@ export async function buildQueryOptions(
   userEnv?: Record<string, string>,
   sessionIdForAskUser?: string,
   agentIdForAskUser?: string,
-  a2aStreamEnabled?: boolean
+  a2aStreamEnabled?: boolean,
+  scene?: string
 ): Promise<BuildQueryOptionsResult> {
   // Determine working directory
   let cwd = process.cwd();
@@ -308,8 +311,24 @@ export async function buildQueryOptions(
     console.log(`📦 No custom path specified, SDK will use bundled CLI`);
   }
 
+  // Determine final system prompt, appending clarifying prompt for new games
+  const vibeGaming = scene === 'vibeGaming';
+  let finalSystemPrompt: SystemPrompt = agent.systemPrompt;
+  if (vibeGaming && VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
+    if (typeof finalSystemPrompt === 'string') {
+      finalSystemPrompt = finalSystemPrompt + '\n\n' + VIBE_GAMING_CLARIFYING_PROMPT;
+    } else {
+      // PresetSystemPrompt object — append to the existing append field
+      finalSystemPrompt = {
+        ...finalSystemPrompt,
+        append: (finalSystemPrompt.append || '') + '\n\n' + VIBE_GAMING_CLARIFYING_PROMPT,
+      };
+    }
+    console.log('🎮 [vibeGaming] Appended new game clarifying prompt to system prompt');
+  }
+
   const queryOptions: Options = {
-    systemPrompt: agent.systemPrompt, // 直接使用 Agent 配置中的 systemPrompt
+    systemPrompt: finalSystemPrompt,
     allowedTools,
     maxTurns: agent.maxTurns,
     cwd,

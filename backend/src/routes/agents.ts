@@ -341,7 +341,8 @@ const ChatRequestSchema = z.object({
     allItems: z.array(z.any()).optional(),
     customContext: z.record(z.any()).optional()
   }).optional(),
-  envVars: z.record(z.string()).optional()
+  envVars: z.record(z.string()).optional(),
+  scene: z.string().optional() // Scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
 }).refine(data => {
   // Either message text or images must be provided
   return data.message.trim().length > 0 || (data.images && data.images.length > 0);
@@ -474,7 +475,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat } = validation.data;
+    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, scene } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -629,7 +630,7 @@ router.post('/chat', async (req, res) => {
         // 构建查询选项（包含 AskUserQuestion MCP 工具）
         // 使用 tempSessionId 作为 MCP 工具的 sessionId（新会话还没有真实 sessionId）
         // Enable A2A streaming for web frontend (real-time updates for external agent calls)
-        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true);
+        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, scene);
 
         // 📊 输出传到 query 中的模型参数
         console.log('📊 [Chat API] QueryOptions 模型参数:');
@@ -1182,6 +1183,17 @@ router.post('/user-response', async (req, res) => {
     const { toolUseId, response, sessionId, agentId } = validation.data;
 
     console.log(`🎤 [AskUserQuestion] Received user response for tool: ${toolUseId}`);
+    console.log(`🎤 [AskUserQuestion]   Frontend sessionId: ${sessionId || '(not provided)'}`);
+    console.log(`🎤 [AskUserQuestion]   Frontend agentId: ${agentId || '(not provided)'}`);
+
+    // Log the pending entry's expected values for debugging
+    const pendingEntry = userInputRegistry.getPendingInput(toolUseId);
+    if (pendingEntry) {
+      console.log(`🎤 [AskUserQuestion]   Pending sessionId: ${pendingEntry.sessionId}`);
+      console.log(`🎤 [AskUserQuestion]   Pending agentId: ${pendingEntry.agentId}`);
+    } else {
+      console.log(`🎤 [AskUserQuestion]   No pending entry found for toolUseId: ${toolUseId}`);
+    }
 
     // 使用带验证的提交方法，防止伪造响应
     const result = userInputRegistry.validateAndSubmitUserResponse(

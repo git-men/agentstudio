@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 import { config } from 'dotenv';
+const BACKEND_ROOT = join(__dirname, '..', '..');
 
 // Re-export path constants for convenient access
 export * from './paths.js';
@@ -96,6 +97,18 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     configData = JSON.parse(content);
   } catch (error) {
     // Config file doesn't exist or can't be read, use empty object
+  }
+
+  // Try to load from local config file (backend/config.local.json) - takes precedence
+  const localConfigPath = join(BACKEND_ROOT, 'config.local.json');
+  try {
+    const content = await readFile(localConfigPath, 'utf-8');
+    const localConfigData = JSON.parse(content);
+    // Merge local config over global config (local takes precedence)
+    configData = { ...configData, ...localConfigData };
+    console.log('✅ Loaded local config from config.local.json');
+  } catch {
+    // Local config file doesn't exist, continue with global config
   }
 
 // Create final configuration with environment variables taking priority over config.json
