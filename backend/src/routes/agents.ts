@@ -506,11 +506,33 @@ router.post('/chat', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx/proxy buffering
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
 
+    // Flush headers immediately to start SSE streaming
+    res.flushHeaders();
+
     // 设置连接管理
     const connectionManager = setupSSEConnectionManagement(req, res, agentId);
+
+    // Send heartbeat to keep connection alive through proxies
+    const heartbeatInterval = setInterval(() => {
+      if (!connectionManager.isConnectionClosed()) {
+        try {
+          res.write(': heartbeat\n\n');
+        } catch {
+          clearInterval(heartbeatInterval);
+        }
+      } else {
+        clearInterval(heartbeatInterval);
+      }
+    }, 5000);
+
+    // Clean up heartbeat when connection closes
+    res.on('close', () => {
+      clearInterval(heartbeatInterval);
+    });
 
     // 🎤 初始化 AskUserQuestion 模块（只会初始化一次）
     initAskUserQuestionModule();
