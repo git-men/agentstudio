@@ -109,7 +109,7 @@ router.post('/', async (req: express.Request<VersionParams>, res) => {
       return res.status(400).json({ error: 'Version message is required' });
     }
 
-    const result = await createVersion(projectPath, message.trim(), slotNumber);
+    const result = await createVersion(projectPath, message.trim());
     
     console.log(`[GitVersion] Created version ${result.tag} for project: ${projectPath}`);
     res.json({
