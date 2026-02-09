@@ -1115,43 +1115,34 @@ router.post('/chat', async (req, res) => {
               }
             }
 
-            // Auto-commit for vibeGaming scene
-            if (scene === 'vibeGaming' && projectPath && resultMsg.subtype === 'success') {
+            // For AGUI output, send finalize events
+            if (outputFormat === 'agui' && aguiAdapter) {
               try {
                 const versionResult = await createVersion(projectPath, `Auto-save after AI response`);
                 console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${projectPath}`);
 
                 // Notify frontend about the new version via SSE before closing
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(`data: ${JSON.stringify({
-                    type: 'auto_version_created',
+                  const versionEvent: AGUIAutoVersionCreatedEvent = {
+                    type: AGUIEventType.AUTO_VERSION_CREATED,
                     version: versionResult,
                     timestamp: Date.now(),
                     agentId,
-                    sessionId: actualSessionId || currentSessionId
-                  })}\n\n`);
+                    sessionId: actualSessionId || currentSessionId,
+                  };
+
+                  if (outputFormat === 'agui') {
+                    res.write(formatAguiEventAsSSE(versionEvent));
+                  } else {
+                    res.write(`data: ${JSON.stringify(versionEvent)}\n\n`);
+                  }
                 }
               } catch (error: any) {
                 // Don't fail the whole request if auto-commit fails (e.g., no changes to commit)
                 console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
               }
             }
-
-            // For AGUI output, send finalize events
-            if (outputFormat === 'agui' && aguiAdapter) {
-              try {
-                const finalEvents = aguiAdapter.finalize();
-                for (const event of finalEvents) {
-                  if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                    res.write(formatAguiEventAsSSE(event));
-                  }
-                }
-                aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
-              } catch (finalizeError) {
-                console.error('Failed to write AGUI finalize events:', finalizeError);
-              }
-            }
-
+            
             // Safety net: ensure RUN_FINISHED is sent even if finalize() failed
             ensureAguiRunFinished();
             console.log(`✅ Received result event (subtype: ${resultMsg.subtype}), closing SSE connection for sessionId: ${actualSessionId || currentSessionId}`);
