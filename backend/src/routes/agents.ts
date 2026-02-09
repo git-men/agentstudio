@@ -21,6 +21,7 @@ import {
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, type AGUIEvent } from '../engines/types.js';
+import { createVersion } from '../services/gitVersionService.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -718,7 +719,7 @@ router.post('/chat', async (req, res) => {
           }
         }
 
-        const currentRequestId = await claudeSession.sendMessage(userMessage, (sdkMessage: SDKMessage) => {
+        const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
           if (isSDKSystemMessage(sdkMessage) && sdkMessage.subtype === "init") {
             // 📊 打印完整的 system.init 消息体，用于调试模型使用情况
             console.log('📊 [Chat API] System Init Message 完整消息体:');
@@ -1049,6 +1050,28 @@ router.post('/chat', async (req, res) => {
                 }
               } catch (finalizeError) {
                 console.error('Failed to write AGUI finalize events:', finalizeError);
+              }
+            }
+
+            // Auto-commit for vibeGaming scene
+            if (scene === 'vibeGaming' && projectPath && resultMsg.subtype === 'success') {
+              try {
+                const versionResult = await createVersion(projectPath, `Auto-save after AI response`);
+                console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${projectPath}`);
+
+                // Notify frontend about the new version via SSE before closing
+                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                  res.write(`data: ${JSON.stringify({
+                    type: 'auto_version_created',
+                    version: versionResult,
+                    timestamp: Date.now(),
+                    agentId,
+                    sessionId: actualSessionId || currentSessionId
+                  })}\n\n`);
+                }
+              } catch (error: any) {
+                // Don't fail the whole request if auto-commit fails (e.g., no changes to commit)
+                console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
               }
             }
 
