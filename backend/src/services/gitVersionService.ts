@@ -126,25 +126,6 @@ async function getNextVersionNumber(projectPath: string): Promise<number> {
 }
 
 /**
- * Get the next version number (auto-increment)
- */
-async function getNextVersionNumber(projectPath: string): Promise<number> {
-  try {
-    const output = await git(projectPath, ['tag', '--list', 'v*', '--sort=-version:refname']);
-    if (!output) return 1;
-
-    const tags = output.split('\n').filter(t => /^v\d+$/.test(t));
-    if (tags.length === 0) return 1;
-
-    // Extract the highest version number
-    const maxVersion = Math.max(...tags.map(t => parseInt(t.substring(1), 10)));
-    return maxVersion + 1;
-  } catch {
-    return 1;
-  }
-}
-
-/**
  * Create a new version (git add + commit + tag)
  */
 export async function createVersion(
