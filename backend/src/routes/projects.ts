@@ -14,6 +14,7 @@ import {
   getApiKey,
 } from '../services/a2a/apiKeyService.js';
 import { A2AConfigSchema, GenerateApiKeyRequestSchema, validateSafe } from '../schemas/a2a.js';
+import { GAME_DEV_SYSTEM_PROMPT } from '../prompts/gameDevSystemPrompt.js';
 
 const router: express.Router = express.Router();
 const readFile = promisify(fs.readFile);
@@ -32,6 +33,34 @@ async function ensureDir(dirPath: string) {
     await mkdir(dirPath, { recursive: true });
   } catch (error) {
     // Directory already exists
+  }
+}
+
+// Sync Cursor rules to project (auto-update for existing projects)
+// Generates the .mdc file from the GAME_DEV_SYSTEM_PROMPT constant (single source of truth)
+function syncCursorRules(projectPath: string): void {
+  try {
+    const mdcContent = `---\nalwaysApply: true\n---\n\n${GAME_DEV_SYSTEM_PROMPT}\n`;
+    const cursorRulesDir = path.join(projectPath, '.cursor', 'rules');
+    const destFile = path.join(cursorRulesDir, 'game-dev-system-prompt.mdc');
+
+    let needsUpdate = false;
+    if (!fs.existsSync(destFile)) {
+      needsUpdate = true;
+    } else {
+      const existing = fs.readFileSync(destFile, 'utf-8');
+      if (existing !== mdcContent) {
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      fs.mkdirSync(cursorRulesDir, { recursive: true });
+      fs.writeFileSync(destFile, mdcContent, 'utf-8');
+    }
+  } catch (error) {
+    // Silently fail - don't break project access if rules sync fails
+    console.warn('Failed to sync Cursor rules:', error);
   }
 }
 
@@ -141,6 +170,11 @@ router.get('/:dirName', async (req, res) => {
     
     if (!project) {
       return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    // Auto-update Cursor rules for existing projects
+    if (project.path && fs.existsSync(project.path)) {
+      syncCursorRules(project.path);
     }
     
     // Include provider/model settings from metadata
@@ -660,6 +694,9 @@ router.post('/create', (req, res) => {
     // Create project directory
     if (!fs.existsSync(projectPath)) {
       fs.mkdirSync(projectPath, { recursive: true });
+
+      // Copy Cursor rules for game development
+      syncCursorRules(projectPath);
 
       // Create .cc-sessions directory and project metadata
       const sessionsDir = path.join(projectPath, '.cc-sessions');

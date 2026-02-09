@@ -8,6 +8,7 @@
 import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import { VIBE_GAMING_CLARIFYING_PROMPT } from '../prompts/vibeGamingPrompt.js';
+import { GAME_DEV_SYSTEM_PROMPT } from '../prompts/gameDevSystemPrompt.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -311,20 +312,32 @@ export async function buildQueryOptions(
     console.log(`📦 No custom path specified, SDK will use bundled CLI`);
   }
 
-  // Determine final system prompt, appending clarifying prompt for new games
+  // Determine final system prompt, appending game-dev rules and clarifying prompt for vibeGaming scene
   const vibeGaming = scene === 'vibeGaming';
   let finalSystemPrompt: SystemPrompt = agent.systemPrompt;
-  if (vibeGaming && VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
-    if (typeof finalSystemPrompt === 'string') {
-      finalSystemPrompt = finalSystemPrompt + '\n\n' + VIBE_GAMING_CLARIFYING_PROMPT;
-    } else {
-      // PresetSystemPrompt object — append to the existing append field
-      finalSystemPrompt = {
-        ...finalSystemPrompt,
-        append: (finalSystemPrompt.append || '') + '\n\n' + VIBE_GAMING_CLARIFYING_PROMPT,
-      };
+  if (vibeGaming) {
+    // Build the extra prompt content: game-dev rules + clarifying prompt
+    const extraParts: string[] = [];
+    if (GAME_DEV_SYSTEM_PROMPT.trim()) {
+      extraParts.push(GAME_DEV_SYSTEM_PROMPT);
     }
-    console.log('🎮 [vibeGaming] Appended new game clarifying prompt to system prompt');
+    if (VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
+      extraParts.push(VIBE_GAMING_CLARIFYING_PROMPT);
+    }
+
+    if (extraParts.length > 0) {
+      const extraPrompt = extraParts.join('\n\n');
+      if (typeof finalSystemPrompt === 'string') {
+        finalSystemPrompt = finalSystemPrompt + '\n\n' + extraPrompt;
+      } else {
+        // PresetSystemPrompt object — append to the existing append field
+        finalSystemPrompt = {
+          ...finalSystemPrompt,
+          append: (finalSystemPrompt.append || '') + '\n\n' + extraPrompt,
+        };
+      }
+      console.log('🎮 [vibeGaming] Appended game-dev rules and clarifying prompt to system prompt');
+    }
   }
 
   const queryOptions: Options = {
