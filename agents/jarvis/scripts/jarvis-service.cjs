@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
 /**
- * Jarvis Service Script
+ * Jarvis Service Script v2.0
  * 
- * Manages todos and journals for Jarvis agent.
- * Uses JSONL format for todos and Markdown files for journals.
+ * Manages todos, journals, and memory for Jarvis agent.
+ * Uses JSONL format for todos, Markdown files for journals and memory.
  * 
  * Usage:
  *   node jarvis-service.cjs list
@@ -17,6 +17,8 @@
  *   node jarvis-service.cjs journals
  *   node jarvis-service.cjs journal-get < input.json
  *   node jarvis-service.cjs journal-save < input.json
+ *   node jarvis-service.cjs memory-list < input.json
+ *   node jarvis-service.cjs memory-get < input.json
  */
 
 const fs = require('fs');
@@ -29,10 +31,8 @@ const path = require('path');
 function getDataDir() {
   const projectPath = process.env.LAVS_PROJECT_PATH;
   if (projectPath) {
-    // Use project's existing data directory
     return path.join(projectPath, 'data');
   }
-  // Fallback to agent's data directory
   return path.join(__dirname, '../data');
 }
 
@@ -45,7 +45,6 @@ function getArchivedFile() {
 }
 
 function getJournalDir() {
-  // Journal is in project root, not inside data
   const projectPath = process.env.LAVS_PROJECT_PATH;
   if (projectPath) {
     return path.join(projectPath, 'journal');
@@ -53,7 +52,14 @@ function getJournalDir() {
   return path.join(__dirname, '../journal');
 }
 
-// Ensure data directory exists
+function getMemoryDir() {
+  const projectPath = process.env.LAVS_PROJECT_PATH;
+  if (projectPath) {
+    return path.join(projectPath, 'memory');
+  }
+  return path.join(__dirname, '../memory');
+}
+
 function ensureDataDir() {
   const dataDir = getDataDir();
   if (!fs.existsSync(dataDir)) {
@@ -102,7 +108,6 @@ function generateTodoId() {
   const todos = loadTodos(getActiveFile());
   const archived = loadTodos(getArchivedFile());
   
-  // Find highest sequence number for today
   const todayPrefix = date + '-';
   let maxSeq = 0;
   
@@ -123,7 +128,6 @@ function generateTodoId() {
 // ============================================================================
 
 function getJournalPath(date) {
-  // date format: YYYY-MM-DD
   const year = date.slice(0, 4);
   const month = parseInt(date.slice(5, 7), 10);
   const monthNames = ['01-January', '02-February', '03-March', '04-April', '05-May', '06-June',
@@ -179,7 +183,11 @@ async function listTodos(input) {
   let filtered = todos;
   
   if (input.status && input.status !== 'all') {
-    filtered = filtered.filter(t => t.status === input.status);
+    if (input.status === 'active') {
+      filtered = filtered.filter(t => t.status === 'pending' || t.status === 'in_progress');
+    } else {
+      filtered = filtered.filter(t => t.status === input.status);
+    }
   }
   if (input.type) {
     filtered = filtered.filter(t => t.type === input.type);
@@ -228,7 +236,6 @@ async function updateTodo(input) {
     if (todo.id === input.id) {
       const updates = input.updates || input;
       
-      // Update allowed fields
       const allowedFields = ['title', 'description', 'status', 'priority', 'deadline', 
                              'scheduledTime', 'assignedAgent', 'agentProject', 'executionStrategy',
                              'tags', 'notes', 'draft'];
@@ -288,11 +295,9 @@ async function archiveTodo(input) {
   const todo = todos[index];
   todo.archivedAt = new Date().toISOString();
   
-  // Remove from active
   todos.splice(index, 1);
   saveTodos(getActiveFile(), todos);
   
-  // Add to archived
   appendTodo(getArchivedFile(), todo);
   
   console.log(JSON.stringify(todo, null, 2));
@@ -301,9 +306,16 @@ async function archiveTodo(input) {
 async function getStats() {
   const todos = loadTodos(getActiveFile());
   const archived = loadTodos(getArchivedFile());
+  const now = new Date();
+  
+  const overdue = todos.filter(t => {
+    if (!t.deadline || t.status === 'completed' || t.status === 'cancelled') return false;
+    return new Date(t.deadline) < now;
+  });
   
   const stats = {
     total: todos.length,
+    draft: todos.filter(t => t.status === 'draft').length,
     pending: todos.filter(t => t.status === 'pending').length,
     in_progress: todos.filter(t => t.status === 'in_progress').length,
     waiting_confirmation: todos.filter(t => t.status === 'waiting_confirmation').length,
@@ -313,6 +325,8 @@ async function getStats() {
     personal: todos.filter(t => t.type === 'personal').length,
     delegated: todos.filter(t => t.type === 'delegated').length,
     mixed: todos.filter(t => t.type === 'mixed').length,
+    overdue: overdue.length,
+    archived_total: archived.length,
   };
   
   console.log(JSON.stringify(stats, null, 2));
@@ -350,7 +364,6 @@ async function checkDue(input) {
     }
   }
   
-  // Sort by deadline
   results.overdue.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
   results.dueSoon.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
   
@@ -366,7 +379,6 @@ async function listJournals(input) {
     return;
   }
   
-  // Recursively find all .md files
   function findFiles(dir) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
@@ -376,10 +388,12 @@ async function listJournals(input) {
       } else if (entry.name.endsWith('.md')) {
         const date = entry.name.replace('.md', '');
         const content = fs.readFileSync(fullPath, 'utf-8');
+        const stat = fs.statSync(fullPath);
         journals.push({
           date,
           path: fullPath,
           preview: content.slice(0, 200) + (content.length > 200 ? '...' : ''),
+          size: stat.size,
         });
       }
     }
@@ -387,10 +401,8 @@ async function listJournals(input) {
   
   findFiles(journalDir);
   
-  // Sort by date descending
   journals.sort((a, b) => b.date.localeCompare(a.date));
   
-  // Apply limit
   const limit = input.limit || 30;
   const limited = journals.slice(0, limit);
   
@@ -434,6 +446,97 @@ async function saveJournal(input) {
 }
 
 // ============================================================================
+// Memory Management
+// ============================================================================
+
+async function listMemory(input) {
+  const memoryDir = getMemoryDir();
+  const items = [];
+  
+  if (!fs.existsSync(memoryDir)) {
+    console.log(JSON.stringify(items, null, 2));
+    return;
+  }
+  
+  const categories = input.category 
+    ? [input.category]
+    : fs.readdirSync(memoryDir, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => e.name);
+  
+  for (const category of categories) {
+    const catDir = path.join(memoryDir, category);
+    if (!fs.existsSync(catDir)) continue;
+    
+    function findMemFiles(dir, relPath) {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        const currentRelPath = relPath ? `${relPath}/${entry.name}` : entry.name;
+        
+        if (entry.isDirectory()) {
+          findMemFiles(fullPath, currentRelPath);
+        } else if (entry.name.endsWith('.md')) {
+          try {
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            const stat = fs.statSync(fullPath);
+            items.push({
+              category,
+              filename: currentRelPath,
+              preview: content.slice(0, 150) + (content.length > 150 ? '...' : ''),
+              size: stat.size,
+              updatedAt: stat.mtime.toISOString(),
+            });
+          } catch (e) {
+            console.error(`[Jarvis] Error reading memory file: ${fullPath}`);
+          }
+        }
+      }
+    }
+    
+    findMemFiles(catDir, '');
+  }
+  
+  // Sort by updatedAt descending
+  items.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+  
+  console.log(JSON.stringify(items, null, 2));
+}
+
+async function getMemory(input) {
+  if (!input.category || !input.filename) {
+    throw new Error('Missing required fields: category, filename');
+  }
+  
+  const memoryDir = getMemoryDir();
+  const filePath = path.join(memoryDir, input.category, input.filename);
+  
+  // Security check: ensure path doesn't escape memory dir
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(memoryDir))) {
+    throw new Error('Invalid path: outside memory directory');
+  }
+  
+  if (!fs.existsSync(filePath)) {
+    console.log(JSON.stringify({ 
+      category: input.category, 
+      filename: input.filename, 
+      content: '', 
+      exists: false 
+    }, null, 2));
+    return;
+  }
+  
+  const content = fs.readFileSync(filePath, 'utf-8');
+  console.log(JSON.stringify({ 
+    category: input.category, 
+    filename: input.filename, 
+    content, 
+    exists: true 
+  }, null, 2));
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -443,7 +546,7 @@ async function main() {
   if (!action) {
     console.error('Error: No action specified');
     console.error('Usage: node jarvis-service.cjs <action>');
-    console.error('Actions: list, add, update, delete, archive, stats, check, journals, journal-get, journal-save');
+    console.error('Actions: list, add, update, delete, archive, stats, check, journals, journal-get, journal-save, memory-list, memory-get');
     process.exit(1);
   }
   
@@ -480,6 +583,12 @@ async function main() {
         break;
       case 'journal-save':
         await saveJournal(input);
+        break;
+      case 'memory-list':
+        await listMemory(input);
+        break;
+      case 'memory-get':
+        await getMemory(input);
         break;
       default:
         throw new Error(`Unknown action: ${action}`);

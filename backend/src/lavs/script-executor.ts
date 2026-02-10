@@ -125,14 +125,20 @@ export class ScriptExecutor {
   /**
    * Get value from nested object by dot path
    * e.g., "user.name" from { user: { name: "Alice" } } => "Alice"
+   * Protects against prototype pollution by blocking __proto__, constructor, prototype keys.
    */
-  private getValueByPath(obj: any, path: string): any {
+  private getValueByPath(obj: unknown, path: string): unknown {
+    // Block prototype pollution attacks
+    const BLOCKED_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
     const keys = path.split('.');
-    let current = obj;
+    let current: unknown = obj;
 
     for (const key of keys) {
       if (current == null) return undefined;
-      current = current[key];
+      if (BLOCKED_KEYS.has(key)) return undefined;
+      if (typeof current !== 'object') return undefined;
+      current = (current as Record<string, unknown>)[key];
     }
 
     return current;
@@ -141,7 +147,7 @@ export class ScriptExecutor {
   /**
    * Build environment variables for script execution
    */
-  private buildEnvironment(
+  buildEnvironment(
     handler: ScriptHandler,
     input: any,
     context: ExecutionContext
@@ -149,9 +155,12 @@ export class ScriptExecutor {
     const env: Record<string, string> = {
       // Inherit base environment (filtered for security)
       ...this.getBaseEnvironment(),
-      // Handler-specific env vars
+      // LAVS context variables
+      LAVS_AGENT_ID: context.agentId,
+      LAVS_ENDPOINT_ID: context.endpointId,
+      // Handler-specific env vars (declared by manifest author)
       ...(handler.env || {}),
-      // Context env vars
+      // Context env vars (e.g. LAVS_PROJECT_PATH)
       ...(context.env || {}),
     };
 
@@ -160,14 +169,76 @@ export class ScriptExecutor {
       Object.assign(env, this.inputToEnv(input));
     }
 
-    return env;
+    // Final safety pass: remove any sensitive vars that might have leaked through
+    return this.filterSensitiveVars(env);
+  }
+
+  /**
+   * Sensitive environment variable patterns (case-insensitive match).
+   * These keywords in variable names indicate potentially sensitive data.
+   */
+  private static readonly SENSITIVE_PATTERNS = [
+    'SECRET',
+    'TOKEN',
+    'PASSWORD',
+    'PASSWD',
+    'CREDENTIAL',
+    'PRIVATE_KEY',
+    'API_KEY',
+    'APIKEY',
+    'ACCESS_KEY',
+    'AUTH',
+  ];
+
+  /**
+   * Whitelist of variable names that are safe even if they match sensitive patterns.
+   * For example, LAVS variables or NODE_ENV.
+   */
+  private static readonly SAFE_OVERRIDES = new Set([
+    'LAVS_AGENT_ID',
+    'LAVS_ENDPOINT_ID',
+    'LAVS_PROJECT_PATH',
+    'NODE_ENV',
+  ]);
+
+  /**
+   * Filter out environment variables that match sensitive patterns.
+   * Variables explicitly declared in handler.env are preserved (they are
+   * intentionally set by the manifest author), but inherited vars from
+   * process.env that match sensitive patterns are removed.
+   *
+   * @param env - Environment variables to filter
+   * @returns Filtered environment variables
+   */
+  filterSensitiveVars(env: Record<string, string>): Record<string, string> {
+    const filtered: Record<string, string> = {};
+
+    for (const [key, value] of Object.entries(env)) {
+      // Always allow safe overrides
+      if (ScriptExecutor.SAFE_OVERRIDES.has(key)) {
+        filtered[key] = value;
+        continue;
+      }
+
+      // Check if variable name matches any sensitive pattern
+      const upperKey = key.toUpperCase();
+      const isSensitive = ScriptExecutor.SENSITIVE_PATTERNS.some(
+        (pattern) => upperKey.includes(pattern)
+      );
+
+      if (!isSensitive) {
+        filtered[key] = value;
+      }
+    }
+
+    return filtered;
   }
 
   /**
    * Get base environment variables (filtered for security)
    * Only include safe variables, exclude sensitive ones
    */
-  private getBaseEnvironment(): Record<string, string> {
+  getBaseEnvironment(): Record<string, string> {
     const env: Record<string, string> = {};
 
     // Whitelist of safe env vars to inherit
@@ -179,6 +250,9 @@ export class ScriptExecutor {
       'LC_ALL',
       'TZ',
       'NODE_ENV',
+      'SHELL',
+      'TMPDIR',
+      'TERM',
     ];
 
     for (const key of safeVars) {
