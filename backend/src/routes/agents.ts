@@ -580,6 +580,7 @@ router.post('/chat', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx/proxy buffering
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+    res.flushHeaders(); // Flush headers immediately to start streaming
 
     // Flush headers immediately to start SSE streaming
     res.flushHeaders();
