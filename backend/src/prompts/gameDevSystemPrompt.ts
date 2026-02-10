@@ -18,6 +18,7 @@ Projects *MUST* follow these rules:
 2. MUST have these scripts in \`package.json\`: \`start\`, \`pause\`, \`stop\` for changing the status of the game
 3. MUST use Node.js stack for scripts
 4. MUST expose hooks for \`package.json\` scripts (\`start\`, \`pause\`, \`stop\`) to control the game state
+5. ABSOLUTELY MUST NOT modify the \`base\` setting in \`vite.config.ts\`. The \`base\` value is \`'/'\` and must remain exactly as-is. Never change, remove, or override it under any circumstances. This is critical for the deployment environment to work correctly
 `.trim();
 
 /** Build the full game-dev system prompt with a concrete project root path */
