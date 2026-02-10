@@ -2,10 +2,12 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pluginPaths } from './pluginPaths';
 import { ParsedPlugin } from '../types/plugins';
+import { getEnginePaths } from '../config/engineConfig';
 
 /**
  * Plugin Symlink Service
  * Manages symlinks for plugin components in ~/.claude
+ * Also handles MCP server configuration by merging into mcp.json
  */
 class PluginSymlink {
   /**
@@ -31,7 +33,10 @@ class PluginSymlink {
       await this.createSkillSymlink(skillDir, skill.name, marketplaceName, pluginName);
     }
 
-    // Note: Hooks and MCP servers are typically not symlinked, but directly referenced
+    // Install MCP servers by merging their config into ~/.claude/mcp.json
+    if (components.mcpServers.length > 0) {
+      await this.installMcpServers(parsedPlugin);
+    }
   }
 
   /**
@@ -53,6 +58,11 @@ class PluginSymlink {
     // Remove skill symlinks
     for (const skill of components.skills) {
       await this.removeSkillSymlink(skill.name, marketplaceName, pluginName);
+    }
+
+    // Remove MCP server entries from mcp.json
+    if (components.mcpServers.length > 0) {
+      await this.removeMcpServers(parsedPlugin);
     }
   }
 
@@ -203,6 +213,99 @@ class PluginSymlink {
   }
 
   /**
+   * Install MCP servers from a plugin's .mcp.json into the engine's mcp.json
+   * Reads the plugin's .mcp.json file and merges server entries into ~/.claude/mcp.json
+   */
+  private async installMcpServers(parsedPlugin: ParsedPlugin): Promise<void> {
+    const { components, pluginName } = parsedPlugin;
+    const mcpConfigPath = getEnginePaths().mcpConfigPath;
+
+    for (const mcpServer of components.mcpServers) {
+      try {
+        // Read the .mcp.json file from the plugin
+        const mcpJsonPath = mcpServer.path;
+        if (!fs.existsSync(mcpJsonPath)) continue;
+
+        const mcpContent = JSON.parse(fs.readFileSync(mcpJsonPath, 'utf-8'));
+
+        // Extract server entries (handle both wrapped and flat formats)
+        let serverEntries: Record<string, any> = {};
+        if (mcpContent.mcpServers && typeof mcpContent.mcpServers === 'object') {
+          serverEntries = mcpContent.mcpServers;
+        } else {
+          for (const [key, value] of Object.entries(mcpContent)) {
+            if (key.startsWith('$')) continue;
+            if (typeof value === 'object' && value !== null) {
+              serverEntries[key] = value;
+            }
+          }
+        }
+
+        if (Object.keys(serverEntries).length === 0) continue;
+
+        // Read existing mcp.json or create new
+        let existingConfig: Record<string, any> = {};
+        if (fs.existsSync(mcpConfigPath)) {
+          try {
+            existingConfig = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+          } catch {
+            existingConfig = {};
+          }
+        }
+
+        if (!existingConfig.mcpServers) {
+          existingConfig.mcpServers = {};
+        }
+
+        // Merge server entries (with metadata tracking which plugin installed them)
+        for (const [name, config] of Object.entries(serverEntries)) {
+          existingConfig.mcpServers[name] = {
+            ...(config as any),
+            _installedBy: `${parsedPlugin.marketplaceName}/${pluginName}`,
+          };
+          console.log(`Registered MCP server: ${name} (from ${pluginName})`);
+        }
+
+        // Write back
+        fs.writeFileSync(mcpConfigPath, JSON.stringify(existingConfig, null, 2), 'utf-8');
+      } catch (error) {
+        console.error(`Failed to install MCP server from ${pluginName}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Remove MCP server entries that were installed by this plugin
+   */
+  private async removeMcpServers(parsedPlugin: ParsedPlugin): Promise<void> {
+    const { marketplaceName, pluginName } = parsedPlugin;
+    const mcpConfigPath = getEnginePaths().mcpConfigPath;
+    const installedBy = `${marketplaceName}/${pluginName}`;
+
+    try {
+      if (!fs.existsSync(mcpConfigPath)) return;
+
+      const config = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+      if (!config.mcpServers) return;
+
+      let removed = false;
+      for (const [name, serverConfig] of Object.entries(config.mcpServers)) {
+        if ((serverConfig as any)._installedBy === installedBy) {
+          delete config.mcpServers[name];
+          console.log(`Removed MCP server: ${name} (from ${pluginName})`);
+          removed = true;
+        }
+      }
+
+      if (removed) {
+        fs.writeFileSync(mcpConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+      }
+    } catch (error) {
+      console.error(`Failed to remove MCP servers from ${pluginName}:`, error);
+    }
+  }
+
+  /**
    * Check if symlinks exist for a plugin
    */
   async checkSymlinks(parsedPlugin: ParsedPlugin): Promise<boolean> {
@@ -230,6 +333,25 @@ class PluginSymlink {
       const symlinkPath = path.join(skillsDir, skill.name);
       if (fs.existsSync(symlinkPath)) {
         return true;
+      }
+    }
+
+    // Check if any MCP servers from this plugin are registered
+    for (const mcpServer of components.mcpServers) {
+      const mcpConfigPath = getEnginePaths().mcpConfigPath;
+      if (fs.existsSync(mcpConfigPath)) {
+        try {
+          const config = JSON.parse(fs.readFileSync(mcpConfigPath, 'utf-8'));
+          if (config.mcpServers) {
+            for (const serverConfig of Object.values(config.mcpServers)) {
+              if ((serverConfig as any)._installedBy === `${parsedPlugin.marketplaceName}/${parsedPlugin.pluginName}`) {
+                return true;
+              }
+            }
+          }
+        } catch {
+          // Ignore parse errors
+        }
       }
     }
 
