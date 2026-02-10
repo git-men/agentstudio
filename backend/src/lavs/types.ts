@@ -145,7 +145,7 @@ export class LAVSError extends Error {
   constructor(
     public code: number,
     message: string,
-    public data?: any
+    public data?: Record<string, unknown>
   ) {
     super(message);
     this.name = 'LAVSError';

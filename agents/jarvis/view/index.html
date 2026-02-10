@@ -5,1041 +5,1178 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Jarvis Dashboard</title>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --bg-primary: #0a0a0a;
-      --bg-secondary: #1a1a1a;
-      --bg-tertiary: #2a2a2a;
+      --bg-primary: #09090b;
+      --bg-secondary: #18181b;
+      --bg-tertiary: #27272a;
+      --bg-hover: #3f3f46;
       --text-primary: #fafafa;
       --text-secondary: #a1a1aa;
       --text-muted: #71717a;
-      --border-color: #27272a;
-      --accent-color: #6366f1;
+      --border: #27272a;
+      --border-light: #3f3f46;
+      --accent: #6366f1;
       --accent-hover: #818cf8;
-      --danger-color: #ef4444;
-      --warning-color: #eab308;
-      --success-color: #22c55e;
+      --accent-bg: rgba(99, 102, 241, 0.12);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.12);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.12);
+      --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --blue: #3b82f6;
+      --blue-bg: rgba(59, 130, 246, 0.12);
+      --purple: #a855f7;
+      --purple-bg: rgba(168, 85, 247, 0.12);
+      --radius: 8px;
+      --radius-lg: 12px;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4);
+      --transition: 150ms ease;
     }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      overflow: hidden;
-    }
+    html, body { height: 100%; overflow: hidden; }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', sans-serif;
       background: var(--bg-primary);
       color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
     }
 
-    .dashboard {
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
+    /* ========== Layout ========== */
+    .app { height: 100vh; display: flex; flex-direction: column; }
 
     .header {
-      padding: 16px 24px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
       display: flex;
       justify-content: space-between;
       align-items: center;
       flex-shrink: 0;
+      background: var(--bg-primary);
     }
 
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
+    .header-left { display: flex; align-items: center; gap: 12px; }
+
+    .avatar {
+      width: 36px; height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; font-weight: 700; color: white;
     }
 
-    .header-icon {
-      font-size: 28px;
-    }
+    .header-info h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+    .header-info p { font-size: 11px; color: var(--text-muted); }
 
-    .header-title {
-      font-size: 20px;
-      font-weight: 600;
-    }
+    .header-actions { display: flex; gap: 6px; }
 
-    .header-subtitle {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .header-actions {
-      display: flex;
-      gap: 8px;
-    }
-
+    /* ========== Buttons ========== */
     .btn {
-      padding: 8px 16px;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 500;
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      gap: 6px;
+      padding: 7px 14px; border-radius: var(--radius); border: none;
+      cursor: pointer; font-size: 12px; font-weight: 500;
+      transition: all var(--transition); display: inline-flex;
+      align-items: center; gap: 5px; white-space: nowrap;
     }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-ghost { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-danger:hover { opacity: 0.9; }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
 
-    .btn-primary {
-      background: var(--accent-color);
-      color: white;
-    }
-
-    .btn-primary:hover {
-      background: var(--accent-hover);
-    }
-
-    .btn-secondary {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      border: 1px solid var(--border-color);
-    }
-
-    .btn-secondary:hover {
-      background: var(--border-color);
-    }
-
-    .btn-danger {
-      background: var(--danger-color);
-      color: white;
-    }
-
+    /* ========== Stats Bar ========== */
     .stats-bar {
-      padding: 16px 24px;
-      display: flex;
-      gap: 16px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 12px 20px;
+      display: flex; gap: 10px;
+      border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       overflow-x: auto;
     }
+    .stats-bar::-webkit-scrollbar { display: none; }
 
-    .stat-card {
-      padding: 12px 16px;
+    .stat {
+      padding: 10px 14px;
       background: var(--bg-secondary);
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      min-width: 120px;
-    }
-
-    .stat-value {
-      font-size: 24px;
-      font-weight: 700;
-    }
-
-    .stat-label {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .tabs {
-      padding: 12px 24px;
-      display: flex;
-      gap: 4px;
-      border-bottom: 1px solid var(--border-color);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      min-width: 100px;
       flex-shrink: 0;
     }
+    .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
+    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 
-    .tab {
-      padding: 8px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      color: var(--text-secondary);
-      transition: all 0.2s;
-    }
-
-    .tab:hover {
-      background: var(--bg-secondary);
-    }
-
-    .tab.active {
-      background: var(--accent-color);
-      color: white;
-    }
-
-    .filters {
-      padding: 12px 24px;
-      display: flex;
-      gap: 8px;
-      border-bottom: 1px solid var(--border-color);
+    /* ========== Tabs ========== */
+    .nav {
+      padding: 0 20px;
+      display: flex; gap: 2px;
+      border-bottom: 1px solid var(--border);
       flex-shrink: 0;
+      background: var(--bg-primary);
     }
 
-    .filter-select {
-      padding: 6px 12px;
-      border-radius: 6px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      color: var(--text-primary);
-      font-size: 13px;
-    }
-
-    .content {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px 24px;
-    }
-
-    .todo-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .todo-item {
-      padding: 16px;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
-      border-left: 3px solid var(--border-color);
+    .nav-item {
+      padding: 10px 16px;
+      font-size: 13px; font-weight: 500;
+      color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+      transition: all var(--transition);
+      display: flex; align-items: center; gap: 6px;
     }
+    .nav-item:hover { color: var(--text-secondary); }
+    .nav-item.active { color: var(--text-primary); border-bottom-color: var(--accent); }
 
-    .todo-item:hover {
+    .nav-badge {
       background: var(--bg-tertiary);
-      transform: translateX(2px);
-    }
-
-    .todo-item.priority-high {
-      border-left-color: var(--danger-color);
-    }
-
-    .todo-item.priority-medium {
-      border-left-color: var(--warning-color);
-    }
-
-    .todo-item.priority-low {
-      border-left-color: var(--success-color);
-    }
-
-    .todo-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 6px;
-    }
-
-    .todo-title {
-      font-size: 15px;
-      font-weight: 500;
-    }
-
-    .todo-title.completed {
-      text-decoration: line-through;
-      opacity: 0.6;
-    }
-
-    .todo-badges {
-      display: flex;
-      gap: 6px;
-    }
-
-    .badge {
-      padding: 2px 8px;
-      border-radius: 9999px;
-      font-size: 11px;
-      font-weight: 600;
-    }
-
-    .badge-high {
-      background: rgba(239, 68, 68, 0.2);
-      color: #f87171;
-    }
-
-    .badge-medium {
-      background: rgba(234, 179, 8, 0.2);
-      color: #facc15;
-    }
-
-    .badge-low {
-      background: rgba(34, 197, 94, 0.2);
-      color: #4ade80;
-    }
-
-    .badge-pending {
-      background: rgba(234, 179, 8, 0.2);
-      color: #facc15;
-    }
-
-    .badge-in_progress {
-      background: rgba(59, 130, 246, 0.2);
-      color: #60a5fa;
-    }
-
-    .todo-meta {
-      font-size: 12px;
-      color: var(--text-secondary);
-    }
-
-    .todo-tags {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-      margin-top: 6px;
-    }
-
-    .tag {
-      padding: 2px 6px;
-      background: var(--bg-tertiary);
-      border-radius: 4px;
-      font-size: 11px;
+      padding: 1px 7px; border-radius: 99px;
+      font-size: 11px; font-weight: 600;
       color: var(--text-muted);
     }
+    .nav-item.active .nav-badge { background: var(--accent-bg); color: var(--accent); }
 
-    .journal-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+    /* ========== Toolbar ========== */
+    .toolbar {
+      padding: 10px 20px;
+      display: flex; gap: 8px; align-items: center;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
     }
 
-    .journal-item {
-      padding: 16px;
-      background: var(--bg-secondary);
-      border-radius: 8px;
-      border: 1px solid var(--border-color);
+    .select {
+      padding: 6px 10px; border-radius: var(--radius);
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      color: var(--text-primary); font-size: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+    }
+    .select:focus { outline: none; border-color: var(--accent); }
+
+    .search-input {
+      padding: 6px 10px; border-radius: var(--radius);
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      color: var(--text-primary); font-size: 12px;
+      flex: 1; max-width: 240px;
+    }
+    .search-input:focus { outline: none; border-color: var(--accent); }
+    .search-input::placeholder { color: var(--text-muted); }
+
+    /* ========== Content ========== */
+    .content { flex: 1; overflow-y: auto; }
+    .content::-webkit-scrollbar { width: 6px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    .content::-webkit-scrollbar-thumb:hover { background: var(--bg-hover); }
+
+    .pad { padding: 16px 20px; }
+
+    /* ========== Todo Items ========== */
+    .todo-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .todo-card {
+      padding: 14px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+      position: relative;
+    }
+    .todo-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+    .todo-card.overdue { border-left: 3px solid var(--danger); }
+    .todo-card.high { border-left: 3px solid var(--danger); }
+    .todo-card.medium { border-left: 3px solid var(--warning); }
+    .todo-card.low { border-left: 3px solid var(--success); }
+
+    .todo-row { display: flex; align-items: flex-start; gap: 10px; }
+
+    .todo-icon {
+      width: 20px; height: 20px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; margin-top: 1px;
     }
 
-    .journal-item:hover {
-      background: var(--bg-tertiary);
-    }
+    .todo-body { flex: 1; min-width: 0; }
 
-    .journal-date {
-      font-size: 15px;
-      font-weight: 500;
-      margin-bottom: 4px;
-    }
+    .todo-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
-    .journal-preview {
-      font-size: 13px;
-      color: var(--text-secondary);
+    .todo-title {
+      font-size: 13px; font-weight: 500; color: var(--text-primary);
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .todo-title.done { text-decoration: line-through; opacity: 0.5; }
+
+    .todo-id { font-size: 10px; color: var(--text-muted); font-family: monospace; }
+
+    .todo-badges { display: flex; gap: 4px; flex-wrap: wrap; margin-left: auto; flex-shrink: 0; }
+
+    .badge {
+      padding: 2px 7px; border-radius: 99px;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.02em;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    }
+    .badge-high { background: var(--danger-bg); color: #f87171; }
+    .badge-medium { background: var(--warning-bg); color: #fbbf24; }
+    .badge-low { background: var(--success-bg); color: #34d399; }
+    .badge-draft { background: var(--purple-bg); color: #c084fc; }
+    .badge-pending { background: var(--warning-bg); color: #fbbf24; }
+    .badge-in_progress { background: var(--blue-bg); color: #60a5fa; }
+    .badge-waiting_confirmation { background: var(--purple-bg); color: #c084fc; }
+    .badge-completed { background: var(--success-bg); color: #34d399; }
+    .badge-cancelled { background: var(--bg-tertiary); color: var(--text-muted); }
+    .badge-personal { background: var(--blue-bg); color: #60a5fa; }
+    .badge-delegated { background: var(--accent-bg); color: var(--accent-hover); }
+    .badge-mixed { background: var(--purple-bg); color: #c084fc; }
+    .badge-overdue { background: var(--danger-bg); color: #f87171; }
+
+    .todo-desc {
+      font-size: 12px; color: var(--text-secondary);
+      margin-top: 4px; line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
     }
 
-    .modal-overlay {
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.7);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .todo-meta-row {
+      display: flex; gap: 12px; margin-top: 8px;
+      font-size: 11px; color: var(--text-muted);
+      flex-wrap: wrap; align-items: center;
+    }
+    .todo-meta-row span { display: flex; align-items: center; gap: 3px; }
+
+    .todo-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+    .tag {
+      padding: 1px 6px; background: var(--bg-tertiary); border-radius: 4px;
+      font-size: 10px; color: var(--text-muted);
+    }
+
+    /* ========== Todo Detail Panel ========== */
+    .detail-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
       z-index: 100;
+      display: flex; justify-content: flex-end;
+    }
+
+    .detail-panel {
+      width: 520px; max-width: 100%;
+      background: var(--bg-primary);
+      border-left: 1px solid var(--border);
+      height: 100%; overflow-y: auto;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { transform: translateX(100%); }
+      to { transform: translateX(0); }
+    }
+
+    .detail-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+      position: sticky; top: 0; background: var(--bg-primary); z-index: 1;
+    }
+
+    .detail-body { padding: 20px; }
+
+    .detail-section { margin-bottom: 20px; }
+    .detail-section-title {
+      font-size: 11px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+
+    .detail-field { margin-bottom: 12px; }
+    .detail-label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; }
+    .detail-value { font-size: 13px; color: var(--text-primary); }
+
+    .progress-log {
+      max-height: 300px; overflow-y: auto;
+      border: 1px solid var(--border); border-radius: var(--radius);
+    }
+    .progress-entry {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .progress-entry:last-child { border-bottom: none; }
+    .progress-time { font-size: 10px; color: var(--text-muted); margin-bottom: 2px; font-family: monospace; }
+    .progress-content { color: var(--text-secondary); line-height: 1.5; word-break: break-word; }
+
+    /* ========== Journal Items ========== */
+    .journal-list { display: flex; flex-direction: column; gap: 6px; }
+
+    .journal-card {
+      padding: 14px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .journal-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+
+    .journal-date { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+    .journal-preview {
+      font-size: 12px; color: var(--text-secondary);
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .journal-size { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ========== Journal Viewer ========== */
+    .journal-viewer {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+      font-size: 12px; line-height: 1.8;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 60vh; overflow-y: auto;
+      color: var(--text-secondary);
+    }
+
+    /* ========== Memory Items ========== */
+    .memory-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 10px;
+    }
+
+    .memory-card {
+      padding: 14px 16px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .memory-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+
+    .memory-cat {
+      font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--accent); margin-bottom: 4px;
+    }
+    .memory-filename { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+    .memory-preview {
+      font-size: 11px; color: var(--text-secondary); line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .memory-meta { font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+
+    .memory-category-tabs {
+      display: flex; gap: 4px; flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .cat-tab {
+      padding: 4px 10px; border-radius: 99px;
+      font-size: 11px; font-weight: 500;
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      color: var(--text-muted); cursor: pointer;
+      transition: all var(--transition);
+    }
+    .cat-tab:hover { border-color: var(--border-light); color: var(--text-secondary); }
+    .cat-tab.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+
+    /* ========== Form / Modal ========== */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.65);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
     }
 
     .modal {
       background: var(--bg-primary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      width: 90%;
-      max-width: 600px;
-      max-height: 80vh;
-      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      width: 90%; max-width: 520px;
+      max-height: 85vh; overflow-y: auto;
       padding: 24px;
+      animation: fadeIn 0.15s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.96); }
+      to { opacity: 1; transform: scale(1); }
     }
 
     .modal-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 20px;
     }
-
-    .modal-title {
-      font-size: 18px;
-      font-weight: 600;
-    }
+    .modal-title { font-size: 16px; font-weight: 600; }
 
     .close-btn {
-      background: none;
-      border: none;
-      color: var(--text-secondary);
-      cursor: pointer;
-      font-size: 24px;
-      padding: 0;
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 20px; padding: 4px;
+      border-radius: 6px; transition: all var(--transition);
     }
+    .close-btn:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
-    .form-group {
-      margin-bottom: 16px;
-    }
-
+    .form-group { margin-bottom: 14px; }
     .form-label {
-      display: block;
-      font-size: 13px;
-      font-weight: 500;
-      margin-bottom: 6px;
-      color: var(--text-secondary);
+      display: block; font-size: 12px; font-weight: 500;
+      color: var(--text-secondary); margin-bottom: 5px;
+    }
+    .form-input, .form-textarea {
+      width: 100%; padding: 8px 12px;
+      background: var(--bg-secondary); border: 1px solid var(--border);
+      border-radius: var(--radius); color: var(--text-primary);
+      font-size: 13px; font-family: inherit;
+    }
+    .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--accent); }
+    .form-textarea { resize: vertical; min-height: 60px; }
+
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    .form-actions {
+      display: flex; justify-content: flex-end; gap: 8px;
+      margin-top: 20px; padding-top: 16px;
+      border-top: 1px solid var(--border);
     }
 
-    .form-input {
-      width: 100%;
-      padding: 10px 12px;
-      background: var(--bg-secondary);
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      color: var(--text-primary);
-      font-size: 14px;
+    /* ========== Empty & Loading ========== */
+    .empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+    .empty-icon { font-size: 36px; margin-bottom: 8px; opacity: 0.5; }
+    .empty-text { font-size: 13px; }
+
+    .loading { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
+
+    .error-box {
+      padding: 12px 16px; margin: 16px 20px;
+      background: var(--danger-bg); border: 1px solid rgba(239,68,68,0.3);
+      border-radius: var(--radius); color: #fca5a5; font-size: 12px;
     }
 
-    .form-input:focus {
-      outline: none;
-      border-color: var(--accent-color);
-    }
-
-    .form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .empty-state {
-      text-align: center;
-      padding: 48px;
-      color: var(--text-secondary);
-    }
-
-    .loading {
-      text-align: center;
-      padding: 24px;
-      color: var(--text-secondary);
-    }
-
-    .error {
-      padding: 12px;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid var(--danger-color);
-      border-radius: 6px;
-      color: #fca5a5;
-      font-size: 13px;
-      margin-bottom: 16px;
+    /* ========== Responsive ========== */
+    @media (max-width: 600px) {
+      .stat { min-width: 80px; padding: 8px 10px; }
+      .stat-value { font-size: 18px; }
+      .detail-panel { width: 100%; }
+      .memory-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
   <div id="root"></div>
-
   <script>
+  (function() {
+    'use strict';
+
+    // ========================================================================
     // State
-    const state = {
-      todos: [],
-      journals: [],
-      stats: { total: 0, pending: 0, in_progress: 0, completed: 0, high_priority: 0 },
-      activeTab: 'todos',
-      filterStatus: 'active',
-      filterPriority: '',
-      loading: true,
-      error: null,
-      showCreateModal: false,
-      showEditModal: false,
-      editingTodo: null,
-      showJournalModal: false,
-      viewingJournal: null,
-      journalLoading: false,
+    // ========================================================================
+    const S = {
+      todos: [], journals: [], memoryItems: [], stats: {},
+      tab: 'todos', // todos | journals | memory
+      filterStatus: 'active', filterPriority: '', filterType: '', searchQuery: '',
+      memoryCat: '',
+      loading: true, error: null,
+      showCreate: false, showDetail: false, detailTodo: null,
+      showJournal: false, viewingJournal: null, journalLoading: false,
+      showMemory: false, viewingMemory: null, memoryLoading: false,
     };
 
-    // Get API base from window context or fallback
-    function getApiBase() {
-      const agentId = window.LAVS_AGENT_ID || 'jarvis';
-      return '/api/agents/' + agentId + '/lavs';
+    // ========================================================================
+    // API
+    // ========================================================================
+    function apiBase() {
+      return '/api/agents/' + (window.LAVS_AGENT_ID || 'jarvis') + '/lavs';
     }
 
-    // API Calls
-    async function callLavs(toolName, input) {
-      input = input || {};
-      const base = getApiBase();
-      const projectPath = window.LAVS_PROJECT_PATH || '';
-      const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + (localStorage.getItem('jwt') || localStorage.getItem('auth_token') || ''),
-      };
-      if (projectPath) {
-        headers['X-Project-Path'] = projectPath;
-      }
-      const response = await fetch(base + '/' + toolName, {
-        method: 'POST',
-        headers: headers,
-        body: JSON.stringify(input),
+    async function call(endpoint, input) {
+      const pp = window.LAVS_PROJECT_PATH || '';
+      const h = { 'Content-Type': 'application/json' };
+      const t = localStorage.getItem('jwt') || localStorage.getItem('auth_token') || '';
+      if (t) h['Authorization'] = 'Bearer ' + t;
+      if (pp) h['X-Project-Path'] = pp;
+      const r = await fetch(apiBase() + '/' + endpoint, {
+        method: 'POST', headers: h, body: JSON.stringify(input || {}),
       });
-      
-      if (!response.ok) {
-        throw new Error('API Error: ' + response.status);
-      }
-      
-      const data = await response.json();
-      return data.result || data;
+      if (!r.ok) throw new Error('API Error: ' + r.status);
+      const d = await r.json();
+      return d.result !== undefined ? d.result : d;
     }
 
-    async function loadData() {
-      state.loading = true;
-      state.error = null;
-      render();
-
+    // ========================================================================
+    // Data Loading
+    // ========================================================================
+    async function loadAll() {
+      S.loading = true; S.error = null; render();
       try {
-        const results = await Promise.all([
-          callLavs('listTodos', {}),
-          callLavs('getStats', {}),
-          callLavs('listJournals', { limit: 10 }),
+        const [todos, stats, journals] = await Promise.all([
+          call('listTodos', {}),
+          call('getStats', {}),
+          call('listJournals', { limit: 30 }),
         ]);
-
-        state.todos = Array.isArray(results[0]) ? results[0] : [];
-        state.stats = results[1] || state.stats;
-        state.journals = Array.isArray(results[2]) ? results[2] : [];
-        state.loading = false;
-      } catch (e) {
-        state.error = e.message;
-        state.loading = false;
+        S.todos = Array.isArray(todos) ? todos : [];
+        S.stats = stats || {};
+        S.journals = Array.isArray(journals) ? journals : [];
+        S.loading = false;
+      } catch(e) {
+        S.error = e.message; S.loading = false;
       }
-      
       render();
     }
 
-    async function addTodo(data) {
+    async function loadMemory(cat) {
       try {
-        await callLavs('addTodo', data);
-        state.showCreateModal = false;
-        await loadData();
-      } catch (e) {
-        state.error = e.message;
-        render();
+        const items = await call('listMemory', cat ? { category: cat } : {});
+        S.memoryItems = Array.isArray(items) ? items : [];
+      } catch(e) {
+        S.memoryItems = [];
       }
+      render();
     }
 
-    async function updateTodo(id, updates) {
+    // ========================================================================
+    // Actions
+    // ========================================================================
+    async function createTodo(data) {
       try {
-        await callLavs('updateTodo', { id: id, updates: updates });
-        state.showEditModal = false;
-        state.editingTodo = null;
-        await loadData();
-      } catch (e) {
-        state.error = e.message;
-        render();
-      }
+        await call('addTodo', data);
+        S.showCreate = false;
+        await loadAll();
+      } catch(e) { S.error = e.message; render(); }
     }
 
-    async function deleteTodo(id) {
+    async function doUpdateTodo(id, updates) {
+      try {
+        await call('updateTodo', { id, updates });
+        S.showDetail = false; S.detailTodo = null;
+        await loadAll();
+      } catch(e) { S.error = e.message; render(); }
+    }
+
+    async function doDeleteTodo(id) {
       if (!confirm('确定要删除这个待办吗？')) return;
       try {
-        await callLavs('deleteTodo', { id: id });
-        state.showEditModal = false;
-        state.editingTodo = null;
-        await loadData();
-      } catch (e) {
-        state.error = e.message;
-        render();
-      }
+        await call('deleteTodo', { id });
+        S.showDetail = false; S.detailTodo = null;
+        await loadAll();
+      } catch(e) { S.error = e.message; render(); }
     }
 
-    async function viewJournal(date) {
-      state.journalLoading = true;
-      state.viewingJournal = { date: date, content: '', exists: false };
-      state.showJournalModal = true;
-      render();
-
+    async function doArchiveTodo(id) {
+      if (!confirm('确定要归档这个待办吗？')) return;
       try {
-        const result = await callLavs('getJournal', { date: date });
-        state.viewingJournal = result;
-        state.journalLoading = false;
-      } catch (e) {
-        state.error = e.message;
-        state.journalLoading = false;
-      }
+        await call('archiveTodo', { id });
+        S.showDetail = false; S.detailTodo = null;
+        await loadAll();
+      } catch(e) { S.error = e.message; render(); }
+    }
+
+    async function openJournal(date) {
+      S.journalLoading = true; S.viewingJournal = { date, content: '', exists: false };
+      S.showJournal = true; render();
+      try {
+        const r = await call('getJournal', { date });
+        S.viewingJournal = r; S.journalLoading = false;
+      } catch(e) { S.error = e.message; S.journalLoading = false; }
       render();
     }
 
+    async function openMemoryFile(cat, filename) {
+      S.memoryLoading = true; S.viewingMemory = { category: cat, filename, content: '', exists: false };
+      S.showMemory = true; render();
+      try {
+        const r = await call('getMemory', { category: cat, filename });
+        S.viewingMemory = r; S.memoryLoading = false;
+      } catch(e) { S.error = e.message; S.memoryLoading = false; }
+      render();
+    }
+
+    // ========================================================================
     // Helpers
-    function isOverdue(todo) {
-      if (!todo.deadline || todo.status === 'completed') return false;
-      return new Date(todo.deadline) < new Date();
+    // ========================================================================
+    function esc(t) { if (!t) return ''; return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function isOverdue(t) {
+      if (!t.deadline || t.status === 'completed' || t.status === 'cancelled') return false;
+      return new Date(t.deadline) < new Date();
     }
 
-    function getFilteredTodos() {
-      let filtered = state.todos;
-      
-      if (state.filterStatus === 'active') {
-        filtered = filtered.filter(function(t) { return t.status === 'pending' || t.status === 'in_progress'; });
-      } else if (state.filterStatus) {
-        filtered = filtered.filter(function(t) { return t.status === state.filterStatus; });
+    function relativeTime(d) {
+      if (!d) return '';
+      const now = new Date(), then = new Date(d);
+      const diff = now - then;
+      if (diff < 0) {
+        const m = Math.round(-diff / 60000);
+        if (m < 60) return m + '分钟后';
+        const h = Math.round(m / 60);
+        if (h < 24) return h + '小时后';
+        return Math.round(h / 24) + '天后';
       }
-      
-      if (state.filterPriority) {
-        filtered = filtered.filter(function(t) { return t.priority === state.filterPriority; });
+      const m = Math.round(diff / 60000);
+      if (m < 60) return m + '分钟前';
+      const h = Math.round(m / 60);
+      if (h < 24) return h + '小时前';
+      return Math.round(h / 24) + '天前';
+    }
+
+    function formatDate(d) {
+      if (!d) return '';
+      try { return new Date(d).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+      catch(e) { return d; }
+    }
+
+    function formatSize(b) {
+      if (b < 1024) return b + 'B';
+      if (b < 1024*1024) return (b/1024).toFixed(1) + 'KB';
+      return (b/1024/1024).toFixed(1) + 'MB';
+    }
+
+    function statusLabel(s) {
+      const m = { draft:'草稿', pending:'待处理', in_progress:'进行中', completed:'已完成', cancelled:'已取消', waiting_confirmation:'待确认' };
+      return m[s] || s;
+    }
+
+    function typeIcon(t) {
+      return t === 'personal' ? '👤' : t === 'delegated' ? '🤖' : '👥';
+    }
+
+    function filteredTodos() {
+      let list = S.todos;
+      if (S.filterStatus === 'active') {
+        list = list.filter(t => t.status === 'pending' || t.status === 'in_progress' || t.status === 'draft' || t.status === 'waiting_confirmation');
+      } else if (S.filterStatus) {
+        list = list.filter(t => t.status === S.filterStatus);
       }
-      
-      return filtered;
+      if (S.filterPriority) list = list.filter(t => t.priority === S.filterPriority);
+      if (S.filterType) list = list.filter(t => t.type === S.filterType);
+      if (S.searchQuery) {
+        const q = S.searchQuery.toLowerCase();
+        list = list.filter(t =>
+          (t.title && t.title.toLowerCase().includes(q)) ||
+          (t.description && t.description.toLowerCase().includes(q)) ||
+          (t.tags && t.tags.some(tag => tag.toLowerCase().includes(q)))
+        );
+      }
+      // Sort: overdue first, then by priority (high > medium > low), then by updatedAt
+      const pOrder = { high: 0, medium: 1, low: 2 };
+      list.sort((a, b) => {
+        const aOd = isOverdue(a) ? 0 : 1;
+        const bOd = isOverdue(b) ? 0 : 1;
+        if (aOd !== bOd) return aOd - bOd;
+        const ap = pOrder[a.priority] !== undefined ? pOrder[a.priority] : 1;
+        const bp = pOrder[b.priority] !== undefined ? pOrder[b.priority] : 1;
+        if (ap !== bp) return ap - bp;
+        return new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0);
+      });
+      return list;
     }
 
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-    }
-
-    // Render
+    // ========================================================================
+    // Render Engine
+    // ========================================================================
     function render() {
       const root = document.getElementById('root');
-      
-      let html = '<div class="dashboard">';
-      
+      let h = '<div class="app">';
+
       // Header
-      html += '<div class="header">';
-      html += '<div class="header-left">';
-      html += '<span class="header-icon">🤖</span>';
-      html += '<div>';
-      html += '<div class="header-title">Jarvis Dashboard</div>';
-      html += '<div class="header-subtitle">智能助手管理中心</div>';
-      html += '</div></div>';
-      html += '<div class="header-actions">';
-      html += '<button class="btn btn-primary" id="btn-create">➕ 新建待办</button>';
-      html += '<button class="btn btn-secondary" id="btn-refresh">🔄</button>';
-      html += '</div></div>';
-      
+      h += '<div class="header">';
+      h += '<div class="header-left">';
+      h += '<div class="avatar">J</div>';
+      h += '<div class="header-info"><h1>Jarvis</h1><p>Personal AI Secretary</p></div>';
+      h += '</div>';
+      h += '<div class="header-actions">';
+      if (S.tab === 'todos') h += '<button class="btn btn-primary" data-act="create">+ 新建</button>';
+      h += '<button class="btn btn-ghost" data-act="refresh">↻</button>';
+      h += '</div></div>';
+
       // Stats bar
-      html += '<div class="stats-bar">';
-      html += '<div class="stat-card"><div class="stat-value">' + (state.stats.total || 0) + '</div><div class="stat-label">总计</div></div>';
-      html += '<div class="stat-card"><div class="stat-value" style="color: var(--warning-color)">' + (state.stats.pending || 0) + '</div><div class="stat-label">待处理</div></div>';
-      html += '<div class="stat-card"><div class="stat-value" style="color: #60a5fa">' + (state.stats.in_progress || 0) + '</div><div class="stat-label">进行中</div></div>';
-      html += '<div class="stat-card"><div class="stat-value" style="color: var(--success-color)">' + (state.stats.completed || 0) + '</div><div class="stat-label">已完成</div></div>';
-      html += '<div class="stat-card"><div class="stat-value" style="color: var(--danger-color)">' + (state.stats.high_priority || 0) + '</div><div class="stat-label">高优先级</div></div>';
-      html += '</div>';
-      
-      // Tabs
-      html += '<div class="tabs">';
-      html += '<div class="tab ' + (state.activeTab === 'todos' ? 'active' : '') + '" data-tab="todos">📋 待办事项</div>';
-      html += '<div class="tab ' + (state.activeTab === 'journals' ? 'active' : '') + '" data-tab="journals">📖 日志</div>';
-      html += '</div>';
-      
-      // Filters (only for todos tab)
-      if (state.activeTab === 'todos') {
-        html += '<div class="filters">';
-        html += '<select class="filter-select" id="filter-status">';
-        html += '<option value="active"' + (state.filterStatus === 'active' ? ' selected' : '') + '>📋 待处理 & 进行中</option>';
-        html += '<option value=""' + (state.filterStatus === '' ? ' selected' : '') + '>全部状态</option>';
-        html += '<option value="pending"' + (state.filterStatus === 'pending' ? ' selected' : '') + '>⏳ 待处理</option>';
-        html += '<option value="in_progress"' + (state.filterStatus === 'in_progress' ? ' selected' : '') + '>🔄 进行中</option>';
-        html += '<option value="completed"' + (state.filterStatus === 'completed' ? ' selected' : '') + '>✅ 已完成</option>';
-        html += '</select>';
-        html += '<select class="filter-select" id="filter-priority">';
-        html += '<option value=""' + (state.filterPriority === '' ? ' selected' : '') + '>全部优先级</option>';
-        html += '<option value="high"' + (state.filterPriority === 'high' ? ' selected' : '') + '>🔴 高</option>';
-        html += '<option value="medium"' + (state.filterPriority === 'medium' ? ' selected' : '') + '>🟡 中</option>';
-        html += '<option value="low"' + (state.filterPriority === 'low' ? ' selected' : '') + '>🟢 低</option>';
-        html += '</select>';
-        html += '</div>';
-      }
-      
+      h += '<div class="stats-bar">';
+      h += statCard(S.stats.total || 0, '总计', 'var(--text-primary)');
+      h += statCard(S.stats.pending || 0, '待处理', 'var(--warning)');
+      h += statCard(S.stats.in_progress || 0, '进行中', 'var(--blue)');
+      h += statCard(S.stats.draft || 0, '草稿', 'var(--purple)');
+      h += statCard(S.stats.overdue || 0, '已过期', 'var(--danger)');
+      h += statCard(S.stats.completed || 0, '已完成', 'var(--success)');
+      h += '</div>';
+
+      // Nav
+      h += '<div class="nav">';
+      h += navItem('todos', '待办事项', S.todos.length);
+      h += navItem('journals', '日志', S.journals.length);
+      h += navItem('memory', '记忆系统', S.memoryItems.length);
+      h += '</div>';
+
+      // Error
+      if (S.error) h += '<div class="error-box">' + esc(S.error) + ' <span style="cursor:pointer;float:right" data-act="dismiss-error">✕</span></div>';
+
       // Content
-      html += '<div class="content">';
-      if (state.error) {
-        html += '<div class="error">' + escapeHtml(state.error) + '</div>';
+      h += '<div class="content">';
+      if (S.loading) {
+        h += '<div class="loading">加载中...</div>';
+      } else if (S.tab === 'todos') {
+        h += renderTodosTab();
+      } else if (S.tab === 'journals') {
+        h += renderJournalsTab();
+      } else if (S.tab === 'memory') {
+        h += renderMemoryTab();
       }
-      if (state.loading) {
-        html += '<div class="loading">加载中...</div>';
-      } else if (state.activeTab === 'todos') {
-        html += renderTodoList();
-      } else {
-        html += renderJournalList();
-      }
-      html += '</div>';
-      
-      html += '</div>';
-      
-      // Modals
-      if (state.showCreateModal) {
-        html += renderCreateModal();
-      }
-      if (state.showEditModal) {
-        html += renderEditModal();
-      }
-      if (state.showJournalModal) {
-        html += renderJournalModal();
-      }
-      
-      root.innerHTML = html;
-      
-      // Attach event listeners
-      attachEventListeners();
+      h += '</div>';
+
+      h += '</div>'; // .app
+
+      // Modals / Panels
+      if (S.showCreate) h += renderCreateModal();
+      if (S.showDetail && S.detailTodo) h += renderDetailPanel();
+      if (S.showJournal) h += renderJournalModal();
+      if (S.showMemory) h += renderMemoryModal();
+
+      root.innerHTML = h;
+      bindEvents();
     }
 
-    function renderTodoList() {
-      const todos = getFilteredTodos();
-      
+    function statCard(val, label, color) {
+      return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + val + '</div><div class="stat-label">' + label + '</div></div>';
+    }
+
+    function navItem(id, label, count) {
+      return '<div class="nav-item' + (S.tab === id ? ' active' : '') + '" data-tab="' + id + '">' +
+        label + '<span class="nav-badge">' + (count || 0) + '</span></div>';
+    }
+
+    // ========================================================================
+    // Todos Tab
+    // ========================================================================
+    function renderTodosTab() {
+      let h = '<div class="toolbar">';
+      h += sel('filter-status', S.filterStatus, [
+        ['active', '📋 活跃'], ['', '全部'], ['draft', '📝 草稿'], ['pending', '⏳ 待处理'],
+        ['in_progress', '🔄 进行中'], ['waiting_confirmation', '⏰ 待确认'], ['completed', '✅ 已完成']
+      ]);
+      h += sel('filter-priority', S.filterPriority, [
+        ['', '全部优先级'], ['high', '🔴 高'], ['medium', '🟡 中'], ['low', '🟢 低']
+      ]);
+      h += sel('filter-type', S.filterType, [
+        ['', '全部类型'], ['personal', '👤 个人'], ['delegated', '🤖 委派'], ['mixed', '👥 混合']
+      ]);
+      h += '<input class="search-input" id="search-input" placeholder="搜索..." value="' + esc(S.searchQuery) + '">';
+      h += '</div>';
+
+      const todos = filteredTodos();
+      h += '<div class="pad">';
       if (todos.length === 0) {
-        return '<div class="empty-state">暂无待办事项</div>';
+        h += '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">暂无匹配的待办事项</div></div>';
+      } else {
+        h += '<div class="todo-list">';
+        for (const t of todos) h += renderTodoCard(t);
+        h += '</div>';
+      }
+      h += '</div>';
+      return h;
+    }
+
+    function renderTodoCard(t) {
+      const od = isOverdue(t);
+      const pClass = t.priority || 'medium';
+      let h = '<div class="todo-card ' + (od ? 'overdue' : pClass) + '" data-todo="' + esc(t.id) + '">';
+      h += '<div class="todo-row">';
+      h += '<div class="todo-icon">' + typeIcon(t.type) + '</div>';
+      h += '<div class="todo-body">';
+      h += '<div class="todo-title-row">';
+      h += '<span class="todo-title' + (t.status === 'completed' ? ' done' : '') + '">' + esc(t.title) + '</span>';
+      h += '<span class="todo-id">' + esc(t.id) + '</span>';
+      h += '<div class="todo-badges">';
+      if (od) h += '<span class="badge badge-overdue">已过期</span>';
+      h += '<span class="badge badge-' + t.priority + '">' + (t.priority === 'high' ? '高' : t.priority === 'medium' ? '中' : '低') + '</span>';
+      h += '<span class="badge badge-' + t.status + '">' + statusLabel(t.status) + '</span>';
+      h += '</div></div>';
+
+      if (t.description) h += '<div class="todo-desc">' + esc(t.description) + '</div>';
+
+      if (t.tags && t.tags.length) {
+        h += '<div class="todo-tags">';
+        for (const tag of t.tags) h += '<span class="tag">' + esc(tag) + '</span>';
+        h += '</div>';
       }
 
-      let html = '<div class="todo-list">';
-      for (let i = 0; i < todos.length; i++) {
-        const todo = todos[i];
-        const typeIcon = todo.type === 'personal' ? '👤' : todo.type === 'delegated' ? '🤖' : '👥';
-        const priorityBadge = todo.priority === 'high' ? '🔴 高' : todo.priority === 'medium' ? '🟡 中' : '🟢 低';
-        const statusBadge = todo.status === 'pending' ? '⏳ 待处理' : todo.status === 'in_progress' ? '🔄 进行中' : '✅ 完成';
-        
-        html += '<div class="todo-item priority-' + todo.priority + '" data-todo-id="' + escapeHtml(todo.id) + '">';
-        html += '<div class="todo-header">';
-        html += '<div>';
-        html += '<span style="margin-right: 8px">' + typeIcon + '</span>';
-        html += '<span class="todo-title ' + (todo.status === 'completed' ? 'completed' : '') + '">' + escapeHtml(todo.title) + '</span>';
-        html += '<span style="font-size: 11px; color: var(--text-muted); margin-left: 8px">#' + escapeHtml(todo.id) + '</span>';
-        html += '</div>';
-        html += '<div class="todo-badges">';
-        html += '<span class="badge badge-' + todo.priority + '">' + priorityBadge + '</span>';
-        html += '<span class="badge badge-' + todo.status + '">' + statusBadge + '</span>';
-        html += '</div></div>';
-        html += '<div class="todo-meta">' + escapeHtml(todo.description || '无描述') + '</div>';
-        
-        if (todo.tags && todo.tags.length > 0) {
-          html += '<div class="todo-tags">';
-          for (let j = 0; j < todo.tags.length; j++) {
-            html += '<span class="tag">' + escapeHtml(todo.tags[j]) + '</span>';
-          }
-          html += '</div>';
+      h += '<div class="todo-meta-row">';
+      if (t.deadline) h += '<span>' + (od ? '⚠️' : '📅') + ' ' + formatDate(t.deadline) + '</span>';
+      if (t.assignedAgent) h += '<span>🤖 ' + esc(t.assignedAgent) + '</span>';
+      if (t.updatedAt) h += '<span>更新 ' + relativeTime(t.updatedAt) + '</span>';
+      const logCount = t.notes && t.notes.progressLog ? t.notes.progressLog.length : 0;
+      if (logCount > 0) h += '<span>📝 ' + logCount + '条日志</span>';
+      h += '</div>';
+
+      h += '</div></div></div>';
+      return h;
+    }
+
+    function sel(id, val, opts) {
+      let h = '<select class="select" id="' + id + '">';
+      for (const [v, l] of opts) h += '<option value="' + v + '"' + (val === v ? ' selected' : '') + '>' + l + '</option>';
+      h += '</select>';
+      return h;
+    }
+
+    // ========================================================================
+    // Todo Detail Panel
+    // ========================================================================
+    function renderDetailPanel() {
+      const t = S.detailTodo;
+      let h = '<div class="detail-overlay" data-act="close-detail">';
+      h += '<div class="detail-panel" onclick="event.stopPropagation()">';
+
+      h += '<div class="detail-header">';
+      h += '<span style="font-weight:600;font-size:14px">' + typeIcon(t.type) + ' ' + esc(t.title) + '</span>';
+      h += '<button class="close-btn" data-act="close-detail">&times;</button>';
+      h += '</div>';
+
+      h += '<div class="detail-body">';
+
+      // Status badges
+      h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">';
+      h += '<span class="badge badge-' + t.priority + '">' + (t.priority === 'high' ? '🔴 高优先级' : t.priority === 'medium' ? '🟡 中优先级' : '🟢 低优先级') + '</span>';
+      h += '<span class="badge badge-' + t.status + '">' + statusLabel(t.status) + '</span>';
+      h += '<span class="badge badge-' + t.type + '">' + typeIcon(t.type) + ' ' + (t.type === 'personal' ? '个人' : t.type === 'delegated' ? '委派' : '混合') + '</span>';
+      if (isOverdue(t)) h += '<span class="badge badge-overdue">⚠️ 已过期</span>';
+      h += '</div>';
+
+      // Description
+      if (t.description) {
+        h += '<div class="detail-section">';
+        h += '<div class="detail-section-title">描述</div>';
+        h += '<div style="font-size:13px;color:var(--text-secondary);line-height:1.6;white-space:pre-wrap">' + esc(t.description) + '</div>';
+        h += '</div>';
+      }
+
+      // Details grid
+      h += '<div class="detail-section">';
+      h += '<div class="detail-section-title">详细信息</div>';
+      h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+      h += field('ID', t.id);
+      h += field('创建时间', formatDate(t.createdAt));
+      h += field('更新时间', formatDate(t.updatedAt));
+      if (t.deadline) h += field('截止时间', formatDate(t.deadline));
+      if (t.scheduledTime) h += field('计划时间', formatDate(t.scheduledTime));
+      if (t.assignedAgent) h += field('委派给', t.assignedAgent);
+      if (t.agentProject) h += field('关联项目', t.agentProject);
+      if (t.executionStrategy) h += field('执行策略', t.executionStrategy);
+      h += '</div></div>';
+
+      // Tags
+      if (t.tags && t.tags.length) {
+        h += '<div class="detail-section">';
+        h += '<div class="detail-section-title">标签</div>';
+        h += '<div style="display:flex;gap:4px;flex-wrap:wrap">';
+        for (const tag of t.tags) h += '<span class="tag" style="font-size:12px;padding:3px 8px">' + esc(tag) + '</span>';
+        h += '</div></div>';
+      }
+
+      // Progress log
+      if (t.notes && t.notes.progressLog && t.notes.progressLog.length) {
+        h += '<div class="detail-section">';
+        h += '<div class="detail-section-title">进度日志 (' + t.notes.progressLog.length + ')</div>';
+        h += '<div class="progress-log">';
+        // Show latest first
+        const logs = [...t.notes.progressLog].reverse();
+        for (const log of logs) {
+          h += '<div class="progress-entry">';
+          h += '<div class="progress-time">' + esc(log.timestamp || '') + ' · ' + esc(log.by || '') + '</div>';
+          let content = log.content || '';
+          // Try to parse JSON content
+          try {
+            const parsed = JSON.parse(content);
+            content = parsed.content || content;
+          } catch(e) {}
+          h += '<div class="progress-content">' + esc(content) + '</div>';
+          h += '</div>';
         }
-        
-        if (todo.assignedAgent) {
-          html += '<div class="todo-meta" style="margin-top: 4px">🤖 委派给: ' + escapeHtml(todo.assignedAgent) + '</div>';
+        h += '</div></div>';
+      }
+
+      // Actions
+      h += '<div style="display:flex;gap:8px;margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">';
+      h += '<button class="btn btn-danger btn-sm" data-act="delete-todo" data-id="' + esc(t.id) + '">删除</button>';
+      h += '<button class="btn btn-ghost btn-sm" data-act="archive-todo" data-id="' + esc(t.id) + '">归档</button>';
+      h += '<div style="flex:1"></div>';
+
+      // Quick status buttons
+      if (t.status !== 'in_progress') h += '<button class="btn btn-primary btn-sm" data-act="set-status" data-id="' + esc(t.id) + '" data-status="in_progress">开始</button>';
+      if (t.status !== 'completed') h += '<button class="btn btn-sm" style="background:var(--success);color:white" data-act="set-status" data-id="' + esc(t.id) + '" data-status="completed">完成</button>';
+      h += '</div>';
+
+      h += '</div></div></div>';
+      return h;
+    }
+
+    function field(label, value) {
+      return '<div class="detail-field"><div class="detail-label">' + label + '</div><div class="detail-value">' + esc(value || '-') + '</div></div>';
+    }
+
+    // ========================================================================
+    // Journals Tab
+    // ========================================================================
+    function renderJournalsTab() {
+      let h = '<div class="pad">';
+      if (S.journals.length === 0) {
+        h += '<div class="empty"><div class="empty-icon">📖</div><div class="empty-text">暂无日志</div></div>';
+      } else {
+        h += '<div class="journal-list">';
+        for (const j of S.journals) {
+          h += '<div class="journal-card" data-journal="' + esc(j.date) + '">';
+          h += '<div class="journal-date">📅 ' + esc(j.date) + '</div>';
+          h += '<div class="journal-preview">' + esc(j.preview || '') + '</div>';
+          if (j.size) h += '<div class="journal-size">' + formatSize(j.size) + '</div>';
+          h += '</div>';
         }
-        
-        html += '</div>';
+        h += '</div>';
       }
-      html += '</div>';
-      return html;
-    }
-
-    function renderJournalList() {
-      if (state.journals.length === 0) {
-        return '<div class="empty-state">暂无日志</div>';
-      }
-
-      let html = '<div class="journal-list">';
-      for (let i = 0; i < state.journals.length; i++) {
-        const j = state.journals[i];
-        html += '<div class="journal-item" data-journal-date="' + escapeHtml(j.date) + '">';
-        html += '<div class="journal-date">📅 ' + escapeHtml(j.date) + '</div>';
-        html += '<div class="journal-preview">' + escapeHtml(j.preview || '无内容') + '</div>';
-        html += '</div>';
-      }
-      html += '</div>';
-      return html;
-    }
-
-    function renderCreateModal() {
-      let html = '<div class="modal-overlay" id="create-modal-overlay">';
-      html += '<div class="modal" id="create-modal">';
-      html += '<div class="modal-header">';
-      html += '<div class="modal-title">新建待办</div>';
-      html += '<button class="close-btn" id="create-close">&times;</button>';
-      html += '</div>';
-      html += '<form id="create-form">';
-      html += '<div class="form-group"><label class="form-label">标题 *</label><input class="form-input" id="create-title" required placeholder="待办标题"></div>';
-      html += '<div class="form-group"><label class="form-label">描述</label><textarea class="form-input" id="create-description" rows="3" placeholder="详细描述"></textarea></div>';
-      html += '<div class="form-row">';
-      html += '<div class="form-group"><label class="form-label">类型</label><select class="form-input" id="create-type"><option value="personal">👤 个人</option><option value="delegated">🤖 可委派</option><option value="mixed">👥 混合</option></select></div>';
-      html += '<div class="form-group"><label class="form-label">优先级</label><select class="form-input" id="create-priority"><option value="high">🔴 高</option><option value="medium" selected>🟡 中</option><option value="low">🟢 低</option></select></div>';
-      html += '</div>';
-      html += '<div class="form-row">';
-      html += '<div class="form-group"><label class="form-label">开始时间</label><input class="form-input" id="create-scheduled" type="datetime-local"></div>';
-      html += '<div class="form-group"><label class="form-label">截止时间</label><input class="form-input" id="create-deadline" type="datetime-local"></div>';
-      html += '</div>';
-      html += '<div class="form-group"><label class="form-label">标签 (逗号分隔)</label><input class="form-input" id="create-tags" placeholder="工作, 重要"></div>';
-      html += '<div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px">';
-      html += '<button type="button" class="btn btn-secondary" id="create-cancel">取消</button>';
-      html += '<button type="submit" class="btn btn-primary">创建</button>';
-      html += '</div></form></div></div>';
-      return html;
-    }
-
-    function renderEditModal() {
-      const todo = state.editingTodo;
-      if (!todo) return '';
-
-      let html = '<div class="modal-overlay" id="edit-modal-overlay">';
-      html += '<div class="modal" id="edit-modal">';
-      html += '<div class="modal-header">';
-      html += '<div class="modal-title">编辑待办</div>';
-      html += '<button class="close-btn" id="edit-close">&times;</button>';
-      html += '</div>';
-      html += '<form id="edit-form" data-todo-id="' + escapeHtml(todo.id) + '">';
-      html += '<div class="form-group"><label class="form-label">标题 *</label><input class="form-input" id="edit-title" required value="' + escapeHtml(todo.title || '') + '"></div>';
-      html += '<div class="form-group"><label class="form-label">描述</label><textarea class="form-input" id="edit-description" rows="3">' + escapeHtml(todo.description || '') + '</textarea></div>';
-      html += '<div class="form-row">';
-      html += '<div class="form-group"><label class="form-label">状态</label><select class="form-input" id="edit-status">';
-      html += '<option value="pending"' + (todo.status === 'pending' ? ' selected' : '') + '>⏳ 待处理</option>';
-      html += '<option value="in_progress"' + (todo.status === 'in_progress' ? ' selected' : '') + '>🔄 进行中</option>';
-      html += '<option value="completed"' + (todo.status === 'completed' ? ' selected' : '') + '>✅ 已完成</option>';
-      html += '<option value="cancelled"' + (todo.status === 'cancelled' ? ' selected' : '') + '>❌ 已取消</option>';
-      html += '</select></div>';
-      html += '<div class="form-group"><label class="form-label">优先级</label><select class="form-input" id="edit-priority">';
-      html += '<option value="high"' + (todo.priority === 'high' ? ' selected' : '') + '>🔴 高</option>';
-      html += '<option value="medium"' + (todo.priority === 'medium' ? ' selected' : '') + '>🟡 中</option>';
-      html += '<option value="low"' + (todo.priority === 'low' ? ' selected' : '') + '>🟢 低</option>';
-      html += '</select></div></div>';
-      html += '<div class="form-row">';
-      html += '<div class="form-group"><label class="form-label">开始时间</label><input class="form-input" id="edit-scheduled" type="datetime-local" value="' + (todo.scheduledTime ? todo.scheduledTime.slice(0, 16) : '') + '"></div>';
-      html += '<div class="form-group"><label class="form-label">截止时间</label><input class="form-input" id="edit-deadline" type="datetime-local" value="' + (todo.deadline ? todo.deadline.slice(0, 16) : '') + '"></div>';
-      html += '</div>';
-      html += '<div style="display: flex; justify-content: space-between; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border-color)">';
-      html += '<button type="button" class="btn btn-danger" id="edit-delete">删除</button>';
-      html += '<div style="display: flex; gap: 8px">';
-      html += '<button type="button" class="btn btn-secondary" id="edit-cancel">取消</button>';
-      html += '<button type="submit" class="btn btn-primary">保存</button>';
-      html += '</div></div></form></div></div>';
-      return html;
+      h += '</div>';
+      return h;
     }
 
     function renderJournalModal() {
-      const journal = state.viewingJournal;
-      if (!journal) return '';
-
-      let html = '<div class="modal-overlay" id="journal-modal-overlay">';
-      html += '<div class="modal" id="journal-modal" style="max-width: 800px">';
-      html += '<div class="modal-header">';
-      html += '<div class="modal-title">📅 ' + escapeHtml(journal.date) + ' 日志</div>';
-      html += '<button class="close-btn" id="journal-close">&times;</button>';
-      html += '</div>';
-      html += '<div style="padding: 16px 0">';
-      
-      if (state.journalLoading) {
-        html += '<div class="loading">加载中...</div>';
-      } else if (!journal.exists) {
-        html += '<div class="empty-state">该日期暂无日志</div>';
+      const j = S.viewingJournal;
+      if (!j) return '';
+      let h = '<div class="modal-overlay" data-act="close-journal">';
+      h += '<div class="modal" style="max-width:700px" onclick="event.stopPropagation()">';
+      h += '<div class="modal-header">';
+      h += '<div class="modal-title">📅 ' + esc(j.date) + '</div>';
+      h += '<button class="close-btn" data-act="close-journal">&times;</button>';
+      h += '</div>';
+      if (S.journalLoading) {
+        h += '<div class="loading">加载中...</div>';
+      } else if (!j.exists) {
+        h += '<div class="empty"><div class="empty-text">该日期暂无日志</div></div>';
       } else {
-        // Render markdown content as simple HTML
-        const content = journal.content || '';
-        html += '<div style="background: var(--bg-secondary); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); white-space: pre-wrap; font-family: monospace; font-size: 13px; line-height: 1.6; max-height: 400px; overflow-y: auto">';
-        html += escapeHtml(content);
-        html += '</div>';
+        h += '<div class="journal-viewer">' + esc(j.content || '') + '</div>';
       }
-      
-      html += '</div>';
-      html += '<div style="display: flex; justify-content: flex-end; padding-top: 16px; border-top: 1px solid var(--border-color)">';
-      html += '<button class="btn btn-secondary" id="journal-close-btn">关闭</button>';
-      html += '</div></div></div>';
-      return html;
+      h += '</div></div>';
+      return h;
     }
 
-    function attachEventListeners() {
-      // Header buttons
-      const btnCreate = document.getElementById('btn-create');
-      if (btnCreate) {
-        btnCreate.addEventListener('click', function() {
-          state.showCreateModal = true;
-          render();
-        });
+    // ========================================================================
+    // Memory Tab
+    // ========================================================================
+    function renderMemoryTab() {
+      // Category tabs
+      const cats = [];
+      const catSet = new Set();
+      for (const m of S.memoryItems) { if (!catSet.has(m.category)) { catSet.add(m.category); cats.push(m.category); } }
+
+      let h = '<div class="pad">';
+      h += '<div class="memory-category-tabs">';
+      h += '<div class="cat-tab' + (!S.memoryCat ? ' active' : '') + '" data-cat="">全部</div>';
+      for (const c of cats) {
+        h += '<div class="cat-tab' + (S.memoryCat === c ? ' active' : '') + '" data-cat="' + esc(c) + '">' + esc(c) + '</div>';
       }
-      
-      const btnRefresh = document.getElementById('btn-refresh');
-      if (btnRefresh) {
-        btnRefresh.addEventListener('click', loadData);
+      h += '</div>';
+
+      const items = S.memoryCat ? S.memoryItems.filter(m => m.category === S.memoryCat) : S.memoryItems;
+
+      if (items.length === 0) {
+        h += '<div class="empty"><div class="empty-icon">🧠</div><div class="empty-text">暂无记忆数据</div></div>';
+      } else {
+        h += '<div class="memory-grid">';
+        for (const m of items) {
+          h += '<div class="memory-card" data-mem-cat="' + esc(m.category) + '" data-mem-file="' + esc(m.filename) + '">';
+          h += '<div class="memory-cat">' + esc(m.category) + '</div>';
+          h += '<div class="memory-filename">' + esc(m.filename) + '</div>';
+          h += '<div class="memory-preview">' + esc(m.preview || '') + '</div>';
+          h += '<div class="memory-meta">' + formatSize(m.size || 0) + ' · 更新 ' + relativeTime(m.updatedAt) + '</div>';
+          h += '</div>';
+        }
+        h += '</div>';
       }
-      
-      // Tabs
-      const tabs = document.querySelectorAll('.tab');
-      tabs.forEach(function(tab) {
-        tab.addEventListener('click', function() {
-          state.activeTab = this.getAttribute('data-tab');
+      h += '</div>';
+      return h;
+    }
+
+    function renderMemoryModal() {
+      const m = S.viewingMemory;
+      if (!m) return '';
+      let h = '<div class="modal-overlay" data-act="close-memory">';
+      h += '<div class="modal" style="max-width:700px" onclick="event.stopPropagation()">';
+      h += '<div class="modal-header">';
+      h += '<div class="modal-title">🧠 ' + esc(m.category) + ' / ' + esc(m.filename) + '</div>';
+      h += '<button class="close-btn" data-act="close-memory">&times;</button>';
+      h += '</div>';
+      if (S.memoryLoading) {
+        h += '<div class="loading">加载中...</div>';
+      } else if (!m.exists) {
+        h += '<div class="empty"><div class="empty-text">文件不存在</div></div>';
+      } else {
+        h += '<div class="journal-viewer">' + esc(m.content || '') + '</div>';
+      }
+      h += '</div></div>';
+      return h;
+    }
+
+    // ========================================================================
+    // Create Modal
+    // ========================================================================
+    function renderCreateModal() {
+      let h = '<div class="modal-overlay" data-act="close-create">';
+      h += '<div class="modal" onclick="event.stopPropagation()">';
+      h += '<div class="modal-header"><div class="modal-title">新建待办</div><button class="close-btn" data-act="close-create">&times;</button></div>';
+      h += '<form id="create-form">';
+      h += fg('标题 *', '<input class="form-input" id="c-title" required placeholder="待办标题">');
+      h += fg('描述', '<textarea class="form-textarea" id="c-desc" rows="2" placeholder="详细描述"></textarea>');
+      h += '<div class="form-row">';
+      h += fg('类型', '<select class="form-input" id="c-type"><option value="personal">👤 个人</option><option value="delegated">🤖 可委派</option><option value="mixed">👥 混合</option></select>');
+      h += fg('优先级', '<select class="form-input" id="c-priority"><option value="high">🔴 高</option><option value="medium" selected>🟡 中</option><option value="low">🟢 低</option></select>');
+      h += '</div>';
+      h += '<div class="form-row">';
+      h += fg('开始时间', '<input class="form-input" id="c-scheduled" type="datetime-local">');
+      h += fg('截止时间', '<input class="form-input" id="c-deadline" type="datetime-local">');
+      h += '</div>';
+      h += fg('标签 (逗号分隔)', '<input class="form-input" id="c-tags" placeholder="工作, 重要">');
+      h += '<div class="form-actions">';
+      h += '<button type="button" class="btn btn-ghost" data-act="close-create">取消</button>';
+      h += '<button type="submit" class="btn btn-primary">创建</button>';
+      h += '</div></form></div></div>';
+      return h;
+    }
+
+    function fg(label, input) {
+      return '<div class="form-group"><label class="form-label">' + label + '</label>' + input + '</div>';
+    }
+
+    // ========================================================================
+    // Event Binding
+    // ========================================================================
+    function bindEvents() {
+      // Delegated click handler
+      document.getElementById('root').addEventListener('click', function(e) {
+        const el = e.target.closest('[data-act]');
+        if (el) {
+          const act = el.getAttribute('data-act');
+          if (act === 'create') { S.showCreate = true; render(); }
+          else if (act === 'refresh') { loadAll(); if (S.tab === 'memory') loadMemory(S.memoryCat); }
+          else if (act === 'close-create') { S.showCreate = false; render(); }
+          else if (act === 'close-detail') { S.showDetail = false; S.detailTodo = null; render(); }
+          else if (act === 'close-journal') { S.showJournal = false; S.viewingJournal = null; render(); }
+          else if (act === 'close-memory') { S.showMemory = false; S.viewingMemory = null; render(); }
+          else if (act === 'dismiss-error') { S.error = null; render(); }
+          else if (act === 'delete-todo') { doDeleteTodo(el.getAttribute('data-id')); }
+          else if (act === 'archive-todo') { doArchiveTodo(el.getAttribute('data-id')); }
+          else if (act === 'set-status') {
+            doUpdateTodo(el.getAttribute('data-id'), { status: el.getAttribute('data-status') });
+          }
+          return;
+        }
+
+        // Tab click
+        const tabEl = e.target.closest('[data-tab]');
+        if (tabEl) {
+          S.tab = tabEl.getAttribute('data-tab');
+          if (S.tab === 'memory' && S.memoryItems.length === 0) loadMemory('');
           render();
-        });
+          return;
+        }
+
+        // Todo click
+        const todoEl = e.target.closest('[data-todo]');
+        if (todoEl && !e.target.closest('[data-act]')) {
+          const id = todoEl.getAttribute('data-todo');
+          const todo = S.todos.find(t => t.id === id);
+          if (todo) { S.detailTodo = todo; S.showDetail = true; render(); }
+          return;
+        }
+
+        // Journal click
+        const jEl = e.target.closest('[data-journal]');
+        if (jEl) {
+          openJournal(jEl.getAttribute('data-journal'));
+          return;
+        }
+
+        // Memory card click
+        const mEl = e.target.closest('[data-mem-cat]');
+        if (mEl) {
+          openMemoryFile(mEl.getAttribute('data-mem-cat'), mEl.getAttribute('data-mem-file'));
+          return;
+        }
+
+        // Memory category tab
+        const catEl = e.target.closest('[data-cat]');
+        if (catEl) {
+          S.memoryCat = catEl.getAttribute('data-cat');
+          render();
+          return;
+        }
       });
-      
+
       // Filters
-      const filterStatus = document.getElementById('filter-status');
-      if (filterStatus) {
-        filterStatus.addEventListener('change', function() {
-          state.filterStatus = this.value;
+      ['filter-status', 'filter-priority', 'filter-type'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', function() {
+          if (id === 'filter-status') S.filterStatus = this.value;
+          if (id === 'filter-priority') S.filterPriority = this.value;
+          if (id === 'filter-type') S.filterType = this.value;
           render();
-        });
-      }
-      
-      const filterPriority = document.getElementById('filter-priority');
-      if (filterPriority) {
-        filterPriority.addEventListener('change', function() {
-          state.filterPriority = this.value;
-          render();
-        });
-      }
-      
-      // Todo items
-      const todoItems = document.querySelectorAll('.todo-item');
-      todoItems.forEach(function(item) {
-        item.addEventListener('click', function() {
-          const todoId = this.getAttribute('data-todo-id');
-          const todo = state.todos.find(function(t) { return t.id === todoId; });
-          if (todo) {
-            state.editingTodo = todo;
-            state.showEditModal = true;
-            render();
-          }
         });
       });
-      
-      // Create modal
-      const createOverlay = document.getElementById('create-modal-overlay');
-      if (createOverlay) {
-        createOverlay.addEventListener('click', function(e) {
-          if (e.target === this) {
-            state.showCreateModal = false;
-            render();
-          }
-        });
-      }
-      
-      const createClose = document.getElementById('create-close');
-      if (createClose) {
-        createClose.addEventListener('click', function() {
-          state.showCreateModal = false;
+
+      // Search
+      const searchEl = document.getElementById('search-input');
+      if (searchEl) {
+        searchEl.addEventListener('input', function() {
+          S.searchQuery = this.value;
           render();
+          // Refocus after render
+          const el = document.getElementById('search-input');
+          if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
         });
       }
-      
-      const createCancel = document.getElementById('create-cancel');
-      if (createCancel) {
-        createCancel.addEventListener('click', function() {
-          state.showCreateModal = false;
-          render();
-        });
-      }
-      
-      const createForm = document.getElementById('create-form');
-      if (createForm) {
-        createForm.addEventListener('submit', function(e) {
+
+      // Create form
+      const form = document.getElementById('create-form');
+      if (form) {
+        form.addEventListener('submit', function(e) {
           e.preventDefault();
           const data = {
-            title: document.getElementById('create-title').value,
-            description: document.getElementById('create-description').value,
-            type: document.getElementById('create-type').value,
-            priority: document.getElementById('create-priority').value,
-            tags: document.getElementById('create-tags').value.split(',').map(function(t) { return t.trim(); }).filter(function(t) { return t; }),
+            title: document.getElementById('c-title').value,
+            description: document.getElementById('c-desc').value,
+            type: document.getElementById('c-type').value,
+            priority: document.getElementById('c-priority').value,
+            tags: document.getElementById('c-tags').value.split(',').map(t => t.trim()).filter(Boolean),
           };
-          
-          const scheduled = document.getElementById('create-scheduled').value;
-          const deadline = document.getElementById('create-deadline').value;
+          const scheduled = document.getElementById('c-scheduled').value;
+          const deadline = document.getElementById('c-deadline').value;
           if (scheduled) data.scheduledTime = new Date(scheduled).toISOString();
           if (deadline) data.deadline = new Date(deadline).toISOString();
-          
-          addTodo(data);
-        });
-      }
-      
-      // Edit modal
-      const editOverlay = document.getElementById('edit-modal-overlay');
-      if (editOverlay) {
-        editOverlay.addEventListener('click', function(e) {
-          if (e.target === this) {
-            state.showEditModal = false;
-            state.editingTodo = null;
-            render();
-          }
-        });
-      }
-      
-      const editClose = document.getElementById('edit-close');
-      if (editClose) {
-        editClose.addEventListener('click', function() {
-          state.showEditModal = false;
-          state.editingTodo = null;
-          render();
-        });
-      }
-      
-      const editCancel = document.getElementById('edit-cancel');
-      if (editCancel) {
-        editCancel.addEventListener('click', function() {
-          state.showEditModal = false;
-          state.editingTodo = null;
-          render();
-        });
-      }
-      
-      const editDelete = document.getElementById('edit-delete');
-      if (editDelete) {
-        editDelete.addEventListener('click', function() {
-          const form = document.getElementById('edit-form');
-          const todoId = form.getAttribute('data-todo-id');
-          deleteTodo(todoId);
-        });
-      }
-      
-      const editForm = document.getElementById('edit-form');
-      if (editForm) {
-        editForm.addEventListener('submit', function(e) {
-          e.preventDefault();
-          const todoId = this.getAttribute('data-todo-id');
-          const updates = {
-            title: document.getElementById('edit-title').value,
-            description: document.getElementById('edit-description').value,
-            status: document.getElementById('edit-status').value,
-            priority: document.getElementById('edit-priority').value,
-          };
-          
-          const scheduled = document.getElementById('edit-scheduled').value;
-          const deadline = document.getElementById('edit-deadline').value;
-          if (scheduled) updates.scheduledTime = new Date(scheduled).toISOString();
-          if (deadline) updates.deadline = new Date(deadline).toISOString();
-          
-          updateTodo(todoId, updates);
-        });
-      }
-      
-      // Journal items
-      const journalItems = document.querySelectorAll('.journal-item');
-      journalItems.forEach(function(item) {
-        item.addEventListener('click', function() {
-          const journalDate = this.getAttribute('data-journal-date');
-          if (journalDate) {
-            viewJournal(journalDate);
-          }
-        });
-      });
-      
-      // Journal modal
-      const journalOverlay = document.getElementById('journal-modal-overlay');
-      if (journalOverlay) {
-        journalOverlay.addEventListener('click', function(e) {
-          if (e.target === this) {
-            state.showJournalModal = false;
-            state.viewingJournal = null;
-            render();
-          }
-        });
-      }
-      
-      const journalClose = document.getElementById('journal-close');
-      if (journalClose) {
-        journalClose.addEventListener('click', function() {
-          state.showJournalModal = false;
-          state.viewingJournal = null;
-          render();
-        });
-      }
-      
-      const journalCloseBtn = document.getElementById('journal-close-btn');
-      if (journalCloseBtn) {
-        journalCloseBtn.addEventListener('click', function() {
-          state.showJournalModal = false;
-          state.viewingJournal = null;
-          render();
+          createTodo(data);
         });
       }
     }
 
-    // Initialize
+    // ========================================================================
+    // Agent Action Listener (event-driven sync)
+    // ========================================================================
+    window.addEventListener('message', function(e) {
+      if (e.data && e.data.type === 'lavs-agent-action') {
+        console.log('[JarvisView] Agent action:', e.data.action);
+        if (e.data.action && e.data.action.type === 'tool_executed') {
+          if (e.data.action.tool && (e.data.action.tool.includes('__lavs_') || e.data.action.tool.includes('jarvis'))) {
+            console.log('[JarvisView] Refreshing data after agent action...');
+            loadAll();
+            if (S.tab === 'memory') loadMemory(S.memoryCat);
+          }
+        }
+      }
+    });
+
+    // ========================================================================
+    // Init
+    // ========================================================================
     document.addEventListener('DOMContentLoaded', function() {
       render();
-      loadData();
+      loadAll();
     });
+  })();
   </script>
 </body>
 </html>
