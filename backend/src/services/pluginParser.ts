@@ -46,20 +46,27 @@ class PluginParser {
         const content = fs.readFileSync(manifestPath, 'utf-8');
         const manifest = JSON.parse(content);
 
-        // Validate required fields (relaxed: author is optional for better compatibility)
-        if (!manifest.name || !manifest.description || !manifest.version) {
-          throw new Error('Plugin manifest is missing required fields (name, description, version)');
+        // Strict minimum: name and description must exist
+        if (!manifest.name || !manifest.description) {
+          throw new Error('Plugin manifest is missing required fields (name, description)');
         }
 
-        // Fill in author from marketplace if missing
-        if (!manifest.author && marketplaceName) {
+        // Fill in optional fields from marketplace.json if missing
+        if (marketplaceName) {
           const marketplaceManifest = this.readMarketplaceManifest(marketplaceName);
-          if (marketplaceManifest?.owner) {
-            manifest.author = marketplaceManifest.owner;
-          } else {
-            manifest.author = { name: 'Unknown' };
+          if (marketplaceManifest) {
+            if (!manifest.version) {
+              manifest.version = marketplaceManifest.metadata?.version || '1.0.0';
+            }
+            if (!manifest.author) {
+              manifest.author = marketplaceManifest.owner || { name: 'Unknown' };
+            }
           }
         }
+
+        // Default fallbacks for missing optional fields
+        if (!manifest.version) manifest.version = '1.0.0';
+        if (!manifest.author) manifest.author = { name: 'Unknown' };
 
         return manifest;
       } catch (error) {
