@@ -427,6 +427,68 @@ export async function checkoutVersion(
 }
 
 /**
+ * Rollback to a specific commit by creating a new commit whose tree
+ * exactly matches the target commit, preserving all history.
+ *
+ * Strategy:
+ *   1. Save the current HEAD ref
+ *   2. `git reset --hard <target>` — working tree + index now match the target
+ *   3. `git reset --soft <original HEAD>` — move HEAD back, keeping tree/index
+ *   4. `git commit` — new commit on the current branch with the target's content
+ *   5. Tag the new commit with the next auto-incremented version number
+ */
+export async function rollbackVersion(
+  projectPath: string,
+  hash: string
+): Promise<CreateVersionResult> {
+  const initialized = await isGitInitialized(projectPath);
+  if (!initialized) {
+    throw new Error('Project has no version history');
+  }
+
+  // Validate that the hash refers to a valid commit
+  let fullHash: string;
+  try {
+    fullHash = await git(projectPath, ['rev-parse', '--verify', hash]);
+  } catch {
+    throw new Error(`Commit ${hash} not found`);
+  }
+
+  // Ensure we're on main/master branch
+  try {
+    await git(projectPath, ['checkout', 'main']);
+  } catch {
+    try {
+      await git(projectPath, ['checkout', 'master']);
+    } catch {
+      await git(projectPath, ['checkout', '-b', 'main']);
+    }
+  }
+
+  // 1. Save current HEAD so we can come back
+  const originalHead = await git(projectPath, ['rev-parse', 'HEAD']);
+
+  // 2. Reset working tree + index to the target commit's state
+  await git(projectPath, ['reset', '--hard', fullHash]);
+
+  // 3. Move HEAD back to the original position, keeping working tree + index
+  await git(projectPath, ['reset', '--soft', originalHead]);
+
+  // 4. Commit — creates a new commit whose tree matches the target exactly
+  const commitMessage = `Rollback to ${hash.substring(0, 7)}`;
+  await git(projectPath, ['commit', '-m', commitMessage, '--allow-empty']);
+
+  // 5. Tag the new commit
+  const versionNumber = await getNextVersionNumber(projectPath);
+  const tag = `v${versionNumber}`;
+  const newCommitHash = await git(projectPath, ['rev-parse', 'HEAD']);
+
+  await git(projectPath, ['tag', '-a', tag, '-m', commitMessage]);
+
+  return { tag, hash: newCommitHash, commitHash: newCommitHash, message: commitMessage };
+}
+
+/**
  * Delete a version tag (does not delete the commit)
  */
 export async function deleteVersion(

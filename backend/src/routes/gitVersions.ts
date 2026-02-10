@@ -15,6 +15,7 @@ import {
   getVersionStatus,
   getCurrentCommitHash,
   checkoutVersion,
+  rollbackVersion,
   deleteVersion,
 } from '../services/gitVersionService';
 
@@ -194,6 +195,41 @@ router.post('/checkout', async (req: express.Request<VersionParams>, res) => {
     }
     
     res.status(500).json({ error: error.message || 'Failed to checkout version' });
+  }
+});
+
+// ========================================
+// POST /api/projects/:projectId/versions/rollback
+// Rollback to a specific commit (creates a new commit + tag matching that state)
+// Body: { hash: string }
+// ========================================
+router.post('/rollback', async (req: express.Request<VersionParams>, res) => {
+  try {
+    const projectPath = resolveProjectPath(req.params.projectId);
+    const { hash } = req.body;
+
+    if (!hash || typeof hash !== 'string') {
+      return res.status(400).json({ error: 'Commit hash is required' });
+    }
+
+    const result = await rollbackVersion(projectPath, hash.trim());
+
+    console.log(`[GitVersion] Rolled back to commit ${hash} → new version ${result.tag} for project: ${projectPath}`);
+    res.json({
+      success: true,
+      version: result,
+    });
+  } catch (error: any) {
+    console.error('[GitVersion] Error rolling back version:', error.message);
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    if (error.message.includes('Rollback failed')) {
+      return res.status(409).json({ error: error.message });
+    }
+
+    res.status(500).json({ error: error.message || 'Failed to rollback version' });
   }
 });
 

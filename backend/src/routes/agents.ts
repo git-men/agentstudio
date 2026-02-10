@@ -343,7 +343,8 @@ const ChatRequestSchema = z.object({
     customContext: z.record(z.any()).optional()
   }).optional(),
   envVars: z.record(z.string()).optional(),
-  scene: z.string().optional() // Scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
+  scene: z.string().optional(), // Scene identifier; 'vibeGaming' triggers auto-commit before RUN_FINISHED
+  isNewVibe: z.boolean().optional().default(false) // When true, append clarifying questions prompt to system prompt
 }).refine(data => {
   // Either message text or images must be provided
   return data.message.trim().length > 0 || (data.images && data.images.length > 0);
@@ -479,7 +480,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, scene } = validation.data;
+    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, scene, isNewVibe } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -677,7 +678,7 @@ router.post('/chat', async (req, res) => {
         // 构建查询选项（包含 AskUserQuestion MCP 工具）
         // 使用 tempSessionId 作为 MCP 工具的 sessionId（新会话还没有真实 sessionId）
         // Enable A2A streaming for web frontend (real-time updates for external agent calls)
-        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, scene);
+        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, scene, isNewVibe);
 
         // 📊 输出传到 query 中的模型参数
         console.log('📊 [Chat API] QueryOptions 模型参数:');

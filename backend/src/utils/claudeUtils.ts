@@ -210,7 +210,8 @@ export async function buildQueryOptions(
   sessionIdForAskUser?: string,
   agentIdForAskUser?: string,
   a2aStreamEnabled?: boolean,
-  scene?: string
+  scene?: string,
+  isNewVibe?: boolean
 ): Promise<BuildQueryOptionsResult> {
   // Determine working directory
   let cwd = process.cwd();
@@ -312,18 +313,29 @@ export async function buildQueryOptions(
     console.log(`📦 No custom path specified, SDK will use bundled CLI`);
   }
 
-  // Determine final system prompt, appending game-dev rules and clarifying prompt for vibeGaming scene
+  // Determine final system prompt
+  // - Game-dev rules: appended when scene === 'vibeGaming' (build constraints)
+  // - Clarifying prompt: appended when isNewVibe === true (ask user for missing decision points)
   const vibeGaming = scene === 'vibeGaming';
   let finalSystemPrompt: SystemPrompt = agent.systemPrompt;
-  if (vibeGaming) {
-    // Build the extra prompt content: game-dev rules (with projectPath) + clarifying prompt
+  {
     const extraParts: string[] = [];
-    const gameDevPrompt = buildGameDevSystemPrompt(projectPath);
-    if (gameDevPrompt.trim()) {
-      extraParts.push(gameDevPrompt);
+
+    // Game-dev rules tied to vibeGaming scene
+    if (vibeGaming) {
+      const gameDevPrompt = buildGameDevSystemPrompt(projectPath);
+      if (gameDevPrompt.trim()) {
+        extraParts.push(gameDevPrompt);
+      }
+      console.log('🎮 [vibeGaming] Appended game-dev rules to system prompt');
     }
-    if (VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
-      extraParts.push(VIBE_GAMING_CLARIFYING_PROMPT);
+
+    // Clarifying questions tied to isNewVibe flag
+    if (isNewVibe) {
+      if (VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
+        extraParts.push(VIBE_GAMING_CLARIFYING_PROMPT);
+      }
+      console.log('🎮 [isNewVibe] Appended clarifying questions prompt to system prompt');
     }
 
     if (extraParts.length > 0) {
@@ -337,7 +349,6 @@ export async function buildQueryOptions(
           append: (finalSystemPrompt.append || '') + '\n\n' + extraPrompt,
         };
       }
-      console.log('🎮 [vibeGaming] Appended game-dev rules and clarifying prompt to system prompt');
     }
   }
 

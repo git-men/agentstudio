@@ -22,9 +22,11 @@ import {
   AGUIEventType,
   type EngineType,
   type AGUIEvent,
+  type AGUIAutoVersionCreatedEvent,
 } from '../engines/index.js';
 import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
 import { sessionEventBus, type SessionEvent } from '../services/sessionEventBus.js';
+import { createVersion } from '../services/gitVersionService.js';
 
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
@@ -77,8 +79,10 @@ const ChatRequestSchema = z.object({
   envVars: z.record(z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
-  // Scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
+  // Scene identifier; 'vibeGaming' triggers auto-commit before RUN_FINISHED
   scene: z.string().optional(),
+  // When true, append clarifying questions prompt to system prompt
+  isNewVibe: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -179,6 +183,7 @@ router.post('/chat', async (req, res) => {
       envVars,
       timeout,
       scene,
+      isNewVibe,
     } = validation.data;
 
     // Resolve workspace: if it's a project name, get the actual path
@@ -246,6 +251,9 @@ router.post('/chat', async (req, res) => {
     // Track session ID for event bus broadcasting
     let activeSessionId: string | null = sessionId || null;
 
+    // For vibeGaming scene, intercept RUN_FINISHED to auto-commit before it's sent
+    let pendingRunFinished: AGUIEvent | null = null;
+
     // AGUI event callback (used by Cursor engine)
     const onAguiEvent = (event: AGUIEvent) => {
       if (isConnectionClosed) return;
@@ -253,6 +261,12 @@ router.post('/chat', async (req, res) => {
       // Extract session ID from RUN_STARTED event
       if (event.type === AGUIEventType.RUN_STARTED && 'threadId' in event) {
         activeSessionId = (event as any).threadId || activeSessionId;
+      }
+
+      // Intercept RUN_FINISHED for vibeGaming auto-commit
+      if (event.type === AGUIEventType.RUN_FINISHED && scene === 'vibeGaming' && resolvedWorkspace) {
+        pendingRunFinished = event;
+        return; // Don't write yet — will be sent after auto-commit
       }
 
       try {
@@ -285,6 +299,33 @@ router.post('/chat', async (req, res) => {
           onAguiEvent
         );
         console.log(`✅ [AGUI] Cursor request completed, sessionId: ${result.sessionId}`);
+
+        // Auto-commit for vibeGaming scene before sending RUN_FINISHED
+        if (pendingRunFinished && scene === 'vibeGaming' && resolvedWorkspace && !isConnectionClosed) {
+          try {
+            const versionResult = await createVersion(resolvedWorkspace, 'Auto-save after AI response');
+            console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${resolvedWorkspace}`);
+
+            const versionEvent: AGUIAutoVersionCreatedEvent = {
+              type: AGUIEventType.AUTO_VERSION_CREATED,
+              version: versionResult,
+              timestamp: Date.now(),
+              agentId: 'cursor',
+              sessionId: activeSessionId || sessionId,
+            };
+            res.write(formatAguiEventAsSSE(versionEvent));
+          } catch (error: any) {
+            console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
+          }
+
+          // Now send the deferred RUN_FINISHED
+          try {
+            res.write(formatAguiEventAsSSE(pendingRunFinished));
+          } catch (error) {
+            console.error('[AGUI] Error writing deferred RUN_FINISHED:', error);
+          }
+          pendingRunFinished = null;
+        }
       } else {
         // Claude engine: Redirect to /api/agents/chat with outputFormat=agui
         // Note: We can't proxy SSE-to-SSE, so we inform the client to use the direct endpoint
@@ -308,6 +349,7 @@ router.post('/chat', async (req, res) => {
             channel: 'web',
             outputFormat: 'agui',
             scene,
+            isNewVibe,
           },
         };
         
