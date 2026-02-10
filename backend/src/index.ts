@@ -49,8 +49,101 @@ import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
+import { pluginPaths } from './services/pluginPaths.js';
+import { pluginInstaller } from './services/pluginInstaller.js';
+import { agentImporter } from './services/agentImporter.js';
+import { cleanBeforeInstall, flushMCPConfig } from './services/pluginInstallStrategy.js';
+import { isCursorEngine } from './config/engineConfig.js';
 
 dotenv.config();
+
+// ============================================================================
+// Builtin Marketplace Initialization
+// ============================================================================
+
+/**
+ * Initialize builtin marketplaces from environment variable.
+ * 
+ * BUILTIN_MARKETPLACES: comma-separated list of local paths (e.g., "/marketplace,/another/path")
+ * 
+ * For each path:
+ * 1. Register as local marketplace (if not already registered)
+ * 2. Re-sync (re-copy) from source to ensure latest data
+ * 3. Clean target directories (cursor-cli engine only)
+ * 4. Install all plugins
+ * 5. Flush MCP config (cursor-cli engine only)
+ * 6. Import AgentStudio agents
+ */
+async function initializeBuiltinMarketplaces(builtinPaths: string): Promise<void> {
+  const fsSync = await import('fs');
+  const pathModule = await import('path');
+  
+  const paths = builtinPaths.split(',').map(p => p.trim()).filter(Boolean);
+  
+  for (const localPath of paths) {
+    if (!fsSync.existsSync(localPath)) {
+      console.warn(`[BuiltinMarketplaces] Path does not exist, skipping: ${localPath}`);
+      continue;
+    }
+
+    const name = pathModule.basename(localPath) || 'default';
+    console.info(`[BuiltinMarketplaces] Processing builtin marketplace: ${name} (${localPath})`);
+
+    try {
+      if (pluginPaths.marketplaceExists(name)) {
+        // Already registered - remove and re-add to refresh from source.
+        // Local marketplaces don't support sync, so we re-copy to ensure latest data.
+        console.info(`[BuiltinMarketplaces] Re-syncing existing local marketplace: ${name}`);
+        await pluginInstaller.removeMarketplace(name);
+      }
+
+      // Register marketplace (copies from source)
+      console.info(`[BuiltinMarketplaces] Registering marketplace: ${name}`);
+      const result = await pluginInstaller.addMarketplace({
+        type: 'local',
+        source: localPath,
+        name,
+      });
+
+      if (!result.success) {
+        console.error(`[BuiltinMarketplaces] Failed to add marketplace ${name}: ${result.error}`);
+        continue;
+      }
+
+      // Clean before install (cursor-cli specific: clears skills dir, marketplace rules/commands)
+      cleanBeforeInstall();
+
+      // Install all plugins in this marketplace
+      const plugins = pluginPaths.listPlugins(name);
+      console.info(`[BuiltinMarketplaces] Installing ${plugins.length} plugins from ${name}`);
+      
+      for (const pluginName of plugins) {
+        try {
+          await pluginInstaller.enablePlugin(pluginName, name);
+        } catch (pluginError) {
+          console.error(`[BuiltinMarketplaces] Failed to install plugin ${pluginName}:`, pluginError);
+        }
+      }
+
+      // Flush MCP config (cursor-cli specific: writes unified mcp.json)
+      flushMCPConfig();
+
+      // Import AgentStudio agents from marketplace
+      try {
+        const agentResult = await agentImporter.importAgentsFromMarketplace(name);
+        if (agentResult.importedCount > 0) {
+          console.info(`[BuiltinMarketplaces] Imported ${agentResult.importedCount} agents from ${name}`);
+        }
+      } catch (agentError) {
+        console.error(`[BuiltinMarketplaces] Failed to import agents from ${name}:`, agentError);
+      }
+
+      console.info(`[BuiltinMarketplaces] Marketplace ${name} initialized successfully`);
+    } catch (error) {
+      console.error(`[BuiltinMarketplaces] Failed to initialize marketplace ${name}:`, error);
+    }
+  }
+}
 
 // ============================================================================
 // Global Error Handlers - Prevent process crashes
@@ -401,6 +494,18 @@ const app: express.Express = express();
     console.info('[MarketplaceUpdate] Marketplace update service initialized');
   } catch (error) {
     console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
+  }
+
+  // 6. Builtin Marketplaces: Auto-register and install from local paths
+  const builtinMarketplaces = process.env.BUILTIN_MARKETPLACES;
+  if (builtinMarketplaces) {
+    console.info('[BuiltinMarketplaces] Initializing builtin marketplaces...');
+    try {
+      await initializeBuiltinMarketplaces(builtinMarketplaces);
+      console.info('[BuiltinMarketplaces] Builtin marketplaces initialized');
+    } catch (error) {
+      console.error('[BuiltinMarketplaces] Error initializing builtin marketplaces:', error);
+    }
   }
 
   // Static files - serve embedded frontend (for npm package) or development frontend

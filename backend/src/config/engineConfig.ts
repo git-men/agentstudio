@@ -219,9 +219,12 @@ function getClaudeSdkPaths(): EnginePathConfig {
   return {
     userConfigDir: sdkDir,
     mcpConfigPath: path.join(sdkDir, 'mcp.json'),
+    mcpDir: path.join(sdkDir, 'mcp'),
     rulesDir: path.join(sdkDir, 'rules'),
     commandsDir: path.join(sdkDir, 'commands'),
+    agentsDir: path.join(sdkDir, 'agents'),
     skillsDir: path.join(sdkDir, 'skills'),
+    hooksDir: path.join(sdkDir, 'hooks'),
     pluginsDir: path.join(sdkDir, 'plugins'),
     projectsDataDir: path.join(sdkDir, 'projects'),
   };
@@ -235,10 +238,13 @@ function getCursorCliPaths(): EnginePathConfig {
   return {
     userConfigDir: cursorDir,
     mcpConfigPath: path.join(cursorDir, 'mcp.json'),
+    mcpDir: path.join(cursorDir, 'mcp'),
     rulesDir: path.join(cursorDir, 'rules'),
     commandsDir: path.join(cursorDir, 'commands'),
+    agentsDir: path.join(cursorDir, 'agents'),
     skillsDir: path.join(cursorDir, 'skills'),
     builtinSkillsDir: path.join(cursorDir, 'skills-cursor'),
+    hooksDir: path.join(cursorDir, 'hooks'),
     pluginsDir: path.join(cursorDir, 'plugins'),
     projectsDataDir: path.join(cursorDir, 'projects'),
   };
@@ -415,6 +421,30 @@ export function getCommandsDir(): string {
  */
 export function getSkillsDir(): string {
   return getEnginePaths().skillsDir;
+}
+
+/**
+ * Get agents directory (backward compatible)
+ * @deprecated Use getEnginePaths().agentsDir instead
+ */
+export function getAgentsDir(): string {
+  return getEnginePaths().agentsDir;
+}
+
+/**
+ * Get hooks directory (backward compatible)
+ * @deprecated Use getEnginePaths().hooksDir instead
+ */
+export function getHooksDir(): string {
+  return getEnginePaths().hooksDir;
+}
+
+/**
+ * Get MCP directory (backward compatible)
+ * @deprecated Use getEnginePaths().mcpDir instead
+ */
+export function getMcpDir(): string {
+  return getEnginePaths().mcpDir;
 }
 
 /**

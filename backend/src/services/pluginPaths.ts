@@ -1,14 +1,23 @@
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import { getSdkDir, getPluginsDir, getCommandsDir, getAgentsDir, getSkillsDir, getHooksDir, getMcpDir } from '../config/sdkConfig.js';
+import { getEnginePaths, getEngineType } from '../config/engineConfig.js';
+
+// Backward-compatible path accessors derived from engineConfig
+const getSdkDir = () => getEnginePaths().userConfigDir;
+const getPluginsDir = () => getEnginePaths().pluginsDir || path.join(getSdkDir(), 'plugins');
+const getCommandsDir = () => getEnginePaths().commandsDir;
+const getAgentsDir = () => getEnginePaths().agentsDir;
+const getSkillsDir = () => getEnginePaths().skillsDir;
+const getHooksDir = () => getEnginePaths().hooksDir;
+const getMcpDir = () => getEnginePaths().mcpDir;
 
 /**
  * Plugin Paths Service
- * Manages paths according to Agent SDK's standard structure
+ * Manages paths according to the current engine's standard structure
  * 
- * Supports multiple SDK engines (claude-code, claude-internal, code-buddy)
- * configured via AGENT_SDK environment variable
+ * Supports engines: cursor-cli (uses ~/.cursor), claude-sdk (uses ~/.claude)
+ * configured via ENGINE environment variable
  */
 class PluginPaths {
   private claudeDir: string;

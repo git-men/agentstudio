@@ -7,7 +7,7 @@ import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
 import { pluginPaths } from './pluginPaths';
 import { pluginParser } from './pluginParser';
-import { pluginSymlink } from './pluginSymlink';
+import { getPluginInstaller, cleanBeforeInstall, flushMCPConfig } from './pluginInstallStrategy';
 import { pluginScanner } from './pluginScanner';
 import { 
   MarketplaceAddRequest, 
@@ -339,8 +339,8 @@ class PluginInstaller {
         };
       }
 
-      // Create symlinks
-      await pluginSymlink.createSymlinks(parsedPlugin);
+      // Install plugin components (symlinks for claude-sdk, file copy for cursor-cli)
+      await getPluginInstaller().createSymlinks(parsedPlugin);
 
       // Get installed plugin info
       const installedPlugin = await pluginScanner.scanPlugin(marketplaceName, pluginName);
@@ -379,8 +379,8 @@ class PluginInstaller {
       // Parse plugin to get components
       const parsedPlugin = await pluginParser.parsePlugin(pluginPath, marketplaceName, pluginName);
 
-      // Remove symlinks
-      await pluginSymlink.removeSymlinks(parsedPlugin);
+      // Remove installed plugin components
+      await getPluginInstaller().removeSymlinks(parsedPlugin);
 
       return true;
     } catch (error) {

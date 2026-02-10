@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { pluginPaths } from './pluginPaths';
 import { pluginParser } from './pluginParser';
-import { pluginSymlink } from './pluginSymlink';
+import { getPluginInstaller } from './pluginInstallStrategy';
 import { InstalledPlugin, PluginMarketplace, AvailablePlugin, MarketplaceManifest } from '../types/plugins';
 
 /**
@@ -150,7 +150,7 @@ class PluginScanner {
       const parsedPlugin = await pluginParser.parsePlugin(pluginPath, marketplaceName, pluginName);
 
       // Check if symlinks are created
-      const symlinkCreated = await pluginSymlink.checkSymlinks(parsedPlugin);
+      const symlinkCreated = await getPluginInstaller().checkSymlinks(parsedPlugin);
 
       // Get install timestamp
       const stats = fs.statSync(pluginPath);

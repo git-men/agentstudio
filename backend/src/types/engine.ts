@@ -83,13 +83,19 @@ export interface EnginePathConfig {
   userConfigDir: string;
   /** MCP config file path */
   mcpConfigPath: string;
+  /** MCP directory for plugin MCP servers (e.g., ~/.claude/mcp) */
+  mcpDir: string;
   /** Rules directory */
   rulesDir: string;
   /** Commands directory */
   commandsDir: string;
+  /** Agents directory (e.g., ~/.claude/agents) */
+  agentsDir: string;
   /** Skills directories (user-created and built-in) */
   skillsDir: string;
   builtinSkillsDir?: string;
+  /** Hooks directory (e.g., ~/.claude/hooks) */
+  hooksDir: string;
   /** Plugins directory */
   pluginsDir?: string;
   /** Projects data directory (e.g., ~/.cursor/projects) */
