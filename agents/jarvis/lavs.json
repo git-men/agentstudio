@@ -1,8 +1,8 @@
 {
   "lavs": "1.0",
   "name": "jarvis",
-  "version": "1.0.0",
-  "description": "Jarvis 个人秘书 - Todo 管理和日志记录服务",
+  "version": "2.0.0",
+  "description": "Jarvis 个人秘书 - Todo 管理、日志记录和记忆系统",
 
   "endpoints": [
     {
@@ -258,6 +258,61 @@
           }
         }
       }
+    },
+    {
+      "id": "listMemory",
+      "method": "query",
+      "description": "列出记忆系统中的分类和文件",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "memory-list"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string", "description": "记忆分类 (personal/projects/preferences/insights/people/events)" }
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": { "$ref": "#/types/MemoryItem" }
+        }
+      }
+    },
+    {
+      "id": "getMemory",
+      "method": "query",
+      "description": "获取指定记忆文件内容",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/jarvis-service.cjs", "memory-get"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string", "description": "记忆分类" },
+            "filename": { "type": "string", "description": "文件名" }
+          },
+          "required": ["category", "filename"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "category": { "type": "string" },
+            "filename": { "type": "string" },
+            "content": { "type": "string" },
+            "exists": { "type": "boolean" }
+          }
+        }
+      }
     }
   ],
 
@@ -278,7 +333,7 @@
         "title": { "type": "string" },
         "description": { "type": "string" },
         "type": { "type": "string", "enum": ["personal", "delegated", "mixed"] },
-        "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "cancelled", "waiting_confirmation"] },
+        "status": { "type": "string", "enum": ["draft", "pending", "in_progress", "completed", "cancelled", "waiting_confirmation"] },
         "priority": { "type": "string", "enum": ["high", "medium", "low"] },
         "deadline": { "type": "string", "format": "date-time" },
         "scheduledTime": { "type": "string", "format": "date-time" },
@@ -296,12 +351,15 @@
       "type": "object",
       "properties": {
         "total": { "type": "number" },
+        "draft": { "type": "number" },
         "pending": { "type": "number" },
         "in_progress": { "type": "number" },
+        "waiting_confirmation": { "type": "number" },
         "completed": { "type": "number" },
         "high_priority": { "type": "number" },
         "personal": { "type": "number" },
-        "delegated": { "type": "number" }
+        "delegated": { "type": "number" },
+        "overdue": { "type": "number" }
       }
     },
     "Journal": {
@@ -309,13 +367,24 @@
       "properties": {
         "date": { "type": "string" },
         "path": { "type": "string" },
-        "preview": { "type": "string" }
+        "preview": { "type": "string" },
+        "size": { "type": "number" }
+      }
+    },
+    "MemoryItem": {
+      "type": "object",
+      "properties": {
+        "category": { "type": "string" },
+        "filename": { "type": "string" },
+        "preview": { "type": "string" },
+        "size": { "type": "number" },
+        "updatedAt": { "type": "string" }
       }
     }
   },
 
   "permissions": {
-    "fileAccess": ["./data/**/*", "./journal/**/*"],
+    "fileAccess": ["./data/**/*", "./journal/**/*", "./memory/**/*"],
     "networkAccess": false,
     "maxExecutionTime": 30000
   }

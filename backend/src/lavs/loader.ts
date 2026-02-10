@@ -32,10 +32,11 @@ export class ManifestLoader {
       let parsed: any;
       try {
         parsed = JSON.parse(content);
-      } catch (e: any) {
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : String(e);
         throw new LAVSError(
           LAVSErrorCode.ParseError,
-          `Invalid JSON in manifest: ${e.message}`,
+          `Invalid JSON in manifest: ${message}`,
           { cause: e }
         );
       }
@@ -47,13 +48,14 @@ export class ManifestLoader {
       const manifest = this.resolvePaths(parsed, manifestPath);
 
       return manifest as LAVSManifest;
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof LAVSError) {
         throw error;
       }
+      const message = error instanceof Error ? error.message : String(error);
       throw new LAVSError(
         LAVSErrorCode.InternalError,
-        `Failed to load manifest: ${error.message}`,
+        `Failed to load manifest: ${message}`,
         { cause: error }
       );
     }
@@ -92,9 +94,17 @@ export class ManifestLoader {
       );
     }
 
-    // Validate each endpoint
+    // Validate each endpoint + uniqueness check
+    const seenIds = new Set<string>();
     for (const endpoint of manifest.endpoints) {
       this.validateEndpoint(endpoint);
+      if (seenIds.has(endpoint.id)) {
+        throw new LAVSError(
+          LAVSErrorCode.InvalidRequest,
+          `Duplicate endpoint ID: '${endpoint.id}'. Endpoint IDs must be unique.`
+        );
+      }
+      seenIds.add(endpoint.id);
     }
   }
 

@@ -8,7 +8,10 @@
 import { LAVSManifest, Endpoint } from '../lavs/types.js';
 import { ManifestLoader } from '../lavs/loader.js';
 import { ScriptExecutor } from '../lavs/script-executor.js';
-import { ScriptHandler, ExecutionContext } from '../lavs/types.js';
+import { FunctionExecutor } from '../lavs/function-executor.js';
+import { LAVSValidator } from '../lavs/validator.js';
+import { PermissionChecker } from '../lavs/permission-checker.js';
+import { ScriptHandler, FunctionHandler, ExecutionContext } from '../lavs/types.js';
 import path from 'path';
 
 /**
@@ -75,9 +78,10 @@ export class LAVSToolGenerator {
 
       console.log(`[LAVS] Generated ${tools.length} tools for agent ${agentId}`);
       return tools;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // If no lavs.json, that's OK - just return empty array
-      if (error.message && error.message.includes('not found')) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('not found')) {
         return [];
       }
       throw error;
@@ -121,36 +125,70 @@ export class LAVSToolGenerator {
       },
     };
 
+    // Create shared instances for validation and permission checking
+    const validator = new LAVSValidator();
+    const permChecker = new PermissionChecker();
+
     // Create executor function
     const execute: ToolExecutor = async (params: any) => {
       console.log(`[LAVS] Executing tool ${toolName} with params:`, params);
 
-      // Only script handlers are supported in PoC
-      if (endpoint.handler.type !== 'script') {
-        throw new Error(`Handler type ${endpoint.handler.type} not supported yet`);
+      // 1. Validate input against schema
+      validator.assertValidInput(endpoint, params);
+
+      // 2. Merge permissions
+      const mergedPermissions = permChecker.mergePermissions(
+        manifest.permissions,
+        endpoint.permissions
+      );
+
+      // 3. Check permissions for script handlers
+      if (endpoint.handler.type === 'script') {
+        permChecker.assertAllowed(
+          endpoint.handler as ScriptHandler,
+          mergedPermissions,
+          agentDir
+        );
       }
 
-      // Execute the handler
-      const executor = new ScriptExecutor();
+      // 4. Build execution context
       const context: ExecutionContext = {
         endpointId: endpoint.id,
         agentId,
         workdir: agentDir,
-        permissions: {
-          ...(manifest.permissions || {}),
-          ...(endpoint.permissions || {}),
-        },
-        // Pass projectPath as environment variable for data isolation
+        permissions: mergedPermissions,
         env: projectPath ? {
           LAVS_PROJECT_PATH: projectPath,
         } : undefined,
       };
 
-      const result = await executor.execute(
-        endpoint.handler as ScriptHandler,
-        params,
-        context
-      );
+      // 5. Execute the handler
+      let result: unknown;
+      switch (endpoint.handler.type) {
+        case 'script': {
+          const executor = new ScriptExecutor();
+          result = await executor.execute(
+            endpoint.handler as ScriptHandler,
+            params,
+            context
+          );
+          break;
+        }
+        case 'function': {
+          const funcExecutor = new FunctionExecutor();
+          result = await funcExecutor.execute(
+            endpoint.handler as FunctionHandler,
+            params,
+            context
+          );
+          break;
+        }
+        default:
+          throw new Error(`Handler type '${endpoint.handler.type}' is not yet supported in tool generation`);
+      }
+
+      // 5. Validate output against schema
+      validator.assertValidOutput(endpoint, result);
 
       return result;
     };
