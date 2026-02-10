@@ -499,8 +499,10 @@ router.post('/chat', async (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx/proxy buffering
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+    res.flushHeaders(); // Flush headers immediately to start streaming
 
     // 设置连接管理
     const connectionManager = setupSSEConnectionManagement(req, res, agentId);
