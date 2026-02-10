@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { ParsedPlugin, PluginManifest, PluginComponent, PluginFile } from '../types/plugins';
+import { pluginPaths } from './pluginPaths';
 
 /**
  * Plugin Parser Service
@@ -12,10 +13,10 @@ class PluginParser {
    */
   async parsePlugin(pluginPath: string, marketplaceName: string, pluginName: string): Promise<ParsedPlugin> {
     // Read plugin manifest
-    const manifest = await this.readManifest(pluginPath, pluginName);
+    const manifest = await this.readManifest(pluginPath, pluginName, marketplaceName);
 
-    // Parse components
-    const components = await this.parseComponents(pluginPath, pluginName);
+    // Parse components (also check marketplace.json for virtual plugin components like MCP)
+    const components = await this.parseComponents(pluginPath, pluginName, marketplaceName);
 
     // Get all files
     const files = await this.getAllFiles(pluginPath);
@@ -32,8 +33,11 @@ class PluginParser {
 
   /**
    * Read plugin manifest (.claude-plugin/plugin.json or from marketplace.json)
+   * Supports:
+   * 1. Standard: pluginPath/.claude-plugin/plugin.json
+   * 2. Virtual: defined in marketplace.json (walks up directory tree to find it)
    */
-  private async readManifest(pluginPath: string, pluginName?: string): Promise<PluginManifest> {
+  private async readManifest(pluginPath: string, pluginName?: string, marketplaceName?: string): Promise<PluginManifest> {
     const manifestPath = path.join(pluginPath, '.claude-plugin', 'plugin.json');
 
     // First, try standard plugin.json
@@ -42,94 +46,128 @@ class PluginParser {
         const content = fs.readFileSync(manifestPath, 'utf-8');
         const manifest = JSON.parse(content);
 
-        // Validate required fields
-        if (!manifest.name || !manifest.description || !manifest.version || !manifest.author) {
-          throw new Error('Plugin manifest is missing required fields (name, description, version, author)');
+        // Validate required fields (relaxed: author is optional for better compatibility)
+        if (!manifest.name || !manifest.description || !manifest.version) {
+          throw new Error('Plugin manifest is missing required fields (name, description, version)');
+        }
+
+        // Fill in author from marketplace if missing
+        if (!manifest.author && marketplaceName) {
+          const marketplaceManifest = this.readMarketplaceManifest(marketplaceName);
+          if (marketplaceManifest?.owner) {
+            manifest.author = marketplaceManifest.owner;
+          } else {
+            manifest.author = { name: 'Unknown' };
+          }
         }
 
         return manifest;
       } catch (error) {
-        if (error instanceof Error) {
+        if (error instanceof Error && error.message.includes('missing required fields')) {
           throw new Error(`Failed to parse plugin manifest: ${error.message}`);
         }
-        throw error;
+        // If parsing failed, fall through to marketplace.json fallback
       }
     }
 
-    // Fallback: try to read from marketplace.json (for marketplace-defined plugins)
-    // Check if pluginPath itself has marketplace.json (for virtual plugins where source is "./")
-    const marketplaceManifestPath = path.join(pluginPath, '.claude-plugin', 'marketplace.json');
-
-    if (fs.existsSync(marketplaceManifestPath)) {
-      try {
-        const content = fs.readFileSync(marketplaceManifestPath, 'utf-8');
-        const marketplaceManifest = JSON.parse(content);
-
-        // Find plugin definition in marketplace.json
-        if (marketplaceManifest.plugins && Array.isArray(marketplaceManifest.plugins)) {
-          // Use provided pluginName if available, otherwise try to match by source path
-          let pluginDef;
-
-          if (pluginName) {
-            pluginDef = marketplaceManifest.plugins.find((p: any) => p.name === pluginName);
-          } else {
-            pluginDef = marketplaceManifest.plugins.find((p: any) => {
-              const resolvedSource = path.resolve(pluginPath, p.source);
-              return resolvedSource === pluginPath;
-            });
-          }
-
-          if (pluginDef) {
-            // Create a synthetic manifest from marketplace plugin definition
-            return {
-              name: pluginDef.name,
-              description: pluginDef.description || 'No description available',
-              version: marketplaceManifest.metadata?.version || '1.0.0',
-              author: marketplaceManifest.owner || { name: 'Unknown' },
-            };
-          }
-        }
-      } catch (error) {
-        console.error('Failed to read marketplace manifest:', error);
-      }
-    }
-
-    // Also try parent directory in case pluginPath is a subdirectory
-    const parentPath = path.dirname(pluginPath);
-    const parentMarketplaceManifestPath = path.join(parentPath, '.claude-plugin', 'marketplace.json');
-
-    if (fs.existsSync(parentMarketplaceManifestPath)) {
-      try {
-        const content = fs.readFileSync(parentMarketplaceManifestPath, 'utf-8');
-        const marketplaceManifest = JSON.parse(content);
-        const pluginName = path.basename(pluginPath);
-
-        // Find plugin definition in marketplace.json
-        if (marketplaceManifest.plugins && Array.isArray(marketplaceManifest.plugins)) {
-          const pluginDef = marketplaceManifest.plugins.find((p: any) => p.name === pluginName);
-
-          if (pluginDef) {
-            // Create a synthetic manifest from marketplace plugin definition
-            return {
-              name: pluginDef.name,
-              description: pluginDef.description || 'No description available',
-              version: marketplaceManifest.metadata?.version || '1.0.0',
-              author: marketplaceManifest.owner || { name: 'Unknown' },
-            };
-          }
-        }
-      } catch (error) {
-        console.error('Failed to read parent marketplace manifest:', error);
-      }
+    // Fallback: search for marketplace.json by walking up the directory tree
+    // This supports virtual plugins that are defined only in marketplace.json
+    const syntheticManifest = this.readManifestFromMarketplaceJson(pluginPath, pluginName, marketplaceName);
+    if (syntheticManifest) {
+      return syntheticManifest;
     }
 
     throw new Error('Plugin manifest not found (.claude-plugin/plugin.json or marketplace.json)');
   }
 
   /**
+   * Read the marketplace's marketplace.json file
+   */
+  private readMarketplaceManifest(marketplaceName: string): any | null {
+    try {
+      const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
+      const manifestPath = path.join(marketplacePath, '.claude-plugin', 'marketplace.json');
+      if (fs.existsSync(manifestPath)) {
+        return JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+      }
+    } catch {
+      // Ignore
+    }
+    return null;
+  }
+
+  /**
+   * Try to create a synthetic manifest by searching for marketplace.json
+   * Walks up the directory tree from pluginPath, or uses marketplaceName directly
+   */
+  private readManifestFromMarketplaceJson(
+    pluginPath: string,
+    pluginName?: string,
+    marketplaceName?: string
+  ): PluginManifest | null {
+    // Strategy 1: If marketplaceName is provided, go directly to the marketplace root
+    if (marketplaceName) {
+      const marketplaceManifest = this.readMarketplaceManifest(marketplaceName);
+      if (marketplaceManifest) {
+        const manifest = this.extractPluginFromMarketplace(marketplaceManifest, pluginName || path.basename(pluginPath));
+        if (manifest) return manifest;
+      }
+    }
+
+    // Strategy 2: Walk up the directory tree to find marketplace.json
+    let currentDir = pluginPath;
+    const root = path.parse(currentDir).root;
+    const maxDepth = 5; // Safety limit
+    
+    for (let i = 0; i < maxDepth; i++) {
+      const marketplaceManifestPath = path.join(currentDir, '.claude-plugin', 'marketplace.json');
+      
+      if (fs.existsSync(marketplaceManifestPath)) {
+        try {
+          const content = fs.readFileSync(marketplaceManifestPath, 'utf-8');
+          const marketplaceManifest = JSON.parse(content);
+          const manifest = this.extractPluginFromMarketplace(
+            marketplaceManifest, 
+            pluginName || path.basename(pluginPath)
+          );
+          if (manifest) return manifest;
+        } catch (error) {
+          console.error('Failed to read marketplace manifest:', error);
+        }
+      }
+
+      // Move up one directory
+      const parentDir = path.dirname(currentDir);
+      if (parentDir === currentDir || parentDir === root) break;
+      currentDir = parentDir;
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract a plugin definition from a marketplace manifest and create a synthetic PluginManifest
+   */
+  private extractPluginFromMarketplace(marketplaceManifest: any, pluginName: string): PluginManifest | null {
+    if (!marketplaceManifest.plugins || !Array.isArray(marketplaceManifest.plugins)) {
+      return null;
+    }
+
+    const pluginDef = marketplaceManifest.plugins.find((p: any) => p.name === pluginName);
+    if (!pluginDef) return null;
+
+    return {
+      name: pluginDef.name,
+      description: pluginDef.description || 'No description available',
+      version: pluginDef.version || marketplaceManifest.metadata?.version || '1.0.0',
+      author: pluginDef.author || marketplaceManifest.owner || { name: 'Unknown' },
+    };
+  }
+
+  /**
    * Parse plugin components
    */
-  private async parseComponents(pluginPath: string, pluginName?: string): Promise<ParsedPlugin['components']> {
+  private async parseComponents(pluginPath: string, pluginName?: string, marketplaceName?: string): Promise<ParsedPlugin['components']> {
     const components: ParsedPlugin['components'] = {
       commands: [],
       agents: [],
@@ -139,17 +177,36 @@ class PluginParser {
     };
 
     // Check if this plugin is defined in marketplace.json with skills
-    // First check if pluginPath itself has marketplace.json (for virtual plugins)
-    let marketplaceManifestPath = path.join(pluginPath, '.claude-plugin', 'marketplace.json');
+    // Use marketplaceName to find marketplace.json directly, or walk up
+    let marketplaceManifestPath: string | null = null;
     let usePluginPath = pluginPath;
 
-    // If not found, try parent directory
-    if (!fs.existsSync(marketplaceManifestPath)) {
-      usePluginPath = path.dirname(pluginPath);
-      marketplaceManifestPath = path.join(usePluginPath, '.claude-plugin', 'marketplace.json');
+    if (marketplaceName) {
+      // Direct lookup via marketplace name
+      const mpPath = pluginPaths.getMarketplacePath(marketplaceName);
+      const mpManifest = path.join(mpPath, '.claude-plugin', 'marketplace.json');
+      if (fs.existsSync(mpManifest)) {
+        marketplaceManifestPath = mpManifest;
+        usePluginPath = mpPath;
+      }
     }
 
-    if (fs.existsSync(marketplaceManifestPath) && pluginName) {
+    // Fallback: check pluginPath itself, then parent
+    if (!marketplaceManifestPath) {
+      const selfPath = path.join(pluginPath, '.claude-plugin', 'marketplace.json');
+      if (fs.existsSync(selfPath)) {
+        marketplaceManifestPath = selfPath;
+        usePluginPath = pluginPath;
+      } else {
+        const parentPath = path.join(path.dirname(pluginPath), '.claude-plugin', 'marketplace.json');
+        if (fs.existsSync(parentPath)) {
+          marketplaceManifestPath = parentPath;
+          usePluginPath = path.dirname(pluginPath);
+        }
+      }
+    }
+
+    if (marketplaceManifestPath && pluginName) {
       try {
         const content = fs.readFileSync(marketplaceManifestPath, 'utf-8');
         const marketplaceManifest = JSON.parse(content);
@@ -428,7 +485,7 @@ class PluginParser {
   /**
    * Validate plugin structure
    */
-  async validatePlugin(pluginPath: string, pluginName?: string): Promise<{ valid: boolean; errors: string[] }> {
+  async validatePlugin(pluginPath: string, pluginName?: string, marketplaceName?: string): Promise<{ valid: boolean; errors: string[] }> {
     const errors: string[] = [];
     
     // Check if directory exists
@@ -439,7 +496,7 @@ class PluginParser {
     
     // Try to read manifest using the same logic as readManifest
     try {
-      await this.readManifest(pluginPath, pluginName);
+      await this.readManifest(pluginPath, pluginName, marketplaceName);
     } catch (error) {
       if (error instanceof Error) {
         errors.push(error.message);

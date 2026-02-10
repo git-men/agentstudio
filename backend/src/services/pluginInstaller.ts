@@ -331,7 +331,7 @@ class PluginInstaller {
       const parsedPlugin = await pluginParser.parsePlugin(pluginPath, marketplaceName, pluginName);
 
       // Check if plugin is valid
-      const validation = await pluginParser.validatePlugin(pluginPath, pluginName);
+      const validation = await pluginParser.validatePlugin(pluginPath, pluginName, marketplaceName);
       if (!validation.valid) {
         return {
           success: false,

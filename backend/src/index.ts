@@ -117,13 +117,27 @@ async function initializeBuiltinMarketplaces(builtinPaths: string): Promise<void
       const plugins = pluginPaths.listPlugins(name);
       console.info(`[BuiltinMarketplaces] Installing ${plugins.length} plugins from ${name}`);
       
+      let installedCount = 0;
+      let failedCount = 0;
       for (const pluginName of plugins) {
         try {
-          await pluginInstaller.enablePlugin(pluginName, name);
+          const installResult = await pluginInstaller.installPlugin({
+            pluginName,
+            marketplaceName: name,
+            marketplaceId: name,
+          });
+          if (installResult.success) {
+            installedCount++;
+          } else {
+            failedCount++;
+            console.warn(`[BuiltinMarketplaces] Plugin ${pluginName} install returned: ${installResult.error}`);
+          }
         } catch (pluginError) {
+          failedCount++;
           console.error(`[BuiltinMarketplaces] Failed to install plugin ${pluginName}:`, pluginError);
         }
       }
+      console.info(`[BuiltinMarketplaces] ${name}: ${installedCount} installed, ${failedCount} failed out of ${plugins.length} total`);
 
       // Flush MCP config (cursor-cli specific: writes unified mcp.json)
       flushMCPConfig();
