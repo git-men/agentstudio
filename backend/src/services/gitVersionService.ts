@@ -126,6 +126,25 @@ async function getNextVersionNumber(projectPath: string): Promise<number> {
 }
 
 /**
+ * Get the next version number (auto-increment)
+ */
+async function getNextVersionNumber(projectPath: string): Promise<number> {
+  try {
+    const output = await git(projectPath, ['tag', '--list', 'v*', '--sort=-version:refname']);
+    if (!output) return 1;
+
+    const tags = output.split('\n').filter(t => /^v\d+$/.test(t));
+    if (tags.length === 0) return 1;
+
+    // Extract the highest version number
+    const maxVersion = Math.max(...tags.map(t => parseInt(t.substring(1), 10)));
+    return maxVersion + 1;
+  } catch {
+    return 1;
+  }
+}
+
+/**
  * Create a new version (git add + commit + tag)
  */
 export async function createVersion(
@@ -134,18 +153,6 @@ export async function createVersion(
 ): Promise<CreateVersionResult> {
   // Validate project path exists
   if (!fs.existsSync(projectPath)) {
-    let realPath: string | null = null;
-    try {
-      realPath = fs.realpathSync(projectPath);
-    } catch {
-      realPath = null;
-    }
-    console.error('[GitVersion] createVersion: project path missing', {
-      projectPath,
-      cwd: process.cwd(),
-      realPath,
-      exists: false,
-    });
     throw new Error(`Project path does not exist: ${projectPath}`);
   }
 
@@ -188,9 +195,9 @@ export async function createVersion(
   await git(projectPath, ['tag', '-a', tag, '-m', commitMessage]);
 
   // Get the commit hash
-  const commitHash = await git(projectPath, ['rev-parse', 'HEAD']);
+  const hash = await git(projectPath, ['rev-parse', 'HEAD']);
 
-  return { tag, hash: commitHash, commitHash, message: commitMessage };
+  return { tag, hash, commitHash: hash, message: commitMessage };
 }
 /**
  * Create a tag for the current HEAD without creating a new commit
