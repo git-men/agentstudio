@@ -11,6 +11,7 @@ import { execSync, spawnSync } from 'child_process';
 import { existsSync, mkdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir, platform } from 'os';
+import { AGENTSTUDIO_HOME, SCRIPTS_DIR, PID_FILE, RUN_DIR } from '../config/paths.js';
 
 // Service configuration
 const SERVICE_NAME = 'agentstudio';
@@ -45,6 +46,27 @@ function getExecutablePath(): string {
   }
 }
 
+// Check if a file is a shell script (e.g., pnpm wrapper)
+function isShellScript(filePath: string): boolean {
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    return content.startsWith('#!/bin/sh') || content.startsWith('#!/usr/bin/env sh') || content.startsWith('#!/bin/bash');
+  } catch {
+    return false;
+  }
+}
+
+// Get the launch arguments for the agentstudio executable
+// Returns [program, ...args] where program is either node (for JS files) or /bin/sh (for shell wrappers)
+function getLaunchArgs(execPath: string): { program: string; script: string } {
+  if (isShellScript(execPath)) {
+    // pnpm creates shell script wrappers - run them with /bin/sh
+    return { program: '/bin/sh', script: execPath };
+  }
+  // npm/yarn creates JS files or symlinks - run them with node
+  return { program: getNodePath(), script: execPath };
+}
+
 // Get Node.js path
 function getNodePath(): string {
   return process.execPath;
@@ -60,14 +82,11 @@ function getLaunchdPlistPath(): string {
 
 function generateLaunchdPlist(config: ServiceConfig): string {
   const execPath = getExecutablePath();
-  const nodePath = getNodePath();
-  const logDir = join(homedir(), '.agentstudio', 'logs');
-  
-  // Ensure log directory exists
-  if (!existsSync(logDir)) {
-    mkdirSync(logDir, { recursive: true });
-  }
+  const { program, script } = getLaunchArgs(execPath);
 
+  // Logs are handled by macOS unified logging (os_log).
+  // View with: log show --predicate 'subsystem == "cc.agentstudio"' --last 1h
+  // Or use Console.app.
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -77,8 +96,8 @@ function generateLaunchdPlist(config: ServiceConfig): string {
     
     <key>ProgramArguments</key>
     <array>
-        <string>${nodePath}</string>
-        <string>${execPath}</string>
+        <string>${program}</string>
+        <string>${script}</string>
         <string>start</string>
         <string>--port</string>
         <string>${config.port}</string>
@@ -91,12 +110,6 @@ function generateLaunchdPlist(config: ServiceConfig): string {
     
     <key>KeepAlive</key>
     <true/>
-    
-    <key>StandardOutPath</key>
-    <string>${join(logDir, 'stdout.log')}</string>
-    
-    <key>StandardErrorPath</key>
-    <string>${join(logDir, 'stderr.log')}</string>
     
     <key>WorkingDirectory</key>
     <string>${homedir()}</string>
@@ -191,26 +204,23 @@ function macOSServiceAction(action: string): void {
       }
       break;
     case 'logs':
-      const logDir = join(homedir(), '.agentstudio', 'logs');
-      const stdoutLog = join(logDir, 'stdout.log');
-      const stderrLog = join(logDir, 'stderr.log');
-      
-      console.log('\n📋 Standard Output (last 50 lines):');
-      if (existsSync(stdoutLog)) {
+      // Use macOS unified logging system
+      console.log('\n📋 AgentStudio Logs (last 50 entries):');
+      try {
+        execSync(
+          `log show --predicate 'subsystem == "cc.${SERVICE_NAME}" OR process == "agentstudio"' --last 1h --style compact | tail -50`,
+          { stdio: 'inherit' }
+        );
+      } catch {
+        console.log('(no logs found via os_log, trying process name...)');
         try {
-          execSync(`tail -50 "${stdoutLog}"`, { stdio: 'inherit' });
-        } catch { /* ignore */ }
-      } else {
-        console.log('(no logs yet)');
-      }
-      
-      console.log('\n📋 Standard Error (last 20 lines):');
-      if (existsSync(stderrLog)) {
-        try {
-          execSync(`tail -20 "${stderrLog}"`, { stdio: 'inherit' });
-        } catch { /* ignore */ }
-      } else {
-        console.log('(no errors)');
+          execSync(
+            `log show --predicate 'process CONTAINS "agentstudio" OR process CONTAINS "node"' --last 30m --style compact | tail -50`,
+            { stdio: 'inherit' }
+          );
+        } catch {
+          console.log('(no logs available)');
+        }
       }
       break;
   }
@@ -227,7 +237,7 @@ function getSystemdServicePath(): string {
 
 function generateSystemdService(config: ServiceConfig): string {
   const execPath = getExecutablePath();
-  const nodePath = getNodePath();
+  const { program, script } = getLaunchArgs(execPath);
 
   return `[Unit]
 Description=${SERVICE_DESCRIPTION}
@@ -235,7 +245,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=${nodePath} ${execPath} start --port ${config.port} --data-dir ${config.dataDir}
+ExecStart=${program} ${script} start --port ${config.port} --data-dir ${config.dataDir}
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -251,17 +261,18 @@ WantedBy=default.target
 
 function generateStartScript(config: ServiceConfig): string {
   const execPath = getExecutablePath();
-  const nodePath = getNodePath();
-  const logDir = join(config.dataDir, 'logs');
+  const { program, script } = getLaunchArgs(execPath);
+  const runDir = join(config.dataDir, 'run');
   
   return `#!/bin/bash
 # AgentStudio start script
 # Generated by agentstudio install
 
-LOGDIR="${logDir}"
-PIDFILE="${config.dataDir}/agentstudio.pid"
+RUNDIR="${runDir}"
+PIDFILE="$RUNDIR/agentstudio.pid"
+LOGFILE="/tmp/agentstudio-$(date +%Y%m%d).log"
 
-mkdir -p "$LOGDIR"
+mkdir -p "$RUNDIR"
 
 # Check if already running
 if [ -f "$PIDFILE" ]; then
@@ -272,21 +283,22 @@ if [ -f "$PIDFILE" ]; then
     fi
 fi
 
-# Start the service
-nohup ${nodePath} ${execPath} start --port ${config.port} --data-dir ${config.dataDir} \\
-    > "$LOGDIR/stdout.log" 2> "$LOGDIR/stderr.log" &
+# Start the service (logs go to /tmp for script mode)
+nohup ${program} ${script} start --port ${config.port} --data-dir ${config.dataDir} \\
+    >> "$LOGFILE" 2>&1 &
 
 echo $! > "$PIDFILE"
 echo "AgentStudio started (PID: $!)"
-echo "Logs: $LOGDIR"
+echo "Log file: $LOGFILE"
 `;
 }
 
 function generateStopScript(config: ServiceConfig): string {
+  const runDir = join(config.dataDir, 'run');
   return `#!/bin/bash
 # AgentStudio stop script
 
-PIDFILE="${config.dataDir}/agentstudio.pid"
+PIDFILE="${runDir}/agentstudio.pid"
 
 if [ -f "$PIDFILE" ]; then
     PID=$(cat "$PIDFILE")
@@ -416,8 +428,7 @@ function installLinuxService(config: ServiceConfig): void {
 
 function uninstallLinuxService(): void {
   const servicePath = getSystemdServicePath();
-  const dataDir = join(homedir(), '.agentstudio');
-  const scriptsDir = join(dataDir, 'scripts');
+  const scriptsDir = SCRIPTS_DIR;
   const stopScriptPath = join(scriptsDir, 'stop.sh');
   const startScriptPath = join(scriptsDir, 'start.sh');
 
@@ -466,12 +477,10 @@ function uninstallLinuxService(): void {
 }
 
 function linuxServiceAction(action: string): void {
-  const dataDir = join(homedir(), '.agentstudio');
-  const scriptsDir = join(dataDir, 'scripts');
+  const scriptsDir = SCRIPTS_DIR;
   const startScriptPath = join(scriptsDir, 'start.sh');
   const stopScriptPath = join(scriptsDir, 'stop.sh');
-  const pidFile = join(dataDir, 'agentstudio.pid');
-  const logDir = join(dataDir, 'logs');
+  const pidFile = PID_FILE;
 
   const useSystemd = isSystemdUserAvailable();
   const hasScripts = existsSync(startScriptPath) && existsSync(stopScriptPath);
@@ -585,26 +594,19 @@ function linuxServiceAction(action: string): void {
           console.log('⚠️  journalctl failed, trying log files...');
         }
       }
-      // Script mode logs
-      const stdoutLog = join(logDir, 'stdout.log');
-      const stderrLog = join(logDir, 'stderr.log');
-      
-      console.log('\n📋 Standard Output (last 50 lines):');
-      if (existsSync(stdoutLog)) {
-        try {
-          execSync(`tail -50 "${stdoutLog}"`, { stdio: 'inherit' });
-        } catch { /* ignore */ }
-      } else {
-        console.log('(no logs yet)');
-      }
-      
-      console.log('\n📋 Standard Error (last 20 lines):');
-      if (existsSync(stderrLog)) {
-        try {
-          execSync(`tail -20 "${stderrLog}"`, { stdio: 'inherit' });
-        } catch { /* ignore */ }
-      } else {
-        console.log('(no errors)');
+      // Script mode: logs go to /tmp/agentstudio-*.log
+      console.log('\n📋 AgentStudio Logs (script mode):');
+      try {
+        // Find most recent log file
+        const result = execSync('ls -t /tmp/agentstudio-*.log 2>/dev/null | head -1', { encoding: 'utf8' }).trim();
+        if (result) {
+          console.log(`Log file: ${result}`);
+          execSync(`tail -50 "${result}"`, { stdio: 'inherit' });
+        } else {
+          console.log('(no log files found in /tmp)');
+        }
+      } catch {
+        console.log('(no logs available)');
       }
       break;
   }
@@ -615,6 +617,9 @@ function linuxServiceAction(action: string): void {
 // =============================================================================
 
 function installWindowsService(config: ServiceConfig): void {
+  const execPath = getExecutablePath();
+  const { program, script } = getLaunchArgs(execPath);
+
   console.log('\n📘 Windows Service Installation\n');
   console.log('Windows service installation requires additional tools.');
   console.log('Here are your options:\n');
@@ -626,21 +631,21 @@ function installWindowsService(config: ServiceConfig): void {
   console.log('3. Name: AgentStudio');
   console.log(`4. Trigger: "When the computer starts"`);
   console.log(`5. Action: Start a program`);
-  console.log(`   Program: ${getNodePath()}`);
-  console.log(`   Arguments: ${getExecutablePath()} start --port ${config.port}`);
+  console.log(`   Program: ${program}`);
+  console.log(`   Arguments: ${script} start --port ${config.port}`);
   console.log(`   Start in: ${homedir()}\n`);
 
   console.log('Option 2: Use NSSM (Non-Sucking Service Manager)');
   console.log('------------------------------------------------');
   console.log('1. Download NSSM from https://nssm.cc/');
   console.log('2. Run: nssm install AgentStudio');
-  console.log(`3. Path: ${getNodePath()}`);
-  console.log(`4. Arguments: ${getExecutablePath()} start --port ${config.port}\n`);
+  console.log(`3. Path: ${program}`);
+  console.log(`4. Arguments: ${script} start --port ${config.port}\n`);
 
   console.log('Option 3: Use pm2 (Cross-platform process manager)');
   console.log('--------------------------------------------------');
   console.log('npm install -g pm2');
-  console.log(`pm2 start ${getExecutablePath()} -- start --port ${config.port}`);
+  console.log(`pm2 start ${script} -- start --port ${config.port}`);
   console.log('pm2 save');
   console.log('pm2 startup\n');
 }
@@ -652,7 +657,7 @@ function installWindowsService(config: ServiceConfig): void {
 export function installService(options: { port?: number; dataDir?: string } = {}): void {
   const config: ServiceConfig = {
     port: options.port || DEFAULT_PORT,
-    dataDir: options.dataDir || join(homedir(), '.agentstudio'),
+    dataDir: options.dataDir || AGENTSTUDIO_HOME,
   };
 
   // Ensure data directory exists
@@ -749,8 +754,7 @@ export function isServiceInstalled(): boolean {
     case 'linux':
       // Check both systemd service file and script-mode installation
       const hasServiceFile = existsSync(getSystemdServicePath());
-      const scriptsDir = join(homedir(), '.agentstudio', 'scripts');
-      const hasScripts = existsSync(join(scriptsDir, 'start.sh'));
+      const hasScripts = existsSync(join(SCRIPTS_DIR, 'start.sh'));
       return hasServiceFile || hasScripts;
     default:
       return false;

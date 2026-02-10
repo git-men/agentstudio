@@ -14,12 +14,12 @@
 import { TunnelClient, TunnelClientConfig } from 'tunely';
 import fs from 'fs/promises';
 import path from 'path';
-import { CLAUDE_AGENT_DIR } from '../config/paths.js';
+import { TUNNEL_CONFIG_FILE, getTunnelConfigFile } from '../config/paths.js';
 
 // Configuration file paths
 // Port-specific config takes priority, then falls back to default config
-const getPortConfigFile = (port: number) => path.join(CLAUDE_AGENT_DIR, `tunnel-config-${port}.json`);
-const DEFAULT_CONFIG_FILE = path.join(CLAUDE_AGENT_DIR, 'tunnel-config.json');
+const getPortConfigFile = (port: number) => getTunnelConfigFile(port);
+const DEFAULT_CONFIG_FILE = TUNNEL_CONFIG_FILE;
 
 /**
  * Tunnel configuration stored on disk

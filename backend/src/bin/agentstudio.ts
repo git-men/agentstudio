@@ -5,6 +5,7 @@ import { readFileSync, existsSync } from 'fs';
 import { execSync, spawn } from 'child_process';
 import { homedir, platform } from 'os';
 import { installService, uninstallService, serviceAction, isServiceInstalled } from './serviceManager.js';
+import { AGENTSTUDIO_HOME } from '../config/paths.js';
 
 // Service configuration constants
 const SERVICE_NAME = 'agentstudio';
@@ -187,7 +188,7 @@ program
         // Check service plist path if on macOS
         if (platform() === 'darwin') {
           try {
-            const plistPath = path.join(homedir(), 'Library', 'LaunchAgents', `com.${SERVICE_NAME}.daemon.plist`);
+            const plistPath = path.join(homedir(), 'Library', 'LaunchAgents', `cc.${SERVICE_NAME}.plist`);
             if (existsSync(plistPath)) {
               const plistContent = readFileSync(plistPath, 'utf8');
               if (plistContent.includes('/pnpm/')) {
@@ -273,7 +274,7 @@ program
             try {
               // First, get service config to preserve settings
               let servicePort = DEFAULT_PORT;
-              let serviceDataDir = path.join(homedir(), '.agentstudio');
+              let serviceDataDir = AGENTSTUDIO_HOME;
 
               const os = platform();
               if (os === 'darwin') {
@@ -410,7 +411,7 @@ program
     console.log(`  Platform:     ${process.platform} ${process.arch}`);
     console.log(`  Install path: ${path.dirname(__dirname)}`);
     console.log(`  Working dir:  ${process.cwd()}`);
-    console.log(`  Data dir:     ${path.join(homedir(), '.agentstudio')}`);
+    console.log(`  Data dir:     ${AGENTSTUDIO_HOME}`);
     
     // Check for frontend
     const embeddedFrontend = path.join(__dirname, '../public/index.html');
@@ -429,7 +430,7 @@ program
   .command('install')
   .description('Install AgentStudio as a system service (auto-start on boot)')
   .option('-p, --port <port>', 'server port', '4936')
-  .option('--data-dir <path>', 'data directory', path.join(homedir(), '.agentstudio'))
+  .option('--data-dir <path>', 'data directory', AGENTSTUDIO_HOME)
   .action((options) => {
     installService({
       port: parseInt(options.port),

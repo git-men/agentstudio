@@ -23,7 +23,7 @@ success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 header_log() { echo -e "${PURPLE}[RESTORE]${NC} $1"; }
 
 # Configuration
-BASE_DIR="$HOME/.agent-studio"
+BASE_DIR="$HOME/.agentstudio"
 APP_DIR="$BASE_DIR/app"
 CONFIG_DIR="$BASE_DIR/config"
 LOGS_DIR="$BASE_DIR/logs"

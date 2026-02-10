@@ -87,7 +87,7 @@ RUN mkdir -p /app/backend/public && \
     cp -r /app/frontend/dist/* /app/backend/public/
 
 # Create data directories (use UID/GID instead of username for reliability)
-RUN mkdir -p /home/agentstudio/.agent-studio/{logs,data,config,backup} && \
+RUN mkdir -p /home/agentstudio/.agentstudio/{data,config,agents,run,scripts,slack-session-locks,scheduled-tasks} && \
     mkdir -p /home/agentstudio/.claude/projects && \
     chown -R ${USER_ID}:${GROUP_ID} /home/agentstudio && \
     chown -R ${USER_ID}:${GROUP_ID} /app

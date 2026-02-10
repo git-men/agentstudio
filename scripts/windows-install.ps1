@@ -4,7 +4,7 @@
 #   PowerShell -ExecutionPolicy Bypass -Command "iex ((New-Object System.Net.WebClient).DownloadString('https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/windows-install.ps1'))"
 
 param(
-    [string]$InstallDir = "$env:USERPROFILE\.agent-studio",
+    [string]$InstallDir = "$env:USERPROFILE\.agentstudio",
     [string]$SlidesDir = "$env:USERPROFILE\slides",
     [string]$GitHubRepo = "okguitar/agentstudio",
     [string]$GitHubBranch = "main"
@@ -324,8 +324,8 @@ function Install-AgentStudio {
     # Create directories
     Write-Log "Creating directories..."
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-    New-Item -ItemType Directory -Path "$env:USERPROFILE\.agent-studio-logs" -Force | Out-Null
-    New-Item -ItemType Directory -Path "$env:USERPROFILE\.agent-studio-config" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$env:USERPROFILE\.agentstudio\logs" -Force | Out-Null
+    New-Item -ItemType Directory -Path "$env:USERPROFILE\.agentstudio\config" -Force | Out-Null
     New-Item -ItemType Directory -Path $SlidesDir -Force | Out-Null
     
     # Copy files
@@ -493,7 +493,7 @@ SLIDES_DIR=$SlidesDir
 # ANTHROPIC_API_KEY=your_key_here
 "@
     
-    $configContent | Out-File -FilePath "$env:USERPROFILE\.agent-studio-config\config.env" -Encoding UTF8
+    $configContent | Out-File -FilePath "$env:USERPROFILE\.agentstudio\config\config.env" -Encoding UTF8
     
     Write-Success "Agent Studio installation completed"
     
@@ -591,7 +591,7 @@ function Main {
     Write-Host "  $InstallDir\stop.bat     # Stop the backend"
     Write-Host ""
     Write-Host "Configuration file:"
-    Write-Host "  $env:USERPROFILE\.agent-studio-config\config.env"
+    Write-Host "  $env:USERPROFILE\.agentstudio\config\config.env"
     Write-Host ""
     Write-Host "✨ Access the application at:"
     Write-Host "   https://agentstudio-frontend.vercel.app/"

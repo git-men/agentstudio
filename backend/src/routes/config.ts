@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { readFile, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { readFile, writeFile, mkdir } from 'fs/promises';
+import { dirname } from 'path';
 import { authMiddleware } from '../middleware/auth';
-import { loadConfig, clearConfigCache } from '../config/index';
+import { loadConfig, clearConfigCache, CONFIG_FILE } from '../config/index';
 
 const router: Router = Router();
 
@@ -50,13 +50,10 @@ router.post('/port', authMiddleware, async (req, res) => {
       });
     }
 
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    const configPath = join(homeDir, '.agent-studio', 'config', 'config.json');
-
     // Read current config
     let currentConfig = {};
     try {
-      const content = await readFile(configPath, 'utf-8');
+      const content = await readFile(CONFIG_FILE, 'utf-8');
       currentConfig = JSON.parse(content);
     } catch (error) {
       // Config file doesn't exist, start with empty object
@@ -68,8 +65,11 @@ router.post('/port', authMiddleware, async (req, res) => {
       port: port
     };
 
+    // Ensure config directory exists
+    await mkdir(dirname(CONFIG_FILE), { recursive: true });
+
     // Write updated config
-    await writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf-8');
+    await writeFile(CONFIG_FILE, JSON.stringify(updatedConfig, null, 2), 'utf-8');
 
     res.json({
       success: true,
@@ -89,13 +89,11 @@ router.post('/port', authMiddleware, async (req, res) => {
 router.post('/', authMiddleware, async (req, res) => {
   try {
     const updates = req.body;
-    const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-    const configPath = join(homeDir, '.agent-studio', 'config', 'config.json');
 
     // Read current config
     let currentConfig = {};
     try {
-      const content = await readFile(configPath, 'utf-8');
+      const content = await readFile(CONFIG_FILE, 'utf-8');
       currentConfig = JSON.parse(content);
     } catch (error) {
       // Config file doesn't exist, start with empty object
@@ -123,8 +121,11 @@ router.post('/', authMiddleware, async (req, res) => {
       ...filteredUpdates
     };
 
+    // Ensure config directory exists
+    await mkdir(dirname(CONFIG_FILE), { recursive: true });
+
     // Write updated config
-    await writeFile(configPath, JSON.stringify(updatedConfig, null, 2), 'utf-8');
+    await writeFile(CONFIG_FILE, JSON.stringify(updatedConfig, null, 2), 'utf-8');
 
     // Clear config cache so changes take effect immediately
     clearConfigCache();

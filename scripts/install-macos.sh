@@ -22,8 +22,8 @@ USER_HOME="$HOME"
 ACTUAL_UID=$(id -u)
 ACTUAL_GID=$(id -g)
 
-# Unified storage structure - all files in ~/.agent-studio
-BASE_DIR="$USER_HOME/.agent-studio"
+# Unified storage structure - all files in ~/.agentstudio
+BASE_DIR="$USER_HOME/.agentstudio"
 APP_DIR="$BASE_DIR/app"
 CONFIG_DIR="$BASE_DIR/config"
 LOGS_DIR="$BASE_DIR/logs"
@@ -542,11 +542,11 @@ cd "$SCRIPT_DIR"
 
 # Load environment
 export NODE_ENV=production
-export SLIDES_DIR="$HOME/.agent-studio/data/slides"
+export SLIDES_DIR="$HOME/.agentstudio/data/slides"
 
 # Function to get port from config.json
 get_config_port() {
-    local config_file="$HOME/.agent-studio/config/config.json"
+    local config_file="$HOME/.agentstudio/config/config.json"
     if [ -f "$config_file" ]; then
         # Try to extract port from config.json using common tools
         if command -v python3 >/dev/null 2>&1; then
@@ -627,7 +627,7 @@ ACTUAL_PORT=${PORT:-$(get_config_port)}
 echo "🍎 Starting Agent Studio Backend on macOS (Production Mode)..."
 echo "📂 Working directory: $(pwd)"
 echo "🌐 Backend port: $ACTUAL_PORT"
-echo "📑 Slides directory: $HOME/.agent-studio/data/slides"
+echo "📑 Slides directory: $HOME/.agentstudio/data/slides"
 echo ""
 echo "✨ Access the application at:"
 echo "   http://localhost:$ACTUAL_PORT/ (Full application with frontend)"
@@ -749,12 +749,12 @@ case "$1" in
     logs)
         echo "Agent Studio logs:"
         echo "Standard output:"
-        tail -f ~/.agent-studio/logs/agent-studio-out.log
+        tail -f ~/.agentstudio/logs/agent-studio-out.log
         ;;
     errors)
         echo "Agent Studio error logs:"
         echo "Standard error:"
-        tail -f ~/.agent-studio/logs/agent-studio-err.log
+        tail -f ~/.agentstudio/logs/agent-studio-err.log
         ;;
     uninstall)
         echo "Uninstalling Agent Studio service..."

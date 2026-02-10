@@ -180,7 +180,7 @@ deploy() {
         --label "agentstudio.branch=${branch}" \
         --label "agentstudio.deployed=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         -p "${port}:4936" \
-        -v "${data_dir}:/home/agentstudio/.agent-studio" \
+        -v "${data_dir}:/home/agentstudio/.agentstudio" \
         -e NODE_ENV=production \
         -e PORT=4936 \
         --network agentstudio-network \

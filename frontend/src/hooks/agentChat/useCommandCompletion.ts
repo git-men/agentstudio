@@ -92,11 +92,11 @@ export const useCommandCompletion = ({
     projectId: projectPath || ''
   });
 
-  // Extract commands arrays from response objects
-  const userCommandsFiltered = userCommandsFilteredData?.commands || [];
-  const projectCommandsFiltered = projectCommandsFilteredData?.commands || [];
-  const userCommands = userCommandsData?.commands || [];
-  const projectCommands = projectCommandsData?.commands || [];
+  // Extract commands arrays from response objects (ensure they are always arrays)
+  const userCommandsFiltered = Array.isArray(userCommandsFilteredData?.commands) ? userCommandsFilteredData.commands : [];
+  const projectCommandsFiltered = Array.isArray(projectCommandsFilteredData?.commands) ? projectCommandsFilteredData.commands : [];
+  const userCommands = Array.isArray(userCommandsData?.commands) ? userCommandsData.commands : [];
+  const projectCommands = Array.isArray(projectCommandsData?.commands) ? projectCommandsData.commands : [];
 
   // Helper function to check if a command is defined
   const isCommandDefined = useCallback((commandName: string) => {

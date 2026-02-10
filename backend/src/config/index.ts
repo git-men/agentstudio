@@ -1,10 +1,12 @@
 import { readFile } from 'fs/promises';
-import { join } from 'path';
 import { config } from 'dotenv';
 const BACKEND_ROOT = join(__dirname, '..', '..');
 
 // Re-export path constants for convenient access
 export * from './paths.js';
+
+// Import path constants
+import { CONFIG_FILE, SLIDES_DIR } from './paths.js';
 
 /**
  * Check if a password has been explicitly configured
@@ -15,11 +17,8 @@ export * from './paths.js';
  */
 export async function isPasswordConfigured(): Promise<boolean> {
   // Check config file first (it has higher priority for password settings)
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-  const configPath = join(homeDir, '.agent-studio', 'config', 'config.json');
-
   try {
-    const content = await readFile(configPath, 'utf-8');
+    const content = await readFile(CONFIG_FILE, 'utf-8');
     const configData = JSON.parse(content);
     
     // If adminPassword field exists in config file, use it (even if empty)
@@ -88,12 +87,9 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
 
   let configData: AgentStudioConfig = {};
 
-  // Try to load from config file
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-  const configPath = join(homeDir, '.agent-studio', 'config', 'config.json');
-
+  // Try to load from config file (unified path: ~/.agentstudio/config/config.json)
   try {
-    const content = await readFile(configPath, 'utf-8');
+    const content = await readFile(CONFIG_FILE, 'utf-8');
     configData = JSON.parse(content);
   } catch (error) {
     // Config file doesn't exist or can't be read, use empty object
@@ -125,7 +121,7 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     corsOrigins: process.env.CORS_ORIGINS || configData.corsOrigins || '',
     corsAllowedDomains: process.env.CORS_ALLOWED_DOMAINS || configData.corsAllowedDomains || '',
     logLevel: process.env.LOG_LEVEL || configData.logLevel || 'info',
-    slidesDir: process.env.SLIDES_DIR || configData.slidesDir || join(homeDir, '.agent-studio', 'data', 'slides'),
+    slidesDir: process.env.SLIDES_DIR || configData.slidesDir || SLIDES_DIR,
     maxFileSize: process.env.MAX_FILE_SIZE || configData.maxFileSize || '10MB',
     allowedFileTypes: configData.allowedFileTypes || ['.txt', '.md', '.js', '.ts', '.json', '.html', '.css'],
     linuxOptimizations: configData.linuxOptimizations || {},
@@ -163,8 +159,7 @@ export async function getServerPort(): Promise<number> {
  * Get the slides directory (simplified - always use default location)
  */
 export async function getSlidesDir(): Promise<string> {
-  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
-  return join(homeDir, '.agent-studio', 'data', 'slides');
+  return SLIDES_DIR;
 }
 
 /**

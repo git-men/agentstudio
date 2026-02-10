@@ -43,7 +43,7 @@ if %errorlevel% neq 0 (
 )
 
 REM Set installation directory
-set INSTALL_DIR=%USERPROFILE%\.agent-studio
+set INSTALL_DIR=%USERPROFILE%\.agentstudio
 set SLIDES_DIR=%USERPROFILE%\slides
 set TEMP_DIR=%TEMP%\agent-studio-install
 
@@ -59,8 +59,8 @@ if exist "%INSTALL_DIR%" (
 REM Create directories
 echo [INFO] Creating directories...
 mkdir "%INSTALL_DIR%" 2>nul
-mkdir "%USERPROFILE%\.agent-studio-logs" 2>nul
-mkdir "%USERPROFILE%\.agent-studio-config" 2>nul
+mkdir "%USERPROFILE%\.agentstudio\logs" 2>nul
+mkdir "%USERPROFILE%\.agentstudio\config" 2>nul
 mkdir "%SLIDES_DIR%" 2>nul
 
 REM Clean up temp directory
@@ -228,7 +228,7 @@ REM Create config file
     echo # 可选: AI 提供商
     echo # OPENAI_API_KEY=your_key_here
     echo # ANTHROPIC_API_KEY=your_key_here
-) > "%USERPROFILE%\.agent-studio-config\config.env"
+) > "%USERPROFILE%\.agentstudio\config\config.env"
 
 REM Clean up temp files
 echo [INFO] Cleaning up temporary files...
@@ -261,7 +261,7 @@ echo   %INSTALL_DIR%\start.bat    # Start the backend
 echo   %INSTALL_DIR%\stop.bat     # Stop the backend
 echo.
 echo Configuration file:
-echo   %USERPROFILE%\.agent-studio-config\config.env
+echo   %USERPROFILE%\.agentstudio\config\config.env
 echo.
 echo ✨ Access the application at:
 echo    https://agentstudio-frontend.vercel.app/

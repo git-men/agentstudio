@@ -38,6 +38,7 @@ import hooksRouter from './routes/hooks';
 import { authMiddleware } from './middleware/auth';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
+import { runMigrations } from './config/migration.js';
 import { cleanupOrphanedTasks } from './services/a2a/taskCleanup';
 import { initializeScheduler, shutdownScheduler } from './services/schedulerService';
 import { shutdownTelemetry } from './services/telemetry';
@@ -118,6 +119,9 @@ process.on('uncaughtExceptionMonitor', (error: Error & { code?: string }, origin
   safeErrorLog('[Monitor] Error:', error);
   safeErrorLog('[Monitor] Stack:', error.stack);
 });
+
+// Run directory migrations (from legacy layout to unified ~/.agentstudio/)
+runMigrations();
 
 // Initialize and log engine configuration at startup
 initializeEngine();

@@ -4,7 +4,7 @@
  * Manages API keys for MCP Admin Server authentication.
  * Keys are stored globally (not per-project) with permission-based access control.
  *
- * Storage: ~/.claude-agent/admin-api-keys.json
+ * Storage: ~/.agentstudio/data/admin-api-keys.json
  * Key Format: ask_{32-hex-chars}
  */
 
@@ -15,6 +15,7 @@ import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import lockfile from 'proper-lockfile';
 import type { AdminApiKey, AdminApiKeyRegistry, AdminPermission } from './types.js';
+import { ADMIN_API_KEYS_FILE } from '../../config/paths.js';
 
 const SALT_ROUNDS = 10;
 const KEY_PREFIX = 'ask_'; // Admin Server Key
@@ -33,8 +34,7 @@ const LOCK_OPTIONS = {
  * Get path to admin API keys file
  */
 function getAdminApiKeysPath(): string {
-  const homeDir = process.env.HOME || process.cwd();
-  return path.join(homeDir, '.claude-agent', 'admin-api-keys.json');
+  return ADMIN_API_KEYS_FILE;
 }
 
 /**

@@ -10,7 +10,7 @@ import { PostHog } from 'posthog-node';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
+import { INSTANCE_ID_FILE } from '../config/paths.js';
 
 // PostHog configuration (hardcoded for distribution)
 const POSTHOG_API_KEY = 'phc_5knpC9zvXXFaTJw4EMwrRBSYHIYW7b8ig6E14N8jYDp';
@@ -29,9 +29,6 @@ try {
 } catch {
   // Ignore errors
 }
-
-// Instance ID storage
-const INSTANCE_ID_FILE = path.join(os.homedir(), '.agentstudio', 'instance_id');
 
 /**
  * Get or create the instance ID for this backend installation

@@ -24,7 +24,7 @@ RUN useradd -m -s /bin/bash -d /home/agentstudio agentstudio
 RUN npm install -g agentstudio
 
 # Create necessary directories and set permissions
-RUN mkdir -p /home/agentstudio/.agent-studio/{logs,data,config,backup} && \
+RUN mkdir -p /home/agentstudio/.agentstudio/{data,config,agents,run,scripts,slack-session-locks,scheduled-tasks} && \
     chown -R agentstudio:agentstudio /home/agentstudio
 
 # Switch to non-root user for running the application

@@ -37,8 +37,8 @@ else
     ACTUAL_GID=$(id -g)
 fi
 
-# Unified storage structure - all files in ~/.agent-studio
-BASE_DIR="$USER_HOME/.agent-studio"
+# Unified storage structure - all files in ~/.agentstudio
+BASE_DIR="$USER_HOME/.agentstudio"
 APP_DIR="$BASE_DIR/app"
 CONFIG_DIR="$BASE_DIR/config"
 LOGS_DIR="$BASE_DIR/logs"
@@ -788,7 +788,7 @@ run_installation() {
     local COMMON_FUNCTIONS='
 # Function to get port from config.json
 get_config_port() {
-    local config_file="$HOME/.agent-studio/config/config.json"
+    local config_file="$HOME/.agentstudio/config/config.json"
     if [ -f "$config_file" ]; then
         # Try to extract port from config.json using common tools
         if command -v python3 >/dev/null 2>&1; then
@@ -839,9 +839,9 @@ $COMMON_HEADER
 $COMMON_FUNCTIONS
 
 echo "🐧 Starting Agent Studio Backend on Linux (Production Mode)..."
-cd "\$HOME/.agent-studio/app"
+cd "\$HOME/.agentstudio/app"
 export NODE_ENV=production
-export SLIDES_DIR="\$HOME/.agent-studio/data/slides"
+export SLIDES_DIR="\$HOME/.agentstudio/data/slides"
 
 # Set port from config if not already set
 if [ -z "\$PORT" ]; then
@@ -852,7 +852,7 @@ ACTUAL_PORT=\$(get_actual_port)
 
 echo "📂 Working directory: \$(pwd)"
 echo "🌐 Backend port: \$ACTUAL_PORT"
-echo "📑 Slides directory: \$HOME/.agent-studio/data/slides"
+echo "📑 Slides directory: \$HOME/.agentstudio/data/slides"
 echo "🖥️  Distribution: $DISTRO_NAME"
 echo "🏗️  Architecture: $ARCH_NAME"
 echo ""
@@ -874,9 +874,9 @@ $COMMON_HEADER
 $COMMON_FUNCTIONS
 
 echo "🐧 Starting Agent Studio Backend on Linux (Development Mode)..."
-cd "\$HOME/.agent-studio/app"
+cd "\$HOME/.agentstudio/app"
 export NODE_ENV=development
-export SLIDES_DIR="\$HOME/.agent-studio/data/slides"
+export SLIDES_DIR="\$HOME/.agentstudio/data/slides"
 
 # Set port from config if not already set
 if [ -z "\$PORT" ]; then
@@ -887,7 +887,7 @@ ACTUAL_PORT=\$(get_actual_port)
 
 echo "📂 Working directory: \$(pwd)"
 echo "🌐 Backend port: \$ACTUAL_PORT"
-echo "📑 Slides directory: \$HOME/.agent-studio/data/slides"
+echo "📑 Slides directory: \$HOME/.agentstudio/data/slides"
 echo "🖥️  Distribution: $DISTRO_NAME"
 echo "🏗️  Architecture: $ARCH_NAME"
 echo ""

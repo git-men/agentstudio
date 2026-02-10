@@ -7,7 +7,7 @@
 set -e
 
 # Configuration
-BASE_DIR="$HOME/.agent-studio"
+BASE_DIR="$HOME/.agentstudio"
 APP_DIR="$BASE_DIR/app"
 CONFIG_DIR="$BASE_DIR/config"
 LOGS_DIR="$BASE_DIR/logs"

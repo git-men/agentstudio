@@ -5,8 +5,7 @@
 
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { dirname } from 'path';
 
 import {
   SpeechToTextProvider,
@@ -25,10 +24,11 @@ import {
 import { createAliyunProvider } from './providers/aliyun';
 import { createTencentProvider } from './providers/tencent';
 import { createGoogleProvider } from './providers/google';
+import { SPEECH_TO_TEXT_CONFIG_FILE } from '../../config/paths.js';
 
-// 配置文件路径
-const CONFIG_DIR = join(homedir(), '.agentstudio');
-const CONFIG_FILE = join(CONFIG_DIR, 'speech-to-text.json');
+// 配置文件路径 (统一使用 paths.ts 中的常量)
+const CONFIG_FILE = SPEECH_TO_TEXT_CONFIG_FILE;
+const CONFIG_DIR = dirname(CONFIG_FILE);
 
 // 单例实例
 let serviceInstance: SpeechToTextService | null = null;
