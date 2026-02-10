@@ -373,9 +373,9 @@ export async function checkoutVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
-    throw new Error(`Invalid version tag: ${tag}`);
-  }
+  // if (!/^slot[1-5]$/.test(tag)) {
+  //   throw new Error(`Invalid version tag: ${tag}`);
+  // }
 
   // Check if tag exists
   try {
@@ -488,9 +488,9 @@ export async function deleteVersion(
   }
 
   // Validate tag format
-  if (!/^slot[1-5]$/.test(tag)) {
-    throw new Error(`Invalid version tag: ${tag}`);
-  }
+  // if (!/^slot[1-5]$/.test(tag)) {
+  //   throw new Error(`Invalid version tag: ${tag}`);
+  // }
 
   // Check if tag exists
   try {
