@@ -272,22 +272,41 @@ class PluginParser {
     }
 
     // Parse MCP servers (.mcp.json)
+    // Supports two formats:
+    // 1. Wrapped: { "mcpServers": { "name": { ... } } }  (Claude Code standard)
+    // 2. Flat:    { "name": { "command": "...", ... } }   (used by some official plugins)
     const mcpPath = path.join(pluginPath, '.mcp.json');
     if (fs.existsSync(mcpPath)) {
       try {
         const mcpContent = fs.readFileSync(mcpPath, 'utf-8');
         const mcp = JSON.parse(mcpContent);
         const relativePath = path.relative(pluginPath, mcpPath);
-        if (mcp.mcpServers) {
-          for (const [name, config] of Object.entries(mcp.mcpServers)) {
-            components.mcpServers.push({
-              type: 'mcp',
-              name,
-              path: mcpPath,
-              relativePath,
-              description: (config as any).description,
-            });
+
+        // Determine the server entries object
+        let serverEntries: Record<string, any>;
+        if (mcp.mcpServers && typeof mcp.mcpServers === 'object') {
+          // Wrapped format: { "mcpServers": { ... } }
+          serverEntries = mcp.mcpServers;
+        } else {
+          // Flat format: the entire object is server entries
+          // Filter out non-server keys (e.g. "$schema")
+          serverEntries = {};
+          for (const [key, value] of Object.entries(mcp)) {
+            if (key.startsWith('$')) continue; // Skip schema/metadata keys
+            if (typeof value === 'object' && value !== null) {
+              serverEntries[key] = value;
+            }
           }
+        }
+
+        for (const [name, config] of Object.entries(serverEntries)) {
+          components.mcpServers.push({
+            type: 'mcp',
+            name,
+            path: mcpPath,
+            relativePath,
+            description: (config as any).description,
+          });
         }
       } catch (error) {
         console.error('Failed to parse MCP config:', error);
