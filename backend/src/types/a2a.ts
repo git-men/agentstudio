@@ -273,6 +273,8 @@ export interface AgentMappingRegistry {
  */
 export interface A2AMessageRequest {
     message: string;
+    /** Optional images for multimodal messages */
+    images?: Array<{ data: string; mediaType: string }>;
     context?: Record<string, unknown>;
     sessionId?: string;
     /** Model to use (optional, engine-specific) */

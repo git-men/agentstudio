@@ -19,10 +19,19 @@ import { z } from 'zod';
 export const SessionModeSchema = z.enum(['reuse', 'new']);
 
 /**
+ * Image schema for multimodal A2A messages
+ */
+export const A2AImageSchema = z.object({
+  data: z.string().min(1, 'Image data cannot be empty'),
+  mediaType: z.string().regex(/^image\/(jpeg|png|gif|webp)$/, 'Unsupported image type'),
+});
+
+/**
  * POST /a2a/:a2aAgentId/messages request validation
  */
 export const A2AMessageRequestSchema = z.object({
   message: z.string().min(1, 'Message cannot be empty').max(10000, 'Message too long (max 10000 characters)'),
+  images: z.array(A2AImageSchema).optional(),
   sessionId: z.string().optional(),
   sessionMode: SessionModeSchema.optional().default('new'),
   context: z.record(z.unknown()).optional(),

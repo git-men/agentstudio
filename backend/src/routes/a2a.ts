@@ -273,8 +273,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       });
     }
 
-    const { message, sessionId, sessionMode = 'new' } = validation.data;
+    const { message, images, sessionId, sessionMode = 'new' } = validation.data;
     const stream = req.query.stream === 'true' || req.headers.accept === 'text/event-stream';
+    
+    if (images && images.length > 0) {
+      console.log(`🖼️ [A2A] Received ${images.length} image(s) with message`);
+    }
     
     // Determine engine type based on agentType
     const engineType = getEngineType(a2aContext.agentType);
@@ -486,7 +490,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         try {
           const result = await executeA2AQueryStreaming(
             message,
-            undefined, // images
+            images, // multimodal images
             queryOptions,
             (sdkMessage: SDKMessage) => {
               // Capture session ID
@@ -535,7 +539,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         try {
           const result = await executeA2AQuery(
             message,
-            undefined, // images
+            images, // multimodal images
             queryOptions,
             async (sdkMessage: SDKMessage) => {
               // Persist to history
@@ -612,11 +616,19 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         res.setHeader('Connection', 'keep-alive');
         res.flushHeaders();
 
+        const messageContent: any[] = [];
+        if (images && images.length > 0) {
+          for (const img of images) {
+            messageContent.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } });
+          }
+        }
+        messageContent.push({ type: 'text', text: message });
+
         const userMessage = {
           type: 'user',
           message: {
             role: 'user',
-            content: [{ type: 'text', text: message }]
+            content: messageContent
           }
         };
 
@@ -659,11 +671,19 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
 
         try {
           await new Promise<void>((resolve, reject) => {
+            const syncMessageContent: any[] = [];
+            if (images && images.length > 0) {
+              for (const img of images) {
+                syncMessageContent.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } });
+              }
+            }
+            syncMessageContent.push({ type: 'text', text: message });
+
             const userMessage = {
               type: 'user',
               message: {
                 role: 'user',
-                content: [{ type: 'text', text: message }]
+                content: syncMessageContent
               }
             };
 
