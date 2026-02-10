@@ -452,6 +452,9 @@ router.post('/chat', async (req, res) => {
   let retryCount = 0;
   const MAX_RETRIES = 1;
 
+  // Hoisted reference to the AGUI safety net so it's accessible from the outer catch block
+  let _ensureAguiRunFinished: () => void = () => {};
+
   try {
     console.log('Chat request received:', req.body);
 
@@ -515,6 +518,27 @@ router.post('/chat', async (req, res) => {
 
     // 设置连接管理
     const connectionManager = setupSSEConnectionManagement(req, res, agentId);
+
+    // Safety net: ensure RUN_FINISHED is always sent before connection closes in AGUI mode
+    let aguiRunFinishedSent = false;
+    const ensureAguiRunFinished = () => {
+      if (outputFormat !== 'agui' || aguiRunFinishedSent) return;
+      if (res.destroyed || connectionManager.isConnectionClosed()) return;
+      try {
+        const runFinishedEvent: AGUIEvent = {
+          type: AGUIEventType.RUN_FINISHED as AGUIEventType.RUN_FINISHED,
+          threadId: sessionId || '',
+          runId: '',
+          timestamp: Date.now(),
+        };
+        res.write(formatAguiEventAsSSE(runFinishedEvent));
+        aguiRunFinishedSent = true;
+        console.log('🛡️ [Safety Net] Sent RUN_FINISHED before connection close');
+      } catch {
+        // Connection already gone, nothing we can do
+      }
+    };
+    _ensureAguiRunFinished = ensureAguiRunFinished;
 
     // Send heartbeat to keep connection alive through proxies
     const heartbeatInterval = setInterval(() => {
@@ -1029,6 +1053,7 @@ router.post('/chat', async (req, res) => {
           } catch (writeError: unknown) {
             console.error('Failed to write SSE data:', writeError);
             const errorMessage = writeError instanceof Error ? writeError.message : 'unknown write error';
+            ensureAguiRunFinished();
             connectionManager.safeCloseConnection(`write error: ${errorMessage}`);
             return;
           }
@@ -1098,11 +1123,14 @@ router.post('/chat', async (req, res) => {
                     res.write(formatAguiEventAsSSE(event));
                   }
                 }
+                aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
               } catch (finalizeError) {
                 console.error('Failed to write AGUI finalize events:', finalizeError);
               }
             }
 
+            // Safety net: ensure RUN_FINISHED is sent even if finalize() failed
+            ensureAguiRunFinished();
             console.log(`✅ Received result event (subtype: ${resultMsg.subtype}), closing SSE connection for sessionId: ${actualSessionId || currentSessionId}`);
             connectionManager.safeCloseConnection('request completed');
           }
@@ -1165,6 +1193,7 @@ router.post('/chat', async (req, res) => {
           } catch (writeError) {
             console.error('Failed to write error message:', writeError);
           }
+          ensureAguiRunFinished();
           connectionManager.safeCloseConnection(`session error: ${errorMessage}`);
         }
         break; // 跳出重试循环
@@ -1190,6 +1219,7 @@ router.post('/chat', async (req, res) => {
             message: errorMessage,
             timestamp: Date.now()
           })}\n\n`);
+          _ensureAguiRunFinished();
           res.end();
         }
       } catch (writeError) {
