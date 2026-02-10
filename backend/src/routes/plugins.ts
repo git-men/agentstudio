@@ -10,6 +10,7 @@ import {
   checkUpdateNow,
   updateMarketplaceAutoUpdateConfig,
 } from '../services/marketplaceUpdateService';
+import { syncBuiltinMarketplaces, getBuiltinMarketplaceStatus } from '../services/builtinMarketplaceService';
 import { MarketplaceAddRequest, PluginInstallRequest, MarketplaceType } from '../types/plugins';
 
 // Valid marketplace types
@@ -185,6 +186,46 @@ router.get('/marketplaces/check-all-updates', async (req, res) => {
     res.status(500).json({
       error: 'Failed to check for updates',
       details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * POST /api/plugin-marketplaces/reinitialize-builtin
+ * Re-run builtin marketplace initialization (same as startup flow).
+ * Uses file lock to prevent concurrent runs.
+ * Called by as-mate after COS sync completes, or manually.
+ */
+router.post('/marketplaces/reinitialize-builtin', async (req, res) => {
+  try {
+    const result = await syncBuiltinMarketplaces();
+
+    if (!result.success && result.error === 'Sync already in progress') {
+      res.status(409).json(result); // Conflict
+      return;
+    }
+
+    res.json(result);
+  } catch (error) {
+    console.error('Failed to reinitialize builtin marketplaces:', error);
+    res.status(500).json({
+      error: 'Failed to reinitialize builtin marketplaces',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+/**
+ * GET /api/plugin-marketplaces/builtin-status
+ * Get the current status of builtin marketplace sync
+ */
+router.get('/marketplaces/builtin-status', async (req, res) => {
+  try {
+    const status = getBuiltinMarketplaceStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to get builtin marketplace status',
     });
   }
 });
