@@ -1,4 +1,5 @@
 import { readFile } from 'fs/promises';
+import { join } from 'path';
 import { config } from 'dotenv';
 const BACKEND_ROOT = join(__dirname, '..', '..');
 
