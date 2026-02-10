@@ -72,15 +72,19 @@ export class LAVSClient {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const body = await response.json();
+        // Handle JSON-RPC error format
+        const rpcError = body.error || body;
         throw new LAVSError(
-          error.code || -1,
-          error.error || `HTTP ${response.status}: ${response.statusText}`,
-          error.data
+          rpcError.code || -1,
+          rpcError.message || rpcError.error || `HTTP ${response.status}: ${response.statusText}`,
+          rpcError.data
         );
       }
 
-      this.manifest = await response.json();
+      const body = await response.json();
+      // Unwrap JSON-RPC 2.0 response: { jsonrpc: '2.0', result: manifest }
+      this.manifest = body.result ?? body;
       return this.manifest!;
     } catch (error: any) {
       if (error instanceof LAVSError) {
@@ -129,15 +133,19 @@ export class LAVSClient {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const body = await response.json();
+        // Handle JSON-RPC error format
+        const rpcError = body.error || body;
         throw new LAVSError(
-          error.code || -1,
-          error.error || `HTTP ${response.status}: ${response.statusText}`,
-          error.data
+          rpcError.code || -1,
+          rpcError.message || rpcError.error || `HTTP ${response.status}: ${response.statusText}`,
+          rpcError.data
         );
       }
 
-      return await response.json();
+      const body = await response.json();
+      // Unwrap JSON-RPC 2.0 response: { jsonrpc: '2.0', result: data }
+      return (body.result ?? body) as TResult;
     } catch (error: any) {
       if (error instanceof LAVSError) {
         throw error;
