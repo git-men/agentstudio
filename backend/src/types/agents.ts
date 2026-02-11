@@ -65,6 +65,40 @@ export interface AgentConfig {
   // Plugin source tracking
   source: 'local' | 'plugin'; // 来源：本地创建或插件安装
   installPath?: string; // 插件 agent 的真实安装路径
+
+  // Lifecycle hooks — executed by the platform at specific points
+  hooks?: AgentHooks;
+}
+
+// =============================================================================
+// Agent Hooks
+// =============================================================================
+
+/**
+ * Actions available for the onRunFinished hook.
+ * - 'create_version': Auto-commit the workspace via gitVersionService and
+ *   emit a CUSTOM 'version_created' AGUI event before RUN_FINISHED.
+ */
+export type OnRunFinishedAction = 'create_version';
+
+/**
+ * Configuration for the onRunFinished hook.
+ * Executed when a chat session completes successfully (result.subtype === 'success'),
+ * just before the RUN_FINISHED event is sent to the client.
+ */
+export interface OnRunFinishedHookConfig {
+  action: OnRunFinishedAction;
+  /** Optional commit message (only for 'create_version'). Defaults to "Auto-save after AI response". */
+  message?: string;
+}
+
+/**
+ * Agent lifecycle hooks.
+ * Hooks are optional — agents without hooks behave exactly as before.
+ */
+export interface AgentHooks {
+  /** Fired after a successful run, before RUN_FINISHED is sent. */
+  onRunFinished?: OnRunFinishedHookConfig;
 }
 
 export interface AgentSession {
