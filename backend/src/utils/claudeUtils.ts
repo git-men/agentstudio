@@ -18,6 +18,7 @@ import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
 import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
+import { getEnginePaths } from '../config/engineConfig.js';
 
 const execAsync = promisify(exec);
 
@@ -108,7 +109,7 @@ export async function getClaudeExecutablePath(): Promise<string | null> {
 }
 
 /**
- * Read MCP (Model Context Protocol) configuration
+ * Read MCP (Model Context Protocol) configuration from AgentStudio config
  */
 export function readMcpConfig(): { mcpServers: Record<string, any> } {
   if (fs.existsSync(MCP_SERVER_CONFIG_FILE)) {
@@ -120,6 +121,30 @@ export function readMcpConfig(): { mcpServers: Record<string, any> } {
     }
   }
   return { mcpServers: {} };
+}
+
+/**
+ * Read engine-native MCP configuration (e.g. ~/.cursor/mcp.json or ~/.claude/mcp.json).
+ * These entries do NOT have an `active` status; they are always enabled.
+ */
+function readEngineMcpConfig(): Record<string, any> {
+  try {
+    const enginePaths = getEnginePaths();
+    const engineMcpPath = enginePaths.mcpConfigPath;
+
+    // Skip if engine path is the same as AgentStudio config (avoid duplicates)
+    if (engineMcpPath === MCP_SERVER_CONFIG_FILE) {
+      return {};
+    }
+
+    if (fs.existsSync(engineMcpPath)) {
+      const config = JSON.parse(fs.readFileSync(engineMcpPath, 'utf-8'));
+      return config.mcpServers || {};
+    }
+  } catch (error) {
+    console.error('Failed to read engine MCP configuration:', error);
+  }
+  return {};
 }
 
 /**
@@ -365,49 +390,79 @@ export async function buildQueryOptions(
     console.log(`🌍 Using process environment variables (no custom variables defined)`);
   }
 
-  // Add MCP configuration if MCP tools are selected
-  if (mcpTools && mcpTools.length > 0) {
-    try {
-      const mcpConfigContent = readMcpConfig();
+  // Add MCP configuration: merge frontend-selected tools + engine-native MCP servers
+  {
+    const mcpServers: Record<string, any> = {};
 
-      // Extract unique server names from mcpTools
-      const serverNames = new Set<string>();
-      for (const tool of mcpTools) {
-        // Tool format: mcp__serverName__toolName or mcp__serverName
-        const parts = tool.split('__');
-        if (parts.length >= 2 && parts[0] === 'mcp') {
-          serverNames.add(parts[1]);
-        }
-      }
+    // 1. Add frontend-selected MCP tools from AgentStudio config (~/.agentstudio/data/mcp-server.json)
+    if (mcpTools && mcpTools.length > 0) {
+      try {
+        const mcpConfigContent = readMcpConfig();
 
-      // Build mcpServers configuration
-      const mcpServers: Record<string, any> = {};
-      for (const serverName of serverNames) {
-        const serverConfig = mcpConfigContent.mcpServers?.[serverName];
-        if (serverConfig && serverConfig.status === 'active') {
-          if (serverConfig.type === 'http') {
-            mcpServers[serverName] = {
-              type: 'http',
-              url: serverConfig.url,
-              headers: serverConfig.headers || {}
-            };
-          } else if (serverConfig.type === 'stdio') {
-            mcpServers[serverName] = {
-              type: 'stdio',
-              command: serverConfig.command,
-              args: serverConfig.args || [],
-              env: serverConfig.env || {}
-            };
+        // Extract unique server names from mcpTools
+        const serverNames = new Set<string>();
+        for (const tool of mcpTools) {
+          // Tool format: mcp__serverName__toolName or mcp__serverName
+          const parts = tool.split('__');
+          if (parts.length >= 2 && parts[0] === 'mcp') {
+            serverNames.add(parts[1]);
           }
         }
-      }
 
-      if (Object.keys(mcpServers).length > 0) {
-        queryOptions.mcpServers = mcpServers;
-        console.log('🔧 MCP Servers configured:', Object.keys(mcpServers));
+        for (const serverName of serverNames) {
+          const serverConfig = mcpConfigContent.mcpServers?.[serverName];
+          if (serverConfig && serverConfig.status === 'active') {
+            if (serverConfig.type === 'http') {
+              mcpServers[serverName] = {
+                type: 'http',
+                url: serverConfig.url,
+                headers: serverConfig.headers || {}
+              };
+            } else if (serverConfig.type === 'stdio') {
+              mcpServers[serverName] = {
+                type: 'stdio',
+                command: serverConfig.command,
+                args: serverConfig.args || [],
+                env: serverConfig.env || {}
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to parse MCP configuration:', error);
+      }
+    }
+
+    // 2. Auto-include ALL engine-native MCP servers (e.g. ~/.cursor/mcp.json, ~/.claude/mcp.json)
+    //    These are always enabled without requiring active status or frontend selection
+    try {
+      const engineServers = readEngineMcpConfig();
+      for (const [name, config] of Object.entries(engineServers)) {
+        // Skip if already added from AgentStudio config (avoid duplicates)
+        if (mcpServers[name]) continue;
+
+        if (config.url) {
+          mcpServers[name] = {
+            type: 'http',
+            url: config.url,
+            headers: config.headers || {}
+          };
+        } else if (config.command) {
+          mcpServers[name] = {
+            type: 'stdio',
+            command: config.command,
+            args: config.args || [],
+            env: config.env || {}
+          };
+        }
       }
     } catch (error) {
-      console.error('Failed to parse MCP configuration:', error);
+      console.error('Failed to load engine MCP configuration:', error);
+    }
+
+    if (Object.keys(mcpServers).length > 0) {
+      queryOptions.mcpServers = mcpServers;
+      console.log('🔧 MCP Servers configured:', Object.keys(mcpServers));
     }
   }
 

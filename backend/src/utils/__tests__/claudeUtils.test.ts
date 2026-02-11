@@ -153,7 +153,7 @@ describe('claudeUtils', () => {
       const result = readMcpConfig();
       expect(result).toEqual(mockConfig);
       expect(fs.readFileSync).toHaveBeenCalledWith(
-        path.join('/mock/home', '.claude-agent', 'mcp-server.json'),
+        path.join('/mock/home', '.agentstudio', 'data', 'mcp-server.json'),
         'utf-8'
       );
     });
@@ -380,6 +380,106 @@ describe('claudeUtils', () => {
       expect(result.queryOptions.pathToClaudeCodeExecutable).toBeUndefined();
       // But should still use the environment variables
       expect(result.queryOptions.env?.ANTHROPIC_API_KEY).toBe('test-key');
+    });
+
+    it('should auto-include engine-native MCP servers without mcpTools', async () => {
+      const { getDefaultVersionId } = await import('../../services/claudeVersionStorage');
+      vi.mocked(getDefaultVersionId).mockResolvedValue(null);
+
+      // Engine MCP config (e.g. ~/.claude/mcp.json) - these have NO status field
+      const engineMcpConfig = {
+        mcpServers: {
+          'engine-server': {
+            command: 'npx',
+            args: ['-y', '@engine/mcp-server']
+          },
+          'engine-http': {
+            url: 'http://localhost:8080/mcp',
+            headers: { 'Authorization': 'Bearer test' }
+          }
+        }
+      };
+
+      // Mock fs to return engine config for engine path, empty for AS path
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+        if (filePath.includes('.claude') && filePath.includes('mcp.json')) {
+          return JSON.stringify(engineMcpConfig);
+        }
+        // AgentStudio config
+        return JSON.stringify({ mcpServers: {} });
+      });
+
+      // No mcpTools provided - engine MCP should still be loaded
+      const result = await buildQueryOptions(mockAgent);
+
+      expect(result.queryOptions.mcpServers).toBeDefined();
+      expect(result.queryOptions.mcpServers?.['engine-server']).toMatchObject({
+        type: 'stdio',
+        command: 'npx',
+        args: ['-y', '@engine/mcp-server']
+      });
+      expect(result.queryOptions.mcpServers?.['engine-http']).toMatchObject({
+        type: 'http',
+        url: 'http://localhost:8080/mcp',
+        headers: { 'Authorization': 'Bearer test' }
+      });
+    });
+
+    it('should give precedence to AgentStudio config over engine config for duplicate servers', async () => {
+      const { getDefaultVersionId } = await import('../../services/claudeVersionStorage');
+      vi.mocked(getDefaultVersionId).mockResolvedValue(null);
+
+      // AgentStudio config has server1 with specific command
+      const asMcpConfig = {
+        mcpServers: {
+          'server1': {
+            type: 'stdio',
+            command: 'node',
+            args: ['as-server1.js'],
+            status: 'active'
+          }
+        }
+      };
+
+      // Engine config also has server1 but with different command
+      const engineMcpConfig = {
+        mcpServers: {
+          'server1': {
+            command: 'npx',
+            args: ['engine-server1']
+          },
+          'server2': {
+            command: 'npx',
+            args: ['engine-server2']
+          }
+        }
+      };
+
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+        if (filePath.includes('.claude') && filePath.includes('mcp.json')) {
+          return JSON.stringify(engineMcpConfig);
+        }
+        return JSON.stringify(asMcpConfig);
+      });
+
+      const mcpTools = ['mcp__server1__tool1'];
+      const result = await buildQueryOptions(mockAgent, undefined, mcpTools);
+
+      // server1 should come from AgentStudio config (precedence)
+      expect(result.queryOptions.mcpServers?.['server1']).toMatchObject({
+        type: 'stdio',
+        command: 'node',
+        args: ['as-server1.js']
+      });
+
+      // server2 should come from engine config (auto-included)
+      expect(result.queryOptions.mcpServers?.['server2']).toMatchObject({
+        type: 'stdio',
+        command: 'npx',
+        args: ['engine-server2']
+      });
     });
 
     it('should use valid executable path when it exists', async () => {
