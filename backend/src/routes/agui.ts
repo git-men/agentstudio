@@ -81,10 +81,6 @@ const ChatRequestSchema = z.object({
   envVars: z.record(z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
-  // Scene identifier; 'vibeGaming' triggers auto-commit before RUN_FINISHED
-  scene: z.string().optional(),
-  // When true, append clarifying questions prompt to system prompt
-  isNewVibe: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -184,8 +180,6 @@ router.post('/chat', async (req, res) => {
       mcpTools,
       envVars,
       timeout,
-      scene,
-      isNewVibe,
     } = validation.data;
 
     // Resolve workspace: if it's a project name, get the actual path
@@ -355,8 +349,6 @@ router.post('/chat', async (req, res) => {
             envVars,
             channel: 'web',
             outputFormat: 'agui',
-            scene,
-            isNewVibe,
           },
         };
         

@@ -61,6 +61,7 @@ interface AdapterState {
     accumulatedContent: string;
   }>;
   sessionId: string | null;
+  hasProcessedStreamEvents: boolean;
 }
 
 /**
@@ -77,6 +78,7 @@ export class ClaudeAguiAdapter {
       currentMessageId: null,
       activeBlocks: new Map(),
       sessionId: null,
+      hasProcessedStreamEvents: false,
     };
   }
 
@@ -89,6 +91,7 @@ export class ClaudeAguiAdapter {
       currentMessageId: null,
       activeBlocks: new Map(),
       sessionId: null,
+      hasProcessedStreamEvents: false,
     };
   }
 
@@ -179,6 +182,11 @@ export class ClaudeAguiAdapter {
 
     // Handle assistant message type
     if (sdkMessage.type === 'assistant' && sdkMessage.message) {
+      // Skip if stream events already delivered this content (avoids duplication)
+      if (this.state.hasProcessedStreamEvents) {
+        this.state.hasProcessedStreamEvents = false;
+        return events;
+      }
       return this.convertAssistantMessage(sdkMessage.message, timestamp);
     }
 
@@ -336,6 +344,7 @@ export class ClaudeAguiAdapter {
         });
         this.state.currentMessageId = null;
         this.state.activeBlocks.clear();
+        this.state.hasProcessedStreamEvents = true;
         break;
     }
 

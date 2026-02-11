@@ -7,8 +7,6 @@
 
 import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
-import { VIBE_GAMING_CLARIFYING_PROMPT } from '../prompts/vibeGamingPrompt.js';
-import { buildGameDevSystemPrompt } from '../prompts/gameDevSystemPrompt.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
@@ -190,7 +188,6 @@ export async function getDefaultClaudeVersionEnv(): Promise<Record<string, strin
  * @param sessionIdForAskUser - Optional session ID for AskUserQuestion MCP tool（用于路由用户通知）
  * @param agentIdForAskUser - Optional agent ID for AskUserQuestion MCP tool
  * @param a2aStreamEnabled - Optional flag to enable streaming for A2A external agent calls (default: false)
- * @param scene - Optional scene identifier; 'vibeGaming' triggers the new-game clarifying prompt
  * @returns Query options and optional sessionRef for dynamic session ID updates
  */
 export interface BuildQueryOptionsResult {
@@ -210,8 +207,6 @@ export async function buildQueryOptions(
   sessionIdForAskUser?: string,
   agentIdForAskUser?: string,
   a2aStreamEnabled?: boolean,
-  scene?: string,
-  isNewVibe?: boolean
 ): Promise<BuildQueryOptionsResult> {
   // Determine working directory
   let cwd = process.cwd();
@@ -314,43 +309,7 @@ export async function buildQueryOptions(
   }
 
   // Determine final system prompt
-  // - Game-dev rules: appended when scene === 'vibeGaming' (build constraints)
-  // - Clarifying prompt: appended when isNewVibe === true (ask user for missing decision points)
-  const vibeGaming = scene === 'vibeGaming';
-  let finalSystemPrompt: SystemPrompt = agent.systemPrompt;
-  {
-    const extraParts: string[] = [];
-
-    // Game-dev rules tied to vibeGaming scene
-    if (vibeGaming) {
-      const gameDevPrompt = buildGameDevSystemPrompt(projectPath);
-      if (gameDevPrompt.trim()) {
-        extraParts.push(gameDevPrompt);
-      }
-      console.log('🎮 [vibeGaming] Appended game-dev rules to system prompt');
-    }
-
-    // Clarifying questions tied to isNewVibe flag
-    if (isNewVibe) {
-      if (VIBE_GAMING_CLARIFYING_PROMPT.trim()) {
-        extraParts.push(VIBE_GAMING_CLARIFYING_PROMPT);
-      }
-      console.log('🎮 [isNewVibe] Appended clarifying questions prompt to system prompt');
-    }
-
-    if (extraParts.length > 0) {
-      const extraPrompt = extraParts.join('\n\n');
-      if (typeof finalSystemPrompt === 'string') {
-        finalSystemPrompt = finalSystemPrompt + '\n\n' + extraPrompt;
-      } else {
-        // PresetSystemPrompt object — append to the existing append field
-        finalSystemPrompt = {
-          ...finalSystemPrompt,
-          append: (finalSystemPrompt.append || '') + '\n\n' + extraPrompt,
-        };
-      }
-    }
-  }
+  const finalSystemPrompt: SystemPrompt = agent.systemPrompt;
 
   const queryOptions: Options = {
     systemPrompt: finalSystemPrompt,
