@@ -149,6 +149,11 @@ export interface MarketplaceAgent {
         message?: string;
       };
     };
+    mcpServers?: Record<string, {
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }>;
   };
 }
 

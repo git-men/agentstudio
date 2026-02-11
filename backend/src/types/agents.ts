@@ -66,6 +66,13 @@ export interface AgentConfig {
   source: 'local' | 'plugin'; // 来源：本地创建或插件安装
   installPath?: string; // 插件 agent 的真实安装路径
 
+  // MCP servers required by this agent (injected at session startup)
+  mcpServers?: Record<string, {
+    command: string;
+    args?: string[];
+    env?: Record<string, string>;
+  }>;
+
   // Lifecycle hooks — executed by the platform at specific points
   hooks?: AgentHooks;
 }
