@@ -3,6 +3,7 @@ import { Server, Settings, CheckCircle, XCircle, ArrowLeftRight } from 'lucide-r
 import { useTranslation } from 'react-i18next';
 import { useBackendServices } from '../hooks/useBackendServices';
 import { getApiBase } from '../lib/config';
+import { normalizeServiceUrl } from '../utils/backendServiceStorage';
 
 interface ServiceStatusIndicatorProps {
   className?: string;
@@ -79,7 +80,7 @@ export const ServiceStatusIndicator: React.FC<ServiceStatusIndicatorProps> = ({
     const updatedServices = await Promise.all(
       services.map(async (service) => {
         try {
-          const testUrl = `${service.url}/api/health`;
+          const testUrl = `${normalizeServiceUrl(service.url)}/api/health`;
           const response = await fetch(testUrl, {
             method: 'GET',
             headers: {
@@ -138,7 +139,7 @@ export const ServiceStatusIndicator: React.FC<ServiceStatusIndicatorProps> = ({
     if (service && service.id !== currentService?.id) {
       // Test connection before switching
       try {
-        const testUrl = `${service.url}/api/health`;
+        const testUrl = `${normalizeServiceUrl(service.url)}/api/health`;
         const response = await fetch(testUrl, {
           method: 'GET',
           headers: {

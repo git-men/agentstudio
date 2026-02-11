@@ -34,12 +34,31 @@ const getCurrentBackendServiceUrl = (): string => {
   return 'http://127.0.0.1:4936';
 };
 
+/**
+ * 获取 BASE_URL 的路径前缀（去除尾部斜杠）
+ * 例如: BASE_URL="/as-backend/" → "/as-backend"
+ *       BASE_URL="/"           → ""
+ */
+const getBasePathPrefix = (): string => {
+  const base = import.meta.env.BASE_URL || '/';
+  // 去除尾部 /，对根路径 "/" 返回空字符串
+  return base === '/' ? '' : base.replace(/\/+$/, '');
+};
+
 // Export as getter functions to ensure they always return the current value
 export const getApiBase = (): string => {
+  if (isEmbeddedMode()) {
+    // 嵌入模式：使用 origin + basePath 前缀 + /api
+    // 支持 nginx 子路径部署（如 /as-backend/api）
+    return window.location.origin + getBasePathPrefix() + '/api';
+  }
   return getCurrentBackendServiceUrl() + '/api';
 };
 
 export const getMediaBase = (): string => {
+  if (isEmbeddedMode()) {
+    return window.location.origin + getBasePathPrefix() + '/media';
+  }
   return getCurrentBackendServiceUrl() + '/media';
 };
 
@@ -56,7 +75,11 @@ export const buildApiUrl = (path: string): string => {
 };
 
 // Helper function to get the current HOST setting
+// 嵌入模式下返回 origin + basePath，支持 nginx 子路径部署
 export const getCurrentHost = (): string => {
+  if (isEmbeddedMode()) {
+    return window.location.origin + getBasePathPrefix();
+  }
   return getCurrentBackendServiceUrl();
 };
 

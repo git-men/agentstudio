@@ -2,6 +2,14 @@ import { BackendService, BackendServicesState, DEFAULT_SERVICES } from '../types
 
 const STORAGE_KEY = 'backendServices';
 
+/**
+ * Normalize a service URL by removing trailing slashes.
+ * This prevents double-slash issues when constructing API URLs like `${url}/api/health`.
+ */
+export const normalizeServiceUrl = (url: string): string => {
+  return url.replace(/\/+$/, '');
+};
+
 export const loadBackendServices = (): BackendServicesState => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -14,7 +22,14 @@ export const loadBackendServices = (): BackendServicesState => {
           currentServiceId: DEFAULT_SERVICES[0].id
         };
       }
-      return parsed;
+      // Normalize URLs on load to fix any previously stored trailing slashes
+      return {
+        ...parsed,
+        services: parsed.services.map((s: BackendService) => ({
+          ...s,
+          url: normalizeServiceUrl(s.url)
+        }))
+      };
     }
   } catch (error) {
     console.error('Failed to load backend services:', error);
@@ -42,6 +57,7 @@ export const getCurrentService = (state: BackendServicesState): BackendService |
 export const addBackendService = (state: BackendServicesState, service: Omit<BackendService, 'id'>): BackendServicesState => {
   const newService: BackendService = {
     ...service,
+    url: normalizeServiceUrl(service.url),
     id: Date.now().toString()
   };
 
@@ -55,10 +71,11 @@ export const addBackendService = (state: BackendServicesState, service: Omit<Bac
 };
 
 export const updateBackendService = (state: BackendServicesState, serviceId: string, updates: Partial<BackendService>): BackendServicesState => {
+  const normalizedUpdates = updates.url ? { ...updates, url: normalizeServiceUrl(updates.url) } : updates;
   const newState = {
     ...state,
     services: state.services.map(service =>
-      service.id === serviceId ? { ...service, ...updates } : service
+      service.id === serviceId ? { ...service, ...normalizedUpdates } : service
     )
   };
 

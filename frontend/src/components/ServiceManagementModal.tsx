@@ -22,6 +22,7 @@ import { BackendService } from '../types/backendServices';
 import { useBackendServices } from '../hooks/useBackendServices';
 import { useAuthStore } from '../stores/authStore';
 import { showSuccess, showError } from '../utils/toast';
+import { normalizeServiceUrl } from '../utils/backendServiceStorage';
 
 interface ServiceManagementModalProps {
   isOpen: boolean;
@@ -72,7 +73,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
     const updatedServices = await Promise.all(
       services.map(async (service) => {
         try {
-          const testUrl = `${service.url}/api/health`;
+          const testUrl = `${normalizeServiceUrl(service.url)}/api/health`;
           const response = await fetch(testUrl, {
             method: 'GET',
             headers: {
@@ -121,7 +122,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
       const service = services.find(s => s.id === serviceId);
       if (!service) return;
 
-      const testUrl = `${service.url}/api/health`;
+      const testUrl = `${normalizeServiceUrl(service.url)}/api/health`;
       const response = await fetch(testUrl, {
         method: 'GET',
         headers: {
@@ -233,7 +234,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
 
       // Call logout endpoint if we have a token
       if (tokenData?.token) {
-        await fetch(`${service.url}/api/auth/logout`, {
+        await fetch(`${normalizeServiceUrl(service.url)}/api/auth/logout`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -272,7 +273,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
 
     // Check if password is required for this service
     try {
-      const response = await fetch(`${service.url}/api/auth/check-password-required`, {
+      const response = await fetch(`${normalizeServiceUrl(service.url)}/api/auth/check-password-required`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -314,7 +315,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
 
     try {
       const tokenData = getToken(passwordServiceId);
-      const response = await fetch(`${service.url}/api/config`, {
+      const response = await fetch(`${normalizeServiceUrl(service.url)}/api/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
