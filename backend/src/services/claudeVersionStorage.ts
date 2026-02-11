@@ -5,16 +5,16 @@ import { CLAUDE_AGENT_DIR, CLAUDE_VERSIONS_FILE } from '../config/paths.js';
 // 默认模型配置（用于Claude系统版本）
 const DEFAULT_MODELS: ModelConfig[] = [
   {
-    id: 'sonnet',
-    name: 'Sonnet',
-    isVision: true,
-    description: 'Claude 3.5 Sonnet - 平衡性能和成本的模型'
-  },
-  {
     id: 'opus',
     name: 'Opus',
     isVision: true,
-    description: 'Claude 3 Opus - 最强大的模型'
+    description: 'Claude Opus - 最强大的模型'
+  },
+  {
+    id: 'sonnet',
+    name: 'Sonnet',
+    isVision: true,
+    description: 'Claude Sonnet - 平衡性能和成本的模型'
   }
 ];
 
