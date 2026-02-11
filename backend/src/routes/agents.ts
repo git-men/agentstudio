@@ -20,8 +20,8 @@ import {
 } from '../services/askUserQuestion/index.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
-import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent, type AGUIAutoVersionCreatedEvent } from '../engines/types.js';
-import { createVersion } from '../services/gitVersionService.js';
+import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
+import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -343,8 +343,6 @@ const ChatRequestSchema = z.object({
     customContext: z.record(z.any()).optional()
   }).optional(),
   envVars: z.record(z.string()).optional(),
-  scene: z.string().optional(), // Scene identifier; 'vibeGaming' triggers auto-commit before RUN_FINISHED
-  isNewVibe: z.boolean().optional().default(false) // When true, append clarifying questions prompt to system prompt
 }).refine(data => {
   // Either message text or images must be provided
   return data.message.trim().length > 0 || (data.images && data.images.length > 0);
@@ -480,7 +478,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, scene, isNewVibe } = validation.data;
+    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -505,6 +503,9 @@ router.post('/chat', async (req, res) => {
     if (!agent.enabled) {
       return res.status(403).json({ error: 'Agent is disabled' });
     }
+
+    // Resolve onRunFinished hook config from the agent
+    const onRunFinishedHook = agent.hooks?.onRunFinished;
 
     // 设置 SSE 响应头
     res.setHeader('Content-Type', 'text/event-stream');
@@ -678,7 +679,7 @@ router.post('/chat', async (req, res) => {
         // 构建查询选项（包含 AskUserQuestion MCP 工具）
         // 使用 tempSessionId 作为 MCP 工具的 sessionId（新会话还没有真实 sessionId）
         // Enable A2A streaming for web frontend (real-time updates for external agent calls)
-        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, scene, isNewVibe);
+        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true);
 
         // 📊 输出传到 query 中的模型参数
         console.log('📊 [Chat API] QueryOptions 模型参数:');
@@ -752,18 +753,14 @@ router.post('/chat', async (req, res) => {
         let compactMessageBuffer: any[] = []; // 缓存 compact 相关消息
 
         // Initialize AGUI adapter if using AGUI output format
+        // NOTE: RUN_STARTED is deferred until the init message arrives with the real session ID.
+        // This prevents a mismatch between RUN_STARTED.threadId and the sessionId used by
+        // awaiting_user_input (and other events), which previously caused the frontend to
+        // send a wrong sessionId when calling /user-response.
         let aguiAdapter: ClaudeAguiAdapter | null = null;
+        let aguiRunStartedSent = false;
         if (outputFormat === 'agui') {
           aguiAdapter = new ClaudeAguiAdapter(actualSessionId || currentSessionId || undefined);
-          // Send RUN_STARTED event
-          const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
-          try {
-            if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-              res.write(formatAguiEventAsSSE(runStartedEvent));
-            }
-          } catch (writeError) {
-            console.error('Failed to write AGUI RUN_STARTED event:', writeError);
-          }
         }
 
         const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
@@ -996,6 +993,24 @@ router.post('/chat', async (req, res) => {
               // 继续会话：使用现有session ID
               console.log(`♻️  Continued session ${currentSessionId} for agent: ${agentId}`);
             }
+
+            // 🎯 Deferred RUN_STARTED: now that we have the real session ID from init,
+            // update the AGUI adapter's threadId and send RUN_STARTED with the correct ID.
+            // This ensures RUN_STARTED.threadId matches the sessionId used everywhere else
+            // (including awaiting_user_input), preventing ID mismatches on the frontend.
+            if (outputFormat === 'agui' && aguiAdapter && !aguiRunStartedSent) {
+              aguiAdapter.setThreadId(responseSessionId);
+              const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
+              try {
+                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                  res.write(formatAguiEventAsSSE(runStartedEvent));
+                  aguiRunStartedSent = true;
+                  console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${responseSessionId}`);
+                }
+              } catch (writeError) {
+                console.error('Failed to write AGUI RUN_STARTED event:', writeError);
+              }
+            }
           }
 
           // 🎯 检测子Agent消息：通过 parent_tool_use_id 字段判断
@@ -1087,43 +1102,46 @@ router.post('/chat', async (req, res) => {
               }
             }
 
-            // Auto-commit for vibeGaming scene (before AGUI finalize / connection close)
-            if (scene === 'vibeGaming' && projectPath && resultMsg.subtype === 'success') {
-              try {
-                const versionResult = await createVersion(projectPath, `Auto-save after AI response`);
-                console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${projectPath}`);
-
-                // Notify frontend about the new version via SSE before closing
-                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                  const versionEvent: AGUIAutoVersionCreatedEvent = {
-                    type: AGUIEventType.AUTO_VERSION_CREATED,
-                    version: versionResult,
-                    timestamp: Date.now(),
-                    agentId,
-                    sessionId: actualSessionId || currentSessionId,
-                  };
-
-                  if (outputFormat === 'agui') {
-                    res.write(formatAguiEventAsSSE(versionEvent));
-                  } else {
-                    res.write(`data: ${JSON.stringify(versionEvent)}\n\n`);
-                  }
-                }
-              } catch (error: any) {
-                // Don't fail the whole request if auto-commit fails (e.g., no changes to commit)
-                console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
-              }
-            }
-
             // For AGUI output, send finalize events
             if (outputFormat === 'agui' && aguiAdapter) {
               try {
                 const finalEvents = aguiAdapter.finalize();
-                for (const event of finalEvents) {
+
+                // Separate RUN_FINISHED from other finalize events so we can
+                // execute the onRunFinished hook before it is sent.
+                const runFinishedEvent = finalEvents.find(e => e.type === AGUIEventType.RUN_FINISHED);
+                const otherEvents = finalEvents.filter(e => e.type !== AGUIEventType.RUN_FINISHED);
+
+                // Send all non-RUN_FINISHED finalize events first
+                for (const event of otherEvents) {
                   if (!res.destroyed && !connectionManager.isConnectionClosed()) {
                     res.write(formatAguiEventAsSSE(event));
                   }
                 }
+
+                // Execute onRunFinished hook (if configured) before sending RUN_FINISHED
+                if (onRunFinishedHook && projectPath && !res.destroyed && !connectionManager.isConnectionClosed()) {
+                  try {
+                    const hookEvents = await runOnRunFinishedHook(onRunFinishedHook, {
+                      projectPath,
+                      agentId,
+                      sessionId: actualSessionId || currentSessionId || undefined,
+                    });
+                    for (const hookEvent of hookEvents) {
+                      if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                        res.write(formatAguiEventAsSSE(hookEvent));
+                      }
+                    }
+                  } catch (hookError: any) {
+                    console.warn(`[onRunFinished hook] Error: ${hookError.message}`);
+                  }
+                }
+
+                // Now send the deferred RUN_FINISHED
+                if (runFinishedEvent && !res.destroyed && !connectionManager.isConnectionClosed()) {
+                  res.write(formatAguiEventAsSSE(runFinishedEvent));
+                }
+
                 aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
               } catch (finalizeError) {
                 console.error('Failed to write AGUI finalize events:', finalizeError);

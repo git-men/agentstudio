@@ -22,14 +22,16 @@ import {
   AGUIEventType,
   type EngineType,
   type AGUIEvent,
-  type AGUIAutoVersionCreatedEvent,
 } from '../engines/index.js';
 import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
 import { sessionEventBus, type SessionEvent } from '../services/sessionEventBus.js';
-import { createVersion } from '../services/gitVersionService.js';
+import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
+import { AgentStorage } from '../services/agentStorage.js';
 
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
+// Agent storage for reading agent hooks config
+const agentStorage = new AgentStorage();
 
 const router: Router = express.Router();
 
@@ -75,10 +77,6 @@ const ChatRequestSchema = z.object({
   envVars: z.record(z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
-  // Scene identifier; 'vibeGaming' triggers auto-commit before RUN_FINISHED
-  scene: z.string().optional(),
-  // When true, append clarifying questions prompt to system prompt
-  isNewVibe: z.boolean().optional().default(false),
 });
 
 // =============================================================================
@@ -178,8 +176,6 @@ router.post('/chat', async (req, res) => {
       mcpTools,
       envVars,
       timeout,
-      scene,
-      isNewVibe,
     } = validation.data;
 
     // Resolve workspace: if it's a project name, get the actual path
@@ -247,7 +243,15 @@ router.post('/chat', async (req, res) => {
     // Track session ID for event bus broadcasting
     let activeSessionId: string | null = sessionId || null;
 
-    // For vibeGaming scene, intercept RUN_FINISHED to auto-commit before it's sent
+    // Resolve agent hooks (if an agentId-like identifier is available from the request)
+    // For AGUI, we try to find an agent whose hooks should apply.
+    // The request body may carry an agentId field (forwarded by the frontend).
+    const requestAgentId = (req.body as any)?.agentId as string | undefined;
+    const aguiAgent = requestAgentId ? agentStorage.getAgent(requestAgentId) : null;
+    const onRunFinishedHook = aguiAgent?.hooks?.onRunFinished;
+
+    // If there's an onRunFinished hook, we intercept RUN_FINISHED so we can
+    // execute the hook and emit its events before the run-finished signal.
     let pendingRunFinished: AGUIEvent | null = null;
 
     // AGUI event callback (used by Cursor engine)
@@ -259,10 +263,10 @@ router.post('/chat', async (req, res) => {
         activeSessionId = (event as any).threadId || activeSessionId;
       }
 
-      // Intercept RUN_FINISHED for vibeGaming auto-commit
-      if (event.type === AGUIEventType.RUN_FINISHED && scene === 'vibeGaming' && resolvedWorkspace) {
+      // Intercept RUN_FINISHED when an onRunFinished hook is configured
+      if (event.type === AGUIEventType.RUN_FINISHED && onRunFinishedHook && resolvedWorkspace) {
         pendingRunFinished = event;
-        return; // Don't write yet — will be sent after auto-commit
+        return; // Don't write yet — will be sent after hook execution
       }
 
       try {
@@ -296,22 +300,19 @@ router.post('/chat', async (req, res) => {
         );
         console.log(`✅ [AGUI] Cursor request completed, sessionId: ${result.sessionId}`);
 
-        // Auto-commit for vibeGaming scene before sending RUN_FINISHED
-        if (pendingRunFinished && scene === 'vibeGaming' && resolvedWorkspace && !isConnectionClosed) {
+        // Execute onRunFinished hook (if configured) before sending RUN_FINISHED
+        if (pendingRunFinished && onRunFinishedHook && resolvedWorkspace && !isConnectionClosed) {
           try {
-            const versionResult = await createVersion(resolvedWorkspace, 'Auto-save after AI response');
-            console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${resolvedWorkspace}`);
-
-            const versionEvent: AGUIAutoVersionCreatedEvent = {
-              type: AGUIEventType.AUTO_VERSION_CREATED,
-              version: versionResult,
-              timestamp: Date.now(),
-              agentId: 'cursor',
+            const hookEvents = await runOnRunFinishedHook(onRunFinishedHook, {
+              projectPath: resolvedWorkspace,
+              agentId: requestAgentId || 'cursor',
               sessionId: activeSessionId || sessionId,
-            };
-            res.write(formatAguiEventAsSSE(versionEvent));
-          } catch (error: any) {
-            console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
+            });
+            for (const hookEvent of hookEvents) {
+              res.write(formatAguiEventAsSSE(hookEvent));
+            }
+          } catch (hookError: any) {
+            console.warn(`[onRunFinished hook] Error: ${hookError.message}`);
           }
 
           // Now send the deferred RUN_FINISHED
@@ -344,8 +345,6 @@ router.post('/chat', async (req, res) => {
             envVars,
             channel: 'web',
             outputFormat: 'agui',
-            scene,
-            isNewVibe,
           },
         };
         
