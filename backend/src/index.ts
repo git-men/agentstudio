@@ -36,6 +36,8 @@ import engineRouter from './routes/engine';
 import rulesRouter from './routes/rules';
 import hooksRouter from './routes/hooks';
 import { authMiddleware } from './middleware/auth';
+import { callChainMiddleware } from './middleware/callChain';
+import { requestIdMiddleware } from './middleware/requestId';
 import { httpsOnly } from './middleware/httpsOnly';
 import { loadConfig, getSlidesDir } from './config/index';
 import { runMigrations } from './config/migration.js';
@@ -328,9 +330,14 @@ const app: express.Express = express();
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Project-Path'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Project-Path', 'X-Call-Chain', 'X-Request-ID'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range', 'X-Call-Chain', 'X-Request-ID']
   }));
+
+  // X-Call-Chain: outermost first, append this service on every response (e.g. nginx->as-mate->as-mate-chat)
+  app.use(callChainMiddleware);
+  // X-Request-ID: pass through or generate, set on request and response
+  app.use(requestIdMiddleware);
 
   // JSON parser - skip /api/slack (needs raw body for signature verification)
   app.use((req, res, next) => {
