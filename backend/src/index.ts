@@ -20,6 +20,7 @@ import configRouter from './routes/config';
 import slackRouter from './routes/slack';
 import skillsRouter from './routes/skills';
 import pluginsRouter from './routes/plugins';
+import marketplaceSkillsRouter from './routes/marketplaceSkills';
 import a2aRouter from './routes/a2a';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
@@ -555,6 +556,7 @@ const app: express.Express = express();
   app.use('/api/a2a', authMiddleware, a2aManagementRouter); // A2A management routes with user auth
   app.use('/api/skills', authMiddleware, skillsRouter);
   app.use('/api/plugins', authMiddleware, pluginsRouter);
+  app.use('/api/marketplace-skills', authMiddleware, marketplaceSkillsRouter);
   app.use('/api/scheduled-tasks', authMiddleware, scheduledTasksRouter);
   app.use('/api/mcp-admin-management', authMiddleware, mcpAdminManagementRouter); // MCP Admin management with JWT auth
   app.use('/api/cloudflare-tunnel', authMiddleware, cloudflareTunnelRouter); // Cloudflare Tunnel management
