@@ -31,10 +31,6 @@ import { createVersion } from '../services/gitVersionService.js';
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
 
-// Track active SSE observer connections by userId for kick support
-// A single user may have multiple observer connections (multiple tabs/sessions)
-const observerConnections = new Map<string, Set<express.Response>>();
-
 const router: Router = express.Router();
 
 // Initialize engines on module load
@@ -594,29 +590,6 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
   // Send initial connected event
   res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, clientId, timestamp: Date.now() })}\n\n`);
 
-  // 通知 AS-Mate 主进程: SSE 客户端连接
-  if (userId) {
-    const connectPayload = { type: 'connect', user_id: userId };
-    console.log(`[AGUI] Notifying AS-Mate connect: ${JSON.stringify(connectPayload)}`);
-    fetch('http://127.0.0.1:3000/internal/connection', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(connectPayload),
-    }).then((resp) => {
-      console.log(`[AGUI] AS-Mate connect response: status=${resp.status} for user=${userId}`);
-      return resp.text();
-    }).then((body) => {
-      console.log(`[AGUI] AS-Mate connect response body: ${body}`);
-    }).catch((err) => {
-      console.error(`[AGUI] Failed to notify connect for user ${userId}:`, err);
-    });
-
-    if (!observerConnections.has(userId)) {
-      observerConnections.set(userId, new Set());
-    }
-    observerConnections.get(userId)!.add(res);
-  }
-
   // Subscribe to session events
   const unsubscribe = sessionEventBus.subscribe(sessionId, clientId, (event: SessionEvent) => {
     if (isConnectionClosed) return;
@@ -655,30 +628,6 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
     clearInterval(heartbeatInterval);
     unsubscribe();
 
-    if (userId) {
-      const userConns = observerConnections.get(userId);
-      if (userConns) {
-        userConns.delete(res);
-        if (userConns.size === 0) {
-          observerConnections.delete(userId);
-        }
-      }
-
-      const disconnectPayload = { type: 'disconnect', user_id: userId };
-      console.log(`[AGUI] Notifying AS-Mate disconnect: ${JSON.stringify(disconnectPayload)}`);
-      fetch('http://127.0.0.1:3000/internal/connection', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(disconnectPayload),
-      }).then((resp) => {
-        console.log(`[AGUI] AS-Mate disconnect response: status=${resp.status} for user=${userId}`);
-        return resp.text();
-      }).then((body) => {
-        console.log(`[AGUI] AS-Mate disconnect response body: ${body}`);
-      }).catch((err) => {
-        console.error(`[AGUI] Failed to notify disconnect for user ${userId}:`, err);
-      });
-    }
   });
 
   res.on('error', () => {
@@ -704,44 +653,6 @@ router.get('/sessions/:sessionId/observers', (req, res) => {
     observerCount: sessionEventBus.getObserverCount(sessionId),
     hasObservers: sessionEventBus.hasObservers(sessionId),
   });
-});
-
-// =============================================================================
-// Internal: Kick User (called by AS-Mate when collaborator is removed)
-// =============================================================================
-
-const kickUserSchema = z.object({
-  user_id: z.string().min(1),
-});
-
-router.post('/internal/kick', express.json(), (req, res) => {
-  const parsed = kickUserSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: 'Invalid request', details: parsed.error.issues });
-    return;
-  }
-
-  const { user_id } = parsed.data;
-  const userConns = observerConnections.get(user_id);
-
-  if (!userConns || userConns.size === 0) {
-    console.log(`[AGUI] Kick: no active connections for user ${user_id}`);
-    res.json({ kicked: false, reason: 'no_active_connections' });
-    return;
-  }
-
-  const count = userConns.size;
-  console.log(`[AGUI] Kick: closing ${count} connection(s) for user ${user_id}`);
-
-  for (const sseRes of userConns) {
-    try {
-      sseRes.end();
-    } catch (err) {
-      console.error(`[AGUI] Kick: error closing connection for user ${user_id}:`, err);
-    }
-  }
-
-  res.json({ kicked: true, closedConnections: count });
 });
 
 export default router;
