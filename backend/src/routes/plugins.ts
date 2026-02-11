@@ -191,7 +191,7 @@ router.get('/marketplaces/check-all-updates', async (req, res) => {
 });
 
 /**
- * POST /api/plugin-marketplaces/reinitialize-builtin
+ * POST /api/plugins/marketplaces/reinitialize-builtin
  * Re-run builtin marketplace initialization (same as startup flow).
  * Uses file lock to prevent concurrent runs.
  * Called by as-mate after COS sync completes, or manually.
