@@ -36,8 +36,14 @@ export const GeneralSettingsPage: React.FC = () => {
   const [language, setLanguage] = useState(i18n.language);
 
   // Chat panel version state
-  // Initial value: use saved preference, or fallback to 'original' until engine loads
-  const [chatVersion, setChatVersion] = useState(() => localStorage.getItem('agentstudio:chat-version') || 'original');
+  // Initial value: use saved preference, or derive from engine type (including cache)
+  const [chatVersion, setChatVersion] = useState(() => {
+    const saved = localStorage.getItem('agentstudio:chat-version');
+    if (saved) return saved;
+    // No saved preference: check cached engine type for fast path
+    const cachedEngine = localStorage.getItem('agentstudio:engine-type');
+    return cachedEngine === 'cursor' ? 'agui' : 'original';
+  });
 
   // Set default chat version based on engine type when engine loads
   // Only applies if user hasn't explicitly set a preference

@@ -11,6 +11,40 @@ export type EngineType = 'claude' | 'cursor';
 // Re-export for convenience
 export type { EngineUICapabilities } from '../hooks/useAGUIChat';
 
+// =============================================================================
+// Engine Type Cache (localStorage)
+// =============================================================================
+
+const ENGINE_TYPE_CACHE_KEY = 'agentstudio:engine-type';
+
+/**
+ * Get cached engine type from localStorage.
+ * This allows the store to initialize with the correct engine type
+ * immediately, avoiding a flash of wrong engine mode on page load.
+ */
+function getCachedEngineType(): EngineType {
+  try {
+    const cached = localStorage.getItem(ENGINE_TYPE_CACHE_KEY);
+    if (cached === 'claude' || cached === 'cursor') {
+      return cached;
+    }
+  } catch {
+    // localStorage might be unavailable
+  }
+  return 'claude'; // default fallback
+}
+
+/**
+ * Save engine type to localStorage for faster initialization on next load.
+ */
+export function cacheEngineType(engine: EngineType): void {
+  try {
+    localStorage.setItem(ENGINE_TYPE_CACHE_KEY, engine);
+  } catch {
+    // localStorage might be unavailable
+  }
+}
+
 interface McpStatusData {
   hasError: boolean;
   connectedServers?: Array<{ name: string; status: string }>;
@@ -138,10 +172,10 @@ interface AgentState {
 }
 
 export const useAgentStore = create<AgentState>((set, get) => ({
-  // Initial state
+  // Initial state - use cached engine type for immediate correct rendering
   currentAgent: null,
-  selectedEngine: 'claude' as EngineType,
-  engineUICapabilities: getDefaultUICapabilities('claude'),
+  selectedEngine: getCachedEngineType(),
+  engineUICapabilities: getDefaultUICapabilities(getCachedEngineType()),
   engineModels: [], // Will be populated when engine info is fetched
   messages: [],
   isAiTyping: false,

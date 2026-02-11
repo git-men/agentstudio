@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useCallback } from 'react';
-import { useAgentStore, type EngineType } from '../../stores/useAgentStore';
+import { useAgentStore, type EngineType, cacheEngineType } from '../../stores/useAgentStore';
 import { fetchEngineInfo, getDefaultUICapabilities } from '../../hooks/useAGUIChat';
 import useEngine from '../../hooks/useEngine';
 
@@ -55,6 +55,8 @@ export const EngineSelector: React.FC<EngineSelectorProps> = ({ disabled: _disab
       if (selectedEngine !== storeEngineType) {
         console.log(`[EngineSync] Syncing engine from ${selectedEngine} to ${storeEngineType}`);
         setSelectedEngine(storeEngineType);
+        // Cache for faster initialization on next page load
+        cacheEngineType(storeEngineType);
       }
     }
   }, [serviceEngineType, selectedEngine, setSelectedEngine]);

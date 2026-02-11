@@ -42,10 +42,16 @@ export const ChatPage: React.FC = () => {
   const wasAiTypingRef = React.useRef(false);
 
   // Chat version state with localStorage persistence
-  // Initial value: use saved preference, or fallback to 'original' until engine loads
+  // Initial value: use saved preference, or derive from engine type (including cached value)
   const [chatVersion, setChatVersion] = useState<ChatVersion>(() => {
     const saved = localStorage.getItem(CHAT_VERSION_KEY);
-    return (saved === 'agui' || saved === 'original') ? saved : 'original';
+    if (saved === 'agui' || saved === 'original') return saved;
+    // No saved preference: use engine-based default
+    // isCursorEngine may already be true from cached React Query data
+    // Also check localStorage cache for engine type as a fast path
+    const cachedEngine = localStorage.getItem('agentstudio:engine-type');
+    if (cachedEngine === 'cursor') return 'agui';
+    return isCursorEngine ? 'agui' : 'original';
   });
 
   // Set default chat version based on engine type when engine loads
