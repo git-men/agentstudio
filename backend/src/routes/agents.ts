@@ -20,8 +20,8 @@ import {
 } from '../services/askUserQuestion/index.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
-import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
-import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
+import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent, type AGUIAutoVersionCreatedEvent } from '../engines/types.js';
+import { createVersion } from '../services/gitVersionService.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -752,18 +752,14 @@ router.post('/chat', async (req, res) => {
         let compactMessageBuffer: any[] = []; // 缓存 compact 相关消息
 
         // Initialize AGUI adapter if using AGUI output format
+        // NOTE: RUN_STARTED is deferred until the init message arrives with the real session ID.
+        // This prevents a mismatch between RUN_STARTED.threadId and the sessionId used by
+        // awaiting_user_input (and other events), which previously caused the frontend to
+        // send a wrong sessionId when calling /user-response.
         let aguiAdapter: ClaudeAguiAdapter | null = null;
+        let aguiRunStartedSent = false;
         if (outputFormat === 'agui') {
           aguiAdapter = new ClaudeAguiAdapter(actualSessionId || currentSessionId || undefined);
-          // Send RUN_STARTED event
-          const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
-          try {
-            if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-              res.write(formatAguiEventAsSSE(runStartedEvent));
-            }
-          } catch (writeError) {
-            console.error('Failed to write AGUI RUN_STARTED event:', writeError);
-          }
         }
 
         const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
@@ -996,6 +992,24 @@ router.post('/chat', async (req, res) => {
               // 继续会话：使用现有session ID
               console.log(`♻️  Continued session ${currentSessionId} for agent: ${agentId}`);
             }
+
+            // 🎯 Deferred RUN_STARTED: now that we have the real session ID from init,
+            // update the AGUI adapter's threadId and send RUN_STARTED with the correct ID.
+            // This ensures RUN_STARTED.threadId matches the sessionId used everywhere else
+            // (including awaiting_user_input), preventing ID mismatches on the frontend.
+            if (outputFormat === 'agui' && aguiAdapter && !aguiRunStartedSent) {
+              aguiAdapter.setThreadId(responseSessionId);
+              const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
+              try {
+                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                  res.write(formatAguiEventAsSSE(runStartedEvent));
+                  aguiRunStartedSent = true;
+                  console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${responseSessionId}`);
+                }
+              } catch (writeError) {
+                console.error('Failed to write AGUI RUN_STARTED event:', writeError);
+              }
+            }
           }
 
           // 🎯 检测子Agent消息：通过 parent_tool_use_id 字段判断
@@ -1087,25 +1101,31 @@ router.post('/chat', async (req, res) => {
               }
             }
 
-            // Execute agent onRunFinished hook (e.g., auto-commit) before finalize
-            if (agent.hooks?.onRunFinished && projectPath && resultMsg.subtype === 'success') {
+            // Auto-commit for vibeGaming scene (before AGUI finalize / connection close)
+            if (scene === 'vibeGaming' && projectPath && resultMsg.subtype === 'success') {
               try {
-                const hookEvents = await runOnRunFinishedHook(agent.hooks.onRunFinished, {
-                  projectPath,
-                  agentId,
-                  sessionId: actualSessionId || currentSessionId,
-                });
-                for (const hookEvent of hookEvents) {
-                  if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                    if (outputFormat === 'agui') {
-                      res.write(formatAguiEventAsSSE(hookEvent));
-                    } else {
-                      res.write(`data: ${JSON.stringify(hookEvent)}\n\n`);
-                    }
+                const versionResult = await createVersion(projectPath, `Auto-save after AI response`);
+                console.log(`🎮 [vibeGaming] Auto-committed version ${versionResult.tag} for project: ${projectPath}`);
+
+                // Notify frontend about the new version via SSE before closing
+                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                  const versionEvent: AGUIAutoVersionCreatedEvent = {
+                    type: AGUIEventType.AUTO_VERSION_CREATED,
+                    version: versionResult,
+                    timestamp: Date.now(),
+                    agentId,
+                    sessionId: actualSessionId || currentSessionId,
+                  };
+
+                  if (outputFormat === 'agui') {
+                    res.write(formatAguiEventAsSSE(versionEvent));
+                  } else {
+                    res.write(`data: ${JSON.stringify(versionEvent)}\n\n`);
                   }
                 }
-              } catch (hookError: any) {
-                console.warn(`[onRunFinished hook] Error: ${hookError.message}`);
+              } catch (error: any) {
+                // Don't fail the whole request if auto-commit fails (e.g., no changes to commit)
+                console.warn(`🎮 [vibeGaming] Auto-commit skipped: ${error.message}`);
               }
             }
 
