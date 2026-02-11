@@ -960,35 +960,16 @@ router.post('/chat', async (req, res) => {
                 console.log(`📡 [AskUserQuestion] Updated session: ${tempSessionId} -> ${responseSessionId}`);
               }
             } else if (currentSessionId && responseSessionId !== currentSessionId) {
-              // Resume场景：Claude SDK返回了新的session ID，需要通知前端
-              console.log(`🔄 Session resumed: ${currentSessionId} -> ${responseSessionId} for agent: ${agentId}`);
+              // Resume scenario: Claude SDK returned a new session ID (branch).
+              // We keep the original sessionId as the public-facing ID so the
+              // frontend sees a consistent session. The SDK's internal session ID
+              // is stored on the ClaudeSession object for future SDK calls.
+              console.log(`🔄 Session resumed: SDK returned ${responseSessionId}, keeping public sessionId as ${currentSessionId} for agent: ${agentId}`);
 
-              // 更新会话管理器中的session ID映射
-              sessionManager.replaceSessionId(claudeSession, currentSessionId, responseSessionId);
+              // Track the SDK's real session ID internally (do NOT replace the
+              // session manager mapping — the session stays indexed under the
+              // original sessionId).
               claudeSession.setClaudeSessionId(responseSessionId);
-
-              // 发送session resume通知给前端
-              const resumeNotification = {
-                type: 'session_resumed',
-                subtype: 'new_branch',
-                originalSessionId: currentSessionId,
-                newSessionId: responseSessionId,
-                sessionId: responseSessionId,
-                message: `会话已从历史记录恢复并创建新分支。原始会话ID: ${currentSessionId}，新会话ID: ${responseSessionId}`,
-                timestamp: Date.now()
-              };
-
-              try {
-                if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(`data: ${JSON.stringify(resumeNotification)}\n\n`);
-                  console.log(`🔄 Sent session resume notification: ${currentSessionId} -> ${responseSessionId}`);
-                }
-              } catch (writeError: unknown) {
-                console.error('Failed to write session resume notification:', writeError);
-              }
-
-              // 更新实际的session ID为新的ID
-              actualSessionId = responseSessionId;
             } else {
               // 继续会话：使用现有session ID
               console.log(`♻️  Continued session ${currentSessionId} for agent: ${agentId}`);
@@ -996,16 +977,18 @@ router.post('/chat', async (req, res) => {
 
             // 🎯 Deferred RUN_STARTED: now that we have the real session ID from init,
             // update the AGUI adapter's threadId and send RUN_STARTED with the correct ID.
-            // This ensures RUN_STARTED.threadId matches the sessionId used everywhere else
-            // (including awaiting_user_input), preventing ID mismatches on the frontend.
+            // Use actualSessionId (original request sessionId) when available so the
+            // frontend sees a consistent session ID. For new sessions actualSessionId
+            // is null, so we fall back to responseSessionId from the SDK.
             if (outputFormat === 'agui' && aguiAdapter && !aguiRunStartedSent) {
-              aguiAdapter.setThreadId(responseSessionId);
+              const aguiThreadId = actualSessionId || responseSessionId;
+              aguiAdapter.setThreadId(aguiThreadId);
               const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
               try {
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
                   res.write(formatAguiEventAsSSE(runStartedEvent));
                   aguiRunStartedSent = true;
-                  console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${responseSessionId}`);
+                  console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${aguiThreadId}`);
                 }
               } catch (writeError) {
                 console.error('Failed to write AGUI RUN_STARTED event:', writeError);
