@@ -143,6 +143,17 @@ export interface MarketplaceAgent {
       welcomeMessage?: string;
     };
     tags?: string[];
+    hooks?: {
+      onRunFinished?: {
+        action: string;
+        message?: string;
+      };
+    };
+    mcpServers?: Record<string, {
+      command: string;
+      args?: string[];
+      env?: Record<string, string>;
+    }>;
   };
 }
 
