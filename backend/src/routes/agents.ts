@@ -380,9 +380,24 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
       claudeSession.cancelRequest(currentRequestId);
       if (reason === 'request completed') {
         console.log(`✅ Cleaned up Claude request ${currentRequestId}: ${reason}`);
+      } else if (reason === 'client disconnected') {
+        // 客户端断开（刷新页面、关闭标签页等）：仅移除回调，不立即中断 session
+        // 用户可能会刷新后重新连接并复用同一 session
+        // 设置延迟中断：如果用户在宽限期内未重新连接，则中断 session 防止资源泄漏
+        console.log(`🔌 Client disconnected, detached callback for request ${currentRequestId} (session kept alive with grace period)`);
+        const DISCONNECT_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 分钟宽限期
+        setTimeout(() => {
+          // 检查 session 是否仍在处理中（说明没有新的客户端接管）
+          if (claudeSession && claudeSession.isCurrentlyProcessing() && typeof claudeSession.interrupt === 'function') {
+            console.log(`⏰ Grace period expired, interrupting orphaned session for agent ${agentId}`);
+            claudeSession.interrupt().catch((e: unknown) => {
+              console.error(`❌ Failed to interrupt orphaned session:`, e);
+            });
+          }
+        }, DISCONNECT_GRACE_PERIOD_MS);
       } else {
         console.log(`🚫 Cancelled Claude request ${currentRequestId} due to: ${reason}`);
-        // 非正常完成时，中断底层 Claude SDK 进程，防止命令继续在后台执行
+        // 非正常完成且非客户端断开时，中断底层 Claude SDK 进程，防止命令继续在后台执行
         if (typeof claudeSession.interrupt === 'function') {
           claudeSession.interrupt().catch((e: unknown) => {
             console.error(`❌ Failed to interrupt session on disconnect:`, e);

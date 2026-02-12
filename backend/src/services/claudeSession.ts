@@ -259,6 +259,11 @@ export class ClaudeSession {
             this.isProcessing = false;
             console.log(`🔓 Session unlocked for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
           }
+        } else if (sdkMessage.type === 'result') {
+          // 回调已被移除（如客户端断开），但 SDK 仍然完成了请求
+          // 需要清除 isProcessing 标记，否则 session 会永远锁定
+          this.isProcessing = false;
+          console.log(`🔓 Session unlocked (no callback) for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
         }
       }
     } catch (error) {
