@@ -391,8 +391,9 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
       }
     }
 
-    // 确保连接关闭
-    if (!res.headersSent) {
+    // 在关闭连接前发送 connection_closed 事件
+    // 仅在连接未被销毁且非客户端主动断开时发送（客户端断开时 socket 已关闭，write 会失败）
+    if (!res.destroyed && reason !== 'client disconnected') {
       try {
         res.write(`data: ${JSON.stringify({
           type: 'connection_closed',
