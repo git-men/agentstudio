@@ -389,6 +389,17 @@ export class ClaudeSession {
       console.error(`❌ Failed to interrupt Claude session for agent ${this.agentId}:`, error);
       throw error;
     }
+
+    // Mark session as inactive after interrupt.
+    // The underlying query stream is dead after interrupt, so any subsequent
+    // sendMessage would push to the messageQueue but the for-await loop has
+    // already exited — resulting in heartbeat-only SSE with no AI data.
+    // By marking inactive, the next chat request's retry logic will remove
+    // this session and create a fresh one with resume, which is the correct
+    // recovery path.
+    this.isActive = false;
+    this.isProcessing = false;
+    console.log(`🛑 Session marked inactive after interrupt for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
   }
 
   /**
