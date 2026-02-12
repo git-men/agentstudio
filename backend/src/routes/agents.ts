@@ -382,6 +382,12 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
         console.log(`✅ Cleaned up Claude request ${currentRequestId}: ${reason}`);
       } else {
         console.log(`🚫 Cancelled Claude request ${currentRequestId} due to: ${reason}`);
+        // 非正常完成时，中断底层 Claude SDK 进程，防止命令继续在后台执行
+        if (typeof claudeSession.interrupt === 'function') {
+          claudeSession.interrupt().catch((e: unknown) => {
+            console.error(`❌ Failed to interrupt session on disconnect:`, e);
+          });
+        }
       }
     }
 
