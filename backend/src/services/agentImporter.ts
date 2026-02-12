@@ -166,6 +166,7 @@ class AgentImporter {
         },
         author: `Marketplace: ${marketplaceName}`,
         tags: agentConfig.tags || [],
+        hooks: agentConfig.hooks || {},
         createdAt: now,
         updatedAt: now,
         enabled: true,
