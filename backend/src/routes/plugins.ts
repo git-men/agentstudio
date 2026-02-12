@@ -195,10 +195,16 @@ router.get('/marketplaces/check-all-updates', async (req, res) => {
  * Re-run builtin marketplace initialization (same as startup flow).
  * Uses file lock to prevent concurrent runs.
  * Called by as-mate after COS sync completes, or manually.
+ * 
+ * Optional body: { builtinPaths: string }
+ *   - If provided, uses this path instead of BUILTIN_MARKETPLACES env var.
+ *   - This allows as-mate to pass the current marketplace directory path,
+ *     which may differ from what was set at process startup time.
  */
 router.post('/marketplaces/reinitialize-builtin', async (req, res) => {
   try {
-    const result = await syncBuiltinMarketplaces();
+    const builtinPaths = req.body?.builtinPaths as string | undefined;
+    const result = await syncBuiltinMarketplaces(builtinPaths);
 
     if (!result.success && result.error === 'Sync already in progress') {
       res.status(409).json(result); // Conflict
