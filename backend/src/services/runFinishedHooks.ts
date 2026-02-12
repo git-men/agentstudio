@@ -9,6 +9,7 @@
  * allowing agents to declare post-run behaviour via configuration.
  */
 
+import fs from 'fs';
 import type { OnRunFinishedHookConfig } from '../types/agents.js';
 import type { AGUIEvent } from '../engines/types.js';
 import { AGUIEventType } from '../engines/types.js';
@@ -43,6 +44,15 @@ export async function runOnRunFinishedHook(
   switch (config.action) {
     case 'create_version': {
       try {
+        // Skip version creation if the project directory has no files
+        const entries = fs.readdirSync(ctx.projectPath).filter(
+          (e) => e !== '.git' && e !== '.gitignore'
+        );
+        if (entries.length === 0) {
+          console.log(`🎮 [hook:create_version] Skipped: no files in ${ctx.projectPath}`);
+          break;
+        }
+
         const commitMessage = config.message ?? 'Auto-save after AI response';
         const versionResult = await createVersion(ctx.projectPath, commitMessage);
 
