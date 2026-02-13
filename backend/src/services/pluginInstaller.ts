@@ -71,8 +71,6 @@ class PluginInstaller {
         await this.copyLocalMarketplace(source, marketplacePath);
       } else if (type === 'cos') {
         await this.downloadFromCOS(source, marketplacePath, cosConfig);
-      } else if (type === 'archive') {
-        await this.downloadAndExtractArchive(source, marketplacePath);
       }
 
       // Save marketplace metadata for sync operations
@@ -140,16 +138,9 @@ class PluginInstaller {
           case 'cos':
             await this.syncCOSMarketplace(marketplacePath, metadata);
             break;
-          case 'archive':
-            await this.syncArchiveMarketplace(marketplacePath, metadata);
-            break;
           case 'local':
-            // Local marketplaces cannot be synced remotely
-            return {
-              success: false,
-              error: 'Local marketplace cannot be synced. Use the original source path.',
-              syncedAt: new Date().toISOString(),
-            };
+            await this.syncLocalMarketplace(marketplacePath, metadata);
+            break;
           default:
             return {
               success: false,
@@ -282,6 +273,74 @@ class PluginInstaller {
       }
       throw error;
     }
+  }
+
+  /**
+   * Sync a local marketplace by re-copying from the source directory.
+   * Also re-installs plugins and re-imports agents.
+   */
+  private async syncLocalMarketplace(marketplacePath: string, metadata: MarketplaceMetadata): Promise<void> {
+    const sourcePath = metadata.source;
+
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      throw new Error(`Source path does not exist or is not set: ${sourcePath}`);
+    }
+
+    // Preserve metadata before re-copy
+    const metadataBackup = { ...metadata, updatedAt: new Date().toISOString() };
+
+    // Re-copy from source (overwrites existing files)
+    await this.copyLocalMarketplace(sourcePath, marketplacePath);
+
+    // Restore metadata (copyLocalMarketplace may overwrite .agentstudio-metadata.json)
+    await this.saveMarketplaceMetadata(marketplacePath, metadataBackup);
+
+    console.log(`Synced local marketplace from ${sourcePath} to ${marketplacePath}`);
+  }
+
+  /**
+   * Check if a local marketplace source directory has changed compared to the installed copy.
+   * Compares marketplace.json version field and file modification times.
+   */
+  private async checkLocalUpdates(marketplacePath: string, metadata: MarketplaceMetadata): Promise<{ hasUpdate: boolean; remoteVersion?: string }> {
+    const sourcePath = metadata.source;
+
+    if (!sourcePath || !fs.existsSync(sourcePath)) {
+      return { hasUpdate: false };
+    }
+
+    // Strategy 1: Compare manifest versions
+    const localManifest = await this.loadMarketplaceManifest(marketplacePath);
+    const sourceManifestPath = path.join(sourcePath, '.claude-plugin', 'marketplace.json');
+
+    if (fs.existsSync(sourceManifestPath)) {
+      try {
+        const sourceContent = fs.readFileSync(sourceManifestPath, 'utf-8');
+        const sourceManifest = JSON.parse(sourceContent) as MarketplaceManifest;
+
+        if (sourceManifest.version && localManifest?.version) {
+          if (sourceManifest.version !== localManifest.version) {
+            return { hasUpdate: true, remoteVersion: sourceManifest.version };
+          }
+        }
+      } catch {
+        // Fall through to mtime check
+      }
+    }
+
+    // Strategy 2: Compare manifest file mtime
+    const localManifestPath = path.join(marketplacePath, '.claude-plugin', 'marketplace.json');
+
+    if (fs.existsSync(sourceManifestPath) && fs.existsSync(localManifestPath)) {
+      const sourceStat = fs.statSync(sourceManifestPath);
+      const localStat = fs.statSync(localManifestPath);
+
+      if (sourceStat.mtimeMs > localStat.mtimeMs) {
+        return { hasUpdate: true };
+      }
+    }
+
+    return { hasUpdate: false };
   }
 
   /**
@@ -720,14 +779,20 @@ class PluginInstaller {
         case 'github':
           hasUpdate = await this.checkGitUpdates(marketplacePath);
           break;
-        case 'cos':
-        case 'archive':
+        case 'local': {
+          const localResult = await this.checkLocalUpdates(marketplacePath, metadata);
+          hasUpdate = localResult.hasUpdate;
+          remoteVersion = localResult.remoteVersion;
+          break;
+        }
+        case 'cos': {
           const remoteManifest = await this.fetchRemoteManifest(metadata.source);
           if (remoteManifest) {
             remoteVersion = remoteManifest.version;
             hasUpdate = remoteVersion !== localVersion;
           }
           break;
+        }
       }
 
       // Update metadata with check timestamp

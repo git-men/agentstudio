@@ -11,9 +11,8 @@
  * - github: GitHub shorthand (owner/repo) or full URL
  * - local: Local directory path
  * - cos: Tencent Cloud COS URL (bucket/prefix)
- * - archive: Direct URL to a tar.gz/zip archive
  */
-export type MarketplaceType = 'git' | 'github' | 'local' | 'cos' | 'archive';
+export type MarketplaceType = 'git' | 'github' | 'local' | 'cos';
 
 export interface PluginAuthor {
   name: string;

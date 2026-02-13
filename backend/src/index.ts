@@ -401,8 +401,8 @@ const app: express.Express = express();
   }
 
   // 5. Marketplace Update Service: Initialize background update checker
-  // Default to DISABLED - builtin marketplaces use the reinitialize-builtin API instead
-  const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES === 'true'; // Default to false
+  // Default to ENABLED - periodically checks for marketplace updates (especially local type)
+  const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES !== 'false'; // Default to true
   console.info('[MarketplaceUpdate] Initializing marketplace update service...');
   try {
     initializeMarketplaceUpdateService({

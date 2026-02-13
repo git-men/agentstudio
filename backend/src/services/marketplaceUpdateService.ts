@@ -181,13 +181,23 @@ async function runUpdateCheck(marketplaceName: string): Promise<void> {
     if (result.hasUpdate) {
       console.info(`[MarketplaceUpdate] Update available for '${marketplaceName}': ${result.localVersion} -> ${result.remoteVersion}`);
       
-      // Auto-apply update if configured
-      if (config.autoApplyUpdates) {
+      // Auto-apply update if configured globally, or always for local type marketplaces
+      const metadata = await loadMarketplaceMetadataForType(marketplaceName);
+      const shouldAutoApply = config.autoApplyUpdates || metadata?.type === 'local';
+      
+      if (shouldAutoApply) {
         console.info(`[MarketplaceUpdate] Auto-applying update for '${marketplaceName}'`);
         try {
           const syncResult = await pluginInstaller.syncMarketplace(marketplaceName);
           if (syncResult.success) {
             console.info(`[MarketplaceUpdate] Successfully updated '${marketplaceName}'`);
+            
+            // For local type, also re-install plugins
+            if (metadata?.type === 'local') {
+              const { syncBuiltinMarketplaces } = await import('./builtinMarketplaceService');
+              console.info(`[MarketplaceUpdate] Re-installing plugins for local marketplace '${marketplaceName}'`);
+              await syncBuiltinMarketplaces(metadata.source);
+            }
           } else {
             console.error(`[MarketplaceUpdate] Failed to update '${marketplaceName}': ${syncResult.error}`);
           }
@@ -330,6 +340,27 @@ export function getMarketplaceUpdateServiceStatus(): {
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+/**
+ * Load marketplace metadata to determine type (for auto-apply decisions).
+ * Reads the full metadata including type and source.
+ */
+async function loadMarketplaceMetadataForType(marketplaceName: string): Promise<{ type: string; source: string } | null> {
+  const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
+  const metadataPath = path.join(marketplacePath, '.claude-plugin', '.agentstudio-metadata.json');
+
+  if (!fs.existsSync(metadataPath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(metadataPath, 'utf-8');
+    const metadata = JSON.parse(content);
+    return { type: metadata.type, source: metadata.source };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Load marketplace metadata for auto-update configuration

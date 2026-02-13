@@ -356,7 +356,8 @@ describe('PluginInstaller', () => {
     });
   });
 
-  describe('addMarketplace - Archive type', () => {
+  // Archive type tests - deprecated, archive marketplace type removed
+  describe.skip('addMarketplace - Archive type (deprecated)', () => {
     it('should add an archive marketplace', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
       vi.mocked(fs.mkdirSync).mockReturnValue(undefined);

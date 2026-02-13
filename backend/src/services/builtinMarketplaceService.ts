@@ -224,6 +224,10 @@ export async function syncBuiltinMarketplaces(
             type: 'local',
             source: sourcePath,
             name,
+            autoUpdate: {
+              enabled: true,
+              checkInterval: 5, // Check every 5 minutes for local marketplace changes
+            },
           });
 
           if (!result.success) {

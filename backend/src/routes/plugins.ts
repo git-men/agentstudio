@@ -14,7 +14,7 @@ import { syncBuiltinMarketplaces, getBuiltinMarketplaceStatus } from '../service
 import { MarketplaceAddRequest, PluginInstallRequest, MarketplaceType } from '../types/plugins';
 
 // Valid marketplace types
-const VALID_MARKETPLACE_TYPES: MarketplaceType[] = ['git', 'github', 'local', 'cos', 'archive'];
+const VALID_MARKETPLACE_TYPES: MarketplaceType[] = ['git', 'github', 'local', 'cos'];
 
 const router: express.Router = express.Router();
 
@@ -67,12 +67,8 @@ router.post('/marketplaces', async (req, res) => {
       });
     }
 
-    // Validate archive URL
-    if (request.type === 'archive' && !request.source.startsWith('http')) {
-      return res.status(400).json({
-        error: 'Archive marketplace requires a valid HTTP/HTTPS URL',
-      });
-    }
+    // Note: archive type has been removed. COS downloads should be handled
+    // externally (e.g., by as-mate) and treated as local type.
 
     const result = await pluginInstaller.addMarketplace(request);
 

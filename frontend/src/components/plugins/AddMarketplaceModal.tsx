@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Github, GitBranch, FolderOpen, Cloud, Archive, RefreshCw } from 'lucide-react';
+import { Github, GitBranch, FolderOpen, Cloud, RefreshCw } from 'lucide-react';
 import { MarketplaceAddRequest, MarketplaceType } from '../../types/plugins';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
@@ -33,7 +33,6 @@ const typeConfig: Record<MarketplaceType, { icon: React.ElementType; label: stri
   git: { icon: GitBranch, label: 'Git Repository' },
   local: { icon: FolderOpen, label: 'Local Directory' },
   cos: { icon: Cloud, label: 'COS (Tencent Cloud)' },
-  archive: { icon: Archive, label: 'Archive URL' },
 };
 
 export const AddMarketplaceModal: React.FC<AddMarketplaceModalProps> = ({
@@ -105,8 +104,6 @@ export const AddMarketplaceModal: React.FC<AddMarketplaceModalProps> = ({
         return t('plugins.marketplaces.addModal.sourcePlaceholderGit', 'https://git.example.com/repo.git');
       case 'cos':
         return 'https://bucket.cos.region.myqcloud.com/prefix';
-      case 'archive':
-        return 'https://example.com/marketplace.tar.gz';
       default:
         return '';
     }
@@ -176,11 +173,6 @@ export const AddMarketplaceModal: React.FC<AddMarketplaceModalProps> = ({
               {formData.type === 'cos' && (
                 <p className="text-xs text-muted-foreground mt-1">
                   COS URL 支持公开访问的存储桶地址，或包含 marketplace.tar.gz 的目录
-                </p>
-              )}
-              {formData.type === 'archive' && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  支持 .tar.gz, .tgz, .zip 格式的压缩包 URL
                 </p>
               )}
             </div>
