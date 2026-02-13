@@ -358,6 +358,14 @@ export class ClaudeSession {
   }
 
   /**
+   * Check if any response callback is registered (i.e. a client is listening).
+   * Used by the grace period timeout to detect if a reconnect has taken over.
+   */
+  public hasActiveCallback(): boolean {
+    return this.responseCallbacks.size > 0;
+  }
+
+  /**
    * Replace the response callback for the currently active request.
    * Used for SSE reconnect: when a client refreshes mid-response,
    * the new connection can re-attach to the ongoing stream.

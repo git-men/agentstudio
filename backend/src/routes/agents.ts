@@ -344,13 +344,6 @@ const ChatRequestSchema = z.object({
     customContext: z.record(z.any()).optional()
   }).optional(),
   envVars: z.record(z.string()).optional(),
-}).refine(data => {
-  // Reconnect requests don't need a message
-  if (data.reconnect) return true;
-  // Either message text or images must be provided
-  return data.message.trim().length > 0 || (data.images && data.images.length > 0);
-}, {
-  message: "Either message text or images must be provided"
 });
 
 // Helper functions for chat endpoint
@@ -392,6 +385,12 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
         setTimeout(() => {
           // 检查 session 是否仍在处理中（说明没有新的客户端接管）
           if (claudeSession && claudeSession.isCurrentlyProcessing() && typeof claudeSession.interrupt === 'function') {
+            // If a reconnect happened, replaceActiveCallback() re-inserted a
+            // callback (cancelRequest cleared it on disconnect). Skip interrupt.
+            if (claudeSession.hasActiveCallback?.()) {
+              console.log(`⏰ Grace period expired but session was reconnected for agent ${agentId}, skipping interrupt`);
+              return;
+            }
             console.log(`⏰ Grace period expired, interrupting orphaned session for agent ${agentId}`);
             claudeSession.interrupt().catch((e: unknown) => {
               console.error(`❌ Failed to interrupt orphaned session:`, e);
@@ -541,6 +540,39 @@ router.post('/chat', async (req, res) => {
       res.flushHeaders();
 
       let isReconnectClosed = false;
+
+      // Register an SSE notification channel for the reconnected client so that
+      // AskUserQuestion's awaiting_user_input events can be delivered.  Without
+      // this, any new AskUserQuestion tool call would fail because the
+      // notificationChannelManager has no channel to send the event through.
+      const reconnectChannelId = generateSSEChannelId();
+      const reconnectChannel = new SSENotificationChannel(
+        reconnectChannelId,
+        sessionId,
+        agentId,
+        res,
+        () => {
+          notificationChannelManager.unregisterChannel(reconnectChannelId);
+
+          // Only cancel pending inputs if the session is no longer processing.
+          // If still processing, a subsequent reconnect may replay them.
+          const rcSession = sessionManager.getSession(sessionId!);
+          if (rcSession && rcSession.isCurrentlyProcessing()) {
+            console.log(`🎤 [Reconnect] Keeping pending inputs alive for reconnectable session: ${sessionId}`);
+          } else {
+            const cancelledCount = userInputRegistry.cancelAllBySession(
+              sessionId!,
+              'SSE connection closed'
+            );
+            if (cancelledCount > 0) {
+              console.log(`🎤 [Reconnect] Cancelled ${cancelledCount} pending inputs for session: ${sessionId}`);
+            }
+          }
+        }
+      );
+      notificationChannelManager.registerChannel(reconnectChannel);
+      console.log(`📡 [Reconnect] Registered SSE notification channel: ${reconnectChannelId} for session: ${sessionId}`);
+
       res.on('close', () => { isReconnectClosed = true; });
 
       // Heartbeat to keep connection alive
@@ -559,6 +591,29 @@ router.post('/chat', async (req, res) => {
       try {
         res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
       } catch { /* connection already dead */ }
+
+      // Re-send any pending AskUserQuestion events that were lost when the old connection died
+      const pendingInputs = userInputRegistry.getPendingInputsBySession(sessionId);
+      console.log(`🔍 [Reconnect] Checked pending inputs for session ${sessionId}: found ${pendingInputs.length}`);
+      if (pendingInputs.length > 0) {
+        console.log(`🔄 [Reconnect] Re-sending ${pendingInputs.length} pending awaiting_user_input event(s)`);
+        for (const request of pendingInputs) {
+          try {
+            if (!isReconnectClosed) {
+              const event = {
+                type: 'awaiting_user_input',
+                toolUseId: request.toolUseId,
+                toolName: 'mcp__ask-user-question__ask_user_question',
+                toolInput: { questions: request.questions },
+                agentId: request.agentId,
+                sessionId: request.sessionId,
+                timestamp: Date.now(),
+              };
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+          } catch { /* connection gone */ }
+        }
+      }
 
       // AGUI adapter for reconnect (if using AGUI output)
       let aguiReconnectAdapter: ClaudeAguiAdapter | null = null;
@@ -736,13 +791,21 @@ router.post('/chat', async (req, res) => {
 
         // 🎤 取消该 session 的所有等待中的用户输入请求
         // 使用 sseChannel.sessionId 获取最新的 sessionId（可能已从 temp 更新为真实 ID）
+        // BUT: if the session is still processing, a reconnect may arrive — preserve
+        // pending inputs so they can be replayed on the new connection.
         const currentSessionId = sseChannel.sessionId;
-        const cancelledCount = userInputRegistry.cancelAllBySession(
-          currentSessionId,
-          'SSE connection closed'
-        );
-        if (cancelledCount > 0) {
-          console.log(`🎤 [AskUserQuestion] Cancelled ${cancelledCount} pending inputs for session: ${currentSessionId}`);
+        const session = sessionManager.getSession(currentSessionId);
+        console.log(`🔍 [AskUserQuestion] onClose: sessionId=${currentSessionId}, sessionFound=${!!session}, isProcessing=${session?.isCurrentlyProcessing()}`);
+        if (session && session.isCurrentlyProcessing()) {
+          console.log(`🎤 [AskUserQuestion] Keeping pending inputs alive for reconnectable session: ${currentSessionId}`);
+        } else {
+          const cancelledCount = userInputRegistry.cancelAllBySession(
+            currentSessionId,
+            'SSE connection closed'
+          );
+          if (cancelledCount > 0) {
+            console.log(`🎤 [AskUserQuestion] Cancelled ${cancelledCount} pending inputs for session: ${currentSessionId}`);
+          }
         }
       }
     );
