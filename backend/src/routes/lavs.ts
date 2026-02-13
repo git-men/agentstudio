@@ -238,8 +238,8 @@ router.post('/:agentId/lavs/:endpoint', async (req, res) => {
       });
     }
 
-    // 4. Validate input against schema
-    validator.assertValidInput(endpoint, input);
+    // 4. Validate input against schema (pass manifest types for $ref resolution)
+    validator.assertValidInput(endpoint, input, manifest.types);
 
     // 5. Build execution context with merged permissions
     const agentDir = getAgentDirectory(agentId);
@@ -312,8 +312,16 @@ router.post('/:agentId/lavs/:endpoint', async (req, res) => {
         });
     }
 
-    // 8. Validate output against schema
-    validator.assertValidOutput(endpoint, result);
+    // 8. Validate output against schema (non-blocking: log warnings instead of failing)
+    try {
+      validator.assertValidOutput(endpoint, result, manifest.types);
+    } catch (validationError: unknown) {
+      // Output validation failures are logged as warnings, not thrown
+      // Script executed successfully; strict schema validation on output
+      // should not block the response (e.g., loose date formats in data)
+      const msg = validationError instanceof Error ? validationError.message : String(validationError);
+      console.warn(`[LAVS] Output validation warning for ${endpointId}: ${msg}`);
+    }
 
     // 9. Auto-publish mutation results to subscribers
     if (endpoint.method === 'mutation') {

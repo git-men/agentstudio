@@ -15,7 +15,7 @@
     "primaryColor": "#6366f1",
     "headerTitle": "Jarvis",
     "headerDescription": "Jeff 的个人秘书",
-    "welcomeMessage": "你好！我是 Jarvis，Jeff 的个人秘书。我可以帮你:\n\n• 管理待办事项\n• 记录和整理日记\n• 协调与其他 Agent 的沟通\n• 跟踪任务进度\n\n试试说:\n• \"帮我添加一个待办：开会\"\n• \"查看今天的待办\"\n• \"记录今天的工作日志\""
+    "welcomeMessage": "你好，我是 Jarvis，随时为你管理待办、记录日志和协调任务。有什么需要帮忙的吗？"
   },
   "author": "AgentStudio System",
   "tags": ["productivity", "todo", "journal", "secretary", "lavs"],
