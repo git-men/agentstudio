@@ -23,6 +23,7 @@ import {
   SLACK_SESSION_LOCKS_DIR,
   SCHEDULED_TASKS_DIR,
   SCHEDULED_TASKS_HISTORY_DIR,
+  META_AGENT_WORKING_DIR,
 } from './paths.js';
 
 const MIGRATED_MARKER = '.migrated';
@@ -236,6 +237,7 @@ function ensureDirectories(): void {
     SLACK_SESSION_LOCKS_DIR,
     SCHEDULED_TASKS_DIR,
     SCHEDULED_TASKS_HISTORY_DIR,
+    META_AGENT_WORKING_DIR,
   ];
 
   for (const dir of dirs) {
