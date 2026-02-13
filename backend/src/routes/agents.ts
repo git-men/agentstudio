@@ -328,6 +328,7 @@ const ChatRequestSchema = z.object({
   claudeVersion: z.string().optional(), // Claude版本ID
   channel: z.enum(['web', 'slack']).optional().default('web'), // Channel for streaming control
   outputFormat: z.enum(['default', 'agui']).optional().default('default'), // Output format: default (SDK format) or agui (AGUI protocol)
+  reconnect: z.boolean().optional(), // When true, re-attach to an in-progress SSE stream instead of sending a new message
   context: z.object({
     currentSlide: z.number().optional().nullable(),
     slideContent: z.string().optional(),
@@ -344,6 +345,8 @@ const ChatRequestSchema = z.object({
   }).optional(),
   envVars: z.record(z.string()).optional(),
 }).refine(data => {
+  // Reconnect requests don't need a message
+  if (data.reconnect) return true;
   // Either message text or images must be provided
   return data.message.trim().length > 0 || (data.images && data.images.length > 0);
 }, {
@@ -500,7 +503,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat } = validation.data;
+    const { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -508,9 +511,139 @@ router.post('/chat', async (req, res) => {
     console.log('[Backend] Received chat request:', {
       agentId,
       sessionId,
+      reconnect: !!reconnect,
       envVarsKeys: envVars ? Object.keys(envVars) : [],
       envVars
     });
+
+    // ── Reconnect branch: re-attach to an in-progress SSE stream ──────────
+    if (reconnect && sessionId) {
+      console.log(`🔄 [Reconnect] Attempting to re-attach to session: ${sessionId}`);
+
+      const claudeSession = sessionManager.getSession(sessionId);
+      if (!claudeSession || !claudeSession.isSessionActive()) {
+        console.log(`❌ [Reconnect] Session ${sessionId} is not active`);
+        return res.status(404).json({ error: 'Session not found or not active' });
+      }
+
+      if (!claudeSession.isCurrentlyProcessing()) {
+        console.log(`ℹ️ [Reconnect] Session ${sessionId} is active but not processing`);
+        return res.status(409).json({ reconnected: false, reason: 'not_processing' });
+      }
+
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+      res.flushHeaders();
+
+      let isReconnectClosed = false;
+      res.on('close', () => { isReconnectClosed = true; });
+
+      // Heartbeat to keep connection alive
+      const heartbeat = setInterval(() => {
+        if (isReconnectClosed) { clearInterval(heartbeat); return; }
+        try { res.write(': heartbeat\n\n'); } catch { clearInterval(heartbeat); }
+      }, 5000);
+
+      // Send SESSION_RESUMED event so the frontend knows reconnection succeeded
+      const sessionResumedEvent = {
+        type: 'SESSION_RESUMED',
+        sessionId,
+        agentId,
+        timestamp: Date.now(),
+      };
+      try {
+        res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
+      } catch { /* connection already dead */ }
+
+      // AGUI adapter for reconnect (if using AGUI output)
+      let aguiReconnectAdapter: ClaudeAguiAdapter | null = null;
+      if (outputFormat === 'agui') {
+        aguiReconnectAdapter = new ClaudeAguiAdapter(sessionId);
+        // Send RUN_STARTED so frontend treats this as an active run
+        const runStartedEvent = aguiReconnectAdapter.createRunStarted({ message: '(reconnected)', projectPath });
+        try {
+          if (!isReconnectClosed) {
+            res.write(formatAguiEventAsSSE(runStartedEvent));
+            // Send a synthetic TEXT_MESSAGE_START so the frontend initializes
+            // its text block tracking.  Without this, TEXT_MESSAGE_CONTENT events
+            // arriving mid-stream won't produce textDelta (aguiState.textBlockIndex
+            // stays null) and messageParts never gets a text entry — the UI won't
+            // update even though data is being pushed.
+            const textStartEvent: AGUIEvent = {
+              type: 'TEXT_MESSAGE_START' as AGUIEventType.TEXT_MESSAGE_START,
+              messageId: `reconnect-${sessionId}-${Date.now()}`,
+              role: 'assistant',
+              timestamp: Date.now(),
+            };
+            res.write(formatAguiEventAsSSE(textStartEvent));
+          }
+        } catch { /* connection gone */ }
+      }
+
+      // Replace the session's response callback to forward events to this new connection
+      const replaced = claudeSession.replaceActiveCallback((sdkMessage: any) => {
+        if (isReconnectClosed) return;
+
+        const eventData = {
+          ...sdkMessage,
+          agentId,
+          sessionId,
+          timestamp: Date.now(),
+        };
+        if (sessionId) {
+          eventData.session_id = sessionId;
+        }
+
+        try {
+          if (!res.destroyed && !isReconnectClosed) {
+            if (outputFormat === 'agui' && aguiReconnectAdapter) {
+              const aguiEvents = aguiReconnectAdapter.convert(sdkMessage);
+              for (const event of aguiEvents) {
+                res.write(formatAguiEventAsSSE(event));
+              }
+            } else {
+              res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+            }
+          }
+        } catch (writeError) {
+          console.error('[Reconnect] Failed to write SSE data:', writeError);
+          isReconnectClosed = true;
+        }
+
+        // When result arrives, finalize and close
+        if (sdkMessage.type === 'result') {
+          if (outputFormat === 'agui' && aguiReconnectAdapter) {
+            try {
+              const finalEvents = aguiReconnectAdapter.finalize();
+              for (const event of finalEvents) {
+                if (!res.destroyed && !isReconnectClosed) {
+                  res.write(formatAguiEventAsSSE(event));
+                }
+              }
+            } catch { /* ignore */ }
+          }
+
+          clearInterval(heartbeat);
+          try { if (!res.destroyed) res.end(); } catch { /* ignore */ }
+        }
+      });
+
+      if (!replaced) {
+        console.log(`❌ [Reconnect] Failed to replace callback for session ${sessionId}`);
+        clearInterval(heartbeat);
+        try { res.end(); } catch { /* ignore */ }
+      } else {
+        console.log(`✅ [Reconnect] Successfully re-attached to session ${sessionId}`);
+      }
+
+      return; // Don't continue to the normal chat flow
+    }
+    // ── End reconnect branch ──────────────────────────────────────────────
 
     // Configure partial message streaming based on channel
     const includePartialMessages = channel === 'web';

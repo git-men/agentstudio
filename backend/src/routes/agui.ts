@@ -63,7 +63,7 @@ const ImageSchema = z.object({
 });
 
 const ChatRequestSchema = z.object({
-  message: z.string().min(1, 'Message is required'),
+  message: z.string(),
   engineType: z.enum(['claude', 'cursor'] as const).optional().default('claude'),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
@@ -77,6 +77,13 @@ const ChatRequestSchema = z.object({
   envVars: z.record(z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
+  // Reconnect: re-attach to an in-progress SSE stream
+  reconnect: z.boolean().optional(),
+}).refine(data => {
+  if (data.reconnect) return true;
+  return data.message.trim().length > 0;
+}, {
+  message: "Message is required unless reconnecting"
 });
 
 // =============================================================================
@@ -176,6 +183,7 @@ router.post('/chat', async (req, res) => {
       mcpTools,
       envVars,
       timeout,
+      reconnect,
     } = validation.data;
 
     // Resolve workspace: if it's a project name, get the actual path
@@ -345,6 +353,7 @@ router.post('/chat', async (req, res) => {
             envVars,
             channel: 'web',
             outputFormat: 'agui',
+            ...(reconnect ? { reconnect: true } : {}),
           },
         };
         

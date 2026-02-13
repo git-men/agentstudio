@@ -358,6 +358,36 @@ export class ClaudeSession {
   }
 
   /**
+   * Replace the response callback for the currently active request.
+   * Used for SSE reconnect: when a client refreshes mid-response,
+   * the new connection can re-attach to the ongoing stream.
+   * @returns true if a callback was replaced, false if no active request exists
+   */
+  public replaceActiveCallback(newCallback: (response: any) => void): boolean {
+    if (!this.isProcessing) {
+      return false;
+    }
+
+    if (this.responseCallbacks.size === 0) {
+      // Callback was cleaned up on disconnect, but session is still processing.
+      // Re-insert a callback so the background handler can forward events.
+      const requestId = `reconnect_${this.nextRequestId++}_${Date.now()}`;
+      this.responseCallbacks.set(requestId, newCallback);
+      console.log(`🔄 [ClaudeSession] Inserted new reconnect callback: ${requestId}`);
+      return true;
+    }
+
+    // Only one request can be processing at a time (isProcessing mutex),
+    // so replace the first (and only) callback.
+    for (const [requestId] of this.responseCallbacks) {
+      this.responseCallbacks.set(requestId, newCallback);
+      console.log(`🔄 [ClaudeSession] Replaced response callback for request: ${requestId}`);
+      return true;
+    }
+    return false;
+  }
+
+  /**
    * 获取最后活动时间
    */
   public getLastActivity(): number {

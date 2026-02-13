@@ -428,7 +428,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               const lastMsgForResult = stateForResult.messages[stateForResult.messages.length - 1];
               if (lastMsgForResult && lastMsgForResult.role === 'assistant') {
                 updateToolPartInMessage(lastMsgForResult.id, event.toolCallId, {
-                  toolResult: event.result,
+                  toolResult: event.result as string | undefined,
                   isError: event.isError || false,
                   isExecuting: false,
                 });

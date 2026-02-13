@@ -897,6 +897,19 @@ router.get('/:agentId', async (req, res) => {
         session.title.toLowerCase().includes(searchTerm)
       );
     }
+
+    // Enrich sessions with live status from SessionManager
+    const liveSessionsInfo = sessionManager.getSessionsInfo();
+    const liveSessionMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
+
+    sessions = sessions.map(session => {
+      const live = liveSessionMap.get(session.id);
+      return {
+        ...session,
+        isActive: live ? live.isActive : false,
+        isProcessing: live ? sessionManager.isSessionBusy(session.id) : false,
+      };
+    });
     
     res.json({ sessions });
   } catch (error) {
