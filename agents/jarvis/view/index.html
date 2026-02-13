@@ -194,6 +194,17 @@
 
     .todo-row { display: flex; align-items: flex-start; gap: 10px; }
 
+    .todo-check {
+      width: 22px; height: 22px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px; margin-top: 1px; cursor: pointer;
+      border-radius: 4px; transition: all var(--transition);
+      color: var(--text-muted);
+    }
+    .todo-check:hover {
+      background: var(--success-bg); color: var(--success);
+    }
+
     .todo-icon {
       width: 20px; height: 20px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
@@ -509,8 +520,9 @@
     // ========================================================================
     // Data Loading
     // ========================================================================
-    async function loadAll() {
-      S.loading = true; S.error = null; render();
+    async function loadAll(showLoading) {
+      if (showLoading) { S.loading = true; render(); }
+      S.error = null;
       try {
         const [todos, stats, journals] = await Promise.all([
           call('listTodos', {}),
@@ -538,7 +550,30 @@
     }
 
     // ========================================================================
-    // Actions
+    // Local stats recalculation (for optimistic updates)
+    // ========================================================================
+    function recalcStats() {
+      const todos = S.todos;
+      const now = new Date();
+      S.stats = {
+        total: todos.length,
+        draft: todos.filter(t => t.status === 'draft').length,
+        pending: todos.filter(t => t.status === 'pending').length,
+        in_progress: todos.filter(t => t.status === 'in_progress').length,
+        waiting_confirmation: todos.filter(t => t.status === 'waiting_confirmation').length,
+        completed: S.stats.completed || 0,
+        high_priority: todos.filter(t => t.priority === 'high').length,
+        personal: todos.filter(t => t.type === 'personal').length,
+        delegated: todos.filter(t => t.type === 'delegated').length,
+        overdue: todos.filter(t => {
+          if (!t.deadline || t.status === 'completed' || t.status === 'cancelled') return false;
+          return new Date(t.deadline) < now;
+        }).length,
+      };
+    }
+
+    // ========================================================================
+    // Actions (with optimistic updates)
     // ========================================================================
     async function createTodo(data) {
       try {
@@ -549,29 +584,59 @@
     }
 
     async function doUpdateTodo(id, updates) {
+      // Optimistic update: apply changes locally first
+      const todo = S.todos.find(t => t.id === id);
+      if (todo) {
+        Object.assign(todo, updates, { updatedAt: new Date().toISOString() });
+        // If completing from detail panel, close it
+        if (S.showDetail && S.detailTodo && S.detailTodo.id === id) {
+          S.showDetail = false; S.detailTodo = null;
+        }
+        recalcStats();
+        render();
+      }
+      // Sync with server in background
       try {
         await call('updateTodo', { id, updates });
-        S.showDetail = false; S.detailTodo = null;
-        await loadAll();
-      } catch(e) { S.error = e.message; render(); }
+        await loadAll(); // silent refresh to sync server state
+      } catch(e) {
+        S.error = e.message;
+        await loadAll(); // reload to revert on error
+      }
     }
 
     async function doDeleteTodo(id) {
       if (!confirm('确定要删除这个待办吗？')) return;
+      // Optimistic: remove from local list
+      S.todos = S.todos.filter(t => t.id !== id);
+      S.showDetail = false; S.detailTodo = null;
+      recalcStats();
+      render();
+      // Sync with server
       try {
         await call('deleteTodo', { id });
-        S.showDetail = false; S.detailTodo = null;
         await loadAll();
-      } catch(e) { S.error = e.message; render(); }
+      } catch(e) {
+        S.error = e.message;
+        await loadAll();
+      }
     }
 
     async function doArchiveTodo(id) {
       if (!confirm('确定要归档这个待办吗？')) return;
+      // Optimistic: remove from local list
+      S.todos = S.todos.filter(t => t.id !== id);
+      S.showDetail = false; S.detailTodo = null;
+      recalcStats();
+      render();
+      // Sync with server
       try {
         await call('archiveTodo', { id });
-        S.showDetail = false; S.detailTodo = null;
         await loadAll();
-      } catch(e) { S.error = e.message; render(); }
+      } catch(e) {
+        S.error = e.message;
+        await loadAll();
+      }
     }
 
     async function openJournal(date) {
@@ -782,7 +847,10 @@
       const pClass = t.priority || 'medium';
       let h = '<div class="todo-card ' + (od ? 'overdue' : pClass) + '" data-todo="' + esc(t.id) + '">';
       h += '<div class="todo-row">';
-      h += '<div class="todo-icon">' + typeIcon(t.type) + '</div>';
+      // Checkbox for quick complete toggle
+      h += '<div class="todo-check" data-act="toggle-complete" data-id="' + esc(t.id) + '" title="' + (t.status === 'completed' ? '标记为未完成' : '标记为已完成') + '">';
+      h += t.status === 'completed' ? '☑' : '☐';
+      h += '</div>';
       h += '<div class="todo-body">';
       h += '<div class="todo-title-row">';
       h += '<span class="todo-title' + (t.status === 'completed' ? ' done' : '') + '">' + esc(t.title) + '</span>';
@@ -825,8 +893,8 @@
     // ========================================================================
     function renderDetailPanel() {
       const t = S.detailTodo;
-      let h = '<div class="detail-overlay" data-act="close-detail">';
-      h += '<div class="detail-panel" onclick="event.stopPropagation()">';
+      let h = '<div class="detail-overlay">';
+      h += '<div class="detail-panel">';
 
       h += '<div class="detail-header">';
       h += '<span style="font-weight:600;font-size:14px">' + typeIcon(t.type) + ' ' + esc(t.title) + '</span>';
@@ -940,8 +1008,8 @@
     function renderJournalModal() {
       const j = S.viewingJournal;
       if (!j) return '';
-      let h = '<div class="modal-overlay" data-act="close-journal">';
-      h += '<div class="modal" style="max-width:700px" onclick="event.stopPropagation()">';
+      let h = '<div class="modal-overlay">';
+      h += '<div class="modal" style="max-width:700px">';
       h += '<div class="modal-header">';
       h += '<div class="modal-title">📅 ' + esc(j.date) + '</div>';
       h += '<button class="close-btn" data-act="close-journal">&times;</button>';
@@ -997,8 +1065,8 @@
     function renderMemoryModal() {
       const m = S.viewingMemory;
       if (!m) return '';
-      let h = '<div class="modal-overlay" data-act="close-memory">';
-      h += '<div class="modal" style="max-width:700px" onclick="event.stopPropagation()">';
+      let h = '<div class="modal-overlay">';
+      h += '<div class="modal" style="max-width:700px">';
       h += '<div class="modal-header">';
       h += '<div class="modal-title">🧠 ' + esc(m.category) + ' / ' + esc(m.filename) + '</div>';
       h += '<button class="close-btn" data-act="close-memory">&times;</button>';
@@ -1018,8 +1086,8 @@
     // Create Modal
     // ========================================================================
     function renderCreateModal() {
-      let h = '<div class="modal-overlay" data-act="close-create">';
-      h += '<div class="modal" onclick="event.stopPropagation()">';
+      let h = '<div class="modal-overlay">';
+      h += '<div class="modal">';
       h += '<div class="modal-header"><div class="modal-title">新建待办</div><button class="close-btn" data-act="close-create">&times;</button></div>';
       h += '<form id="create-form">';
       h += fg('标题 *', '<input class="form-input" id="c-title" required placeholder="待办标题">');
@@ -1045,13 +1113,19 @@
     }
 
     // ========================================================================
-    // Event Binding
+    // Event Binding (ONE-TIME setup on document, never re-binds)
     // ========================================================================
+    let _eventsBound = false;
     function bindEvents() {
-      // Delegated click handler
-      document.getElementById('root').addEventListener('click', function(e) {
+      if (_eventsBound) return;
+      _eventsBound = true;
+
+      // Single delegated click handler on document (survives innerHTML replacements)
+      document.addEventListener('click', function(e) {
+        // --- Action buttons (data-act) ---
         const el = e.target.closest('[data-act]');
         if (el) {
+          e.stopPropagation();
           const act = el.getAttribute('data-act');
           if (act === 'create') { S.showCreate = true; render(); }
           else if (act === 'refresh') { loadAll(); if (S.tab === 'memory') loadMemory(S.memoryCat); }
@@ -1065,10 +1139,38 @@
           else if (act === 'set-status') {
             doUpdateTodo(el.getAttribute('data-id'), { status: el.getAttribute('data-status') });
           }
+          else if (act === 'toggle-complete') {
+            const id = el.getAttribute('data-id');
+            const todo = S.todos.find(t => t.id === id);
+            if (todo) {
+              const newStatus = todo.status === 'completed' ? 'pending' : 'completed';
+              doUpdateTodo(id, { status: newStatus });
+            }
+          }
           return;
         }
 
-        // Tab click
+        // --- Detail panel: clicks on overlay (outside panel) close it ---
+        const overlay = e.target.closest('.detail-overlay');
+        if (overlay) {
+          // Only close if clicking directly on the overlay, not inside .detail-panel
+          if (!e.target.closest('.detail-panel')) {
+            S.showDetail = false; S.detailTodo = null; render();
+            return;
+          }
+        }
+
+        // --- Modal overlays: clicks on overlay close them ---
+        const modalOverlay = e.target.closest('.modal-overlay');
+        if (modalOverlay && !e.target.closest('.modal')) {
+          // Determine which modal
+          if (S.showCreate) { S.showCreate = false; render(); }
+          else if (S.showJournal) { S.showJournal = false; S.viewingJournal = null; render(); }
+          else if (S.showMemory) { S.showMemory = false; S.viewingMemory = null; render(); }
+          return;
+        }
+
+        // --- Tab click ---
         const tabEl = e.target.closest('[data-tab]');
         if (tabEl) {
           S.tab = tabEl.getAttribute('data-tab');
@@ -1077,30 +1179,30 @@
           return;
         }
 
-        // Todo click
+        // --- Todo card click (open detail) ---
         const todoEl = e.target.closest('[data-todo]');
-        if (todoEl && !e.target.closest('[data-act]')) {
+        if (todoEl) {
           const id = todoEl.getAttribute('data-todo');
           const todo = S.todos.find(t => t.id === id);
           if (todo) { S.detailTodo = todo; S.showDetail = true; render(); }
           return;
         }
 
-        // Journal click
+        // --- Journal click ---
         const jEl = e.target.closest('[data-journal]');
         if (jEl) {
           openJournal(jEl.getAttribute('data-journal'));
           return;
         }
 
-        // Memory card click
+        // --- Memory card click ---
         const mEl = e.target.closest('[data-mem-cat]');
         if (mEl) {
           openMemoryFile(mEl.getAttribute('data-mem-cat'), mEl.getAttribute('data-mem-file'));
           return;
         }
 
-        // Memory category tab
+        // --- Memory category tab ---
         const catEl = e.target.closest('[data-cat]');
         if (catEl) {
           S.memoryCat = catEl.getAttribute('data-cat');
@@ -1109,33 +1211,28 @@
         }
       });
 
-      // Filters
-      ['filter-status', 'filter-priority', 'filter-type'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('change', function() {
-          if (id === 'filter-status') S.filterStatus = this.value;
-          if (id === 'filter-priority') S.filterPriority = this.value;
-          if (id === 'filter-type') S.filterType = this.value;
-          render();
-        });
+      // Delegated change handler for filters
+      document.addEventListener('change', function(e) {
+        const target = e.target;
+        if (target.id === 'filter-status') { S.filterStatus = target.value; render(); }
+        else if (target.id === 'filter-priority') { S.filterPriority = target.value; render(); }
+        else if (target.id === 'filter-type') { S.filterType = target.value; render(); }
       });
 
-      // Search
-      const searchEl = document.getElementById('search-input');
-      if (searchEl) {
-        searchEl.addEventListener('input', function() {
-          S.searchQuery = this.value;
+      // Delegated input handler for search
+      document.addEventListener('input', function(e) {
+        if (e.target.id === 'search-input') {
+          S.searchQuery = e.target.value;
           render();
           // Refocus after render
           const el = document.getElementById('search-input');
           if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-        });
-      }
+        }
+      });
 
-      // Create form
-      const form = document.getElementById('create-form');
-      if (form) {
-        form.addEventListener('submit', function(e) {
+      // Delegated submit handler for create form
+      document.addEventListener('submit', function(e) {
+        if (e.target.id === 'create-form') {
           e.preventDefault();
           const data = {
             title: document.getElementById('c-title').value,
@@ -1149,8 +1246,18 @@
           if (scheduled) data.scheduledTime = new Date(scheduled).toISOString();
           if (deadline) data.deadline = new Date(deadline).toISOString();
           createTodo(data);
-        });
-      }
+        }
+      });
+
+      // Keyboard: Escape to close modals/panels
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          if (S.showDetail) { S.showDetail = false; S.detailTodo = null; render(); }
+          else if (S.showCreate) { S.showCreate = false; render(); }
+          else if (S.showJournal) { S.showJournal = false; S.viewingJournal = null; render(); }
+          else if (S.showMemory) { S.showMemory = false; S.viewingMemory = null; render(); }
+        }
+      });
     }
 
     // ========================================================================
@@ -1174,7 +1281,7 @@
     // ========================================================================
     document.addEventListener('DOMContentLoaded', function() {
       render();
-      loadAll();
+      loadAll(true); // initial load shows loading spinner
     });
   })();
   </script>
