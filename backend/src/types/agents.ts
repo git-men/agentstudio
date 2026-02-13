@@ -275,6 +275,7 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
       { name: 'TodoWrite', enabled: true },
       { name: 'Skill', enabled: true }
     ],
+    workingDirectory: '~/.as-jarvis',
     ui: {
       icon: '⚙️',
       headerTitle: 'Meta Agent',

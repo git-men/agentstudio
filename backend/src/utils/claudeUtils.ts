@@ -9,6 +9,7 @@ import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
@@ -238,7 +239,11 @@ export async function buildQueryOptions(
   if (projectPath) {
     cwd = projectPath;
   } else if (agent.workingDirectory) {
-    cwd = path.resolve(process.cwd(), agent.workingDirectory);
+    // Expand ~ to home directory
+    const resolvedDir = agent.workingDirectory.startsWith('~')
+      ? path.join(homedir(), agent.workingDirectory.slice(1))
+      : agent.workingDirectory;
+    cwd = path.resolve(process.cwd(), resolvedDir);
   }
 
   // Determine permission mode: request > agent config > default

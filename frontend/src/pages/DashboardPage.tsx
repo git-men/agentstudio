@@ -19,7 +19,8 @@ import {
   X,
   Trash2,
   AlertCircle,
-  ArrowUp
+  ArrowUp,
+  MessageCircle
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useProjects, Project } from '../hooks/useProjects';
@@ -261,6 +262,34 @@ export const DashboardPage: React.FC = () => {
             {t('dashboard.welcome.title', { defaultValue: '让我们开始工作吧' })}
           </h1>
         </div>
+
+        {/* Meta Agent 快捷入口 */}
+        {agents.find(a => a.id === 'meta-agent' && a.enabled) && (
+          <div className="w-full max-w-2xl mb-6">
+            <button
+              onClick={() => {
+                const url = `/chat/meta-agent`;
+                window.open(url, '_blank');
+              }}
+              className="w-full flex items-center gap-4 px-5 py-4 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border border-indigo-200 dark:border-indigo-700/50 rounded-2xl hover:shadow-lg hover:border-indigo-300 dark:hover:border-indigo-600 transition-all group"
+            >
+              <div className="flex-shrink-0 p-3 bg-indigo-100 dark:bg-indigo-800/50 rounded-xl group-hover:bg-indigo-200 dark:group-hover:bg-indigo-700/50 transition-colors">
+                <MessageCircle className="w-6 h-6 text-indigo-600 dark:text-indigo-300" />
+              </div>
+              <div className="flex-1 text-left">
+                <div className="text-base font-semibold text-indigo-900 dark:text-indigo-100">
+                  {t('dashboard.metaAgent.title', { defaultValue: 'Meta Agent' })}
+                </div>
+                <div className="text-sm text-indigo-600 dark:text-indigo-300 mt-0.5">
+                  {t('dashboard.metaAgent.description', { defaultValue: '系统配置助手 — 创建 Agent、Skill、Rule，或让我帮你找到合适的 Agent' })}
+                </div>
+              </div>
+              <div className="flex-shrink-0 text-indigo-400 dark:text-indigo-500 group-hover:text-indigo-600 dark:group-hover:text-indigo-300 transition-colors">
+                <ArrowUp className="w-5 h-5 rotate-45" />
+              </div>
+            </button>
+          </div>
+        )}
 
         {/* 输入框区域 */}
         <div className="w-full max-w-2xl">

@@ -230,6 +230,15 @@ export function getProjectApiKeysFile(projectPath: string): string {
   return join(projectPath, '.a2a', 'api-keys.json');
 }
 
+// ─── Meta Agent ──────────────────────────────────────────────────────────────
+
+/**
+ * Default working directory for Meta Agent.
+ * Created on startup so Meta Agent always has a workspace.
+ * Default: ~/.as-jarvis
+ */
+export const META_AGENT_WORKING_DIR = join(homedir(), '.as-jarvis');
+
 // ─── Backward Compatibility Aliases ──────────────────────────────────────────
 // These aliases are kept for backward compatibility with code that still
 // imports CLAUDE_AGENT_DIR. They now point to the new unified location.

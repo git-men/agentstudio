@@ -45,6 +45,10 @@ export const AgentsPage: React.FC = () => {
 
   const agents = agentsData?.agents || [];
 
+  // Built-in system agents that cannot be edited or deleted
+  const BUILTIN_AGENT_IDS = ['claude-code', 'meta-agent'];
+  const isBuiltinAgent = (agent: AgentConfig) => BUILTIN_AGENT_IDS.includes(agent.id);
+
   // 🎯 显示所有已启用的 Agent，用户可以管理所有 Agent
   const userAgents = agents;
 
@@ -260,10 +264,10 @@ Please respond in Chinese unless the user specifically requests another language
       author: agent.author
     });
 
-    // System agents (author: 'System') cannot be deleted
-    if (agent.author === 'System') {
-      console.log(`🛑 [FRONTEND DEBUG] Blocked deletion of system agent: ${agent.id}`);
-      showError('System agents cannot be deleted');
+    // Built-in system agents cannot be deleted
+    if (isBuiltinAgent(agent)) {
+      console.log(`🛑 [FRONTEND DEBUG] Blocked deletion of built-in agent: ${agent.id}`);
+      showError('Built-in system agents cannot be deleted');
       return;
     }
 
@@ -412,18 +416,20 @@ Please respond in Chinese unless the user specifically requests another language
                         <span>使用</span>
                       </button>
                     )}
-                    <button
-                      onClick={() => handleEdit(agent)}
-                      className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded"
-                      title="编辑助手"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
+                    {!isBuiltinAgent(agent) && (
+                      <button
+                        onClick={() => handleEdit(agent)}
+                        className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded"
+                        title="编辑助手"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleDelete(agent)}
                       className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded"
                       title="删除助手"
-                      disabled={agent.author === 'System'}
+                      disabled={isBuiltinAgent(agent)}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -537,18 +543,20 @@ Please respond in Chinese unless the user specifically requests another language
                           >
                             {agent.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                           </button>
-                          <button
-                            onClick={() => handleEdit(agent)}
-                            className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded transition-colors"
-                            title="编辑助手"
-                          >
-                            <Edit className="w-4 h-4" />
-                          </button>
+                          {!isBuiltinAgent(agent) && (
+                            <button
+                              onClick={() => handleEdit(agent)}
+                              className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded transition-colors"
+                              title="编辑助手"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleDelete(agent)}
                             className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded transition-colors"
                             title="删除助手"
-                            disabled={agent.author === 'System'}
+                            disabled={isBuiltinAgent(agent)}
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -764,7 +772,7 @@ Please respond in Chinese unless the user specifically requests another language
                   <SystemPromptEditor
                     value={editForm.systemPrompt || ''}
                     onChange={(systemPrompt) => setEditForm({ ...editForm, systemPrompt })}
-                    disabled={editingAgent?.id === 'claude-code'}
+                    disabled={editingAgent ? isBuiltinAgent(editingAgent) : false}
                   />
                 </div>
               </div>
