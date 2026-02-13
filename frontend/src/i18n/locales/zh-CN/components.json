@@ -905,7 +905,9 @@
   "compactSummary": {
     "title": "已压缩上下文",
     "expand": "展开查看",
-    "collapse": "收起"
+    "collapse": "收起",
+    "autoCompact": "上下文窗口已自动压缩。之前的对话内容已被总结以释放空间，对话将继续进行。",
+    "autoCompactWithTokens": "上下文窗口已自动压缩（压缩前 {{tokens}} tokens）。之前的对话内容已被总结以释放空间，对话将继续进行。"
   },
   "recentActivity": {
     "title": "最近活动",

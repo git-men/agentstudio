@@ -96,7 +96,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
   } = props;
 
   const { t } = useTranslation('components');
-  const { addMessage, addCommandPartToMessage, addTextPartToMessage, selectedEngine, updateMessage, addToolPartToMessage, updateToolPartInMessage } = useAgentStore();
+  const { addMessage, addCommandPartToMessage, addTextPartToMessage, addCompactSummaryPartToMessage, selectedEngine, updateMessage, addToolPartToMessage, updateToolPartInMessage } = useAgentStore();
   const agentChatMutation = useAgentChat();
   const aguiChat = useAGUIChat();
 
@@ -436,13 +436,26 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               break;
             
             case 'CUSTOM': {
+              const customEvent = event as { name?: string; data?: any };
               // Handle session ID sync from Cursor CLI
-              const customEvent = event as { name?: string; data?: { sessionId?: string } };
               if (customEvent.name === 'session_id_updated' && customEvent.data?.sessionId) {
                 const cliSessionId = customEvent.data.sessionId;
                 console.log(`🔄 [AGUI] Session ID updated from CLI: ${cliSessionId}`);
                 setCurrentSessionId(cliSessionId);
                 onSessionChange?.(cliSessionId);
+              }
+              // Handle auto-compact event (context window auto-compaction)
+              if (customEvent.name === 'auto_compact') {
+                const preTokens = customEvent.data?.preTokens || 0;
+                console.log('🔄 [AGUI] Auto-compact event received:', { preTokens });
+                const stateForCompact = useAgentStore.getState();
+                const lastMsg = stateForCompact.messages[stateForCompact.messages.length - 1];
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  const tokenInfo = preTokens > 0
+                    ? t('compactSummary.autoCompactWithTokens', { tokens: preTokens.toLocaleString() })
+                    : t('compactSummary.autoCompact');
+                  addCompactSummaryPartToMessage(lastMsg.id, tokenInfo);
+                }
               }
               break;
             }
@@ -559,6 +572,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     addMessage,
     addCommandPartToMessage,
     addTextPartToMessage,
+    addCompactSummaryPartToMessage,
     updateMessage,
     addToolPartToMessage,
     updateToolPartInMessage,

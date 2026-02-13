@@ -902,6 +902,13 @@
       "increaseMaxTurns": "Increase the maximum turns in agent settings"
     }
   },
+  "compactSummary": {
+    "title": "Context Compacted",
+    "expand": "Expand to view",
+    "collapse": "Collapse",
+    "autoCompact": "The context window has been automatically compacted. Previous conversation content has been summarized to free up space. The conversation will continue.",
+    "autoCompactWithTokens": "The context window has been automatically compacted ({{tokens}} tokens before compaction). Previous conversation content has been summarized to free up space. The conversation will continue."
+  },
   "recentActivity": {
     "title": "Recent Activity",
     "empty": "No recent activity",

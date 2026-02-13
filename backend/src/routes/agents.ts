@@ -940,6 +940,52 @@ router.post('/chat', async (req, res) => {
             });
           }
 
+          // 🔄 处理自动压缩事件 (auto-compaction)
+          // 当上下文窗口接近限制时，SDK 会自动触发压缩，发送 compact_boundary 事件
+          // 与手动 /compact 不同，自动压缩需要即时通知前端
+          if (message !== '/compact' && isSDKCompactBoundaryMessage(sdkMessage)) {
+            const compactMsg = sdkMessage as SDKCompactBoundaryMessage;
+            const compactMetadata = (compactMsg as any).compact_metadata;
+            console.log('🔄 [AUTO-COMPACT] Detected auto-compaction event:', {
+              trigger: compactMetadata?.trigger,
+              preTokens: compactMetadata?.pre_tokens,
+            });
+
+            try {
+              if (!res.destroyed && !connectionManager.isConnectionClosed()) {
+                if (outputFormat === 'agui') {
+                  // AGUI 模式：使用 CUSTOM 事件类型发送
+                  const aguiCustomEvent: AGUIEvent = {
+                    type: AGUIEventType.CUSTOM,
+                    name: 'auto_compact',
+                    data: {
+                      trigger: compactMetadata?.trigger || 'auto',
+                      preTokens: compactMetadata?.pre_tokens || 0,
+                      agentId: agentId,
+                      sessionId: actualSessionId || currentSessionId,
+                    },
+                    timestamp: Date.now(),
+                  };
+                  res.write(formatAguiEventAsSSE(aguiCustomEvent));
+                } else {
+                  // 默认模式：发送自动压缩通知给前端
+                  const autoCompactEvent = {
+                    type: 'auto_compact',
+                    trigger: compactMetadata?.trigger || 'auto',
+                    preTokens: compactMetadata?.pre_tokens || 0,
+                    agentId: agentId,
+                    sessionId: actualSessionId || currentSessionId,
+                    timestamp: Date.now(),
+                  };
+                  res.write(`data: ${JSON.stringify(autoCompactEvent)}\n\n`);
+                }
+              }
+            } catch (writeError: unknown) {
+              console.error('Failed to write auto-compact event:', writeError);
+            }
+            return; // 不继续处理，避免重复发送
+          }
+
           // 处理 /compact 命令的特殊消息序列
           if (message === '/compact' && isSDKCompactBoundaryMessage(sdkMessage)) {
             compactMessageBuffer.push(sdkMessage);

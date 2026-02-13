@@ -22,6 +22,7 @@ import { AgentStorage } from '../../services/agentStorage.js';
 import { getDefaultVersionId, getVersionByIdInternal } from '../../services/claudeVersionStorage.js';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { isMockEnabled } from '../../testing/mockSdkQuery.js';
 
 // Agent storage for getting agent configurations
 const globalAgentStorage = new AgentStorage();
@@ -157,6 +158,15 @@ export class ClaudeEngine implements IAgentEngine {
    * current API key permissions and CLI version.
    */
   private async fetchModelsFromSdk(): Promise<ModelInfo[]> {
+    // When MOCK_SDK=true, skip real SDK call and return mock models
+    if (isMockEnabled()) {
+      console.log('[ClaudeEngine] MOCK_SDK=true, returning mock models');
+      return [
+        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Mock)', isVision: true, description: 'Mock model for testing' },
+        { id: 'claude-opus-4-20250514', name: 'Claude Opus 4 (Mock)', isVision: true, isThinking: true, description: 'Mock model for testing' },
+      ];
+    }
+
     try {
       const abortController = new AbortController();
       const timeoutMs = 15_000; // 15s timeout for SDK init + model fetch

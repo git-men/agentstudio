@@ -89,6 +89,7 @@ export const useAIStreamHandler = ({
     addThinkingPartToMessage,
     updateTextPartInMessage,
     updateThinkingPartInMessage,
+    addCompactSummaryPartToMessage,
     addToolPartToMessage,
     updateToolPartInMessage,
     updateMcpStatus,
@@ -954,6 +955,37 @@ export const useAIStreamHandler = ({
       return;
     }
 
+    // 🔄 处理自动压缩通知事件 (auto-compaction)
+    // 当 Claude SDK 自动压缩上下文窗口时，通知用户
+    if (eventData.type === 'auto_compact') {
+      const compactData = eventData as any;
+      const preTokens = compactData.preTokens || 0;
+      const trigger = compactData.trigger || 'auto';
+      console.log('🔄 [AUTO-COMPACT] Context window auto-compacted:', { trigger, preTokens });
+
+      // 确保有 AI 消息 placeholder
+      if (!aiMessageIdRef.current) {
+        const message = {
+          content: '',
+          role: 'assistant' as const,
+        };
+        addMessage(message);
+        const state = useAgentStore.getState();
+        aiMessageIdRef.current = state.messages[state.messages.length - 1].id;
+        console.log('🔄 [AUTO-COMPACT] Created new AI message with ID:', aiMessageIdRef.current);
+      }
+
+      // 构建压缩通知内容
+      const tokenInfo = preTokens > 0
+        ? t('compactSummary.autoCompactWithTokens', { tokens: preTokens.toLocaleString() })
+        : t('compactSummary.autoCompact');
+
+      // 添加 compactSummary 到消息
+      addCompactSummaryPartToMessage(aiMessageIdRef.current, tokenInfo);
+
+      return;
+    }
+
     // 🎤 处理 AskUserQuestion 等待用户输入事件
     // 新架构：MCP 工具会阻塞等待用户输入，SSE 连接保持打开
     // 用户提交答案后，MCP 工具返回，Claude 继续执行
@@ -1521,6 +1553,7 @@ export const useAIStreamHandler = ({
     addThinkingPartToMessage,
     updateTextPartInMessage,
     updateThinkingPartInMessage,
+    addCompactSummaryPartToMessage,
     addToolPartToMessage,
     updateToolPartInMessage,
     updateMcpStatus,

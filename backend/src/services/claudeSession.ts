@@ -1,6 +1,7 @@
 import { query, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, SDKSystemMessage } from '@anthropic-ai/claude-agent-sdk';
 import { MessageQueue } from './messageQueue';
+import { createMockQuery, isMockEnabled } from '../testing/mockSdkQuery.js';
 
 /**
  * Claude 会话包装器 - 使用 Streaming Input Mode
@@ -140,10 +141,19 @@ export class ClaudeSession {
       console.log(`🔧 [DEBUG] About to call query() for agent: ${this.agentId}`);
 
       // query 返回的对象既是 AsyncGenerator 又有 interrupt() 等方法
-      this.queryObject = query({
-        prompt: this.messageQueue, // messageQueue 实现了 AsyncIterable
-        options: queryOptions
-      });
+      // When MOCK_SDK=true, use mock query that replays JSONL scenarios
+      if (isMockEnabled()) {
+        console.log(`🧪 [MOCK] Using mock SDK query for agent: ${this.agentId}`);
+        this.queryObject = createMockQuery({
+          prompt: this.messageQueue,
+          options: queryOptions,
+        });
+      } else {
+        this.queryObject = query({
+          prompt: this.messageQueue, // messageQueue 实现了 AsyncIterable
+          options: queryOptions
+        });
+      }
 
       // queryObject 本身就是 AsyncIterable，可以直接赋值给 queryStream
       this.queryStream = this.queryObject;
