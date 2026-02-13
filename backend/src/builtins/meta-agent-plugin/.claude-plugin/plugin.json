@@ -1,0 +1,7 @@
+{
+  "name": "meta-agent",
+  "version": "1.0.0",
+  "description": "Meta Agent 系统插件 - 提供系统配置助手和业务路由所需的 Skills 和 Agent 定义",
+  "author": "AgentStudio",
+  "type": "builtin"
+}

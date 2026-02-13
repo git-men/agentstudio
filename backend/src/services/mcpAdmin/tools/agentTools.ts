@@ -380,6 +380,302 @@ export const toggleAgentToolTool: ToolDefinition = {
 };
 
 /**
+ * Create a new agent
+ */
+export const createAgentTool: ToolDefinition = {
+  tool: {
+    name: 'create_agent',
+    description: 'Create a new agent in AgentStudio with the specified configuration',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Unique agent ID (lowercase, numbers, hyphens, underscores)',
+        },
+        name: {
+          type: 'string',
+          description: 'Display name for the agent',
+        },
+        description: {
+          type: 'string',
+          description: 'Agent description',
+        },
+        systemPrompt: {
+          type: 'string',
+          description: 'System prompt for the agent',
+        },
+        maxTurns: {
+          type: 'number',
+          description: 'Maximum conversation turns (1-100, or omit for unlimited)',
+        },
+        permissionMode: {
+          type: 'string',
+          description: 'Permission mode: "default", "acceptEdits", "bypassPermissions", or "plan"',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags for categorization',
+        },
+        icon: {
+          type: 'string',
+          description: 'Icon emoji for the agent UI',
+        },
+        welcomeMessage: {
+          type: 'string',
+          description: 'Welcome message shown when user opens the agent',
+        },
+      },
+      required: ['id', 'name', 'description', 'systemPrompt'],
+    },
+  },
+  handler: async (params): Promise<McpToolCallResult> => {
+    try {
+      const id = params.id as string;
+      const name = params.name as string;
+      const description = params.description as string;
+      const systemPrompt = params.systemPrompt as string;
+
+      if (!id || !name || !description || !systemPrompt) {
+        return {
+          content: [{ type: 'text', text: 'id, name, description, and systemPrompt are required' }],
+          isError: true,
+        };
+      }
+
+      // Check if agent already exists
+      const existing = agentStorage.getAgent(id);
+      if (existing) {
+        return {
+          content: [{ type: 'text', text: `Agent already exists: ${id}` }],
+          isError: true,
+        };
+      }
+
+      const agentConfig = {
+        id,
+        name,
+        description,
+        version: '1.0.0',
+        systemPrompt,
+        maxTurns: (params.maxTurns as number) || undefined,
+        permissionMode: (params.permissionMode as string) || 'acceptEdits',
+        allowedTools: [],
+        ui: {
+          icon: (params.icon as string) || '🤖',
+          headerTitle: name,
+          headerDescription: description,
+        },
+        welcomeMessage: (params.welcomeMessage as string) || undefined,
+        enabled: true,
+        source: 'local' as const,
+        tags: (params.tags as string[]) || [],
+        author: 'Meta Agent',
+      };
+
+      const created = agentStorage.createAgent(agentConfig as any);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: true,
+                agent: {
+                  id: created.id,
+                  name: created.name,
+                  description: created.description,
+                  createdAt: created.createdAt,
+                },
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error creating agent: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+  requiredPermissions: ['agents:write'],
+};
+
+/**
+ * Delete an agent
+ */
+export const deleteAgentTool: ToolDefinition = {
+  tool: {
+    name: 'delete_agent',
+    description: 'Delete an agent (built-in agents will be disabled instead of deleted)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentId: {
+          type: 'string',
+          description: 'Agent ID to delete',
+        },
+      },
+      required: ['agentId'],
+    },
+  },
+  handler: async (params): Promise<McpToolCallResult> => {
+    try {
+      const agentId = params.agentId as string;
+
+      if (!agentId) {
+        return {
+          content: [{ type: 'text', text: 'Agent ID is required' }],
+          isError: true,
+        };
+      }
+
+      const agent = agentStorage.getAgent(agentId);
+      if (!agent) {
+        return {
+          content: [{ type: 'text', text: `Agent not found: ${agentId}` }],
+          isError: true,
+        };
+      }
+
+      const result = agentStorage.deleteAgent(agentId);
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                success: result,
+                agentId,
+                message: result ? 'Agent deleted successfully' : 'Failed to delete agent',
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error deleting agent: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+  requiredPermissions: ['agents:write'],
+};
+
+/**
+ * Preview agent configuration without creating
+ */
+export const previewAgentTool: ToolDefinition = {
+  tool: {
+    name: 'preview_agent',
+    description: 'Preview an agent configuration without actually creating it. Returns the full rendered configuration.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Proposed agent ID',
+        },
+        name: {
+          type: 'string',
+          description: 'Display name',
+        },
+        description: {
+          type: 'string',
+          description: 'Agent description',
+        },
+        systemPrompt: {
+          type: 'string',
+          description: 'System prompt',
+        },
+        maxTurns: {
+          type: 'number',
+          description: 'Maximum conversation turns',
+        },
+        permissionMode: {
+          type: 'string',
+          description: 'Permission mode',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags',
+        },
+      },
+      required: ['id', 'name', 'systemPrompt'],
+    },
+  },
+  handler: async (params): Promise<McpToolCallResult> => {
+    try {
+      const id = params.id as string;
+      const name = params.name as string;
+
+      // Check if ID would conflict
+      const existing = agentStorage.getAgent(id);
+      const conflicts = existing ? `⚠️ Agent with ID "${id}" already exists and would be overwritten` : null;
+
+      const preview = {
+        id,
+        name,
+        description: (params.description as string) || '',
+        version: '1.0.0',
+        systemPrompt: params.systemPrompt as string,
+        systemPromptPreview: (params.systemPrompt as string).substring(0, 200) + ((params.systemPrompt as string).length > 200 ? '...' : ''),
+        maxTurns: (params.maxTurns as number) || 'unlimited',
+        permissionMode: (params.permissionMode as string) || 'acceptEdits',
+        tags: (params.tags as string[]) || [],
+        ui: {
+          icon: '🤖',
+          headerTitle: name,
+          headerDescription: (params.description as string) || '',
+        },
+        warnings: conflicts ? [conflicts] : [],
+        note: 'This is a preview only. Call create_agent to actually create the agent.',
+      };
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(preview, null, 2),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error previewing agent: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+  requiredPermissions: ['agents:read'],
+};
+
+/**
  * All agent tools
  */
 export const agentTools: ToolDefinition[] = [
@@ -387,4 +683,7 @@ export const agentTools: ToolDefinition[] = [
   getAgentTool,
   updateAgentTool,
   toggleAgentToolTool,
+  createAgentTool,
+  deleteAgentTool,
+  previewAgentTool,
 ];

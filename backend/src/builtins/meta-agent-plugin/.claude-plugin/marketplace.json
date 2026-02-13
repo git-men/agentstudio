@@ -1,0 +1,35 @@
+{
+  "name": "meta-agent",
+  "version": "1.0.0",
+  "description": "Meta Agent 系统插件",
+  "plugins": [],
+  "agents": [
+    {
+      "name": "meta-agent",
+      "path": "agents/meta-agent.json",
+      "description": "系统配置助手 & 业务路由器"
+    }
+  ],
+  "skills": [
+    {
+      "name": "agent-designer",
+      "path": "skills/agent-designer",
+      "description": "Agent 设计引导"
+    },
+    {
+      "name": "command-designer",
+      "path": "skills/command-designer",
+      "description": "Command 设计引导"
+    },
+    {
+      "name": "mcp-configurator",
+      "path": "skills/mcp-configurator",
+      "description": "MCP Server 配置引导"
+    },
+    {
+      "name": "task-router",
+      "path": "skills/task-router",
+      "description": "业务任务路由"
+    }
+  ]
+}
