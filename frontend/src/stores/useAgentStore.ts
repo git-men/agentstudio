@@ -6,7 +6,7 @@ import { getDefaultUICapabilities } from '../hooks/useAGUIChat';
 /**
  * Engine type for AGUI
  */
-export type EngineType = 'claude' | 'cursor';
+export type EngineType = 'claude' | 'cursor' | 'codebuddy';
 
 // Re-export for convenience
 export type { EngineUICapabilities } from '../hooks/useAGUIChat';
@@ -25,7 +25,7 @@ const ENGINE_TYPE_CACHE_KEY = 'agentstudio:engine-type';
 function getCachedEngineType(): EngineType {
   try {
     const cached = localStorage.getItem(ENGINE_TYPE_CACHE_KEY);
-    if (cached === 'claude' || cached === 'cursor') {
+    if (cached === 'claude' || cached === 'cursor' || cached === 'codebuddy') {
       return cached;
     }
   } catch {

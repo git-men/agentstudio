@@ -20,7 +20,7 @@
  * This is different from the runtime EngineType in engines/types.ts which
  * represents the execution engine (claude/cursor) for individual chat sessions.
  */
-export type ServiceEngineType = 'cursor-cli' | 'claude-sdk';
+export type ServiceEngineType = 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk';
 
 /**
  * Configuration scope levels

@@ -119,7 +119,7 @@ export function ConfigGate({
 
 interface EngineTypeGateProps {
   /** Engine type to check for */
-  engine: 'cursor-cli' | 'claude-sdk';
+  engine: 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk';
   /** Content to render if engine matches */
   children: ReactNode;
   /** Fallback content if engine doesn't match */
@@ -190,6 +190,22 @@ export function CursorOnly({ children, fallback = null }: CursorOnlyProps) {
   );
 }
 
+interface CodeBuddyOnlyProps {
+  children: ReactNode;
+  fallback?: ReactNode;
+}
+
+/**
+ * Show content only for CodeBuddy SDK engine
+ */
+export function CodeBuddyOnly({ children, fallback = null }: CodeBuddyOnlyProps) {
+  return (
+    <EngineTypeGate engine="codebuddy-sdk" fallback={fallback}>
+      {children}
+    </EngineTypeGate>
+  );
+}
+
 // =============================================================================
 // Not Supported Message
 // =============================================================================
@@ -254,6 +270,7 @@ export default {
   EngineTypeGate,
   ClaudeOnly,
   CursorOnly,
+  CodeBuddyOnly,
   NotSupportedMessage,
   EngineLoadingPlaceholder,
 };

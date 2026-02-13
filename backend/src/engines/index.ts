@@ -17,6 +17,9 @@ export { claudeEngine, ClaudeEngine, ClaudeAguiAdapter } from './claude/index.js
 // Export Cursor engine
 export { cursorEngine, CursorEngine, CursorAguiAdapter } from './cursor/index.js';
 
+// Export CodeBuddy engine
+export { codebuddyEngine, CodeBuddyEngine } from './codebuddy/index.js';
+
 // =============================================================================
 // Engine Initialization
 // =============================================================================
@@ -24,6 +27,7 @@ export { cursorEngine, CursorEngine, CursorAguiAdapter } from './cursor/index.js
 import { engineManager } from './engineManager.js';
 import { claudeEngine } from './claude/index.js';
 import { cursorEngine } from './cursor/index.js';
+import { codebuddyEngine } from './codebuddy/index.js';
 import { getEngineType } from '../config/engineConfig.js';
 import type { EngineType } from './types.js';
 
@@ -33,6 +37,9 @@ import type { EngineType } from './types.js';
 function mapServiceEngineToAguiEngine(serviceEngine: string): EngineType {
   if (serviceEngine === 'cursor-cli') {
     return 'cursor';
+  }
+  if (serviceEngine === 'codebuddy-sdk') {
+    return 'codebuddy';
   }
   return 'claude';
 }
@@ -49,6 +56,9 @@ export function initializeEngines(): void {
   
   // Register Cursor engine
   engineManager.registerEngine(cursorEngine);
+  
+  // Register CodeBuddy engine
+  engineManager.registerEngine(codebuddyEngine);
   
   // Set default engine based on ENGINE environment variable
   const serviceEngineType = getEngineType();
