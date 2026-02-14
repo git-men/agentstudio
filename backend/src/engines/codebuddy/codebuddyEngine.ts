@@ -325,13 +325,20 @@ export class CodeBuddyEngine implements IAgentEngine {
       // Send error event
       onAguiEvent(adapter.createRunError(errorMessage, 'CODEBUDDY_ENGINE_ERROR'));
 
-      // Finalize
+      // Finalize (sends RUN_FINISHED to close the stream properly)
       const finalEvents = adapter.finalize();
       for (const event of finalEvents) {
         onAguiEvent(event);
       }
 
-      throw error;
+      // Cleanup session tracking
+      if (existingSessionId) {
+        this.activeSessions.delete(existingSessionId);
+      }
+
+      // Don't re-throw: error events already sent to client via SSE.
+      // Re-throwing would cause the route layer to send a duplicate RUN_ERROR.
+      return { sessionId: existingSessionId || 'error' };
     }
   }
 
