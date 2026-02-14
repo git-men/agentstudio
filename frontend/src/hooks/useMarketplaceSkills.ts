@@ -11,9 +11,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
   marketplaceSkillsAPI,
-  type MarketplaceSkillsResponse,
-  type SkillToggleResult,
-  type BatchToggleResult,
 } from '../api/marketplaceSkills';
 
 // Query keys

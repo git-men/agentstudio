@@ -182,6 +182,7 @@ export class AGUIAdapter {
                         events.push({
                             type: AGUIEventType.TOOL_CALL_START,
                             toolId: block.id || blockId,
+                            toolCallId: block.id || blockId,
                             toolName: block.name || 'unknown',
                             timestamp,
                         });
@@ -212,6 +213,7 @@ export class AGUIAdapter {
                         events.push({
                             type: AGUIEventType.TOOL_CALL_ARGS,
                             toolId: activeBlock.id,
+                            toolCallId: activeBlock.id,
                             args: event.delta.partial_json,
                             timestamp,
                         });
@@ -235,6 +237,7 @@ export class AGUIAdapter {
                             events.push({
                                 type: AGUIEventType.TOOL_CALL_END,
                                 toolId: activeBlock.id,
+                                toolCallId: activeBlock.id,
                                 timestamp,
                             });
                         }
@@ -307,9 +310,9 @@ export class AGUIAdapter {
                 } else if (b.type === 'tool_use') {
                     const toolId = b.id || `tool-${Date.now()}`;
                     events.push(
-                        { type: AGUIEventType.TOOL_CALL_START, toolId, toolName: b.name || 'unknown', timestamp },
-                        { type: AGUIEventType.TOOL_CALL_ARGS, toolId, args: JSON.stringify(b.input || {}), timestamp },
-                        { type: AGUIEventType.TOOL_CALL_END, toolId, timestamp }
+                        { type: AGUIEventType.TOOL_CALL_START, toolId, toolCallId: toolId, toolName: b.name || 'unknown', timestamp },
+                        { type: AGUIEventType.TOOL_CALL_ARGS, toolId, toolCallId: toolId, args: JSON.stringify(b.input || {}), timestamp },
+                        { type: AGUIEventType.TOOL_CALL_END, toolId, toolCallId: toolId, timestamp }
                     );
                 }
             }
