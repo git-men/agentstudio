@@ -8,7 +8,12 @@ import { exec } from 'child_process';
 
 // Mock modules
 vi.mock('fs');
-vi.mock('child_process');
+vi.mock('child_process', () => ({
+  exec: vi.fn(),
+}));
+vi.mock('stream/promises', () => ({
+  pipeline: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../pluginPaths');
 vi.mock('../pluginParser');
 vi.mock('../pluginSymlink');
@@ -21,6 +26,7 @@ global.fetch = mockFetch;
 describe('PluginInstaller', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
   });
 
   describe('addMarketplace', () => {
@@ -322,6 +328,7 @@ describe('PluginInstaller', () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
       vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
       vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+      vi.mocked(fs.readdirSync).mockReturnValue([] as any);
       
       // Mock fetch for archive download
       const mockResponse = {
@@ -393,7 +400,7 @@ describe('PluginInstaller', () => {
       
       const result = await pluginInstaller.addMarketplace({
         name: 'archive-market',
-        type: 'archive',
+        type: 'archive' as any,
         source: 'https://example.com/marketplace.tar.gz'
       });
 
@@ -418,7 +425,7 @@ describe('PluginInstaller', () => {
       
       const result = await pluginInstaller.addMarketplace({
         name: 'failed-market',
-        type: 'archive',
+        type: 'archive' as any,
         source: 'https://example.com/nonexistent.tar.gz'
       });
 
@@ -431,6 +438,9 @@ describe('PluginInstaller', () => {
     it('should check for updates in a git marketplace', async () => {
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         const pathStr = p.toString();
+        // Exclude metadata file so loadMarketplaceMetadata returns null,
+        // forcing fallback to git update check
+        if (pathStr.includes('.agentstudio-metadata.json')) return false;
         return pathStr.includes('.git') || pathStr.includes('marketplace');
       });
       vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({
@@ -438,13 +448,15 @@ describe('PluginInstaller', () => {
         version: '1.0.0'
       }));
       
+      // Mock exec: promisify(exec) without custom symbol resolves with first
+      // non-error callback arg, so pass { stdout, stderr } as a single object
       vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
         const cb = typeof options === 'function' ? options : callback;
         // Simulate "behind" status
         if (cmd.includes('git status')) {
-          cb(null, 'Your branch is behind', '');
+          cb(null, { stdout: 'Your branch is behind', stderr: '' });
         } else {
-          cb(null, '', '');
+          cb(null, { stdout: '', stderr: '' });
         }
         return {} as any;
       });
@@ -470,10 +482,11 @@ describe('PluginInstaller', () => {
         version: '1.0.0'
       }));
       
+      // See comment above re: promisify(exec) mock behavior
       vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
         const cb = typeof options === 'function' ? options : callback;
         // Simulate up-to-date status
-        cb(null, 'Your branch is up to date', '');
+        cb(null, { stdout: 'Your branch is up to date', stderr: '' });
         return {} as any;
       });
 

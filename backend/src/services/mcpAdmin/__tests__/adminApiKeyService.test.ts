@@ -6,6 +6,24 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+
+// Set AGENTSTUDIO_HOME before modules load so config/paths.ts picks it up
+const TEST_HOME = vi.hoisted(() => {
+  const _path = require('path');
+  const _os = require('os');
+  const home = _path.join(_os.tmpdir(), 'mcp-admin-test-' + Date.now());
+  delete process.env.DATA_DIR;
+  process.env.AGENTSTUDIO_HOME = home;
+  return home;
+});
+
+// Mock proper-lockfile to avoid filesystem lock issues in tests
+vi.mock('proper-lockfile', () => ({
+  default: {
+    lock: async () => async () => {},
+  },
+}));
+
 import {
   generateAdminApiKey,
   validateAdminApiKey,
@@ -18,15 +36,11 @@ import {
 } from '../adminApiKeyService.js';
 import type { AdminPermission } from '../types.js';
 
-// Use a temp directory for testing
-const TEST_HOME = path.join(os.tmpdir(), 'mcp-admin-test-' + Date.now());
-const TEST_KEYS_FILE = path.join(TEST_HOME, '.claude-agent', 'admin-api-keys.json');
+// Match the actual path used by the service: AGENTSTUDIO_HOME/data/admin-api-keys.json
+const TEST_KEYS_FILE = path.join(TEST_HOME, 'data', 'admin-api-keys.json');
 
 describe('adminApiKeyService', () => {
   beforeEach(async () => {
-    // Set test home directory
-    process.env.HOME = TEST_HOME;
-
     // Ensure clean state
     try {
       await fs.rm(TEST_HOME, { recursive: true, force: true });

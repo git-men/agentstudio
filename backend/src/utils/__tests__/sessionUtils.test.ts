@@ -85,7 +85,8 @@ describe('sessionUtils', () => {
         mockQueryOptions,
         'old-session',
         'version-1',
-        undefined  // modelId
+        undefined,  // modelId
+        undefined   // configSnapshot
       );
     });
 
@@ -110,7 +111,8 @@ describe('sessionUtils', () => {
         mockQueryOptions,
         undefined,
         undefined,
-        undefined  // modelId
+        undefined,  // modelId
+        undefined   // configSnapshot
       );
     });
 
@@ -134,7 +136,8 @@ describe('sessionUtils', () => {
         mockQueryOptions,
         undefined,
         undefined,
-        undefined  // modelId
+        undefined,  // modelId
+        undefined   // configSnapshot
       );
     });
   });

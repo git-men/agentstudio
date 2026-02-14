@@ -3,6 +3,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import https from 'https';
+import { PassThrough } from 'stream';
+import { EventEmitter } from 'events';
 
 // Mock file system
 vi.mock('fs/promises', () => ({
@@ -139,12 +142,27 @@ describe('OpenAICompatibleProvider', () => {
         '../providers/openaiCompatible'
       );
 
-      // Mock fetch
-      const mockFetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({ text: 'Hello, world!' }),
-      });
-      global.fetch = mockFetch;
+      // Create mock response (EventEmitter to simulate IncomingMessage)
+      const mockRes = new EventEmitter() as any;
+      mockRes.statusCode = 200;
+
+      // Create mock request (PassThrough to accept formData.pipe())
+      const mockReq = new PassThrough();
+
+      // Mock https.request to intercept the real HTTP call
+      const requestSpy = vi
+        .spyOn(https, 'request')
+        .mockImplementation(((options: any, callback: any) => {
+          process.nextTick(() => {
+            callback(mockRes);
+            mockRes.emit(
+              'data',
+              JSON.stringify({ text: 'Hello, world!' })
+            );
+            mockRes.emit('end');
+          });
+          return mockReq as any;
+        }) as any);
 
       const provider = createOpenAIProvider({
         provider: 'openai',
@@ -160,14 +178,16 @@ describe('OpenAICompatibleProvider', () => {
 
       expect(result.text).toBe('Hello, world!');
       expect(result.provider).toBe('openai');
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.openai.com/v1/audio/transcriptions',
+      expect(requestSpy).toHaveBeenCalledWith(
         expect.objectContaining({
+          hostname: 'api.openai.com',
+          path: '/v1/audio/transcriptions',
           method: 'POST',
           headers: expect.objectContaining({
             Authorization: 'Bearer sk-test-key',
           }),
-        })
+        }),
+        expect.any(Function)
       );
     });
   });

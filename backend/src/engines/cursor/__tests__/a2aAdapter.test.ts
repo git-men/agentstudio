@@ -84,27 +84,20 @@ describe('CursorA2AAdapter', () => {
         metadata: { partial: true },
       });
 
-      // Add more content
+      // Add more content - adapter now emits only the delta, not accumulated text
       const contentResponse2 = adapter.convertEvent(createEvent('TEXT_MESSAGE_CONTENT', { content: 'World!' }));
 
       const msg2 = contentResponse2[0].result as A2AMessage;
       expect(msg2.parts[0]).toMatchObject({
         kind: 'text',
-        text: 'Hello World!',
+        text: 'World!',
         metadata: { partial: true },
       });
 
-      // End message
+      // End message - no longer emits a response (saves to history for RUN_FINISHED)
       const endResponse = adapter.convertEvent(createEvent('TEXT_MESSAGE_END'));
 
-      expect(endResponse).toHaveLength(1);
-      const finalMsg = endResponse[0].result as A2AMessage;
-      expect(finalMsg.parts[0]).toMatchObject({
-        kind: 'text',
-        text: 'Hello World!',
-      });
-      // Final message should not have partial flag
-      expect(finalMsg.parts[0].metadata?.partial).toBeUndefined();
+      expect(endResponse).toHaveLength(0);
     });
 
     it('should handle empty content gracefully', () => {
@@ -386,8 +379,9 @@ describe('convertAGUIEventsToA2A', () => {
       requestId: 'batch-request',
     });
 
-    // Should have: status-update(working), message(partial), message(final), status-update(completed)
-    expect(responses.length).toBeGreaterThanOrEqual(4);
+    // Should have: status-update(working), message(delta), status-update(completed)
+    // TEXT_MESSAGE_END no longer emits a response (saves to history for RUN_FINISHED)
+    expect(responses.length).toBeGreaterThanOrEqual(3);
 
     // First response should be working status
     expect((responses[0].result as A2ATaskStatusUpdateEvent).status.state).toBe('working');

@@ -13,6 +13,7 @@ vi.mock('../pluginInstaller');
 describe('MarketplaceUpdateService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.resetModules();
     vi.useFakeTimers();
   });
 
@@ -88,6 +89,8 @@ describe('MarketplaceUpdateService', () => {
       } = await import('../marketplaceUpdateService');
       
       initializeMarketplaceUpdateService();
+      // Flush microtasks so async scheduleAllUpdateChecks() completes
+      await vi.advanceTimersByTimeAsync(0);
       
       const status = getMarketplaceUpdateServiceStatus();
       expect(status.scheduledChecks.length).toBe(1);
@@ -204,7 +207,7 @@ describe('MarketplaceUpdateService', () => {
       // Verify file was written with correct config
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('.agentstudio-metadata.json'),
-        expect.stringContaining('"enabled":true')
+        expect.stringContaining('"enabled": true')
       );
       
       // Verify job was scheduled
@@ -238,6 +241,8 @@ describe('MarketplaceUpdateService', () => {
       } = await import('../marketplaceUpdateService');
       
       initializeMarketplaceUpdateService();
+      // Flush microtasks so async scheduleAllUpdateChecks() completes first
+      await vi.advanceTimersByTimeAsync(0);
       
       await updateMarketplaceAutoUpdateConfig('test-market', {
         enabled: false
@@ -276,6 +281,8 @@ describe('MarketplaceUpdateService', () => {
       } = await import('../marketplaceUpdateService');
       
       initializeMarketplaceUpdateService();
+      // Flush microtasks so async scheduleAllUpdateChecks() completes
+      await vi.advanceTimersByTimeAsync(0);
       
       let status = getMarketplaceUpdateServiceStatus();
       expect(status.scheduledChecks.length).toBe(2);

@@ -107,8 +107,15 @@ vi.mock('../../services/a2a/taskManager', () => ({
       taskId: 'test-task-id',
       status: 'canceled',
       message: 'Task canceled successfully'
-    })
+    }),
+    updateTaskStatus: vi.fn().mockResolvedValue(undefined)
   }
+}));
+vi.mock('../../services/taskExecutor/index', () => ({
+  getTaskExecutor: vi.fn().mockReturnValue({
+    submitTask: vi.fn().mockResolvedValue(undefined),
+    getStats: vi.fn().mockReturnValue({ mode: 'builtin', activeTasks: 0 }),
+  }),
 }));
 vi.mock('../../services/sessionManager');
 vi.mock('../../utils/sessionUtils');
@@ -289,7 +296,8 @@ describe('A2A Protocol Endpoints', () => {
         expect.anything(),
         undefined,
         undefined,
-        'reuse'
+        'reuse',
+        expect.anything() // configSnapshot
       );
     });
 
