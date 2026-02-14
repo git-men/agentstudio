@@ -177,7 +177,7 @@ router.patch('/config', async (req: express.Request, res: Response) => {
     if (!validation.success) {
       return res.status(400).json({
         error: 'Invalid configuration',
-        details: validation.error.errors,
+        details: validation.error.issues,
       });
     }
 

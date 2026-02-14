@@ -34,7 +34,7 @@ export const A2AMessageRequestSchema = z.object({
   images: z.array(A2AImageSchema).optional(),
   sessionId: z.string().optional(),
   sessionMode: SessionModeSchema.optional().default('new'),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -65,7 +65,7 @@ export const A2ATaskRequestSchema = z.object({
     .min(1000, 'Timeout must be at least 1 second (1000ms)')
     .max(1800000, 'Timeout cannot exceed 30 minutes (1800000ms)')
     .optional(),
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
   pushNotificationConfig: PushNotificationConfigSchema.optional(),
 });
 
@@ -83,7 +83,7 @@ export const TaskStatusSchema = z.enum(['pending', 'running', 'completed', 'fail
  */
 export const TaskInputSchema = z.object({
   message: z.string().min(1),
-  additionalContext: z.record(z.unknown()).optional(),
+  additionalContext: z.record(z.string(), z.unknown()).optional(),
 });
 
 /**
@@ -251,7 +251,7 @@ export const AgentMappingRegistrySchema = z.object({
  */
 export const JSONSchemaSchema = z.object({
   type: z.string(),
-  properties: z.record(z.any()).optional(),
+  properties: z.record(z.string(), z.any()).optional(),
   required: z.array(z.string()).optional(),
 }).passthrough(); // Allow additional properties
 
@@ -331,7 +331,7 @@ export const CallExternalAgentOutputSchema = z.object({
 export function validateWithSchema<T>(schema: z.ZodSchema<T>, data: unknown): T {
   const result = schema.safeParse(data);
   if (!result.success) {
-    const errors = result.error.errors.map((err) => ({
+    const errors = result.error.issues.map((err: any) => ({
       field: err.path.join('.'),
       message: err.message,
     }));
@@ -353,7 +353,7 @@ export function validateSafe<T>(
   }
   return {
     success: false,
-    errors: result.error.errors.map((err) => ({
+    errors: result.error.issues.map((err: any) => ({
       field: err.path.join('.'),
       message: err.message,
     })),

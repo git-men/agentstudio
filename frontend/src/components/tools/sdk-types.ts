@@ -30,18 +30,20 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
 
 // SDK 0.2.x 移除的类型，本地定义以保持向后兼容
-// BashOutputInput 已被 TaskOutputInput 替代
+// 这些类型将在未来版本中移除
+
+/** @deprecated Use TaskOutputInput instead. BashOutput has been renamed to TaskOutput in SDK 0.2.x */
 export interface BashOutputInput {
   bash_id: string;
   filter?: string;
 }
 
-// KillShellInput 已被 TaskStopInput 替代
+/** @deprecated Use TaskStopInput instead. KillShell has been renamed to TaskStop in SDK 0.2.x */
 export interface KillShellInput {
   shell_id: string;
 }
 
-// TimeMachineInput 已从 SDK 中移除（工具已废弃）
+/** @deprecated TimeMachine tool has been removed from SDK 0.2.x. Use file checkpointing + rewindFiles() instead. */
 export interface TimeMachineInput {
   message_prefix: string;
   course_correction: string;

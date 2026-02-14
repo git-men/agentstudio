@@ -9,6 +9,13 @@ interface KillBashToolProps {
   execution: BaseToolExecution;
 }
 
+/**
+ * @deprecated KillBash/KillShell tool has been replaced by TaskStop in Claude Agent SDK 0.2.x.
+ * The underlying SDK type `KillShellInput` no longer exists and is locally defined for
+ * backward compatibility. This component will be removed in a future release.
+ * New sessions will use TaskStop instead.
+ */
+
 export const KillBashTool: React.FC<KillBashToolProps> = ({ execution }) => {
   const { t } = useTranslation('components');
   const input = execution.toolInput as unknown as KillShellInput;

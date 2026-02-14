@@ -74,7 +74,7 @@ const ChatRequestSchema = z.object({
   providerId: z.string().optional(),
   permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
   mcpTools: z.array(z.string()).optional(),
-  envVars: z.record(z.string()).optional(),
+  envVars: z.record(z.string(), z.string()).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
 });
@@ -160,7 +160,7 @@ router.post('/chat', async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({
         error: 'Invalid request',
-        details: validation.error.errors,
+        details: validation.error.issues,
       });
     }
 

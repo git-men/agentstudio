@@ -26,11 +26,8 @@
   },
   "dependencies": {
     "@a2a-js/sdk": "^0.2.5",
-    "@ai-sdk/anthropic": "^1.0.5",
-    "@ai-sdk/openai": "^1.0.7",
     "@anthropic-ai/claude-agent-sdk": "^0.2.42",
     "@types/js-yaml": "^4.0.9",
-    "ai": "^5.0.22",
     "axios": "^1.13.4",
     "bcryptjs": "^2.4.3",
     "commander": "^11.1.0",
@@ -54,7 +51,7 @@
     "tunely": "^0.2.1",
     "undici": "^7.16.0",
     "uuid": "^9.0.1",
-    "zod": "^3.22.2"
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@eslint/js": "^9.37.0",

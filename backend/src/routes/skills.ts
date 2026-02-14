@@ -87,7 +87,7 @@ router.post('/', async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: 'Invalid skill data', 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
 
@@ -133,7 +133,7 @@ router.put('/:skillId', async (req, res) => {
     if (!validation.success) {
       return res.status(400).json({ 
         error: 'Invalid skill data', 
-        details: validation.error.errors 
+        details: validation.error.issues 
       });
     }
 

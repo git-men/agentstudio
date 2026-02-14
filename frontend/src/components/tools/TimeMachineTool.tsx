@@ -9,6 +9,14 @@ interface TimeMachineToolProps {
   execution: BaseToolExecution;
 }
 
+/**
+ * @deprecated TimeMachine tool has been completely removed from Claude Agent SDK 0.2.x.
+ * The underlying SDK type `TimeMachineInput` no longer exists and is locally defined for
+ * backward compatibility. This component will be removed in a future release.
+ * The TimeMachine functionality has been deprecated in favor of file checkpointing
+ * and `rewindFiles()` API.
+ */
+
 export const TimeMachineTool: React.FC<TimeMachineToolProps> = ({ execution }) => {
   const { t } = useTranslation('components');
   const input = execution.toolInput as unknown as TimeMachineInput;
