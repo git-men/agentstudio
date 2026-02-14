@@ -811,6 +811,18 @@
       "failed": "Execution failed"
     }
   },
+  "agentOutputTool": {
+    "agentId": "Agent ID",
+    "blocking": "Blocking",
+    "blockingMode": "Blocking mode",
+    "nonBlockingMode": "Non-blocking mode",
+    "timeout": "Timeout",
+    "waitingForResult": "Waiting for background agent result...",
+    "fetchingResult": "Fetching background agent result...",
+    "completed": "Completed",
+    "error": "Error",
+    "noResult": "No result yet"
+  },
   "killBashTool": {
     "subtitle": "Kill Shell {{shellId}}",
     "subtitleWithProcess": "Kill Shell {{shellId}} ({{processName}})",

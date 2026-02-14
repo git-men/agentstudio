@@ -27,6 +27,7 @@ import { WebSearchTool } from './WebSearchTool';
 import { McpTool } from './McpTool';
 import { A2ACallTool } from './A2ACallTool';
 import { SkillTool } from './SkillTool';
+import { AgentOutputTool } from './AgentOutputTool';
 import { parseMcpToolName } from './mcpUtils';
 import { BaseToolComponent } from './BaseToolComponent';
 import { CUSTOM_MCP_TOOLS } from './customMcpTools';
@@ -136,6 +137,9 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onAskUser
 
     case 'Skill':
       return <SkillTool execution={execution} />;
+
+    case 'AgentOutput':
+      return <AgentOutputTool execution={execution} />;
 
     default:
       // 对于未知工具，使用基础组件显示

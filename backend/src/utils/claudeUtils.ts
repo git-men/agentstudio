@@ -17,7 +17,7 @@ import { integrateAskUserQuestionMcpServer, SessionRef } from '../services/askUs
 import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
-import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
+import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME } from '../config/paths.js';
 import { getEnginePaths } from '../config/engineConfig.js';
 
 const execAsync = promisify(exec);
@@ -355,6 +355,21 @@ export async function buildQueryOptions(
   // This ensures critical variables like PATH, etc. are available
   // Priority: userEnv > environmentVariables (from version/default) > process.env
   queryOptions.env = { ...process.env, ...environmentVariables, ...userEnv };
+
+  // Workaround for CLI v2.0.77+ macOS EMFILE bug:
+  // The Claude CLI's skill directory watcher (chokidar) crashes with "EMFILE: too many open files"
+  // on macOS when ~/.claude/skills exists. Setting CLAUDE_CONFIG_DIR to a clean directory avoids
+  // triggering the watcher. This doesn't affect the AgentStudio backend's own config (which uses
+  // AGENTSTUDIO_HOME), and the CLI still functions correctly for API calls.
+  // See: CLI v2.0.77 introduced skill directory watching that v2.0.62 didn't have.
+  if (process.platform === 'darwin' && !queryOptions.env.CLAUDE_CONFIG_DIR) {
+    const sdkConfigDir = path.join(AGENTSTUDIO_HOME, 'claude-sdk-config');
+    if (!fs.existsSync(sdkConfigDir)) {
+      fs.mkdirSync(sdkConfigDir, { recursive: true });
+    }
+    queryOptions.env.CLAUDE_CONFIG_DIR = sdkConfigDir;
+    console.log(`🔧 [macOS] Set CLAUDE_CONFIG_DIR to ${sdkConfigDir} (workaround for CLI skills watcher EMFILE bug)`);
+  }
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
   // This ensures proxy settings work regardless of which form the client library checks first

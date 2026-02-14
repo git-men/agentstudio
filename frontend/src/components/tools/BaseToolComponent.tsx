@@ -22,7 +22,8 @@ import {
   Square,  // 用于KillBash，表示终止/停止操作
   Plug,  // 用于MCP工具
   AlertCircle,  // 用于中断状态
-  Sparkles  // 用于Skill工具
+  Sparkles,  // 用于Skill工具
+  Monitor  // 用于AgentOutput，表示后台Agent输出监控
 } from 'lucide-react';
 import type { BaseToolExecution } from './sdk-types';
 
@@ -46,6 +47,7 @@ const TOOL_ICONS = {
   TodoWrite: CheckSquare,
   WebSearch: Globe,
   Skill: Sparkles,
+  AgentOutput: Monitor,
   // Cursor CLI 工具映射
   lsToolCall: FolderOpen,
   readToolCall: FileText,
@@ -81,6 +83,7 @@ const TOOL_COLORS = {
   TodoWrite: 'text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/30',
   WebSearch: 'text-sky-600 dark:text-sky-400 bg-sky-100 dark:bg-sky-900/30',
   Skill: 'text-fuchsia-600 dark:text-fuchsia-400 bg-fuchsia-100 dark:bg-fuchsia-900/30',
+  AgentOutput: 'text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30',
   // Cursor CLI 工具颜色映射
   lsToolCall: 'text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30',
   readToolCall: 'text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/30',

@@ -26,6 +26,9 @@ export const TOOL_DISPLAY_MAP = {
   
   // Skills
   'Skill': '技能调用',
+  
+  // 后台Agent
+  'AgentOutput': '后台Agent输出',
   // 注意：AskUserQuestion 通过内置 MCP server 自动提供，无需在工具选择器中显示
 } as const;
 
@@ -46,6 +49,7 @@ export const TOOL_DESCRIPTION_MAP = {
   'Task': '执行复杂任务',
   'ExitPlanMode': '退出计划模式',
   'Skill': '调用预定义的技能',
+  'AgentOutput': '获取后台Agent的执行结果',
 } as const;
 
 /**

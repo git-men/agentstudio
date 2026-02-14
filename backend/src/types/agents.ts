@@ -188,6 +188,7 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
       { name: 'NotebookEdit', enabled: true },
       { name: 'KillShell', enabled: true },
       { name: 'BashOutput', enabled: true },
+      { name: 'AgentOutput', enabled: true },
       { name: 'SlashCommand', enabled: true },
       { name: 'ExitPlanMode', enabled: true },
       // AskUserQuestion 通过内置 MCP server 自动提供，无需手动配置

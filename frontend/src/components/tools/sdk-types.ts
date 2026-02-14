@@ -50,6 +50,13 @@ export interface TimeMachineInput {
   restore_code?: boolean;
 }
 
+/** @deprecated AgentOutput has been replaced by TaskOutput in SDK 0.2.x. Use TaskOutputInput instead. */
+export interface AgentOutputInput {
+  agentId: string;
+  block?: boolean;
+  wait_up_to?: number;
+}
+
 // 重新导出所有 SDK 类型，方便统一导入
 export type {
   ToolInputSchemas,
@@ -275,6 +282,7 @@ export interface ToolTypeMap {
   WebFetch: WebFetchInput;
   TodoWrite: TodoWriteInput;
   WebSearch: WebSearchInput;
+  AgentOutput: AgentOutputInput;
 }
 
 // 动态工具类型解析函数
@@ -300,7 +308,8 @@ export function resolveToolType(toolName: string): keyof ToolTypeMap | null {
     'AskUserQuestion': 'AskUserQuestion',
     'WebFetch': 'WebFetch',
     'TodoWrite': 'TodoWrite',
-    'WebSearch': 'WebSearch'
+    'WebSearch': 'WebSearch',
+    'AgentOutput': 'AgentOutput'
   };
 
   return toolMap[toolName] || null;

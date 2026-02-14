@@ -811,6 +811,18 @@
       "failed": "执行失败"
     }
   },
+  "agentOutputTool": {
+    "agentId": "Agent ID",
+    "blocking": "阻塞等待",
+    "blockingMode": "阻塞等待模式",
+    "nonBlockingMode": "非阻塞模式",
+    "timeout": "超时时间",
+    "waitingForResult": "正在等待后台 Agent 执行结果...",
+    "fetchingResult": "正在获取后台 Agent 结果...",
+    "completed": "执行完成",
+    "error": "执行出错",
+    "noResult": "暂无结果"
+  },
   "killBashTool": {
     "subtitle": "终止 Shell {{shellId}}",
     "subtitleWithProcess": "终止 Shell {{shellId}} ({{processName}})",

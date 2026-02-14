@@ -69,3 +69,4 @@ specs/
 # Telemetry data
 backend/.telemetry/
 backend/config.local.json
+.worktrees/
