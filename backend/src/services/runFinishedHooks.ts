@@ -15,6 +15,38 @@ import type { AGUIEvent } from '../engines/types.js';
 import { AGUIEventType } from '../engines/types.js';
 import { createVersion } from './gitVersionService.js';
 
+// ---------------------------------------------------------------------------
+// agentstudio-mate backup helper (same machine, fire-and-forget)
+// ---------------------------------------------------------------------------
+
+function getAsMateAdminBaseUrl(): string {
+  const envBase = process.env.AS_MATE_ADMIN_BASE_URL;
+  if (envBase && envBase.trim()) return envBase.trim();
+  const port = process.env.AS_MATE_PORTS_AS_MATE ?? '3000';
+  return `http://127.0.0.1:${port}`;
+}
+
+async function requestBackup(traceId?: string): Promise<void> {
+  const baseUrl = getAsMateAdminBaseUrl();
+  const url = new URL('/api/backup', baseUrl);
+  if (traceId) url.searchParams.set('trace_id', traceId);
+
+  const res = await fetch(url.toString(), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(30_000), // 30 s ceiling
+  });
+
+  if (!res.ok) {
+    throw new Error(`backup request failed: ${res.status} ${res.statusText}`);
+  }
+
+  const body = (await res.json()) as { success: boolean; message?: string };
+  if (!body.success) {
+    throw new Error(`backup returned success=false: ${body.message ?? 'unknown'}`);
+  }
+}
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -74,6 +106,12 @@ export async function runOnRunFinishedHook(
           },
           timestamp: Date.now(),
         } as AGUIEvent);
+
+        // Fire-and-forget: request backup from agentstudio-mate (same machine)
+        requestBackup(ctx.sessionId).then(
+          () => console.log('🎮 [hook:create_version] Backup request succeeded'),
+          (err) => console.warn(`🎮 [hook:create_version] Backup request failed: ${err.message}`)
+        );
       } catch (error: any) {
         // Don't fail the whole request — just skip the version event
         console.warn(`🎮 [hook:create_version] Skipped: ${error.message}`);
