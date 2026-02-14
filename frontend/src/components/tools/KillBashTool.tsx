@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseToolComponent } from './BaseToolComponent';
 import type { BaseToolExecution } from './sdk-types';
-import type { KillShellInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import type { KillShellInput } from './sdk-types';
 import { Square, Zap, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface KillBashToolProps {

@@ -5,10 +5,11 @@
 import type { BaseToolExecution } from '../sdk-types';
 import type {
   AgentInput, BashInput, FileEditInput, FileReadInput, FileWriteInput,
-  GlobInput, GrepInput, KillShellInput, ListMcpResourcesInput,
-  McpInput, NotebookEditInput, ReadMcpResourceInput, TimeMachineInput,
+  GlobInput, GrepInput, ListMcpResourcesInput,
+  McpInput, NotebookEditInput, ReadMcpResourceInput,
   TodoWriteInput, WebFetchInput, WebSearchInput, AskUserQuestionInput
 } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import type { KillShellInput, TimeMachineInput } from '../sdk-types';
 import type {
   MultiEditInput, LSToolInput, NotebookReadToolInput, BashOutputToolResult,
   EditToolResult

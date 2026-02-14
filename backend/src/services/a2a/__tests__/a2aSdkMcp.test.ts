@@ -194,6 +194,7 @@ describe('A2A SDK MCP Server', () => {
 
             await tool.handler({
                 agentUrl: 'https://test.example.com/a2a/agent-1',
+                agentName: undefined,
                 message: 'Test message',
                 sessionId: 'provided-session-123',
                 useTask: false,
@@ -220,7 +221,9 @@ describe('A2A SDK MCP Server', () => {
 
             const result = await tool.handler({
                 agentUrl: 'https://test.example.com/a2a/agent-1',
+                agentName: undefined,
                 message: 'Test message',
+                sessionId: undefined,
                 useTask: false,
             }, {});
 
@@ -243,7 +246,9 @@ describe('A2A SDK MCP Server', () => {
 
             const result = await tool.handler({
                 agentUrl: 'https://test.example.com/a2a/agent-1',
+                agentName: undefined,
                 message: 'Test message',
+                sessionId: undefined,
                 useTask: false,
             }, {});
 

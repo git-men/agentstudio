@@ -10,47 +10,66 @@ import type {
   ToolInputSchemas,
   AgentInput,
   BashInput,
-  BashOutputInput,
+  TaskOutputInput,
+  TaskStopInput,
   ExitPlanModeInput,
   FileEditInput,
   FileReadInput,
   FileWriteInput,
   GlobInput,
   GrepInput,
-  KillShellInput,
   ListMcpResourcesInput,
   McpInput,
   NotebookEditInput,
   ReadMcpResourceInput,
-  TimeMachineInput,
   TodoWriteInput,
   WebFetchInput,
   WebSearchInput,
-  AskUserQuestionInput
+  AskUserQuestionInput,
+  ConfigInput
 } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+
+// SDK 0.2.x 移除的类型，本地定义以保持向后兼容
+// BashOutputInput 已被 TaskOutputInput 替代
+export interface BashOutputInput {
+  bash_id: string;
+  filter?: string;
+}
+
+// KillShellInput 已被 TaskStopInput 替代
+export interface KillShellInput {
+  shell_id: string;
+}
+
+// TimeMachineInput 已从 SDK 中移除（工具已废弃）
+export interface TimeMachineInput {
+  message_prefix: string;
+  course_correction: string;
+  restore_code?: boolean;
+}
 
 // 重新导出所有 SDK 类型，方便统一导入
 export type {
   ToolInputSchemas,
   AgentInput,
   BashInput,
-  BashOutputInput,
+  TaskOutputInput,
+  TaskStopInput,
   ExitPlanModeInput,
   FileEditInput,
   FileReadInput,
   FileWriteInput,
   GlobInput,
   GrepInput,
-  KillShellInput,
   ListMcpResourcesInput,
   McpInput,
   NotebookEditInput,
   ReadMcpResourceInput,
-  TimeMachineInput,
   TodoWriteInput,
   WebFetchInput,
   WebSearchInput,
-  AskUserQuestionInput
+  AskUserQuestionInput,
+  ConfigInput
 };
 
 // 项目特定的基础接口
@@ -106,10 +125,13 @@ export interface ExtendedBashInput extends BashInput {
   };
 }
 
-export interface ExtendedBashOutputInput extends BashOutputInput {
+export interface ExtendedTaskOutputInput extends TaskOutputInput {
   // 添加项目特有的输出处理字段
   realTimeUpdates?: boolean;
 }
+
+// 向后兼容别名
+export type ExtendedBashOutputInput = ExtendedTaskOutputInput;
 
 export interface ExtendedGrepInput extends GrepInput {
   // 项目特定的搜索增强功能
@@ -232,8 +254,8 @@ export function isAskUserQuestionInput(input: unknown): input is AskUserQuestion
 export interface ToolTypeMap {
   Task: AgentInput;
   Bash: BashInput;
-  BashOutput: BashOutputInput;
-  KillBash: KillShellInput;
+  BashOutput: BashOutputInput | TaskOutputInput;
+  KillBash: KillShellInput | TaskStopInput;
   Glob: GlobInput;
   Grep: GrepInput;
   LS: GlobInput; // LS 是 Glob 的简化版本

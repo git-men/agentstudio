@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BaseToolComponent } from './BaseToolComponent';
 import { Clock, History, ArrowLeft, RefreshCw } from 'lucide-react';
 import type { BaseToolExecution } from './sdk-types';
-import type { TimeMachineInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import type { TimeMachineInput } from './sdk-types';
 
 interface TimeMachineToolProps {
   execution: BaseToolExecution;

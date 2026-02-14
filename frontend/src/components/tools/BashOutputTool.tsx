@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseToolComponent } from './BaseToolComponent';
 import type { BaseToolExecution, BashOutputToolResult } from './sdk-types';
-import type { BashOutputInput } from '@anthropic-ai/claude-agent-sdk/sdk-tools';
+import type { BashOutputInput } from './sdk-types';
 import { Terminal, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 interface BashOutputToolProps {
