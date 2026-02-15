@@ -308,9 +308,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     
     // Check if engine has synced - only fetch sessions when selectedEngine matches service engine
     // This prevents fetching with wrong engine type (e.g., fetching claude sessions when service is cursor)
-    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor'> = {
+    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor' | 'codebuddy'> = {
         'cursor-cli': 'cursor',
         'claude-sdk': 'claude',
+        'codebuddy-sdk': 'codebuddy',
     };
     const expectedEngine = serviceEngineType ? SERVICE_TO_STORE_ENGINE[serviceEngineType] : undefined;
     // Only fetch when: 1) service engine is loaded AND 2) selectedEngine matches expected engine
@@ -734,7 +735,9 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 showMcpStatusModal={showMcpStatusModal}
 
                 // Data - use engine-specific models when AGUI engine (Cursor/CodeBuddy) is selected
-                availableModels={(selectedEngine === 'cursor' || selectedEngine === 'codebuddy') && engineModels.length > 0 ? engineModels : availableModels}
+                // When AGUI engine models are still loading (empty), show empty array instead of
+                // falling back to Claude models to prevent toolbar flickering
+                availableModels={(selectedEngine === 'cursor' || selectedEngine === 'codebuddy') ? engineModels : availableModels}
                 claudeVersionsData={claudeVersionsData}
                 agent={agent}
                 projectPath={projectPath}
