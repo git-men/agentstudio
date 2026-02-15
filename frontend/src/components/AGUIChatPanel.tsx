@@ -467,7 +467,20 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
         try {
             setIsStopping(true);
-            await interruptSessionMutation.mutateAsync(currentSessionId);
+            
+            // Use correct interrupt endpoint based on engine type
+            if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
+                // AGUI engines: use /api/agui/sessions/:id/interrupt
+                await authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ engineType: selectedEngine }),
+                });
+            } else {
+                // Claude engine: use /api/agents/sessions/:id/interrupt
+                await interruptSessionMutation.mutateAsync(currentSessionId);
+            }
+            
             interruptAllExecutingTools();
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
@@ -481,6 +494,12 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             });
         } catch (error) {
             console.error('Error stopping generation:', error);
+            // Even if the server-side interrupt fails, abort the client-side request
+            if (abortControllerRef.current) {
+                abortControllerRef.current.abort();
+                abortControllerRef.current = null;
+            }
+            setAiTyping(false);
             setIsStopping(false);
             setIsInitializingSession(false);
         }
