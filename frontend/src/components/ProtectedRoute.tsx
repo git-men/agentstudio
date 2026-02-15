@@ -6,6 +6,7 @@ import { useBackendServices } from '../hooks/useBackendServices';
 import { BackendOnboardingWizard } from './BackendOnboardingWizard';
 import { getBackendOnboardingStatus } from '../utils/onboardingStorage';
 import { isTokenExpired, shouldRefreshToken } from '../utils/authHelpers';
+import { detectAndConfigureSameOriginBackend } from '../utils/sameOriginBackendDetection';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -19,16 +20,38 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const [isVerifying, setIsVerifying] = useState(true);
   const [isValid, setIsValid] = useState(false);
   const [showBackendOnboarding, setShowBackendOnboarding] = useState(false);
+  const [isDetectingSameOrigin, setIsDetectingSameOrigin] = useState(false);
   const lastServiceId = useRef<string | null>(null);
   const lastVerifyTime = useRef<number>(0);
 
-  // Check backend onboarding status first
+  // Quick Start: Auto-detect same-origin backend before showing onboarding wizard
   useEffect(() => {
-    const status = getBackendOnboardingStatus();
-    if (!status.completed) {
-      setShowBackendOnboarding(true);
-      setIsVerifying(false);
-    }
+    const quickStart = async () => {
+      // Check if onboarding is already completed
+      const status = getBackendOnboardingStatus();
+      if (status.completed) {
+        setIsVerifying(true);
+        return;
+      }
+
+      // Try to detect and configure same-origin backend
+      setIsDetectingSameOrigin(true);
+      const sameOriginDetected = await detectAndConfigureSameOriginBackend();
+      setIsDetectingSameOrigin(false);
+
+      if (sameOriginDetected) {
+        // Same-origin backend detected and configured
+        // Reload to apply new service configuration and proceed with auto-login
+        console.log('[QuickStart] Reloading to apply same-origin backend configuration');
+        window.location.reload();
+      } else {
+        // No same-origin backend found - show onboarding wizard
+        setShowBackendOnboarding(true);
+        setIsVerifying(false);
+      }
+    };
+
+    quickStart();
   }, []);
 
   useEffect(() => {
@@ -96,6 +119,18 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     setShowBackendOnboarding(false);
     setIsVerifying(true); // Start verifying login after onboarding
   };
+
+  // Show loading state while detecting same-origin backend
+  if (isDetectingSameOrigin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-400">🚀 Quick Start...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show backend onboarding wizard if needed (highest priority)
   if (showBackendOnboarding) {
