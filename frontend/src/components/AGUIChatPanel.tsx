@@ -234,11 +234,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     } = toolSelector;
 
     // Claude version manager
-    // Skip model validation when using Cursor engine to prevent resetting to GLM models
+    // Skip model validation when using AGUI engines (Cursor/CodeBuddy) to prevent resetting to Claude models
     const claudeVersionManager = useClaudeVersionManager({
         initialModel: projectDefaultModel || 'sonnet',
         initialVersion: projectDefaultProvider,
-        skipModelValidation: selectedEngine === 'cursor',
+        skipModelValidation: selectedEngine === 'cursor' || selectedEngine === 'codebuddy',
     });
     const {
         selectedModel,
@@ -253,10 +253,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     
     // Reset model selection when switching engines
     useEffect(() => {
-        if (selectedEngine === 'cursor' && engineModels.length > 0) {
-            // When switching to Cursor, select the first available model (usually 'auto')
+        if ((selectedEngine === 'cursor' || selectedEngine === 'codebuddy') && engineModels.length > 0) {
+            // When switching to AGUI engine (Cursor/CodeBuddy), select the first available model
             const firstModel = engineModels[0]?.id || 'auto';
-            console.log(`[AGUIChatPanel] Switching to Cursor engine, resetting model to: ${firstModel}`);
+            console.log(`[AGUIChatPanel] Switching to ${selectedEngine} engine, resetting model to: ${firstModel}`);
             setSelectedModel(firstModel);
         }
     }, [selectedEngine, engineModels, setSelectedModel]);
