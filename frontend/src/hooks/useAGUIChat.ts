@@ -13,7 +13,7 @@ import type { AGUIEvent } from '../types/aguiTypes';
 /**
  * Engine type
  */
-export type EngineType = 'claude' | 'cursor';
+export type EngineType = 'claude' | 'cursor' | 'codebuddy';
 
 /**
  * Image data for Claude vision
@@ -131,10 +131,24 @@ export const CURSOR_UI_CAPABILITIES: EngineUICapabilities = {
 };
 
 /**
+ * Default UI capabilities for CodeBuddy engine
+ */
+export const CODEBUDDY_UI_CAPABILITIES: EngineUICapabilities = {
+  showMcpToolSelector: false, // v1: no MCP tool selector
+  showImageUpload: false, // v1: no image upload
+  showPermissionSelector: false, // v1: fixed to bypassPermissions
+  showProviderSelector: false, // CodeBuddy has no provider concept
+  showModelSelector: true, // Models can be selected
+  showEnvVars: false, // v1: no env vars UI
+};
+
+/**
  * Get default UI capabilities for an engine type
  */
 export function getDefaultUICapabilities(engineType: EngineType): EngineUICapabilities {
-  return engineType === 'cursor' ? CURSOR_UI_CAPABILITIES : CLAUDE_UI_CAPABILITIES;
+  if (engineType === 'cursor') return CURSOR_UI_CAPABILITIES;
+  if (engineType === 'codebuddy') return CODEBUDDY_UI_CAPABILITIES;
+  return CLAUDE_UI_CAPABILITIES;
 }
 
 /**
@@ -192,12 +206,12 @@ export const useAGUIChat = () => {
       let endpoint: string;
       let requestBody: Record<string, unknown>;
 
-      if (engineType === 'cursor') {
-        // Cursor Engine: Use /api/agui/chat
+      if (engineType === 'cursor' || engineType === 'codebuddy') {
+        // Cursor / CodeBuddy Engine: Use /api/agui/chat directly
         endpoint = `${API_BASE}/agui/chat`;
         requestBody = {
           message,
-          engineType: 'cursor',
+          engineType,
           workspace,
           timeout,
         };
@@ -205,15 +219,19 @@ export const useAGUIChat = () => {
         if (sessionId) {
           requestBody.sessionId = sessionId;
         }
-        // Pass model parameter if provided (e.g., 'opus-4.5', 'sonnet-4.5', 'auto')
+        // Pass model parameter if provided
         if (model) {
           requestBody.model = model;
-          console.log(`🎯 [AGUI] Cursor model: ${model}`);
+          console.log(`🎯 [AGUI] ${engineType} model: ${model}`);
         }
-        // Pass images for Cursor engine (will be saved to workspace and referenced via @path)
+        // Pass permission mode for CodeBuddy
+        if (engineType === 'codebuddy' && permissionMode) {
+          requestBody.permissionMode = permissionMode;
+        }
+        // Pass images (Cursor: saved to workspace and referenced via @path)
         if (images && images.length > 0) {
           requestBody.images = images;
-          console.log(`🖼️ [AGUI] Cursor images: ${images.length} image(s)`);
+          console.log(`🖼️ [AGUI] ${engineType} images: ${images.length} image(s)`);
         }
       } else {
         // Claude Engine: Use /api/agents/chat with outputFormat=agui

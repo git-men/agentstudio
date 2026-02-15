@@ -64,7 +64,7 @@ const ImageSchema = z.object({
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
-  engineType: z.enum(['claude', 'cursor'] as const).optional().default('claude'),
+  engineType: z.enum(['claude', 'cursor', 'codebuddy'] as const).optional().default('claude'),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
   model: z.string().optional(),
@@ -283,8 +283,8 @@ router.post('/chat', async (req, res) => {
     };
 
     try {
-      if (engineType === 'cursor') {
-        // Cursor engine: Use directly
+      if (engineType === 'cursor' || engineType === 'codebuddy') {
+        // Cursor / CodeBuddy engine: Use directly via AGUI
         const result = await engineManager.sendMessage(
           engineType,
           message,
@@ -294,18 +294,19 @@ router.post('/chat', async (req, res) => {
             sessionId,
             model,
             images,
+            permissionMode,
             timeout,
           },
           onAguiEvent
         );
-        console.log(`✅ [AGUI] Cursor request completed, sessionId: ${result.sessionId}`);
+        console.log(`✅ [AGUI] ${engineType} request completed, sessionId: ${result.sessionId}`);
 
         // Execute onRunFinished hook (if configured) before sending RUN_FINISHED
         if (pendingRunFinished && onRunFinishedHook && resolvedWorkspace && !isConnectionClosed) {
           try {
             const hookEvents = await runOnRunFinishedHook(onRunFinishedHook, {
               projectPath: resolvedWorkspace,
-              agentId: requestAgentId || 'cursor',
+              agentId: requestAgentId || engineType,
               sessionId: activeSessionId || sessionId,
             });
             for (const hookEvent of hookEvents) {

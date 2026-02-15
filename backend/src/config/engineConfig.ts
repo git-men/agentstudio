@@ -69,7 +69,7 @@ function detectEngineType(): ServiceEngineType {
  * Supports case-insensitive matching and common aliases
  */
 function validateEngineType(engine: string): ServiceEngineType {
-  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk'];
+  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk'];
   const normalized = engine.trim().toLowerCase();
 
   // 直接匹配
@@ -86,6 +86,9 @@ function validateEngineType(engine: string): ServiceEngineType {
     'claude_sdk': 'claude-sdk',
     'claudesdk': 'claude-sdk',
     'claude-code': 'claude-sdk',
+    'codebuddy': 'codebuddy-sdk',
+    'codebuddy_sdk': 'codebuddy-sdk',
+    'codebuddysdk': 'codebuddy-sdk',
   };
 
   const mapped = aliasMap[normalized];
@@ -207,6 +210,58 @@ const CURSOR_CLI_CAPABILITIES: ServiceEngineCapabilities = {
   },
 };
 
+/**
+ * CodeBuddy SDK engine capabilities
+ */
+const CODEBUDDY_SDK_CAPABILITIES: ServiceEngineCapabilities = {
+  mcp: {
+    supported: true,
+    scopes: ['global'],
+    canRead: true,
+    canWrite: false, // v1: read-only MCP config
+  },
+  rules: {
+    supported: false, // v1: no rules support
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  commands: {
+    supported: false, // v1: no commands support
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  skills: {
+    supported: false, // v1: no skills support
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  plugins: {
+    supported: false, // v1: no plugins support
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  hooks: {
+    supported: false, // v1: no hooks support
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  features: {
+    provider: false, // CodeBuddy has no provider concept
+    subagents: false, // v1: no subagents
+    a2a: false, // v1: no A2A
+    scheduledTasks: false, // v1: no scheduled tasks
+    mcpAdmin: false, // v1: no MCP admin
+    voice: false, // v1: no voice
+    vision: true, // CodeBuddy supports vision
+    hooks: false, // v1: no hooks
+  },
+};
+
 // =============================================================================
 // Engine Path Configurations
 // =============================================================================
@@ -250,6 +305,25 @@ function getCursorCliPaths(): EnginePathConfig {
   };
 }
 
+/**
+ * Get CodeBuddy SDK paths
+ */
+function getCodebuddySdkPaths(): EnginePathConfig {
+  const codebuddyDir = path.join(os.homedir(), '.codebuddy');
+  return {
+    userConfigDir: codebuddyDir,
+    mcpConfigPath: path.join(codebuddyDir, 'mcp.json'),
+    mcpDir: path.join(codebuddyDir, 'mcp'),
+    rulesDir: path.join(codebuddyDir, 'rules'),
+    commandsDir: path.join(codebuddyDir, 'commands'),
+    agentsDir: path.join(codebuddyDir, 'agents'),
+    skillsDir: path.join(codebuddyDir, 'skills'),
+    hooksDir: path.join(codebuddyDir, 'hooks'),
+    pluginsDir: path.join(codebuddyDir, 'plugins'),
+    projectsDataDir: path.join(codebuddyDir, 'projects'),
+  };
+}
+
 // =============================================================================
 // Engine Configuration Singleton
 // =============================================================================
@@ -273,6 +347,13 @@ export function initializeEngine(): ServiceEngineConfig {
       name: 'Cursor CLI',
       capabilities: CURSOR_CLI_CAPABILITIES,
       paths: getCursorCliPaths(),
+    };
+  } else if (engineType === 'codebuddy-sdk') {
+    _engineConfig = {
+      engine: 'codebuddy-sdk',
+      name: 'CodeBuddy Agent SDK',
+      capabilities: CODEBUDDY_SDK_CAPABILITIES,
+      paths: getCodebuddySdkPaths(),
     };
   } else {
     _engineConfig = {
@@ -316,6 +397,13 @@ export function isCursorEngine(): boolean {
  */
 export function isClaudeEngine(): boolean {
   return getEngineType() === 'claude-sdk';
+}
+
+/**
+ * Check if current engine is CodeBuddy SDK
+ */
+export function isCodebuddyEngine(): boolean {
+  return getEngineType() === 'codebuddy-sdk';
 }
 
 /**
@@ -388,7 +476,9 @@ export { getEngineType as SDK_ENGINE_TYPE };
  * @deprecated Use getEnginePaths().userConfigDir instead
  */
 export function getSdkDirName(): string {
-  return isCursorEngine() ? '.cursor' : '.claude';
+  if (isCursorEngine()) return '.cursor';
+  if (isCodebuddyEngine()) return '.codebuddy';
+  return '.claude';
 }
 
 /**

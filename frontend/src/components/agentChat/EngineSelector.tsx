@@ -21,6 +21,7 @@ interface EngineSelectorProps {
 const SERVICE_TO_STORE_ENGINE: Record<string, EngineType> = {
   'cursor-cli': 'cursor',
   'claude-sdk': 'claude',
+  'codebuddy-sdk': 'codebuddy',
 };
 
 /**
