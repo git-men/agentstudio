@@ -228,9 +228,9 @@ describe('A2A SDK MCP Server', () => {
             }, {});
 
             expect(result.content).toHaveLength(2);
-            expect(result.content[0].text).toBe('Response');
-            expect(result.content[1].text).toContain('Session ID: returned-session-456');
-            expect(result.content[1].text).toContain('To continue this conversation');
+            expect((result.content[0] as { type: 'text'; text: string }).text).toBe('Response');
+            expect((result.content[1] as { type: 'text'; text: string }).text).toContain('Session ID: returned-session-456');
+            expect((result.content[1] as { type: 'text'; text: string }).text).toContain('To continue this conversation');
         });
 
         it('should not include session info block if no sessionId returned', async () => {
@@ -253,7 +253,7 @@ describe('A2A SDK MCP Server', () => {
             }, {});
 
             expect(result.content).toHaveLength(1);
-            expect(result.content[0].text).toBe('Response');
+            expect((result.content[0] as { type: 'text'; text: string }).text).toBe('Response');
         });
     });
 });
