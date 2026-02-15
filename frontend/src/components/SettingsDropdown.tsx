@@ -84,8 +84,11 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   const showPermissionSection = uiCaps.showPermissionSelector;
   const showEnvVarsSection = uiCaps.showEnvVars;
 
+  // When model selector is enabled but models haven't loaded yet, show loading state
+  const isModelsLoading = uiCaps.showModelSelector && availableModels.length === 0;
+
   // Get current model name
-  const currentModelName = availableModels.find(m => m.id === selectedModel)?.name || selectedModel;
+  const currentModelName = isModelsLoading ? '...' : (availableModels.find(m => m.id === selectedModel)?.name || selectedModel);
 
   // Get permission mode label
   const permissionModeLabel = {
