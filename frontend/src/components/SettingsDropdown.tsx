@@ -76,6 +76,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
 
   const handleModelChange = (model: string) => {
     onModelChange(model);
+    setIsOpen(false);
   };
 
   const hasClaudeVersions = claudeVersionsData?.versions && claudeVersionsData.versions.length > 1 && uiCaps.showProviderSelector;
