@@ -468,33 +468,35 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         try {
             setIsStopping(true);
             
-            // Use correct interrupt endpoint based on engine type
-            if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
-                // AGUI engines: use /api/agui/sessions/:id/interrupt
-                await authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ engineType: selectedEngine }),
-                });
-            } else {
-                // Claude engine: use /api/agents/sessions/:id/interrupt
-                await interruptSessionMutation.mutateAsync(currentSessionId);
-            }
-            
+            // IMPORTANT: Abort the client-side SSE stream FIRST to prevent receiving
+            // any more events (including error events from the server-side interrupt).
+            // Then call the server to clean up the backend session.
             interruptAllExecutingTools();
             abortControllerRef.current.abort();
             abortControllerRef.current = null;
             setAiTyping(false);
-            setIsStopping(false);
             setIsInitializingSession(false);
 
             addMessage({
                 content: t('agentChat.generationStopped'),
                 role: 'assistant'
             });
+
+            // Now call server-side interrupt (fire-and-forget, don't await)
+            if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
+                authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ engineType: selectedEngine }),
+                }).catch(err => console.warn('[Stop] Server interrupt failed:', err));
+            } else {
+                interruptSessionMutation.mutateAsync(currentSessionId)
+                    .catch(err => console.warn('[Stop] Server interrupt failed:', err));
+            }
+            
+            setIsStopping(false);
         } catch (error) {
             console.error('Error stopping generation:', error);
-            // Even if the server-side interrupt fails, abort the client-side request
             if (abortControllerRef.current) {
                 abortControllerRef.current.abort();
                 abortControllerRef.current = null;
