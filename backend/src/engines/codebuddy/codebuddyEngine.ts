@@ -201,10 +201,10 @@ export class CodeBuddyEngine implements IAgentEngine {
     } = config;
 
     // Create AGUI adapter (reuse ClaudeAguiAdapter since message format is identical)
+    // NOTE: Don't send RUN_STARTED yet - wait for system.init to get real session ID from SDK.
+    // Sending RUN_STARTED with a generated UUID causes session resume failures because the
+    // frontend stores the fake UUID and passes it back, but the SDK doesn't recognize it.
     const adapter = new ClaudeAguiAdapter(existingSessionId || undefined);
-
-    // Send RUN_STARTED event
-    onAguiEvent(adapter.createRunStarted({ message, workspace }));
 
     try {
       const query = await getQueryFunction();
@@ -262,6 +262,9 @@ export class CodeBuddyEngine implements IAgentEngine {
       };
       this.activeSessions.set(sessionId, session);
 
+      // Track whether RUN_STARTED has been sent
+      let runStartedSent = false;
+
       // Helper: execute query and iterate over SDK messages
       const executeQuery = async (options: Record<string, any>) => {
         const q = query({
@@ -281,7 +284,20 @@ export class CodeBuddyEngine implements IAgentEngine {
             this.activeSessions.delete(sessionId);
             session.id = finalSid;
             this.activeSessions.set(finalSid, session);
-            console.log(`[CodeBuddyEngine] Session ID: ${finalSid}`);
+            console.log(`[CodeBuddyEngine] SDK Session ID: ${finalSid}`);
+
+            // NOW send RUN_STARTED with the real SDK session ID
+            if (!runStartedSent) {
+              onAguiEvent(adapter.createRunStarted({ message, workspace }));
+              runStartedSent = true;
+            }
+          }
+
+          // If we haven't received system.init yet but getting other messages,
+          // send RUN_STARTED with what we have (fallback)
+          if (!runStartedSent) {
+            onAguiEvent(adapter.createRunStarted({ message, workspace }));
+            runStartedSent = true;
           }
 
           // Convert SDK message to AGUI events using ClaudeAguiAdapter
@@ -295,6 +311,12 @@ export class CodeBuddyEngine implements IAgentEngine {
             resultReceived = true;
             console.log(`[CodeBuddyEngine] Result received`);
           }
+        }
+
+        // If no messages at all, still send RUN_STARTED (edge case)
+        if (!runStartedSent) {
+          onAguiEvent(adapter.createRunStarted({ message, workspace }));
+          runStartedSent = true;
         }
 
         return finalSid;
@@ -341,6 +363,9 @@ export class CodeBuddyEngine implements IAgentEngine {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[CodeBuddyEngine] Error:', errorMessage);
+
+      // Ensure RUN_STARTED was sent before error/finish events
+      onAguiEvent(adapter.createRunStarted({ message, workspace }));
 
       // Send error event
       onAguiEvent(adapter.createRunError(errorMessage, 'CODEBUDDY_ENGINE_ERROR'));
