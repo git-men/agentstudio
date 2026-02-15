@@ -4,11 +4,12 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { AgentStorage } from '../services/agentStorage';
 import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-history';
-import { readCursorCliSessions, readCursorCliSession } from '../utils/cursorCliHistoryParser.js';
-// IDE Agent parser (preserved for future use)
-// import { readCursorHistorySessions, readCursorSession } from '../utils/cursorIdeAgentParser.js';
+// Note: Cursor/CodeBuddy session reading is now handled via engine.readSessions()
+// Claude session reading still uses readClaudeHistorySessions() below (pending migration)
 import { sessionManager } from '../services/sessionManager';
 import { getProjectsDir } from '../config/sdkConfig.js';
+// Note: getEngineType is no longer needed here - engine routing is handled via engineManager
+import { engineManager } from '../engines/index.js';
 
 const router: express.Router = express.Router();
 
@@ -837,15 +838,17 @@ router.get('/:agentId', async (req, res) => {
     
     let sessions: any[] = [];
     
-    // If projectPath is provided, read from history based on engine type
+    // If projectPath is provided, read from history via engine interface
     if (projectPath) {
-      if (engine === 'cursor') {
-        // Read from Cursor Agent transcripts
-        console.log('📂 [DEBUG] Reading Cursor history sessions for project:', projectPath);
-        const cursorSessions = await readCursorCliSessions(projectPath);
-        console.log(`📊 [DEBUG] Found ${cursorSessions.length} raw Cursor sessions`);
+      const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+      
+      if (defaultEngine.readSessions) {
+        // Use engine's own session reader
+        console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history sessions for project:`, projectPath);
+        const engineSessions = await defaultEngine.readSessions(projectPath);
+        console.log(`📊 [DEBUG] Found ${engineSessions.length} sessions via ${defaultEngine.type} engine`);
         
-        sessions = cursorSessions.map((session) => ({
+        sessions = engineSessions.map((session) => ({
           id: session.id,
           agentId: agentId,
           title: session.title,
@@ -854,7 +857,7 @@ router.get('/:agentId', async (req, res) => {
           messageCount: session.messages.length
         }));
       } else {
-        // Default: Read from Claude Code history
+        // Fallback: Read from Claude Code history (Claude engine hasn't migrated yet)
         console.log('📂 [DEBUG] Reading Claude history sessions for project:', projectPath);
         const claudeSessions = readClaudeHistorySessions(projectPath);
         console.log(`📊 [DEBUG] Found ${claudeSessions.length} raw Claude sessions`);
@@ -914,36 +917,30 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
     
     let session: any = null;
     
-    // If projectPath is provided, read from history based on engine type
+    // If projectPath is provided, read from history via engine interface
     if (projectPath) {
-      if (engine === 'cursor') {
-        // Read from Cursor Agent transcripts
-        console.log('📂 [CURSOR] Reading Cursor history messages for session:', sessionId, 'in project:', projectPath);
-        session = await readCursorCliSession(projectPath, sessionId);
+      const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+      
+      if (defaultEngine.readSession) {
+        // Use engine's own session reader (efficient: reads single file)
+        console.log(`📂 [${defaultEngine.type}] Reading session ${sessionId} in project:`, projectPath);
+        session = await defaultEngine.readSession(projectPath, sessionId);
         
         if (session) {
-          console.log('📨 [CURSOR] Found session with', session.messages?.length || 0, 'messages');
+          console.log(`📨 [${defaultEngine.type}] Found session with ${session.messages?.length || 0} messages`);
           session = {
             ...session,
             agentId: agentId
           };
         }
       } else {
-        // Default: Read from Claude Code history
+        // Fallback: Read from Claude Code history (Claude engine hasn't migrated yet)
         console.log('Reading Claude history messages for session:', sessionId, 'in project:', projectPath);
         const claudeSessions = readClaudeHistorySessions(projectPath);
         session = claudeSessions.find(s => s.id === sessionId);
         
         if (session) {
           console.log('📨 Found session with', session.messages?.length || 0, 'messages');
-          console.log('📨 First few messages:', session.messages?.slice(0, 3).map((msg: any) => ({
-            role: msg.role,
-            hasMessageParts: !!msg.messageParts,
-            messagePartsCount: msg.messageParts?.length || 0,
-            content: msg.content?.slice(0, 50) + '...'
-          })));
-          
-          // Add agentId to match expected format
           session = {
             ...session,
             agentId: agentId

@@ -481,6 +481,12 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {
+            // If the abort controller was already aborted (user clicked stop),
+            // this is not a real error - just a consequence of aborting the stream
+            if (abortController.signal.aborted) {
+              console.log('[AGUI] Ignoring error after user abort:', error.message);
+              return;
+            }
             console.error('[AGUI] Error:', error);
             addMessage({
               role: 'assistant',
@@ -515,6 +521,14 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
       console.error('Chat error:', error);
       setAiTyping(false);
       setIsInitializingSession(false);
+
+      // If abortControllerRef was already cleared by handleStopGeneration,
+      // this error is from the user-initiated stop, not a real error
+      if (!abortControllerRef.current) {
+        console.log('Request was aborted by user (controller already cleared)');
+        return;
+      }
+
       abortControllerRef.current = null;
 
       // Check if error is due to user cancellation (abort)
@@ -523,7 +537,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         (error instanceof Error && (
           error.message.includes('aborted') ||
           error.message.includes('BodyStreamBuffer was aborted') ||
-          error.message.includes('signal is aborted')
+          error.message.includes('signal is aborted') ||
+          error.message.includes('network error')
         ))
       );
       if (isAbortError) {

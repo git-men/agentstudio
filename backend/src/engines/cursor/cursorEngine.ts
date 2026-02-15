@@ -16,9 +16,11 @@ import type {
   AGUIEvent,
   ModelInfo,
   EngineImageData,
+  SessionDetail,
 } from '../types.js';
 import { CursorAguiAdapter } from './aguiAdapter.js';
 import { saveImageToHiddenDir } from '../../utils/sessionUtils.js';
+import { readCursorCliSessions, readCursorCliSession } from '../../utils/cursorCliHistoryParser.js';
 
 // Cache for Cursor models
 let cachedModels: ModelInfo[] | null = null;
@@ -569,6 +571,56 @@ export class CursorEngine implements IAgentEngine {
     // Kill the process
     session.process.kill('SIGTERM');
     this.activeSessions.delete(sessionId);
+  }
+
+  /**
+   * Read all sessions for a project from Cursor history
+   */
+  async readSessions(projectPath: string): Promise<SessionDetail[]> {
+    const cursorSessions = await readCursorCliSessions(projectPath);
+    return cursorSessions.map(session => ({
+      id: session.id,
+      title: session.title,
+      createdAt: session.createdAt,
+      lastUpdated: session.lastUpdated,
+      messages: session.messages.map(msg => ({
+        type: msg.role as 'user' | 'assistant',
+        uuid: msg.id,
+        timestamp: new Date(msg.timestamp).toISOString(),
+        sessionId: session.id,
+        message: {
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content || '',
+        },
+        messageParts: msg.messageParts,
+      })),
+    }));
+  }
+
+  /**
+   * Read a single session by ID from Cursor history
+   */
+  async readSession(projectPath: string, sessionId: string): Promise<SessionDetail | null> {
+    const session = await readCursorCliSession(projectPath, sessionId);
+    if (!session) return null;
+    
+    return {
+      id: session.id,
+      title: session.title,
+      createdAt: session.createdAt,
+      lastUpdated: session.lastUpdated,
+      messages: session.messages.map(msg => ({
+        type: msg.role as 'user' | 'assistant',
+        uuid: msg.id,
+        timestamp: new Date(msg.timestamp).toISOString(),
+        sessionId: session.id,
+        message: {
+          role: msg.role as 'user' | 'assistant',
+          content: msg.content || '',
+        },
+        messageParts: msg.messageParts,
+      })),
+    };
   }
 
   /**

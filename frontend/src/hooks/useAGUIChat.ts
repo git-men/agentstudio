@@ -334,6 +334,16 @@ export const useAGUIChat = () => {
       };
 
     } catch (error) {
+      // If the request was aborted by the user, don't treat as error
+      if (abortController?.signal.aborted) {
+        console.log('[AGUI] Chat aborted by user');
+        return {
+          sessionId: sessionId || '',
+          success: false,
+          error: 'aborted',
+        };
+      }
+
       console.error('[AGUI] Chat error:', error);
 
       if (onError && error instanceof Error) {

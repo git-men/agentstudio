@@ -343,6 +343,68 @@ export type AGUIEvent =
   | AGUICustomEvent;
 
 // =============================================================================
+// Session History Types
+// =============================================================================
+
+/**
+ * Unified session summary (for session list views)
+ */
+export interface SessionSummary {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastUpdated: string;
+  messageCount: number;
+}
+
+/**
+ * Message content block
+ */
+export interface SessionMessageContent {
+  type: string;
+  text?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Unified session message
+ */
+export interface SessionMessage {
+  type: 'user' | 'assistant' | 'summary' | string;
+  uuid: string;
+  timestamp: string;
+  sessionId: string;
+  message?: {
+    role: 'user' | 'assistant';
+    content: string | SessionMessageContent[];
+  };
+  cwd?: string;
+  // Claude-specific fields (preserved for compatibility)
+  summary?: string;
+  parentUuid?: string | null;
+  isSidechain?: boolean;
+  isMeta?: boolean;
+  toolUseResult?: unknown;
+  isCompactSummary?: boolean;
+  isCompactCommand?: boolean;
+  isVisibleInTranscriptOnly?: boolean;
+  sourceToolUseID?: string;
+  // Message display parts (computed)
+  messageParts?: unknown[];
+}
+
+/**
+ * Unified session detail (with messages)
+ */
+export interface SessionDetail {
+  id: string;
+  title: string;
+  createdAt: string;
+  lastUpdated: string;
+  messages: SessionMessage[];
+}
+
+// =============================================================================
 // Engine Interface
 // =============================================================================
 
@@ -390,6 +452,23 @@ export interface IAgentEngine {
    * Get active session count
    */
   getActiveSessionCount(): number;
+  
+  /**
+   * Read all sessions for a project (optional - for session history support)
+   * 
+   * @param projectPath - Absolute path to the project directory
+   * @returns Array of session summaries with messages
+   */
+  readSessions?(projectPath: string): Promise<SessionDetail[]>;
+  
+  /**
+   * Read a single session by ID (optional - for session history support)
+   * 
+   * @param projectPath - Absolute path to the project directory
+   * @param sessionId - Session ID to read
+   * @returns Session detail or null if not found
+   */
+  readSession?(projectPath: string, sessionId: string): Promise<SessionDetail | null>;
 }
 
 // =============================================================================

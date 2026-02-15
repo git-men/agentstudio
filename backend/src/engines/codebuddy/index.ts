@@ -5,3 +5,4 @@
  */
 
 export { codebuddyEngine, CodeBuddyEngine } from './codebuddyEngine.js';
+export { readCodebuddyHistorySessions, readCodebuddyHistorySession } from './historyParser.js';

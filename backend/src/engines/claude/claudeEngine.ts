@@ -13,6 +13,7 @@ import type {
   EngineCapabilities,
   AGUIEvent,
   ModelInfo,
+  SessionDetail,
 } from '../types.js';
 import { ClaudeAguiAdapter } from './aguiAdapter.js';
 import { sessionManager } from '../../services/sessionManager.js';
@@ -21,8 +22,6 @@ import { handleSessionManagement, buildUserMessageContent } from '../../utils/se
 import { AgentStorage } from '../../services/agentStorage.js';
 import { getDefaultVersionId, getVersionByIdInternal } from '../../services/claudeVersionStorage.js';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { query } from '@anthropic-ai/claude-agent-sdk';
-import { isMockEnabled } from '../../testing/mockSdkQuery.js';
 
 // Agent storage for getting agent configurations
 const globalAgentStorage = new AgentStorage();
@@ -95,14 +94,13 @@ export class ClaudeEngine implements IAgentEngine {
   /**
    * Get supported models for Claude engine.
    * 
-   * Uses a 4-level fallback strategy with caching:
-   * 1. SDK `query().supportedModels()` — most accurate (reflects API key permissions & CLI version)
-   * 2. REST API `GET {ANTHROPIC_BASE_URL}/v1/models` — broad model list from API
-   * 3. Default provider config from `claudeVersionStorage` — works offline
-   * 4. Hardcoded fallback — always available
+   * Uses a 3-level fallback strategy with caching:
+   * 1. REST API `GET {ANTHROPIC_BASE_URL}/v1/models` — queries the remote server directly
+   * 2. Default provider config from `claudeVersionStorage` — works offline
+   * 3. Hardcoded fallback — always available
    * 
    * Results are cached for MODEL_CACHE_TTL (5 minutes) to avoid repeated
-   * SDK/API calls on frequent frontend polling.
+   * API calls on frequent frontend polling.
    */
   async getSupportedModels(): Promise<ModelInfo[]> {
     // Check cache first
@@ -111,15 +109,7 @@ export class ClaudeEngine implements IAgentEngine {
       return cachedModels;
     }
 
-    // Level 1: SDK supportedModels() — most accurate
-    const fromSdk = await this.fetchModelsFromSdk();
-    if (fromSdk.length > 0) {
-      cachedModels = fromSdk;
-      modelsCacheTime = now;
-      return fromSdk;
-    }
-
-    // Level 2: REST API /v1/models
+    // Level 1: REST API /v1/models — queries remote server directly
     const fromApi = await this.fetchModelsFromApi();
     if (fromApi.length > 0) {
       cachedModels = fromApi;
@@ -127,7 +117,7 @@ export class ClaudeEngine implements IAgentEngine {
       return fromApi;
     }
 
-    // Level 3: Default provider config
+    // Level 2: Default provider config
     const fromProvider = await this.getModelsFromDefaultProvider();
     if (fromProvider.length > 0) {
       cachedModels = fromProvider;
@@ -135,7 +125,7 @@ export class ClaudeEngine implements IAgentEngine {
       return fromProvider;
     }
 
-    // Level 4: Hardcoded fallback (no cache — always re-evaluate upper levels next time)
+    // Level 3: Hardcoded fallback (no cache — always re-evaluate upper levels next time)
     return this.getHardcodedModels();
   }
 
@@ -150,80 +140,7 @@ export class ClaudeEngine implements IAgentEngine {
   }
 
   /**
-   * Level 1: Fetch models via Claude Agent SDK's Query.supportedModels().
-   * 
-   * This creates a lightweight query instance, waits for initialization,
-   * calls supportedModels(), then immediately aborts the session.
-   * The result is the most accurate list because the SDK reflects the
-   * current API key permissions and CLI version.
-   */
-  private async fetchModelsFromSdk(): Promise<ModelInfo[]> {
-    // When MOCK_SDK=true, skip real SDK call and return mock models
-    if (isMockEnabled()) {
-      console.log('[ClaudeEngine] MOCK_SDK=true, returning mock models');
-      return [
-        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4 (Mock)', isVision: true, description: 'Mock model for testing' },
-        { id: 'claude-opus-4-20250514', name: 'Claude Opus 4 (Mock)', isVision: true, isThinking: true, description: 'Mock model for testing' },
-      ];
-    }
-
-    try {
-      const abortController = new AbortController();
-      const timeoutMs = 15_000; // 15s timeout for SDK init + model fetch
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => {
-          abortController.abort();
-          reject(new Error('SDK supportedModels() timeout'));
-        }, timeoutMs)
-      );
-
-      const q = query({
-        prompt: '.',
-        options: {
-          abortController,
-          cwd: process.cwd(),
-          allowedTools: ['Read'],
-          maxTurns: 1,
-        },
-      });
-
-      // supportedModels() waits on Query's internal "initialization" promise.
-      // Initialization is triggered when the session starts (first iteration).
-      const modelsPromise = q.supportedModels();
-
-      // Start iteration so the SDK starts the CLI and sends init
-      const iter = q[Symbol.asyncIterator]();
-      const firstResultPromise = iter.next();
-
-      const sdkModels = await Promise.race([
-        Promise.all([modelsPromise, firstResultPromise]).then(([models]) => models),
-        timeoutPromise,
-      ]);
-
-      // Immediately abort — we only needed the model list
-      abortController.abort();
-
-      if (!Array.isArray(sdkModels) || sdkModels.length === 0) return [];
-
-      const models: ModelInfo[] = sdkModels.map((m) => ({
-        id: m.value,
-        name: m.displayName,
-        isVision: !m.displayName.toLowerCase().includes('haiku'), // Haiku has limited vision support
-        isThinking: m.displayName.toLowerCase().includes('thinking'),
-        description: m.description,
-      }));
-
-      console.log(`[ClaudeEngine] Fetched ${models.length} models from SDK supportedModels()`);
-      return models;
-    } catch (error) {
-      console.warn('[ClaudeEngine] Failed to fetch models from SDK:', error instanceof Error ? error.message : error);
-      return [];
-    }
-  }
-
-  /**
-   * Level 2: Fetch models from Anthropic REST API `/v1/models`.
+   * Level 1: Fetch models from Anthropic REST API `/v1/models`.
    */
   private async fetchModelsFromApi(): Promise<ModelInfo[]> {
     const baseUrl = (process.env.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/$/, '');
@@ -315,7 +232,7 @@ export class ClaudeEngine implements IAgentEngine {
   }
 
   /**
-   * Level 3: Get models from the default provider config in claudeVersionStorage.
+   * Level 2: Get models from the default provider config in claudeVersionStorage.
    */
   private async getModelsFromDefaultProvider(): Promise<ModelInfo[]> {
     try {
@@ -340,7 +257,7 @@ export class ClaudeEngine implements IAgentEngine {
   }
 
   /**
-   * Level 4: Hardcoded fallback model list.
+   * Level 3: Hardcoded fallback model list.
    * Uses short aliases that Claude CLI / SDK accepts as valid model identifiers.
    */
   private getHardcodedModels(): ModelInfo[] {
@@ -393,7 +310,7 @@ export class ClaudeEngine implements IAgentEngine {
         const allAgents = globalAgentStorage.getAllAgents();
         agentConfig = allAgents.find(a => a.enabled) || null;
       }
-      
+
       // Use default config if no agent found
       const defaultAgent = agentConfig || DEFAULT_AGUI_AGENT;
       console.log(`[ClaudeEngine] Using agent: ${defaultAgent.id || defaultAgent.name}`);
@@ -488,7 +405,7 @@ export class ClaudeEngine implements IAgentEngine {
           userMessage,
           (sdkMessage: SDKMessage) => {
             console.log(`[ClaudeEngine] SDK callback received: type=${sdkMessage.type}`);
-            
+
             // Update session ID if received
             if (sdkMessage.session_id) {
               finalSessionId = sdkMessage.session_id;
@@ -499,7 +416,7 @@ export class ClaudeEngine implements IAgentEngine {
             // Convert SDK message to AGUI events
             const aguiEvents = adapter.convert(sdkMessage as any);
             console.log(`[ClaudeEngine] Converted to ${aguiEvents.length} AGUI events`);
-            
+
             if (aguiEvents.length > 0) {
               hasReceivedStreamEvents = true;
             }
@@ -514,13 +431,13 @@ export class ClaudeEngine implements IAgentEngine {
               console.log(`[ClaudeEngine] Result received, finalizing...`);
               resultReceived = true;
               clearTimeout(timeout);
-              
+
               // Finalize adapter (close any open blocks)
               const finalEvents = adapter.finalize();
               for (const event of finalEvents) {
                 onAguiEvent(event);
               }
-              
+
               resolve();
             }
           }
@@ -538,13 +455,13 @@ export class ClaudeEngine implements IAgentEngine {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       console.error('[ClaudeEngine] Error:', errorMessage);
-      
+
       // Send error event
       onAguiEvent(adapter.createRunError(errorMessage, 'CLAUDE_ENGINE_ERROR'));
-      
+
       // Send run finished
       onAguiEvent(adapter.createRunFinished());
-      
+
       throw error;
     }
   }
@@ -555,11 +472,15 @@ export class ClaudeEngine implements IAgentEngine {
   async interruptSession(sessionId: string): Promise<void> {
     console.log(`🛑 [ClaudeEngine] Interrupting session: ${sessionId}`);
     const result = await sessionManager.interruptSession(sessionId);
-    
+
     if (!result.success) {
       throw new Error(result.error || 'Failed to interrupt session');
     }
   }
+
+  // Note: readSessions/readSession not yet implemented for Claude engine.
+  // The full parsing logic currently lives in routes/sessions.ts (readClaudeHistorySessions).
+  // TODO: Extract Claude parsing into engines/claude/historyParser.ts
 }
 
 // Export singleton instance

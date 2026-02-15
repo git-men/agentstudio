@@ -15,8 +15,10 @@ import type {
   EngineCapabilities,
   AGUIEvent,
   ModelInfo,
+  SessionDetail,
 } from '../types.js';
 import { ClaudeAguiAdapter } from '../claude/aguiAdapter.js';
+import { readCodebuddyHistorySessions, readCodebuddyHistorySession } from './historyParser.js';
 
 // Dynamic import for @tencent-ai/agent-sdk to handle cases where it's not installed
 let queryFn: any = null;
@@ -400,6 +402,20 @@ export class CodeBuddyEngine implements IAgentEngine {
     console.log(`[CodeBuddyEngine] Interrupting session: ${sessionId}`);
     session.abortController.abort();
     this.activeSessions.delete(sessionId);
+  }
+
+  /**
+   * Read all sessions for a project from CodeBuddy history
+   */
+  async readSessions(projectPath: string): Promise<SessionDetail[]> {
+    return readCodebuddyHistorySessions(projectPath);
+  }
+
+  /**
+   * Read a single session by ID from CodeBuddy history
+   */
+  async readSession(projectPath: string, sessionId: string): Promise<SessionDetail | null> {
+    return readCodebuddyHistorySession(projectPath, sessionId);
   }
 
   /**
