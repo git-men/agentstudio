@@ -84,6 +84,16 @@ export function useEngine() {
   const isClaudeEngine = config?.engine === 'claude-sdk';
 
   /**
+   * Check if current engine is CodeBuddy SDK
+   */
+  const isCodebuddyEngine = config?.engine === 'codebuddy-sdk';
+
+  /**
+   * Check if current engine uses AGUI protocol (Cursor or CodeBuddy)
+   */
+  const isAguiEngine = isCursorEngine || isCodebuddyEngine;
+
+  /**
    * Check if a feature is supported by current engine
    */
   const isFeatureSupported = (feature: EngineFeatureKey): boolean => {
@@ -138,6 +148,8 @@ export function useEngine() {
     engineName: config?.name,
     isCursorEngine,
     isClaudeEngine,
+    isCodebuddyEngine,
+    isAguiEngine,
 
     // Capability helpers
     capabilities: config?.capabilities,

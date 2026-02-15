@@ -19,8 +19,9 @@ type ChatVersion = 'original' | 'agui';
 const CHAT_VERSION_KEY = 'agentstudio:chat-version';
 
 // Get default chat version based on engine type
-function getDefaultChatVersion(isCursorEngine: boolean): ChatVersion {
-  return isCursorEngine ? 'agui' : 'original';
+// Both Cursor and CodeBuddy engines use the AGUI protocol
+function getDefaultChatVersion(isAguiEngine: boolean): ChatVersion {
+  return isAguiEngine ? 'agui' : 'original';
 }
 
 export const ChatPage: React.FC = () => {
@@ -33,7 +34,7 @@ export const ChatPage: React.FC = () => {
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
   const { setCurrentAgent, setCurrentSessionId, isAiTyping } = useAgentStore();
-  const { isCursorEngine, isLoading: isEngineLoading } = useEngine();
+  const { isAguiEngine, isLoading: isEngineLoading } = useEngine();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);
   const [hideRightPanel, setHideRightPanel] = useState(false);
@@ -47,11 +48,11 @@ export const ChatPage: React.FC = () => {
     const saved = localStorage.getItem(CHAT_VERSION_KEY);
     if (saved === 'agui' || saved === 'original') return saved;
     // No saved preference: use engine-based default
-    // isCursorEngine may already be true from cached React Query data
+    // isAguiEngine may already be true from cached React Query data
     // Also check localStorage cache for engine type as a fast path
     const cachedEngine = localStorage.getItem('agentstudio:engine-type');
-    if (cachedEngine === 'cursor') return 'agui';
-    return isCursorEngine ? 'agui' : 'original';
+    if (cachedEngine === 'cursor' || cachedEngine === 'codebuddy') return 'agui';
+    return isAguiEngine ? 'agui' : 'original';
   });
 
   // Set default chat version based on engine type when engine loads
@@ -61,11 +62,11 @@ export const ChatPage: React.FC = () => {
       const saved = localStorage.getItem(CHAT_VERSION_KEY);
       if (!saved) {
         // User hasn't set a preference, use engine-based default
-        const defaultVersion = getDefaultChatVersion(isCursorEngine);
+        const defaultVersion = getDefaultChatVersion(isAguiEngine);
         setChatVersion(defaultVersion);
       }
     }
-  }, [isEngineLoading, isCursorEngine]);
+  }, [isEngineLoading, isAguiEngine]);
 
   // Sync chat version when changed from settings page
   useEffect(() => {
