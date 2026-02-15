@@ -55,15 +55,20 @@ export const ChatPage: React.FC = () => {
     return isAguiEngine ? 'agui' : 'original';
   });
 
-  // Set default chat version based on engine type when engine loads
-  // Only applies if user hasn't explicitly set a preference
+  // Set chat version based on engine type when engine loads
+  // AGUI engines (Cursor, CodeBuddy) always force AGUI panel regardless of saved preference
   useEffect(() => {
     if (!isEngineLoading) {
-      const saved = localStorage.getItem(CHAT_VERSION_KEY);
-      if (!saved) {
-        // User hasn't set a preference, use engine-based default
-        const defaultVersion = getDefaultChatVersion(isAguiEngine);
-        setChatVersion(defaultVersion);
+      if (isAguiEngine) {
+        // AGUI engines must use AGUI panel - override any saved preference
+        setChatVersion('agui');
+        localStorage.setItem(CHAT_VERSION_KEY, 'agui');
+      } else {
+        const saved = localStorage.getItem(CHAT_VERSION_KEY);
+        if (!saved) {
+          // User hasn't set a preference, use engine-based default
+          setChatVersion('original');
+        }
       }
     }
   }, [isEngineLoading, isAguiEngine]);

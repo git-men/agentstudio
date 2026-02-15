@@ -733,8 +733,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 confirmMessage={confirmMessage || ''}
                 showMcpStatusModal={showMcpStatusModal}
 
-                // Data - use engine-specific models when Cursor is selected
-                availableModels={selectedEngine === 'cursor' && engineModels.length > 0 ? engineModels : availableModels}
+                // Data - use engine-specific models when AGUI engine (Cursor/CodeBuddy) is selected
+                availableModels={(selectedEngine === 'cursor' || selectedEngine === 'codebuddy') && engineModels.length > 0 ? engineModels : availableModels}
                 claudeVersionsData={claudeVersionsData}
                 agent={agent}
                 projectPath={projectPath}
