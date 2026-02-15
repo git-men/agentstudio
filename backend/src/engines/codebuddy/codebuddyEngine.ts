@@ -262,27 +262,26 @@ export class CodeBuddyEngine implements IAgentEngine {
       };
       this.activeSessions.set(sessionId, session);
 
-      // Create query
-      const q = query({
-        prompt: message,
-        options: queryOptions,
-      });
+      // Helper: execute query and iterate over SDK messages
+      const executeQuery = async (options: Record<string, any>) => {
+        const q = query({
+          prompt: message,
+          options,
+        });
 
-      let finalSessionId = sessionId;
-      let resultReceived = false;
+        let finalSid = sessionId;
+        let resultReceived = false;
 
-      try {
-        // Iterate over SDK messages
         for await (const sdkMessage of q) {
           // Update session ID from system init
           if (sdkMessage.type === 'system' && sdkMessage.subtype === 'init' && sdkMessage.session_id) {
-            finalSessionId = sdkMessage.session_id;
+            finalSid = sdkMessage.session_id;
             adapter.setThreadId(sdkMessage.session_id);
             // Update session tracking
             this.activeSessions.delete(sessionId);
-            session.id = finalSessionId;
-            this.activeSessions.set(finalSessionId, session);
-            console.log(`[CodeBuddyEngine] Session ID: ${finalSessionId}`);
+            session.id = finalSid;
+            this.activeSessions.set(finalSid, session);
+            console.log(`[CodeBuddyEngine] Session ID: ${finalSid}`);
           }
 
           // Convert SDK message to AGUI events using ClaudeAguiAdapter
@@ -297,12 +296,33 @@ export class CodeBuddyEngine implements IAgentEngine {
             console.log(`[CodeBuddyEngine] Result received`);
           }
         }
+
+        return finalSid;
+      };
+
+      let finalSessionId = sessionId;
+
+      try {
+        finalSessionId = await executeQuery(queryOptions);
       } catch (iterError) {
         // Check if this was an intentional abort
         if (abortController.signal.aborted) {
           console.log(`[CodeBuddyEngine] Query aborted for session ${finalSessionId}`);
         } else {
-          throw iterError;
+          // Check if this is a resume failure - retry without resume
+          const iterErrorMessage = iterError instanceof Error ? iterError.message : String(iterError);
+          if (existingSessionId && (
+            iterErrorMessage.includes('No conversation found') ||
+            iterErrorMessage.includes('conversation') && iterErrorMessage.includes('not found') ||
+            iterErrorMessage.includes('session') && iterErrorMessage.includes('not found')
+          )) {
+            console.log(`[CodeBuddyEngine] Resume failed for session ${existingSessionId}, retrying without resume...`);
+            // Remove resume option and retry as new session
+            delete queryOptions.resume;
+            finalSessionId = await executeQuery(queryOptions);
+          } else {
+            throw iterError;
+          }
         }
       }
 
