@@ -320,11 +320,16 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               break;
               
             case 'RUN_ERROR':
-              console.error('[AGUI] Run error:', event.error);
-              addMessage({
-                role: 'assistant',
-                content: `❌ **Error**: ${event.error}`,
-              });
+              // Skip error display if the request was intentionally aborted by the user
+              if (abortControllerRef.current?.signal.aborted) {
+                console.log('[AGUI] Ignoring RUN_ERROR after user abort');
+              } else {
+                console.error('[AGUI] Run error:', event.error);
+                addMessage({
+                  role: 'assistant',
+                  content: `❌ **Error**: ${event.error}`,
+                });
+              }
               setAiTyping(false);
               break;
               
@@ -512,8 +517,16 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
       setIsInitializingSession(false);
       abortControllerRef.current = null;
 
-      // Check if error is due to user cancellation
-      if (error instanceof DOMException && error.name === 'AbortError') {
+      // Check if error is due to user cancellation (abort)
+      const isAbortError = (
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && (
+          error.message.includes('aborted') ||
+          error.message.includes('BodyStreamBuffer was aborted') ||
+          error.message.includes('signal is aborted')
+        ))
+      );
+      if (isAbortError) {
         console.log('Request was aborted by user');
         return;
       }
