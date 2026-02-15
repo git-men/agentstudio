@@ -28,14 +28,23 @@ export const A2AImageSchema = z.object({
 
 /**
  * POST /a2a/:a2aAgentId/messages request validation
+ *
+ * Supports multimodal messages: at least one of `message` (non-empty) or `images`
+ * must be provided. This allows image-only messages (e.g. from WeChat Work).
  */
 export const A2AMessageRequestSchema = z.object({
-  message: z.string().min(1, 'Message cannot be empty').max(10000, 'Message too long (max 10000 characters)'),
+  message: z.string().max(10000, 'Message too long (max 10000 characters)'),
   images: z.array(A2AImageSchema).optional(),
   sessionId: z.string().optional(),
   sessionMode: SessionModeSchema.optional().default('new'),
   context: z.record(z.string(), z.unknown()).optional(),
-});
+}).refine(
+  (data) => data.message.length > 0 || (data.images !== undefined && data.images.length > 0),
+  {
+    message: 'Either message or images must be provided',
+    path: ['message'],
+  }
+);
 
 /**
  * Push Notification Authentication Info validation

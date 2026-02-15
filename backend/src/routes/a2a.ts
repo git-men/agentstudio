@@ -42,7 +42,7 @@ import { a2aHistoryService } from '../services/a2a/a2aHistoryService.js';
 import { getTaskExecutor } from '../services/taskExecutor/index.js';
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from '../services/sessionManager.js';
-import { handleSessionManagement } from '../utils/sessionUtils.js';
+import { handleSessionManagement, isVisionModel, saveImageToHiddenDir } from '../utils/sessionUtils.js';
 import { buildQueryOptions } from '../utils/claudeUtils.js';
 import { executeA2AQuery, executeA2AQueryStreaming } from '../services/a2a/a2aQueryService.js';
 
@@ -463,6 +463,51 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
     // User requested includePartialMessages = false for A2A streaming to get complete messages
     queryOptions.includePartialMessages = false;
 
+    // ============================================================================
+    // Image Processing: Handle vision vs non-vision models
+    // - Vision model: pass images as base64 inline (default behavior)
+    // - Non-vision model: save images to .agentstudio-images/ directory,
+    //   provide file paths in message so AI can use MCP tools to read them
+    // ============================================================================
+    let processedMessage = message;
+    let processedImages = images;
+
+    if (images && images.length > 0) {
+      const modelId = queryOptions.model || 'sonnet';
+      const supportsVision = await isVisionModel(modelId);
+
+      if (!supportsVision) {
+        console.log(`⚠️ [A2A] Model '${modelId}' does not support vision, saving ${images.length} image(s) to disk`);
+        const imagePaths: string[] = [];
+
+        for (let i = 0; i < images.length; i++) {
+          try {
+            const imagePath = saveImageToHiddenDir(
+              images[i].data,
+              images[i].mediaType,
+              i + 1,
+              a2aContext.workingDirectory
+            );
+            imagePaths.push(imagePath);
+            console.log(`💾 [A2A] Saved image ${i + 1} to: ${imagePath}`);
+          } catch (error) {
+            console.error(`[A2A] Failed to save image ${i + 1}:`, error);
+          }
+        }
+
+        // Append image file paths to message for non-vision model
+        if (imagePaths.length > 0) {
+          const pathInfo = imagePaths.map((p, i) => `图片${i + 1}: @${p}`).join('\n');
+          processedMessage = `${message}\n\n以下图片已保存到本地，你可以通过文件路径查看:\n${pathInfo}`;
+        }
+
+        // Don't pass base64 images to non-vision model (already saved to disk)
+        processedImages = undefined;
+      } else {
+        console.log(`✅ [A2A] Model '${modelId}' supports vision, passing ${images.length} image(s) inline`);
+      }
+    }
+
     const startTime = Date.now();
 
     // ============================================================================
@@ -487,8 +532,8 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
 
         try {
           const result = await executeA2AQueryStreaming(
-            message,
-            images, // multimodal images
+            processedMessage,
+            processedImages, // multimodal images (undefined for non-vision models)
             queryOptions,
             (sdkMessage: SDKMessage) => {
               // Capture session ID
@@ -536,8 +581,8 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         // Synchronous Mode with one-shot Query
         try {
           const result = await executeA2AQuery(
-            message,
-            images, // multimodal images
+            processedMessage,
+            processedImages, // multimodal images (undefined for non-vision models)
             queryOptions,
             async (sdkMessage: SDKMessage) => {
               // Persist to history
@@ -615,12 +660,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         res.flushHeaders();
 
         const messageContent: any[] = [];
-        if (images && images.length > 0) {
-          for (const img of images) {
+        if (processedImages && processedImages.length > 0) {
+          for (const img of processedImages) {
             messageContent.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } });
           }
         }
-        messageContent.push({ type: 'text', text: message });
+        messageContent.push({ type: 'text', text: processedMessage });
 
         const userMessage = {
           type: 'user',
@@ -670,12 +715,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         try {
           await new Promise<void>((resolve, reject) => {
             const syncMessageContent: any[] = [];
-            if (images && images.length > 0) {
-              for (const img of images) {
+            if (processedImages && processedImages.length > 0) {
+              for (const img of processedImages) {
                 syncMessageContent.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } });
               }
             }
-            syncMessageContent.push({ type: 'text', text: message });
+            syncMessageContent.push({ type: 'text', text: processedMessage });
 
             const userMessage = {
               type: 'user',
