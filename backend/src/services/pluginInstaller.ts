@@ -20,6 +20,20 @@ import {
 
 const execAsync = promisify(exec);
 
+function getSafeDirectory(targetPath: string): string {
+  try {
+    return fs.realpathSync(targetPath);
+  } catch {
+    return targetPath;
+  }
+}
+
+function buildGitCommand(targetPath: string, gitArgs: string): string {
+  const safeDirectory = getSafeDirectory(targetPath);
+  const escaped = safeDirectory.replace(/(["\\$`])/g, '\\$1');
+  return `git -c safe.directory="${escaped}" ${gitArgs}`;
+}
+
 // Marketplace metadata file for tracking source type and config
 interface MarketplaceMetadata {
   type: string;
@@ -204,7 +218,7 @@ class PluginInstaller {
     if (!fs.existsSync(gitDir)) {
       throw new Error('Not a git repository');
     }
-    await execAsync('git pull', { cwd: marketplacePath });
+    await execAsync(buildGitCommand(marketplacePath, 'pull'), { cwd: marketplacePath });
     console.log(`Synced git marketplace at ${marketplacePath}`);
   }
 
@@ -764,10 +778,10 @@ class PluginInstaller {
   private async checkGitUpdates(marketplacePath: string): Promise<boolean> {
     try {
       // Fetch latest from remote
-      await execAsync('git fetch', { cwd: marketplacePath });
+      await execAsync(buildGitCommand(marketplacePath, 'fetch'), { cwd: marketplacePath });
       
       // Check if local is behind remote
-      const { stdout } = await execAsync('git status -uno', { cwd: marketplacePath });
+      const { stdout } = await execAsync(buildGitCommand(marketplacePath, 'status -uno'), { cwd: marketplacePath });
       return stdout.includes('behind');
     } catch {
       return false;
@@ -838,4 +852,3 @@ class PluginInstaller {
 }
 
 export const pluginInstaller = new PluginInstaller();
-

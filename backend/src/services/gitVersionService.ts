@@ -56,7 +56,13 @@ export interface CreateVersionResult {
  */
 async function git(projectPath: string, args: string[]): Promise<string> {
   try {
-    const { stdout } = await execFileAsync('git', args, {
+    let safeDirectory = projectPath;
+    try {
+      safeDirectory = fs.realpathSync(projectPath);
+    } catch {
+      // Fall back to the provided path if resolution fails.
+    }
+    const { stdout } = await execFileAsync('git', ['-c', `safe.directory=${safeDirectory}`, ...args], {
       cwd: projectPath,
       env: {
         ...process.env,
