@@ -10,7 +10,7 @@ import path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { Rule, RuleListItem, RuleCreate, RuleUpdate, RuleFilter, RuleFrontmatter } from '../types/rules.js';
-import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
+import { isCursorEngine, isCodebuddyEngine, getEngineType, getEnginePaths } from '../config/engineConfig.js';
 import { getSdkDirName } from '../config/sdkConfig.js';
 
 const router: Router = Router();
@@ -20,17 +20,14 @@ const getRuleExtension = (): string => {
   return isCursorEngine() ? '.mdc' : '.md';
 };
 
-// Get global rules directory
+// Get global rules directory (engine-aware)
 const getGlobalRulesDir = (): string => {
-  if (isCursorEngine()) {
-    return path.join(os.homedir(), '.cursor', 'rules');
-  }
-  return path.join(os.homedir(), '.claude', 'rules');
+  return getEnginePaths().rulesDir;
 };
 
-// Get project rules directory
+// Get project rules directory (engine-aware)
 const getProjectRulesDir = (projectPath?: string): string => {
-  const sdkDirName = isCursorEngine() ? '.cursor' : getSdkDirName();
+  const sdkDirName = getSdkDirName();
   if (projectPath) {
     return path.join(projectPath, sdkDirName, 'rules');
   }
@@ -267,8 +264,8 @@ router.get('/', async (req: Request, res: Response) => {
     
     res.json({
       rules: ruleItems,
-      readOnly: isCursorEngine(),
-      engine: isCursorEngine() ? 'cursor-cli' : 'claude-sdk',
+      readOnly: isCursorEngine() || isCodebuddyEngine(),
+      engine: getEngineType(),
     });
   } catch (error) {
     console.error('Error listing rules:', error);
@@ -339,11 +336,11 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/rules - Create a new rule
 router.post('/', async (req: Request, res: Response) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
-        message: 'Rules are read-only when using Cursor CLI engine',
+        message: `Rules are read-only when using ${getEngineType()} engine`,
       });
       return;
     }
@@ -403,11 +400,11 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/rules/:id - Update a rule
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
-        message: 'Rules are read-only when using Cursor CLI engine',
+        message: `Rules are read-only when using ${getEngineType()} engine`,
       });
       return;
     }
@@ -483,11 +480,11 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/rules/:id - Delete a rule
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
-        message: 'Rules are read-only when using Cursor CLI engine',
+        message: `Rules are read-only when using ${getEngineType()} engine`,
       });
       return;
     }

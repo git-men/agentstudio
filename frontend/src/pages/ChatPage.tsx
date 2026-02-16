@@ -33,7 +33,7 @@ export const ChatPage: React.FC = () => {
   const sessionId = searchParams.get('session');
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
-  const { setCurrentAgent, setCurrentSessionId, isAiTyping } = useAgentStore();
+  const { setCurrentAgentAndSession, isAiTyping } = useAgentStore();
   const { isAguiEngine, isLoading: isEngineLoading } = useEngine();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);
@@ -148,10 +148,9 @@ export const ChatPage: React.FC = () => {
     }
   }, [error]);
 
-  // Set current agent when data loads, then set session ID
-  // NOTE: Engine type is determined by the service configuration (EngineSelector),
-  // not by the session ID. If user tries to load a session from a different engine,
-  // it will simply not find the session in the current engine's session list.
+  // Set current agent and session ID atomically when data loads
+  // Using atomic setCurrentAgentAndSession avoids an intermediate state where
+  // currentSessionId is null (which would disable the session messages query)
   useEffect(() => {
     console.log('🎯 ChatPage agent/session effect:', {
       hasAgent: !!agent,
@@ -161,15 +160,10 @@ export const ChatPage: React.FC = () => {
     });
 
     if (agent) {
-      console.log('🎯 Setting current agent:', agent.id);
-      setCurrentAgent(agent);
-      // Set session ID after agent is set
-      if (sessionId) {
-        console.log('🎯 Setting session ID:', sessionId);
-        setCurrentSessionId(sessionId);
-      }
+      console.log('🎯 Setting current agent and session:', agent.id, sessionId);
+      setCurrentAgentAndSession(agent, sessionId || null);
     }
-  }, [agent, sessionId, setCurrentAgent, setCurrentSessionId]);
+  }, [agent, sessionId, setCurrentAgentAndSession]);
 
   // Show project selector if no project path is provided and agent is loaded
   useEffect(() => {

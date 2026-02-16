@@ -6,7 +6,7 @@ import { promisify } from 'util';
 import matter from 'gray-matter';
 import { SlashCommand, SlashCommandCreate, SlashCommandUpdate, SlashCommandFilter } from '../types/commands';
 import { getCommandsDir, getSdkDirName } from '../config/sdkConfig.js';
-import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
+import { isCursorEngine, isCodebuddyEngine, getEngineType, getEnginePaths } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 const readdir = promisify(fs.readdir);
@@ -27,12 +27,10 @@ const getProjectCommandsDir = (projectPath?: string) => {
   return path.join(process.cwd(), '..', sdkDirName, 'commands');
 };
 
-// Get user commands directory (e.g., ~/.claude/commands or ~/.cursor/commands)
+// Get user commands directory (engine-aware: ~/.claude/commands, ~/.cursor/commands, or ~/.codebuddy/commands)
 const getUserCommandsDir = () => {
-  if (isCursorEngine()) {
-    return getEnginePaths().commandsDir;
-  }
-  return getCommandsDir();
+  // Use engine-aware path for all engines
+  return getEnginePaths().commandsDir;
 };
 
 // Ensure directory exists
@@ -259,11 +257,11 @@ router.get('/', async (req, res) => {
       return a.name.localeCompare(b.name);
     });
 
-    // Include readOnly flag for Cursor engine
+    // Include readOnly flag for non-Claude engines
     res.json({
       commands,
-      readOnly: isCursorEngine(),
-      engine: isCursorEngine() ? 'cursor-cli' : 'claude-sdk',
+      readOnly: isCursorEngine() || isCodebuddyEngine(),
+      engine: getEngineType(),
     });
   } catch (error) {
     console.error('Error listing commands:', error);
@@ -340,11 +338,11 @@ router.get('/:id', async (req, res) => {
 // POST /api/commands - Create new command
 router.post('/', async (req, res) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
-        message: 'Commands are read-only when using Cursor CLI engine',
+        message: `Commands are read-only when using ${getEngineType()} engine`,
       });
     }
 
@@ -407,11 +405,11 @@ router.post('/', async (req, res) => {
 // PUT /api/commands/:id - Update command
 router.put('/:id', async (req, res) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
-        message: 'Commands are read-only when using Cursor CLI engine',
+        message: `Commands are read-only when using ${getEngineType()} engine`,
       });
     }
 
@@ -525,11 +523,11 @@ router.put('/:id', async (req, res) => {
 // DELETE /api/commands/:id - Delete command
 router.delete('/:id', async (req, res) => {
   try {
-    // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    // Check if in read-only mode (non-Claude engines)
+    if (isCursorEngine() || isCodebuddyEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
-        message: 'Commands are read-only when using Cursor CLI engine',
+        message: `Commands are read-only when using ${getEngineType()} engine`,
       });
     }
 

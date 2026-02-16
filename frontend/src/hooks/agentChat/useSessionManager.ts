@@ -67,10 +67,11 @@ export const useSessionManager = ({
     if (onSessionChange) {
       onSessionChange(sessionId);
     }
-    // Clear messages first, then invalidate to trigger fresh load
-    clearMessages();
+    // NOTE: Don't call clearMessages() here — loadSessionMessages will fully replace
+    // the messages array when the new data arrives. Clearing before the query completes
+    // causes an unnecessary flash of empty state.
     queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, sessionId] });
-  }, [agentId, onSessionChange, setCurrentSessionId, clearMessages, queryClient]);
+  }, [agentId, onSessionChange, setCurrentSessionId, queryClient]);
 
   /**
    * Create a new session
@@ -101,11 +102,10 @@ export const useSessionManager = ({
     if (currentSessionId) {
       // Set loading state
       setIsLoadingMessages(true);
-      // Clear messages first, then invalidate to trigger fresh load
-      clearMessages();
+      // Invalidate to trigger fresh load — loadSessionMessages will replace messages when data arrives
       queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, currentSessionId] });
     }
-  }, [agentId, currentSessionId, clearMessages, queryClient]);
+  }, [agentId, currentSessionId, queryClient]);
 
   return {
     isLoadingMessages,

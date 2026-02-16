@@ -218,47 +218,47 @@ const CODEBUDDY_SDK_CAPABILITIES: ServiceEngineCapabilities = {
     supported: true,
     scopes: ['global'],
     canRead: true,
-    canWrite: false, // v1: read-only MCP config
+    canWrite: false, // Read-only: SDK manages its own mcp.json
   },
   rules: {
-    supported: false, // v1: no rules support
-    scopes: [],
-    canRead: false,
-    canWrite: false,
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false, // Read-only for now
   },
   commands: {
-    supported: false, // v1: no commands support
-    scopes: [],
-    canRead: false,
-    canWrite: false,
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false, // Read-only for now
   },
   skills: {
-    supported: false, // v1: no skills support
-    scopes: [],
-    canRead: false,
-    canWrite: false,
+    supported: true,
+    scopes: ['user', 'project'],
+    canRead: true,
+    canWrite: false, // Read-only for now
   },
   plugins: {
-    supported: false, // v1: no plugins support
-    scopes: [],
-    canRead: false,
-    canWrite: false,
+    supported: true,
+    scopes: ['user'],
+    canRead: true,
+    canWrite: false, // Read-only for now
   },
   hooks: {
-    supported: false, // v1: no hooks support
-    scopes: [],
-    canRead: false,
-    canWrite: false,
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false, // Read-only for now
   },
   features: {
     provider: false, // CodeBuddy has no provider concept
-    subagents: false, // v1: no subagents
-    a2a: false, // v1: no A2A
-    scheduledTasks: false, // v1: no scheduled tasks
-    mcpAdmin: false, // v1: no MCP admin
-    voice: false, // v1: no voice
+    subagents: true, // SDK supports agents option + SubagentStart/Stop hooks
+    a2a: true, // A2A via SDK MCP server integration
+    scheduledTasks: true, // UI feature, works with any engine
+    mcpAdmin: true, // MCP config viewing
+    voice: true, // Voice input works with CodeBuddy
     vision: true, // CodeBuddy supports vision
-    hooks: false, // v1: no hooks
+    hooks: true, // CodeBuddy has ~/.codebuddy/hooks/
   },
 };
 

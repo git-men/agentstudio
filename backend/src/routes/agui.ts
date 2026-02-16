@@ -295,6 +295,8 @@ router.post('/chat', async (req, res) => {
             model,
             images,
             permissionMode,
+            mcpTools,
+            envVars,
             timeout,
           },
           onAguiEvent

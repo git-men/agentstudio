@@ -14,11 +14,18 @@ import type {
   EngineConfig,
   EngineCapabilities,
   AGUIEvent,
+  AGUIEventType,
+  EngineImageData,
   ModelInfo,
   SessionDetail,
 } from '../types.js';
 import { ClaudeAguiAdapter } from '../claude/aguiAdapter.js';
 import { readCodebuddyHistorySessions, readCodebuddyHistorySession } from './historyParser.js';
+import { saveImageToHiddenDir } from '../../utils/sessionUtils.js';
+import { readMcpConfig } from '../../utils/claudeUtils.js';
+import { getEnginePaths } from '../../config/engineConfig.js';
+import { integrateA2AMcpServer } from '../../services/a2a/a2aIntegration.js';
+import * as fs from 'fs';
 
 // Dynamic import for @tencent-ai/agent-sdk to handle cases where it's not installed
 let queryFn: any = null;
@@ -61,27 +68,27 @@ export class CodeBuddyEngine implements IAgentEngine {
     mcp: {
       supported: true,
       configPath: '~/.codebuddy/mcp.json',
-      dynamicToolLoading: false, // v1: static MCP config only
+      dynamicToolLoading: true, // SDK supports mcpServers option for dynamic MCP
     },
     skills: {
-      supported: false, // v1: no skills support
+      supported: false,
     },
     features: {
       multiTurn: true,
       thinking: true,
       vision: true,
       streaming: true,
-      subagents: false, // v1: no subagents
+      subagents: true, // SDK supports agents option + SubagentStart/Stop hooks
       codeExecution: true,
     },
-    permissionModes: ['bypassPermissions'], // v1: only bypass mode
+    permissionModes: ['default', 'acceptEdits', 'bypassPermissions', 'plan'],
     ui: {
-      showMcpToolSelector: false, // v1: no MCP tool selector
-      showImageUpload: false, // v1: no image support
-      showPermissionSelector: false, // v1: fixed to bypassPermissions
+      showMcpToolSelector: true, // Dynamic MCP tool selection
+      showImageUpload: true, // Supported via saving image to disk and @path reference
+      showPermissionSelector: true, // SDK supports 6 permission modes
       showProviderSelector: false, // CodeBuddy has no provider concept
       showModelSelector: true, // Models can be fetched via SDK
-      showEnvVars: false, // v1: no env vars UI
+      showEnvVars: true, // Support passing env vars to SDK
     },
   };
 
@@ -188,6 +195,127 @@ export class CodeBuddyEngine implements IAgentEngine {
   }
 
   /**
+   * Process images for CodeBuddy SDK.
+   * Saves images to a hidden directory and replaces [imageN] placeholders
+   * in the message with @path references so the model can read them.
+   */
+  private processImages(
+    message: string,
+    images: EngineImageData[] | undefined,
+    workspace: string
+  ): string {
+    if (!images || images.length === 0) {
+      return message;
+    }
+
+    console.log(`[CodeBuddyEngine] Processing ${images.length} images`);
+    let processedMessage = message;
+
+    for (let i = 0; i < images.length; i++) {
+      const image = images[i];
+      const imageIndex = i + 1;
+      const placeholder = `[image${imageIndex}]`;
+
+      try {
+        const imagePath = saveImageToHiddenDir(
+          image.data,
+          image.mediaType,
+          imageIndex,
+          workspace
+        );
+        console.log(`[CodeBuddyEngine] Saved image ${imageIndex} to: ${imagePath}`);
+        processedMessage = processedMessage.replace(placeholder, `@${imagePath}`);
+      } catch (error) {
+        console.error(`[CodeBuddyEngine] Failed to save image ${imageIndex}:`, error);
+      }
+    }
+
+    return processedMessage;
+  }
+
+  /**
+   * Build MCP server configuration by merging frontend-selected tools
+   * with engine-native MCP config (~/.codebuddy/mcp.json).
+   */
+  private buildMcpServers(mcpTools?: string[]): Record<string, any> {
+    const mcpServers: Record<string, any> = {};
+
+    // 1. Add frontend-selected MCP tools from AgentStudio config (~/.agentstudio/data/mcp-server.json)
+    if (mcpTools && mcpTools.length > 0) {
+      try {
+        const mcpConfigContent = readMcpConfig();
+
+        // Extract unique server names from mcpTools (format: mcp__serverName__toolName)
+        const serverNames = new Set<string>();
+        for (const tool of mcpTools) {
+          const parts = tool.split('__');
+          if (parts.length >= 2 && parts[0] === 'mcp') {
+            serverNames.add(parts[1]);
+          }
+        }
+
+        for (const serverName of serverNames) {
+          const serverConfig = mcpConfigContent.mcpServers?.[serverName];
+          if (serverConfig && serverConfig.status === 'active') {
+            if (serverConfig.type === 'http') {
+              mcpServers[serverName] = {
+                type: 'http',
+                url: serverConfig.url,
+                headers: serverConfig.headers || {},
+              };
+            } else if (serverConfig.type === 'stdio') {
+              mcpServers[serverName] = {
+                type: 'stdio',
+                command: serverConfig.command,
+                args: serverConfig.args || [],
+                env: serverConfig.env || {},
+              };
+            } else if (serverConfig.type === 'sse') {
+              mcpServers[serverName] = {
+                type: 'sse',
+                url: serverConfig.url,
+                headers: serverConfig.headers || {},
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[CodeBuddyEngine] Failed to parse MCP configuration:', error);
+      }
+    }
+
+    // 2. Auto-include ALL engine-native MCP servers (~/.codebuddy/mcp.json)
+    try {
+      const engineMcpPath = getEnginePaths().mcpConfigPath;
+      if (fs.existsSync(engineMcpPath)) {
+        const config = JSON.parse(fs.readFileSync(engineMcpPath, 'utf-8'));
+        const engineServers = config.mcpServers || {};
+        for (const [name, serverConfig] of Object.entries(engineServers) as [string, any][]) {
+          if (mcpServers[name]) continue; // Skip duplicates
+          if (serverConfig.url) {
+            mcpServers[name] = {
+              type: serverConfig.type || 'http',
+              url: serverConfig.url,
+              headers: serverConfig.headers || {},
+            };
+          } else if (serverConfig.command) {
+            mcpServers[name] = {
+              type: 'stdio',
+              command: serverConfig.command,
+              args: serverConfig.args || [],
+              env: serverConfig.env || {},
+            };
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[CodeBuddyEngine] Failed to load engine MCP configuration:', error);
+    }
+
+    return mcpServers;
+  }
+
+  /**
    * Send a message using CodeBuddy SDK
    */
   async sendMessage(
@@ -199,6 +327,9 @@ export class CodeBuddyEngine implements IAgentEngine {
       workspace,
       sessionId: existingSessionId,
       model,
+      images,
+      envVars: userEnvVars,
+      mcpTools,
       permissionMode = 'bypassPermissions',
     } = config;
 
@@ -215,7 +346,7 @@ export class CodeBuddyEngine implements IAgentEngine {
       const abortController = new AbortController();
       const sessionId = existingSessionId || uuidv4();
 
-      // Build environment variables for authentication
+      // Build environment variables: merge auth tokens + user-provided env vars
       const env: Record<string, string | undefined> = {};
       if (process.env.CODEBUDDY_API_KEY) {
         env.CODEBUDDY_API_KEY = process.env.CODEBUDDY_API_KEY;
@@ -225,6 +356,11 @@ export class CodeBuddyEngine implements IAgentEngine {
       }
       if (process.env.CODEBUDDY_CODE_PATH) {
         env.CODEBUDDY_CODE_PATH = process.env.CODEBUDDY_CODE_PATH;
+      }
+      // Merge user-provided env vars (from UI)
+      if (userEnvVars && Object.keys(userEnvVars).length > 0) {
+        Object.assign(env, userEnvVars);
+        console.log(`[CodeBuddyEngine] Added ${Object.keys(userEnvVars).length} user env vars`);
       }
 
       const queryOptions: Record<string, any> = {
@@ -250,10 +386,26 @@ export class CodeBuddyEngine implements IAgentEngine {
         queryOptions.resume = existingSessionId;
       }
 
+      // Build and add MCP server configuration
+      const mcpServers = this.buildMcpServers(mcpTools);
+      if (Object.keys(mcpServers).length > 0) {
+        queryOptions.mcpServers = mcpServers;
+        console.log(`[CodeBuddyEngine] MCP Servers configured:`, Object.keys(mcpServers));
+      }
+
+      // Integrate A2A SDK MCP server (in-process)
+      await integrateA2AMcpServer(queryOptions, workspace, true);
+
+      // Process images: save to hidden directory and replace placeholders with @path
+      const processedMessage = this.processImages(message, images, workspace);
+
       console.log(`[CodeBuddyEngine] Starting query...`);
       console.log(`   Workspace: ${workspace}`);
       console.log(`   Model: ${model || 'default'}`);
       console.log(`   Session: ${existingSessionId || 'new'}`);
+      if (images && images.length > 0) {
+        console.log(`   Images: ${images.length} (saved to disk with @path references)`);
+      }
 
       // Track session
       const session: CodeBuddySession = {
@@ -270,7 +422,7 @@ export class CodeBuddyEngine implements IAgentEngine {
       // Helper: execute query and iterate over SDK messages
       const executeQuery = async (options: Record<string, any>) => {
         const q = query({
-          prompt: message,
+          prompt: processedMessage,
           options,
         });
 
@@ -300,6 +452,26 @@ export class CodeBuddyEngine implements IAgentEngine {
           if (!runStartedSent) {
             onAguiEvent(adapter.createRunStarted({ message, workspace }));
             runStartedSent = true;
+          }
+
+          // Handle compact boundary events (auto-compaction / manual /compact)
+          if (sdkMessage.type === 'system' && (sdkMessage as any).subtype === 'compact_boundary') {
+            const compactMetadata = (sdkMessage as any).compact_metadata;
+            console.log(`[CodeBuddyEngine] Compact boundary detected:`, {
+              trigger: compactMetadata?.trigger,
+              preTokens: compactMetadata?.pre_tokens,
+            });
+            onAguiEvent({
+              type: 'CUSTOM' as AGUIEventType,
+              name: 'auto_compact',
+              data: {
+                trigger: compactMetadata?.trigger || 'auto',
+                preTokens: compactMetadata?.pre_tokens || 0,
+                sessionId: finalSid,
+              },
+              timestamp: Date.now(),
+            } as any);
+            continue;
           }
 
           // Convert SDK message to AGUI events using ClaudeAguiAdapter

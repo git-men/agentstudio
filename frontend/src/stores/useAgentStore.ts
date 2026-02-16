@@ -136,6 +136,7 @@ interface AgentState {
   
   // Actions
   setCurrentAgent: (agent: AgentConfig | null) => void;
+  setCurrentAgentAndSession: (agent: AgentConfig, sessionId: string | null) => void;
   setSelectedEngine: (engine: EngineType) => void;
   setEngineUICapabilities: (capabilities: EngineUICapabilities) => void;
   setEngineModels: (models: Array<{ id: string; name: string; isVision?: boolean; isThinking?: boolean }>) => void;
@@ -203,16 +204,34 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     } : {})
   })),
   
+  // Atomic version: sets agent + sessionId in a single state update to avoid
+  // intermediate state where currentSessionId is null (which disables queries)
+  setCurrentAgentAndSession: (agent, sessionId) => set((state) => ({
+    currentAgent: agent,
+    ...(state.currentAgent?.id !== agent?.id ? {
+      messages: [],
+      isAiTyping: false,
+      currentSessionId: sessionId
+    } : {
+      ...(sessionId !== undefined ? { currentSessionId: sessionId } : {})
+    })
+  })),
+  
   setSelectedEngine: (engine) => set((state) => ({
     selectedEngine: engine,
     // Update UI capabilities when switching engines
     engineUICapabilities: getDefaultUICapabilities(engine),
-    // Clear session when switching engines
-    ...(state.selectedEngine !== engine ? {
-      messages: [],
-      isAiTyping: false,
-      currentSessionId: null
-    } : {})
+    // NOTE: Do NOT clear messages/currentSessionId here.
+    // Engine type is determined at service startup and synced by EngineSelector.
+    // This sync corrects the cached engine type to match the service config.
+    // Clearing session state during sync causes a race condition:
+    //   1. Messages load from the (correct) backend engine
+    //   2. EngineSelector syncs the store engine type (if cache was stale)
+    //   3. If we clear here, messages/sessionId are lost
+    //   4. ChatPage effect won't re-set sessionId (its deps haven't changed)
+    // The session query key includes engine type, so React Query will
+    // refetch with the correct engine after sync. Backend uses its configured
+    // default engine regardless of the query param, so data stays consistent.
   })),
   
   setEngineUICapabilities: (capabilities) => set({ engineUICapabilities: capabilities }),

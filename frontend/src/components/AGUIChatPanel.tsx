@@ -6,7 +6,7 @@
  * and tool call display.
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Clock, Plus, RefreshCw, ChevronDown } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
 import { useAgentSessions, useAgentSessionMessages, useInterruptSession } from '../hooks/useAgents';
@@ -338,15 +338,16 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         hasSuccessfulResponse
     });
 
-    // Load session messages
+    // Load session messages when data arrives
+    // NOTE: Do NOT include isLoadingMessages in deps — it would cause a re-trigger loop
+    // (effect sets isLoadingMessages → dep change → effect re-runs → loadSessionMessages again)
+    // Also skip loading during active streaming to avoid overwriting in-flight messages
     useEffect(() => {
-        if (sessionMessagesData?.messages && currentSessionId) {
+        if (sessionMessagesData?.messages && currentSessionId && !isAiTyping) {
             loadSessionMessages(sessionMessagesData.messages);
-            if (isLoadingMessages) {
-                setTimeout(() => setIsLoadingMessages(false), 100);
-            }
+            setIsLoadingMessages(false);
         }
-    }, [sessionMessagesData, currentSessionId, loadSessionMessages, isLoadingMessages]);
+    }, [sessionMessagesData, currentSessionId, loadSessionMessages, isAiTyping, setIsLoadingMessages]);
 
     // Restore model/provider from active session when page refreshes
     useEffect(() => {
@@ -529,8 +530,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setSearchTerm('');
     };
 
-    // Ask user question submit
-    const handleAskUserQuestionSubmit = async (toolUseId: string, response: string) => {
+    // Ask user question submit — memoized to avoid invalidating renderedMessages useMemo on every render
+    const handleAskUserQuestionSubmit = useCallback(async (toolUseId: string, response: string) => {
         try {
             const apiResponse = await authFetch(`${API_BASE}/agents/user-response`, {
                 method: 'POST',
@@ -550,7 +551,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         } catch (error) {
             console.error('Submit failed:', error);
         }
-    };
+    }, [currentSessionId, agent.id, setPendingUserQuestion]);
 
     // Render messages using existing renderer - matching original chat style
     const renderedMessages = useMemo(() => {

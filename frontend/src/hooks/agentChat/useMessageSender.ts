@@ -96,7 +96,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
   } = props;
 
   const { t } = useTranslation('components');
-  const { addMessage, addCommandPartToMessage, addTextPartToMessage, addCompactSummaryPartToMessage, selectedEngine, updateMessage, addToolPartToMessage, updateToolPartInMessage } = useAgentStore();
+  const { addMessage, addCommandPartToMessage, addTextPartToMessage, addCompactSummaryPartToMessage, selectedEngine, updateMessage, addToolPartToMessage, updateToolPartInMessage, addThinkingPartToMessage, updateThinkingPartInMessage } = useAgentStore();
   const agentChatMutation = useAgentChat();
   const aguiChat = useAGUIChat();
 
@@ -358,6 +358,45 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               // Message finalized
               break;
               
+            case 'THINKING_START': {
+              // Ensure we have an assistant message to add thinking to
+              let stateForThinking = useAgentStore.getState();
+              let lastMsgForThinking = stateForThinking.messages[stateForThinking.messages.length - 1];
+              
+              if (!lastMsgForThinking || lastMsgForThinking.role !== 'assistant') {
+                addMessage({ role: 'assistant', content: '' });
+                stateForThinking = useAgentStore.getState();
+                lastMsgForThinking = stateForThinking.messages[stateForThinking.messages.length - 1];
+              }
+              
+              if (lastMsgForThinking && lastMsgForThinking.role === 'assistant') {
+                addThinkingPartToMessage(lastMsgForThinking.id, '');
+              }
+              break;
+            }
+              
+            case 'THINKING_CONTENT': {
+              const stateForThinkContent = useAgentStore.getState();
+              const lastMsgForThinkContent = stateForThinkContent.messages[stateForThinkContent.messages.length - 1];
+              if (lastMsgForThinkContent && lastMsgForThinkContent.role === 'assistant' && lastMsgForThinkContent.messageParts) {
+                // Find the last thinking part and append content
+                const thinkingParts = lastMsgForThinkContent.messageParts.filter((p: any) => p.type === 'thinking');
+                if (thinkingParts.length > 0) {
+                  const lastThinkingPart = thinkingParts[thinkingParts.length - 1];
+                  updateThinkingPartInMessage(
+                    lastMsgForThinkContent.id,
+                    lastThinkingPart.id,
+                    (lastThinkingPart.content || '') + (event as any).content
+                  );
+                }
+              }
+              break;
+            }
+              
+            case 'THINKING_END':
+              // Thinking block finalized
+              break;
+              
             case 'TOOL_CALL_START':
               currentToolCalls.set(event.toolCallId, {
                 name: event.toolName,
@@ -477,7 +516,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           workspace: projectPath || '.',
           sessionId: currentSessionId || undefined, // Convert null to undefined
           model: selectedModel,
-          images: imageData.length > 0 ? imageData : undefined, // Pass images for Cursor engine
+          images: imageData.length > 0 ? imageData : undefined, // Pass images
+          envVars: Object.keys(envVars).length > 0 ? envVars : undefined, // Pass env vars
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {
@@ -608,6 +648,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     updateMessage,
     addToolPartToMessage,
     updateToolPartInMessage,
+    addThinkingPartToMessage,
+    updateThinkingPartInMessage,
     agentChatMutation,
     aguiChat,
     handleStreamMessage,

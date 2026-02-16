@@ -134,12 +134,12 @@ export const CURSOR_UI_CAPABILITIES: EngineUICapabilities = {
  * Default UI capabilities for CodeBuddy engine
  */
 export const CODEBUDDY_UI_CAPABILITIES: EngineUICapabilities = {
-  showMcpToolSelector: false, // v1: no MCP tool selector
-  showImageUpload: false, // v1: no image upload
-  showPermissionSelector: false, // v1: fixed to bypassPermissions
+  showMcpToolSelector: true, // Dynamic MCP tool selection (SDK supports mcpServers option)
+  showImageUpload: true, // Supported via saving image to disk and @path reference
+  showPermissionSelector: true, // SDK supports default/acceptEdits/bypassPermissions/plan/delegate/dontAsk
   showProviderSelector: false, // CodeBuddy has no provider concept
   showModelSelector: true, // Models can be selected
-  showEnvVars: false, // v1: no env vars UI
+  showEnvVars: true, // Support passing env vars to SDK
 };
 
 /**
@@ -228,10 +228,20 @@ export const useAGUIChat = () => {
         if (engineType === 'codebuddy' && permissionMode) {
           requestBody.permissionMode = permissionMode;
         }
-        // Pass images (Cursor: saved to workspace and referenced via @path)
+        // Pass MCP tools for dynamic tool loading
+        if (mcpTools && mcpTools.length > 0) {
+          requestBody.mcpTools = mcpTools;
+          console.log(`🔧 [AGUI] ${engineType} mcpTools: ${mcpTools.length} tool(s)`);
+        }
+        // Pass images (saved to workspace and referenced via @path)
         if (images && images.length > 0) {
           requestBody.images = images;
           console.log(`🖼️ [AGUI] ${engineType} images: ${images.length} image(s)`);
+        }
+        // Pass env vars for CodeBuddy
+        if (envVars && Object.keys(envVars).length > 0) {
+          requestBody.envVars = envVars;
+          console.log(`🔑 [AGUI] ${engineType} envVars: ${Object.keys(envVars).length} var(s)`);
         }
       } else {
         // Claude Engine: Use /api/agents/chat with outputFormat=agui

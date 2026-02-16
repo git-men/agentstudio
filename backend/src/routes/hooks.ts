@@ -11,14 +11,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { Hook, HookListItem, HookCreate, HookUpdate, HooksConfig } from '../types/hooks.js';
-import { isCursorEngine } from '../config/engineConfig.js';
+import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
 import { getSdkDirName } from '../config/sdkConfig.js';
 
 const router: Router = Router();
 
-// Get global settings file path
+// Get global settings file path (uses engine-aware path)
 const getGlobalSettingsPath = (): string => {
-  return path.join(os.homedir(), '.claude', 'settings.json');
+  return path.join(getEnginePaths().userConfigDir, 'settings.json');
 };
 
 // Get local settings file path

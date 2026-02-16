@@ -48,15 +48,17 @@ export interface EngineConfig {
   /** Images to include in the message */
   images?: EngineImageData[];
   
-  // Claude-specific options
-  /** Provider ID (only for Claude engine) */
-  providerId?: string;
-  /** Permission mode (only for Claude engine) */
+  // Shared options
+  /** Permission mode */
   permissionMode?: 'default' | 'acceptEdits' | 'bypassPermissions' | 'plan';
-  /** MCP tools to enable (only for Claude engine) */
+  /** MCP tools to enable (frontend-selected tool IDs) */
   mcpTools?: string[];
   /** Environment variables */
   envVars?: Record<string, string>;
+  
+  // Claude-specific options
+  /** Provider ID (only for Claude engine) */
+  providerId?: string;
   
   // Cursor-specific options
   /** Command timeout in milliseconds */
