@@ -132,6 +132,9 @@ export const WebSocketTunnelPage: React.FC = () => {
   const [cfCurrentStep, setCfCurrentStep] = useState<CloudflareWizardStep>('intro');
   const [cfShowWizard, setCfShowWizard] = useState(true);
 
+  // HTTP proxy URL copy state (for the proxy URL shown in Tunely connected step)
+  const [copiedProxyUrl, setCopiedProxyUrl] = useState(false);
+
   // Load config and status on mount
   useEffect(() => {
     loadConfig();
@@ -406,11 +409,18 @@ export const WebSocketTunnelPage: React.FC = () => {
     }
   };
 
-  // Get full domain with suffix
+  // Get full domain with suffix (for IM access)
   const getFullDomain = () => {
     if (!config?.tunnelName) return null;
     const suffix = config.domainSuffix || serverInfo?.domain?.suffix || '.agentstudio.woa.com';
     return `${config.tunnelName}${suffix}`;
+  };
+
+  // Get HTTP proxy URL (for web access via path-prefix)
+  const getHttpProxyUrl = () => {
+    if (!config?.tunnelName || !config?.serverUrl) return null;
+    const baseUrl = config.serverUrl.replace(/\/+$/, '');
+    return `${baseUrl}/t/${config.tunnelName}/`;
   };
 
   const copyDomain = () => {
@@ -419,6 +429,15 @@ export const WebSocketTunnelPage: React.FC = () => {
       navigator.clipboard.writeText(`${config?.protocol || 'https'}://${fullDomain}`);
       setCopiedDomain(true);
       setTimeout(() => setCopiedDomain(false), 2000);
+    }
+  };
+
+  const copyProxyUrl = () => {
+    const proxyUrl = getHttpProxyUrl();
+    if (proxyUrl) {
+      navigator.clipboard.writeText(proxyUrl);
+      setCopiedProxyUrl(true);
+      setTimeout(() => setCopiedProxyUrl(false), 2000);
     }
   };
 
@@ -912,6 +931,80 @@ export const WebSocketTunnelPage: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Access Methods - IM and Web */}
+        {status?.connected && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
+              <LinkIcon className="w-5 h-5" />
+              接入方式
+            </h2>
+
+            <div className="space-y-4">
+              {/* IM Access */}
+              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center gap-2 mb-2">
+                  <Wifi className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">IM 接入</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">（子域名模式，用于企微/IM 消息转发）</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600 break-all">
+                    {config?.protocol || 'https'}://{getFullDomain()}
+                  </code>
+                  <button
+                    onClick={copyDomain}
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                    title="复制"
+                  >
+                    {copiedDomain ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                  <a
+                    href={`${config?.protocol || 'https'}://${getFullDomain()}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                    title="在新窗口打开"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              </div>
+
+              {/* Web / HTTP Proxy Access */}
+              {getHttpProxyUrl() && (
+                <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Globe className="w-4 h-4 text-green-500" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">网页接入</span>
+                    <span className="text-xs text-gray-400 dark:text-gray-500">（HTTP 代理模式，用于公网 Web 前端访问后端）</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600 break-all">
+                      {getHttpProxyUrl()}
+                    </code>
+                    <button
+                      onClick={copyProxyUrl}
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="复制"
+                    >
+                      {copiedProxyUrl ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                    <a
+                      href={getHttpProxyUrl()!}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                      title="在新窗口打开"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Current Config Info */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -1531,6 +1624,7 @@ export const WebSocketTunnelPage: React.FC = () => {
       </div>
     );
   };
+
 
   return (
     <div className="space-y-6">

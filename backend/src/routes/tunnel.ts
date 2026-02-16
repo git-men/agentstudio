@@ -81,6 +81,15 @@ router.put('/config', async (req: Request, res: Response): Promise<any> => {
     if (req.body.protocol === 'https' || req.body.protocol === 'http') {
       newConfig.protocol = req.body.protocol;
     }
+    if (typeof req.body.tunnelName === 'string') {
+      newConfig.tunnelName = req.body.tunnelName.trim();
+    }
+    if (typeof req.body.websocketUrl === 'string') {
+      newConfig.websocketUrl = req.body.websocketUrl.trim();
+    }
+    if (typeof req.body.domainSuffix === 'string') {
+      newConfig.domainSuffix = req.body.domainSuffix.trim();
+    }
 
     // Determine if we should reconnect
     const shouldReconnect = 'token' in newConfig || 'serverUrl' in newConfig || 'enabled' in newConfig;
