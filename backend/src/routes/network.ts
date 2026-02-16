@@ -27,9 +27,12 @@ router.get('/', async (_req: Request, res: Response): Promise<any> => {
     // Get backend port from environment
     const port = process.env.PORT || '4936';
     
-    // Build full tunnel URL if connected
+    // Build full tunnel URL if connected (IM access via subdomain)
     let tunnelUrl: string | null = null;
     let fullDomain: string | null = tunnelStatus.domain;
+    
+    // Build HTTP proxy URL (web access via path-prefix: {serverUrl}/t/{tunnelName}/)
+    let httpProxyUrl: string | null = null;
     
     if (tunnelStatus.connected && tunnelStatus.domain) {
       const protocol = tunnelConfig.protocol || 'https';
@@ -40,6 +43,12 @@ router.get('/', async (_req: Request, res: Response): Promise<any> => {
       }
       
       tunnelUrl = `${protocol}://${fullDomain}`;
+      
+      // Build HTTP proxy URL from the same tunnel config
+      if (tunnelConfig.serverUrl && tunnelConfig.tunnelName) {
+        const serverBase = tunnelConfig.serverUrl.replace(/\/+$/, '');
+        httpProxyUrl = `${serverBase}/t/${tunnelConfig.tunnelName}/`;
+      }
     }
     
     res.json({
@@ -48,6 +57,7 @@ router.get('/', async (_req: Request, res: Response): Promise<any> => {
         connected: tunnelStatus.connected,
         domain: fullDomain,
         url: tunnelUrl,
+        httpProxyUrl,
       },
       network: {
         hostname: networkInfo.hostname,

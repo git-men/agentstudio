@@ -30,6 +30,7 @@ import {
     useToolSelector,
     useCommandCompletion
 } from '../hooks/agentChat';
+import { isCommandTrigger } from '../utils/commandFormatter';
 import { ChatMessageRenderer } from './ChatMessageRenderer';
 import {
     AgentInputArea,
@@ -402,6 +403,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         isAiTyping,
         currentSessionId,
         hasCommandsLoadError,
+        userCommandsError: userCommandsError || undefined,
+        projectCommandsError: projectCommandsError || undefined,
         SYSTEM_COMMANDS,
         userCommands,
         projectCommands,
@@ -454,6 +457,28 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         onHandleKeyDown: (e: React.KeyboardEvent) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
+
+                // Check for undefined command and show warning
+                if (isCommandTrigger(inputMessage)) {
+                    const commandName = inputMessage.slice(1).split(' ')[0].toLowerCase();
+                    if (!isCommandDefined(commandName)) {
+                        // If commands failed to load, provide a more helpful error message
+                        if (hasCommandsLoadError) {
+                            setCommandWarning(t('agentChat.commandsLoadErrorWarning', {
+                                command: commandName,
+                                commands: SYSTEM_COMMANDS.map(cmd => cmd.content).join(', '),
+                                errorMessage: userCommandsError?.message || projectCommandsError?.message || 'Unknown error'
+                            }));
+                        } else {
+                            setCommandWarning(t('agentChat.unknownCommandWarning', {
+                                command: commandName,
+                                commands: getAllAvailableCommands()
+                            }));
+                        }
+                        return;
+                    }
+                }
+
                 handleSendMessage();
                 return;
             }
