@@ -15,6 +15,7 @@ import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
+import { integrateA2UIMcpServer } from '../services/a2ui/a2uiIntegration.js';
 import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
@@ -504,6 +505,9 @@ export async function buildQueryOptions(
     const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }
+
+  // Integrate A2UI MCP server for rich UI rendering
+  await integrateA2UIMcpServer(queryOptions);
 
   // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)
   let frontendToolSessionRef: SessionRef | null = null;

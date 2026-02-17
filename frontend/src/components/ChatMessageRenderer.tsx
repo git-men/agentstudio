@@ -3,6 +3,7 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { ToolUsage } from './ToolUsage';
 import { ImagePreview } from './ImagePreview';
 import { CompactSummary } from './CompactSummary';
+import { A2UIRenderer } from './a2ui';
 import type { ChatMessage } from '../types/index';
 
 interface ChatMessageRendererProps {
@@ -190,6 +191,15 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                   className="max-w-32 max-h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={() => openImagePreview(imageUrl)}
                   title={part.imageData.filename || 'Click to preview'}
+                />
+              </div>
+            );
+          } else if (part.type === 'a2ui' && part.a2uiData) {
+            return (
+              <div key={part.id} className="a2ui-message-part my-2">
+                <A2UIRenderer
+                  messages={part.a2uiData.messages}
+                  className="rounded-lg"
                 />
               </div>
             );
