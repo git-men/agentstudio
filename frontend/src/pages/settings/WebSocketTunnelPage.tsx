@@ -58,6 +58,10 @@ interface TunnelServerInfo {
   };
   protocols: string[];    // e.g., ["https", "http"]
   instruction?: string;   // Optional instruction message from server
+  auth?: {
+    required: boolean;
+    type: string | null;
+  };
 }
 
 type TunelyConfigStep = 'server' | 'domain' | 'connected' | 'edit';
@@ -109,6 +113,7 @@ export const WebSocketTunnelPage: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [checkResult, setCheckResult] = useState<{ available: boolean; reason?: string } | null>(null);
   const [copiedDomain, setCopiedDomain] = useState(false);
+  const [accessToken, setAccessToken] = useState('');
 
   // Tunely server info state
   const [tunelyStep, setTunelyStep] = useState<TunelyConfigStep>('server');
@@ -285,6 +290,11 @@ export const WebSocketTunnelPage: React.FC = () => {
       return;
     }
 
+    if (serverInfo?.auth?.required && !accessToken.trim()) {
+      showError('该服务器要求提供接入令牌，请先获取令牌');
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -301,6 +311,7 @@ export const WebSocketTunnelPage: React.FC = () => {
           protocol,
           websocketUrl: serverInfo?.websocket?.url,
           domainSuffix: serverInfo?.domain?.suffix,
+          ...(accessToken.trim() ? { accessToken: accessToken.trim() } : {}),
         })
       });
 
@@ -313,6 +324,7 @@ export const WebSocketTunnelPage: React.FC = () => {
       setConfig(data.config);
       setStatus(data.status);
       setCheckResult(null);
+      setAccessToken('');
 
       // Switch to connected step
       setTunelyStep('connected');
@@ -773,11 +785,30 @@ export const WebSocketTunnelPage: React.FC = () => {
             </label>
           </div>
 
+          {/* Access Token (when server requires auth) */}
+          {serverInfo?.auth?.required && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                接入令牌 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={accessToken}
+                onChange={(e) => setAccessToken(e.target.value)}
+                placeholder="粘贴从管理平台获取的接入令牌"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                该服务器要求提供接入令牌才能创建隧道，请从 <span className="font-medium">管理平台</span> 获取令牌后粘贴至此处。令牌仅在创建隧道时使用一次。
+              </p>
+            </div>
+          )}
+
           {/* Create Button */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={saveConfig}
-              disabled={saving || !tunnelName.trim()}
+              disabled={saving || !tunnelName.trim() || (serverInfo?.auth?.required && !accessToken.trim())}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50"
             >
               {saving ? (

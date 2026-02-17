@@ -209,7 +209,7 @@ router.get('/check-name', async (req: Request, res: Response): Promise<any> => {
  */
 router.post('/create-tunnel', async (req: Request, res: Response): Promise<any> => {
   try {
-    const { name, serverUrl, autoConnect, protocol, websocketUrl, domainSuffix } = req.body;
+    const { name, serverUrl, autoConnect, protocol, websocketUrl, domainSuffix, accessToken } = req.body;
 
     if (!name || typeof name !== 'string') {
       return res.status(400).json({
@@ -226,7 +226,7 @@ router.post('/create-tunnel', async (req: Request, res: Response): Promise<any> 
     // Validate protocol
     const validProtocol = protocol === 'http' ? 'http' : 'https';
 
-    const result = await tunnelService.createAndSave(name.trim(), autoConnect === true, validProtocol, websocketUrl, domainSuffix);
+    const result = await tunnelService.createAndSave(name.trim(), autoConnect === true, validProtocol, websocketUrl, domainSuffix, accessToken);
 
     if (result.success) {
       res.json({

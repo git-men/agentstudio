@@ -446,7 +446,7 @@ class TunnelService {
    * Create a tunnel and get the token
    * @param name The tunnel name to create (e.g., "my-dev")
    */
-  async createTunnel(name: string): Promise<TunnelCreateResult> {
+  async createTunnel(name: string, accessToken?: string): Promise<TunnelCreateResult> {
     if (!name || name.trim() === '') {
       return { success: false, error: '隧道名称不能为空' };
     }
@@ -454,11 +454,16 @@ class TunnelService {
     const apiBaseUrl = getApiBaseUrl(this.config.serverUrl);
 
     try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (accessToken) {
+        headers['Authorization'] = `Bearer ${accessToken}`;
+      }
+
       const response = await fetch(`${apiBaseUrl}/api/tunnels`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           domain: name.trim(),
           name: name.trim(),
@@ -504,8 +509,8 @@ class TunnelService {
    * @param websocketUrl The WebSocket URL from server info
    * @param domainSuffix The domain suffix (e.g., ".agentstudio.woa.com")
    */
-  async createAndSave(name: string, autoConnect: boolean = false, protocol: 'https' | 'http' = 'https', websocketUrl?: string, domainSuffix?: string): Promise<TunnelCreateResult> {
-    const result = await this.createTunnel(name);
+  async createAndSave(name: string, autoConnect: boolean = false, protocol: 'https' | 'http' = 'https', websocketUrl?: string, domainSuffix?: string, accessToken?: string): Promise<TunnelCreateResult> {
+    const result = await this.createTunnel(name, accessToken);
 
     if (result.success && result.token) {
       // Save the config with the new token
