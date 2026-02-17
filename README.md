@@ -140,26 +140,48 @@ Same Claude Agent SDK, friendlier experience.
 
 ### Docker
 
+AgentStudio 提供单一 Dockerfile，支持 **Bun**（默认，更快启动、更低内存）和 **Node.js**（兼容回退）两种运行时。
+
 ```bash
-docker build -t agentstudio:latest .
+# Build (default Bun runtime)
+docker build -t agentstudio .
+
+# Or Node.js runtime
+docker build --target node -t agentstudio:node .
+
+# Run with docker-compose
 docker-compose up -d
+
+# Or run directly
+docker run -d --name agentstudio -p 4936:4936 \
+  -e ANTHROPIC_API_KEY=your_key \
+  -v $(pwd)/data/home:/home/agentstudio \
+  agentstudio
 ```
 
-See [DOCKER.md](DOCKER.md) for details.
+**Runtime comparison:**
 
-### One-Click Install
+| Target | Runtime | Startup | Image Size | Use Case |
+|--------|---------|---------|------------|----------|
+| `bun` (default) | Bun | Fast | ~1GB | Recommended |
+| `node` | Node.js | Normal | ~2.7GB | Compatibility fallback |
 
-**macOS/Linux:**
+**Docker Compose profiles:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/install-macos.sh | bash
+docker-compose up -d                                    # Bun (default)
+docker-compose --profile node up -d agentstudio-node    # Node.js
 ```
 
-**Windows (PowerShell):**
+**Data persistence:** Mount a local directory as the container's HOME:
 
-```powershell
-irm https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/windows-install.ps1 | iex
+```bash
+docker run -d -p 4936:4936 \
+  -v /path/to/home:/home/agentstudio \
+  agentstudio
 ```
+
+**Health check:** `curl http://localhost:4936/api/health`
 
 ### Development Setup
 

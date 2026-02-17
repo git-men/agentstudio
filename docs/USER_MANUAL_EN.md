@@ -61,10 +61,11 @@ AgentStudio is a modern personal AI agent platform built on Claude Code SDK. Thr
 
 ## Quick Start
 
-### Method 1: One-Click Installation (Recommended)
+### Method 1: NPM Install (Recommended)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/remote-install.sh | bash
+npm install -g agentstudio
+agentstudio start
 ```
 
 ### Method 2: Source Code Deployment

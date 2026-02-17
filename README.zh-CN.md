@@ -145,21 +145,7 @@ docker build -t agentstudio:latest .
 docker-compose up -d
 ```
 
-详见 [DOCKER.md](DOCKER.md)。
-
-### 一键安装
-
-**macOS/Linux：**
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/install-macos.sh | bash
-```
-
-**Windows（PowerShell）：**
-
-```powershell
-irm https://raw.githubusercontent.com/okguitar/agentstudio/main/scripts/windows-install.ps1 | iex
-```
+详见 README.md Docker 章节。
 
 ### 开发环境搭建
 

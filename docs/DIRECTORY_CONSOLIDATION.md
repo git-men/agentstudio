@@ -120,9 +120,7 @@ export AGENTSTUDIO_HOME=/custom/path  # 默认 ~/.agentstudio
 
 ### 安装/部署文件
 
-- `install-macos.sh`, `install-linux.sh`
-- `Dockerfile`, `Dockerfile.npm` 等
-- `windows-install.ps1`, `windows-install-simple.bat`
+- `Dockerfile`（支持 bun/node 双 target）
 
 ## 8. 迁移策略
 

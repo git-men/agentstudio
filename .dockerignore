@@ -5,21 +5,20 @@ npm-debug.log
 pnpm-debug.log
 yarn-error.log
 
-# Build outputs (keep dist as we need it after build)
+# Build outputs
 *.tsbuildinfo
 **/*.tsbuildinfo
 
 # Development files
 .git
 .gitignore
-*.md
-!CLAUDE.md
 .env.local
 .env.development
 .env.test
 
 # IDE
 .vscode
+.cursor
 .idea
 *.swp
 *.swo
@@ -37,10 +36,13 @@ Thumbs.db
 **/*.spec.js
 coverage
 
-# Docker
-Dockerfile
+# Docker (avoid copying Docker files into build context)
 .dockerignore
 docker-compose.yml
+
+# Documentation (keep CLAUDE.md for reference)
+*.md
+!CLAUDE.md
 
 # CI/CD
 .github
@@ -51,3 +53,4 @@ docker-compose.yml
 .cache
 tmp
 temp
+data

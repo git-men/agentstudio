@@ -16,10 +16,7 @@
     "noEmit": false,
     "resolveJsonModule": true,
     "baseUrl": ".",
-    "paths": {
-      "*/streaming": ["../shared/types/streaming"]
-    }
   },
-  "include": ["src/**/*", "../shared/**/*"],
+  "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }

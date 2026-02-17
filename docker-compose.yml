@@ -1,29 +1,22 @@
-version: '3.8'
-
 # =============================================================================
-# AgentStudio Docker Compose Configuration
+# AgentStudio Docker Compose
 # =============================================================================
-# 
+#
 # Default: Bun runtime (faster startup, lower memory)
-# 
-# Build options:
-#   1. Default (Bun)    - docker-compose up -d
-#   2. Node.js runtime  - docker-compose --profile node up -d agentstudio-node
-#   3. Pre-built        - docker-compose --profile prebuilt up -d agentstudio-prebuilt
-#   4. NPM package      - docker-compose --profile npm up -d agentstudio-npm
+#
+# Usage:
+#   docker-compose up -d                                    # Bun (default)
+#   docker-compose --profile node up -d agentstudio-node    # Node.js
 #
 # =============================================================================
 
 services:
-  # ==========================================================================
   # Default: Bun Runtime (faster startup, lower memory)
-  # Uses Node.js for build, Bun for runtime (best compatibility + performance)
-  # Requires: Docker with 4GB+ memory
-  # ==========================================================================
   agentstudio:
     build:
       context: .
       dockerfile: Dockerfile
+      target: bun
       args:
         USER_ID: ${USER_ID:-1000}
         GROUP_ID: ${GROUP_ID:-1000}
@@ -33,13 +26,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4936
-      # API Keys (uncomment and set)
-      # - ANTHROPIC_API_KEY=your_key_here
-      # - OPENAI_API_KEY=your_key_here
     env_file:
       - .env
     volumes:
-      # Mount local directory as user HOME for data persistence
       - ${AGENTSTUDIO_HOME:-./data/home}:/home/agentstudio
     restart: unless-stopped
     healthcheck:
@@ -49,16 +38,15 @@ services:
       retries: 3
       start_period: 10s
 
-  # ==========================================================================
-  # Node.js Runtime - Full compatibility
+  # Node.js Runtime (full compatibility fallback)
   # Usage: docker-compose --profile node up -d agentstudio-node
-  # ==========================================================================
   agentstudio-node:
     profiles:
       - node
     build:
       context: .
-      dockerfile: Dockerfile.node
+      dockerfile: Dockerfile
+      target: node
       args:
         USER_ID: ${USER_ID:-1000}
         GROUP_ID: ${GROUP_ID:-1000}
@@ -79,63 +67,3 @@ services:
       timeout: 3s
       retries: 3
       start_period: 20s
-
-  # ==========================================================================
-  # Pre-built - Uses local build artifacts (faster, works with limited memory)
-  # Requires: pnpm run build
-  # Usage: docker-compose --profile prebuilt up -d agentstudio-prebuilt
-  # ==========================================================================
-  agentstudio-prebuilt:
-    profiles:
-      - prebuilt
-    build:
-      context: .
-      dockerfile: Dockerfile.prebuilt
-      args:
-        USER_ID: ${USER_ID:-1000}
-        GROUP_ID: ${GROUP_ID:-1000}
-    container_name: agentstudio-prebuilt
-    ports:
-      - "${PORT:-4936}:4936"
-    environment:
-      - NODE_ENV=production
-      - PORT=4936
-    env_file:
-      - .env
-    volumes:
-      - ${AGENTSTUDIO_HOME:-./data/home}:/home/agentstudio
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4936/api/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
-
-  # ==========================================================================
-  # NPM Install - Uses published npm package
-  # Usage: docker-compose --profile npm up -d agentstudio-npm
-  # ==========================================================================
-  agentstudio-npm:
-    profiles:
-      - npm
-    build:
-      context: .
-      dockerfile: Dockerfile.npm
-    container_name: agentstudio-npm
-    ports:
-      - "${PORT:-4936}:4936"
-    environment:
-      - NODE_ENV=production
-      - PORT=4936
-    env_file:
-      - .env
-    volumes:
-      - ${AGENTSTUDIO_HOME:-./data/home}:/home/agentstudio
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4936/api/health"]
-      interval: 30s
-      timeout: 3s
-      retries: 3
-      start_period: 15s
