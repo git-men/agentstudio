@@ -587,8 +587,23 @@ const app: express.Express = express();
   });
 
   // Graceful shutdown handler
+  let isShuttingDown = false;
   const gracefulShutdown = async () => {
+    // Prevent double shutdown (second Ctrl+C while shutting down)
+    if (isShuttingDown) {
+      console.info('[System] Force exit (shutdown already in progress)');
+      process.exit(1);
+    }
+    isShuttingDown = true;
+
     console.info('[System] Shutting down gracefully...');
+
+    // Hard timeout: force exit after 3 seconds no matter what
+    const forceExitTimer = setTimeout(() => {
+      console.warn('[System] Shutdown timed out after 3s, force exiting');
+      process.exit(1);
+    }, 3000);
+    forceExitTimer.unref(); // Don't keep event loop alive
 
     // 1. Stop scheduler (no new tasks will be scheduled)
     try {
@@ -606,9 +621,12 @@ const app: express.Express = express();
       console.error('[MarketplaceUpdate] Error shutting down marketplace update service:', error);
     }
 
-    // 2. Stop task executor (wait for running tasks to complete or timeout)
+    // 2. Stop task executor (with timeout)
     try {
-      await shutdownTaskExecutor();
+      await Promise.race([
+        shutdownTaskExecutor(),
+        new Promise(resolve => setTimeout(resolve, 2000)),
+      ]);
       console.info('[TaskExecutor] Task executor stopped');
     } catch (error) {
       console.error('[TaskExecutor] Error shutting down task executor:', error);
