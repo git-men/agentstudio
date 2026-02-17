@@ -455,8 +455,8 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
     safeCloseConnection(`response error: ${error.message}`);
   });
 
-  // 设置连接超时保护（30分钟）
-  const CONNECTION_TIMEOUT_MS = 30 * 60 * 1000;
+  // 设置连接超时保护（300分钟）
+  const CONNECTION_TIMEOUT_MS = 300 * 60 * 1000;
   connectionTimeout = setTimeout(() => {
     safeCloseConnection('connection timeout');
   }, CONNECTION_TIMEOUT_MS);
