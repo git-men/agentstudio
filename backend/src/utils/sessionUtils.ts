@@ -98,6 +98,20 @@ export async function handleSessionManagement(
     claudeSession = sessionManager.getSession(sessionId);
     
     if (claudeSession) {
+      // Check if session is still alive (e.g., not interrupted)
+      if (!claudeSession.isSessionActive()) {
+        console.log(`⚠️  Session ${sessionId} found but inactive (likely interrupted), removing and recreating for agent: ${agentId}`);
+        await sessionManager.removeSession(sessionId);
+
+        const sessionExists = sessionManager.checkSessionExists(sessionId, projectPath);
+        if (sessionExists) {
+          claudeSession = sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
+        } else {
+          claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+        }
+        return { claudeSession, actualSessionId };
+      }
+
       // 并发控制：检查会话是否正在处理其他请求
       if (sessionManager.isSessionBusy(sessionId)) {
         console.warn(`⚠️  Session ${sessionId} is currently busy processing another request`);

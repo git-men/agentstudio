@@ -344,6 +344,7 @@ const ChatRequestSchema = z.object({
   claudeVersion: z.string().optional(), // Claude版本ID
   channel: z.enum(['web', 'slack']).optional().default('web'), // Channel for streaming control
   outputFormat: z.enum(['default', 'agui']).optional().default('default'), // Output format: default (SDK format) or agui (AGUI protocol)
+  reconnect: z.boolean().optional(), // When true, re-attach to an in-progress SSE stream instead of sending a new message
   context: z.object({
     currentSlide: z.number().optional().nullable(),
     slideContent: z.string().optional(),
@@ -396,13 +397,41 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
       claudeSession.cancelRequest(currentRequestId);
       if (reason === 'request completed') {
         console.log(`✅ Cleaned up Claude request ${currentRequestId}: ${reason}`);
+      } else if (reason === 'client disconnected') {
+        // 客户端断开（刷新页面、关闭标签页等）：仅移除回调，不立即中断 session
+        // 用户可能会刷新后重新连接并复用同一 session
+        // 设置延迟中断：如果用户在宽限期内未重新连接，则中断 session 防止资源泄漏
+        console.log(`🔌 Client disconnected, detached callback for request ${currentRequestId} (session kept alive with grace period)`);
+        const DISCONNECT_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 分钟宽限期
+        setTimeout(() => {
+          // 检查 session 是否仍在处理中（说明没有新的客户端接管）
+          if (claudeSession && claudeSession.isCurrentlyProcessing() && typeof claudeSession.interrupt === 'function') {
+            // If a reconnect happened, replaceActiveCallback() re-inserted a
+            // callback (cancelRequest cleared it on disconnect). Skip interrupt.
+            if (claudeSession.hasActiveCallback?.()) {
+              console.log(`⏰ Grace period expired but session was reconnected for agent ${agentId}, skipping interrupt`);
+              return;
+            }
+            console.log(`⏰ Grace period expired, interrupting orphaned session for agent ${agentId}`);
+            claudeSession.interrupt().catch((e: unknown) => {
+              console.error(`❌ Failed to interrupt orphaned session:`, e);
+            });
+          }
+        }, DISCONNECT_GRACE_PERIOD_MS);
       } else {
         console.log(`🚫 Cancelled Claude request ${currentRequestId} due to: ${reason}`);
+        // 非正常完成且非客户端断开时，中断底层 Claude SDK 进程，防止命令继续在后台执行
+        if (typeof claudeSession.interrupt === 'function') {
+          claudeSession.interrupt().catch((e: unknown) => {
+            console.error(`❌ Failed to interrupt session on disconnect:`, e);
+          });
+        }
       }
     }
 
-    // 确保连接关闭
-    if (!res.headersSent) {
+    // 在关闭连接前发送 connection_closed 事件
+    // 仅在连接未被销毁且非客户端主动断开时发送（客户端断开时 socket 已关闭，write 会失败）
+    if (!res.destroyed && reason !== 'client disconnected') {
       try {
         res.write(`data: ${JSON.stringify({
           type: 'connection_closed',
@@ -447,8 +476,8 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
     safeCloseConnection(`response error: ${error.message}`);
   });
 
-  // 设置连接超时保护（30分钟）
-  const CONNECTION_TIMEOUT_MS = 30 * 60 * 1000;
+  // 设置连接超时保护（300分钟）
+  const CONNECTION_TIMEOUT_MS = 300 * 60 * 1000;
   connectionTimeout = setTimeout(() => {
     safeCloseConnection('connection timeout');
   }, CONNECTION_TIMEOUT_MS);
@@ -494,7 +523,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat } = validation.data;
+    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -502,9 +531,195 @@ router.post('/chat', async (req, res) => {
     console.log('[Backend] Received chat request:', {
       agentId,
       sessionId,
+      reconnect: !!reconnect,
       envVarsKeys: envVars ? Object.keys(envVars) : [],
       envVars
     });
+
+    // ── Reconnect branch: re-attach to an in-progress SSE stream ──────────
+    if (reconnect && sessionId) {
+      console.log(`🔄 [Reconnect] Attempting to re-attach to session: ${sessionId}`);
+
+      const claudeSession = sessionManager.getSession(sessionId);
+      if (!claudeSession || !claudeSession.isSessionActive()) {
+        console.log(`❌ [Reconnect] Session ${sessionId} is not active`);
+        return res.status(404).json({ error: 'Session not found or not active' });
+      }
+
+      if (!claudeSession.isCurrentlyProcessing()) {
+        console.log(`ℹ️ [Reconnect] Session ${sessionId} is active but not processing`);
+        return res.status(409).json({ reconnected: false, reason: 'not_processing' });
+      }
+
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+      res.flushHeaders();
+
+      let isReconnectClosed = false;
+
+      // Register an SSE notification channel for the reconnected client so that
+      // AskUserQuestion's awaiting_user_input events can be delivered.  Without
+      // this, any new AskUserQuestion tool call would fail because the
+      // notificationChannelManager has no channel to send the event through.
+      const reconnectChannelId = generateSSEChannelId();
+      const reconnectChannel = new SSENotificationChannel(
+        reconnectChannelId,
+        sessionId,
+        agentId,
+        res,
+        () => {
+          notificationChannelManager.unregisterChannel(reconnectChannelId);
+
+          // Only cancel pending inputs if the session is no longer processing.
+          // If still processing, a subsequent reconnect may replay them.
+          const rcSession = sessionManager.getSession(sessionId!);
+          if (rcSession && rcSession.isCurrentlyProcessing()) {
+            console.log(`🎤 [Reconnect] Keeping pending inputs alive for reconnectable session: ${sessionId}`);
+          } else {
+            const cancelledCount = userInputRegistry.cancelAllBySession(
+              sessionId!,
+              'SSE connection closed'
+            );
+            if (cancelledCount > 0) {
+              console.log(`🎤 [Reconnect] Cancelled ${cancelledCount} pending inputs for session: ${sessionId}`);
+            }
+          }
+        }
+      );
+      notificationChannelManager.registerChannel(reconnectChannel);
+      console.log(`📡 [Reconnect] Registered SSE notification channel: ${reconnectChannelId} for session: ${sessionId}`);
+
+      res.on('close', () => { isReconnectClosed = true; });
+
+      // Heartbeat to keep connection alive
+      const heartbeat = setInterval(() => {
+        if (isReconnectClosed) { clearInterval(heartbeat); return; }
+        try { res.write(': heartbeat\n\n'); } catch { clearInterval(heartbeat); }
+      }, 5000);
+
+      // Send SESSION_RESUMED event so the frontend knows reconnection succeeded
+      const sessionResumedEvent = {
+        type: 'SESSION_RESUMED',
+        sessionId,
+        agentId,
+        timestamp: Date.now(),
+      };
+      try {
+        res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
+      } catch { /* connection already dead */ }
+
+      // Re-send any pending AskUserQuestion events that were lost when the old connection died
+      const pendingInputs = userInputRegistry.getPendingInputsBySession(sessionId);
+      console.log(`🔍 [Reconnect] Checked pending inputs for session ${sessionId}: found ${pendingInputs.length}`);
+      if (pendingInputs.length > 0) {
+        console.log(`🔄 [Reconnect] Re-sending ${pendingInputs.length} pending awaiting_user_input event(s)`);
+        for (const request of pendingInputs) {
+          try {
+            if (!isReconnectClosed) {
+              const event = {
+                type: 'awaiting_user_input',
+                toolUseId: request.toolUseId,
+                toolName: 'mcp__ask-user-question__ask_user_question',
+                toolInput: { questions: request.questions },
+                agentId: request.agentId,
+                sessionId: request.sessionId,
+                timestamp: Date.now(),
+              };
+              res.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+          } catch { /* connection gone */ }
+        }
+      }
+
+      // AGUI adapter for reconnect (if using AGUI output)
+      let aguiReconnectAdapter: ClaudeAguiAdapter | null = null;
+      if (outputFormat === 'agui') {
+        aguiReconnectAdapter = new ClaudeAguiAdapter(sessionId);
+        // Send RUN_STARTED so frontend treats this as an active run
+        const runStartedEvent = aguiReconnectAdapter.createRunStarted({ message: '(reconnected)', projectPath });
+        try {
+          if (!isReconnectClosed) {
+            res.write(formatAguiEventAsSSE(runStartedEvent));
+            // Send a synthetic TEXT_MESSAGE_START so the frontend initializes
+            // its text block tracking.  Without this, TEXT_MESSAGE_CONTENT events
+            // arriving mid-stream won't produce textDelta (aguiState.textBlockIndex
+            // stays null) and messageParts never gets a text entry — the UI won't
+            // update even though data is being pushed.
+            const textStartEvent: AGUIEvent = {
+              type: 'TEXT_MESSAGE_START' as AGUIEventType.TEXT_MESSAGE_START,
+              messageId: `reconnect-${sessionId}-${Date.now()}`,
+              role: 'assistant',
+              timestamp: Date.now(),
+            };
+            res.write(formatAguiEventAsSSE(textStartEvent));
+          }
+        } catch { /* connection gone */ }
+      }
+
+      // Replace the session's response callback to forward events to this new connection
+      const replaced = claudeSession.replaceActiveCallback((sdkMessage: any) => {
+        if (isReconnectClosed) return;
+
+        const eventData = {
+          ...sdkMessage,
+          agentId,
+          sessionId,
+          timestamp: Date.now(),
+        };
+        if (sessionId) {
+          eventData.session_id = sessionId;
+        }
+
+        try {
+          if (!res.destroyed && !isReconnectClosed) {
+            if (outputFormat === 'agui' && aguiReconnectAdapter) {
+              const aguiEvents = aguiReconnectAdapter.convert(sdkMessage);
+              for (const event of aguiEvents) {
+                res.write(formatAguiEventAsSSE(event));
+              }
+            } else {
+              res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+            }
+          }
+        } catch (writeError) {
+          console.error('[Reconnect] Failed to write SSE data:', writeError);
+          isReconnectClosed = true;
+        }
+
+        // When result arrives, finalize and close
+        if (sdkMessage.type === 'result') {
+          if (outputFormat === 'agui' && aguiReconnectAdapter) {
+            try {
+              const finalEvents = aguiReconnectAdapter.finalize();
+              for (const event of finalEvents) {
+                if (!res.destroyed && !isReconnectClosed) {
+                  res.write(formatAguiEventAsSSE(event));
+                }
+              }
+            } catch { /* ignore */ }
+          }
+
+          clearInterval(heartbeat);
+          try { if (!res.destroyed) res.end(); } catch { /* ignore */ }
+        }
+      });
+
+      if (!replaced) {
+        console.log(`❌ [Reconnect] Failed to replace callback for session ${sessionId}`);
+        clearInterval(heartbeat);
+        try { res.end(); } catch { /* ignore */ }
+      } else {
+        console.log(`✅ [Reconnect] Successfully re-attached to session ${sessionId}`);
+      }
+
+      return; // Don't continue to the normal chat flow
+    }
+    // ── End reconnect branch ──────────────────────────────────────────────
 
     // Configure partial message streaming based on channel
     const includePartialMessages = channel === 'web';
@@ -647,13 +862,21 @@ router.post('/chat', async (req, res) => {
 
         // 🎤 取消该 session 的所有等待中的用户输入请求
         // 使用 sseChannel.sessionId 获取最新的 sessionId（可能已从 temp 更新为真实 ID）
+        // BUT: if the session is still processing, a reconnect may arrive — preserve
+        // pending inputs so they can be replayed on the new connection.
         const currentSessionId = sseChannel.sessionId;
-        const cancelledCount = userInputRegistry.cancelAllBySession(
-          currentSessionId,
-          'SSE connection closed'
-        );
-        if (cancelledCount > 0) {
-          console.log(`🎤 [AskUserQuestion] Cancelled ${cancelledCount} pending inputs for session: ${currentSessionId}`);
+        const session = sessionManager.getSession(currentSessionId);
+        console.log(`🔍 [AskUserQuestion] onClose: sessionId=${currentSessionId}, sessionFound=${!!session}, isProcessing=${session?.isCurrentlyProcessing()}`);
+        if (session && session.isCurrentlyProcessing()) {
+          console.log(`🎤 [AskUserQuestion] Keeping pending inputs alive for reconnectable session: ${currentSessionId}`);
+        } else {
+          const cancelledCount = userInputRegistry.cancelAllBySession(
+            currentSessionId,
+            'SSE connection closed'
+          );
+          if (cancelledCount > 0) {
+            console.log(`🎤 [AskUserQuestion] Cancelled ${cancelledCount} pending inputs for session: ${currentSessionId}`);
+          }
         }
       }
     );

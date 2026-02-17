@@ -81,6 +81,7 @@ class UserInputRegistry extends EventEmitter {
         reject: (error: Error) => {
           this.pendingInputs.delete(toolUseId);
           console.log(`❌ [UserInputRegistry] Rejected input for tool: ${toolUseId}`, error.message);
+          console.log(`❌ [UserInputRegistry] Reject caller stack:`, new Error().stack);
           reject(error);
         },
       };
@@ -187,6 +188,7 @@ class UserInputRegistry extends EventEmitter {
         results.push(entry.request);
       }
     }
+    console.log(`🔍 [UserInputRegistry] getPendingInputsBySession(${sessionId}): found ${results.length}, total pending: ${this.pendingInputs.size}`);
     return results;
   }
   
@@ -202,7 +204,10 @@ class UserInputRegistry extends EventEmitter {
         count++;
       }
     }
-    console.log(`🚫 [UserInputRegistry] Cancelled ${count} pending inputs for session: ${sessionId}`);
+    console.log(`🚫 [UserInputRegistry] Cancelled ${count} pending inputs for session: ${sessionId}, reason: ${reason}`);
+    if (count > 0) {
+      console.log(`🚫 [UserInputRegistry] Cancel caller stack:`, new Error().stack);
+    }
     return count;
   }
   

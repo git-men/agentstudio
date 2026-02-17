@@ -156,6 +156,8 @@ export class SessionManager {
     const session = new ClaudeSession(agentId, options, resumeSessionId, claudeVersionId, modelId);
     if (resumeSessionId) {
       this.sessions.set(resumeSessionId, session);
+      // 初始化心跳记录，防止被 cleanupIdleSessions 立即清理
+      this.sessionHeartbeats.set(resumeSessionId, Date.now());
       const sessionForAgent = this.agentSessions.get(agentId);
       if (sessionForAgent) {
         sessionForAgent.add(resumeSessionId);

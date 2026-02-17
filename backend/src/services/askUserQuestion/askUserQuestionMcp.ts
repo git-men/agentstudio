@@ -29,6 +29,13 @@ export type AskUserQuestionInput = {
       description: string;
     }>;
     multiSelect: boolean;
+    customInput?: boolean | {
+      enabled: boolean;
+      placeholder?: string;
+      maxLength?: number;
+      rows?: number;
+      required?: boolean;
+    };
   }>;
 };
 
@@ -42,7 +49,7 @@ const TOOL_DESCRIPTION = `Use this tool when you need to ask the user questions 
 4. Offer choices to the user about what direction to take.
 
 Usage notes:
-- Users will always be able to select "Other" to provide custom text input
+- By default, a free-text input box is shown so users can type a custom answer. Set customInput to false to disable it and only allow selecting from the provided options.
 - Use multiSelect: true to allow multiple answers to be selected for a question
 - The tool will pause execution until the user provides their answers
 - This tool supports multiple notification channels (Web, Slack, WeChat, etc.)
@@ -87,9 +94,21 @@ export async function createAskUserQuestionMcpServer(sessionRef: SessionRef, age
               )
               .min(2)
               .max(4)
-              .describe('The available choices (2-4 options). No need for "Other" option, it will be added automatically.'),
+              .describe('The available choices (2-4 options).'),
             multiSelect: z.boolean().describe(
               'Set to true to allow multiple options to be selected.'
+            ),
+            customInput: z.union([
+              z.boolean(),
+              z.object({
+                enabled: z.boolean(),
+                placeholder: z.string().optional(),
+                maxLength: z.number().optional(),
+                rows: z.number().optional(),
+                required: z.boolean().optional(),
+              })
+            ]).optional().describe(
+              'Controls whether a free-text input box is shown. undefined/true = show (default), false = hide (user can only pick from options), object = full control over placeholder, maxLength, rows, required.'
             ),
           })
         )
