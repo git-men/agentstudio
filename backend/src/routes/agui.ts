@@ -513,10 +513,8 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
         resultSessionId = (event as any).threadId || resultSessionId;
       }
 
-      // Broadcast AI response events to observers
-      if (sessionEventBus.hasObservers(sessionId)) {
-        sessionEventBus.emit(sessionId, event);
-      }
+      // Broadcast AI response events to observers (and store in history for late subscribers)
+      sessionEventBus.emit(sessionId, event);
     };
 
     // Resolve workspace path
@@ -592,7 +590,8 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
   // Send initial connected event
   res.write(`event: connected\ndata: ${JSON.stringify({ sessionId, clientId, timestamp: Date.now() })}\n\n`);
 
-  // Subscribe to session events
+  // Subscribe to session events (replay=true allows late-joining browsers to catch up)
+  const replay = req.query.replay === 'true';
   const unsubscribe = sessionEventBus.subscribe(sessionId, clientId, (event: SessionEvent) => {
     if (isConnectionClosed) return;
 
@@ -608,7 +607,7 @@ router.get('/sessions/:sessionId/observe', (req, res) => {
       console.error(`[AGUI] Error writing observe event to ${clientId}:`, error);
       isConnectionClosed = true;
     }
-  });
+  }, { replay });
 
   // Heartbeat
   const heartbeatInterval = setInterval(() => {

@@ -46,10 +46,17 @@ interface ObserverInfo {
 /**
  * Centralized event bus for AGUI session broadcasting.
  * Singleton - use the exported `sessionEventBus` instance.
+ *
+ * Supports event history replay: late subscribers receive recent events
+ * from the session, preventing race conditions where events are missed.
  */
 class SessionEventBus {
   private emitter = new EventEmitter();
   private observers = new Map<string, Map<string, ObserverInfo>>();
+  /** Event history per session for late-subscriber replay */
+  private sessionHistory = new Map<string, SessionEvent[]>();
+  /** Max events to keep per session history */
+  private static MAX_HISTORY_PER_SESSION = 50;
   
   constructor() {
     // Allow many listeners per session (one per observer)
@@ -57,14 +64,21 @@ class SessionEventBus {
   }
 
   /**
-   * Subscribe to events for a specific session
-   * Returns an unsubscribe function
+   * Subscribe to events for a specific session.
+   * Returns an unsubscribe function.
+   *
+   * @param options.replay - If true, replay historical events to this subscriber.
+   *   Default: false. Only enable for read-only observers (e.g. browser UI)
+   *   that join after events have already been emitted. Do NOT enable for
+   *   stateful consumers like SessionTracker that trigger side effects.
    */
   subscribe(
     sessionId: string,
     clientId: string,
-    callback: SessionObserverCallback
+    callback: SessionObserverCallback,
+    options?: { replay?: boolean }
   ): () => void {
+    const replay = options?.replay ?? false;
     const eventName = `session:${sessionId}`;
 
     // Track observer
@@ -77,7 +91,7 @@ class SessionEventBus {
       clientId,
     });
 
-    // Subscribe to events
+    // Subscribe to future events
     const listener = (event: SessionEvent) => {
       try {
         callback(event);
@@ -88,7 +102,23 @@ class SessionEventBus {
 
     this.emitter.on(eventName, listener);
 
-    console.log(`[SessionEventBus] Observer ${clientId} subscribed to session ${sessionId} (total: ${this.observers.get(sessionId)!.size})`);
+    const historySize = this.sessionHistory.get(sessionId)?.length ?? 0;
+    console.log(`[SessionEventBus] Observer ${clientId} subscribed to session ${sessionId} (total: ${this.observers.get(sessionId)!.size}, history: ${historySize}, replay: ${replay})`);
+
+    // Replay event history only if explicitly requested (opt-in)
+    if (replay && historySize > 0) {
+      const history = this.sessionHistory.get(sessionId)!;
+      console.log(`[SessionEventBus] Replaying ${history.length} historical events to ${clientId}`);
+      queueMicrotask(() => {
+        for (const event of history) {
+          try {
+            callback(event);
+          } catch (error) {
+            console.error(`[SessionEventBus] Error replaying event to ${clientId}:`, error);
+          }
+        }
+      });
+    }
 
     // Return unsubscribe function
     return () => {
@@ -105,9 +135,20 @@ class SessionEventBus {
   }
 
   /**
-   * Emit an event to all observers of a session
+   * Emit an event to all observers of a session.
+   * Events are also stored in history for late-subscriber replay.
    */
   emit(sessionId: string, event: SessionEvent): void {
+    // Store in history
+    if (!this.sessionHistory.has(sessionId)) {
+      this.sessionHistory.set(sessionId, []);
+    }
+    const history = this.sessionHistory.get(sessionId)!;
+    history.push(event);
+    if (history.length > SessionEventBus.MAX_HISTORY_PER_SESSION) {
+      history.shift();
+    }
+
     const eventName = `session:${sessionId}`;
     this.emitter.emit(eventName, event);
   }
@@ -134,13 +175,14 @@ class SessionEventBus {
   }
 
   /**
-   * Clean up all observers for a session
+   * Clean up all observers and history for a session
    */
   cleanupSession(sessionId: string): void {
     const eventName = `session:${sessionId}`;
     this.emitter.removeAllListeners(eventName);
     this.observers.delete(sessionId);
-    console.log(`[SessionEventBus] Cleaned up all observers for session ${sessionId}`);
+    this.sessionHistory.delete(sessionId);
+    console.log(`[SessionEventBus] Cleaned up all observers and history for session ${sessionId}`);
   }
 }
 
