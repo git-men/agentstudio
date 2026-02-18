@@ -28,9 +28,10 @@ import { ServiceManagementModal } from './ServiceManagementModal';
 import { UpdateNotification } from './UpdateNotification';
 import { useMobileContext } from '../contexts/MobileContext';
 import useEngine from '../hooks/useEngine';
+import useProduct from '../hooks/useProduct';
 import type { EngineFeatureKey, ConfigCapabilityKey } from '../types/engine';
 
-// Navigation item type with optional engine requirements
+// Navigation item type with optional engine and product requirements
 interface NavItem {
   name: string;
   href: string;
@@ -42,6 +43,8 @@ interface NavItem {
   requireConfig?: ConfigCapabilityKey;
   // Optional: require a specific engine type
   requireEngine?: 'cursor-cli' | 'claude-sdk';
+  // Optional: require a product feature module to be enabled
+  requireModule?: string;
 }
 
 const getNavigationItems = (t: (key: string) => string): NavItem[] => [
@@ -49,28 +52,32 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     name: t('nav.dashboard'),
     href: '/dashboard',
     icon: LayoutDashboard,
+    requireModule: 'manage.dashboard',
   },
   {
     name: t('nav.projects'),
     href: '/projects',
     icon: FolderOpen,
+    requireModule: 'manage.projects',
   },
   {
     name: t('nav.mcp'),
     href: '/mcp',
     icon: Server,
     requireConfig: 'mcp',
+    requireModule: 'manage.mcp',
   },
   {
     name: t('nav.agents'),
     href: '/agents',
     icon: Bot,
+    requireModule: 'manage.agents',
   },
   {
     name: t('nav.scheduledTasks'),
     href: '/scheduled-tasks',
     icon: Clock,
-    // Available for both Claude and Cursor engines
+    requireModule: 'system.scheduler',
   },
   {
     name: t('nav.extensions'),
@@ -82,36 +89,42 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
         href: '/plugins',
         icon: Package,
         requireConfig: 'plugins',
+        requireModule: 'extend.plugins',
       },
       {
         name: t('nav.commands'),
         href: '/settings/commands',
         icon: Command,
         requireConfig: 'commands',
+        requireModule: 'extend.commands',
       },
       {
         name: t('nav.subagents'),
         href: '/settings/subagents',
         icon: Bot,
         requireFeature: 'subagents',
+        requireModule: 'extend.subagents',
       },
       {
         name: t('nav.skills'),
         href: '/skills',
         icon: Zap,
         requireConfig: 'skills',
+        requireModule: 'extend.skills',
       },
       {
-        name: 'Rules', // TODO: Add i18n
+        name: 'Rules',
         href: '/rules',
         icon: FileCode,
         requireConfig: 'rules',
+        requireModule: 'extend.rules',
       },
       {
-        name: 'Hooks', // TODO: Add i18n key
+        name: 'Hooks',
         href: '/hooks',
         icon: Webhook,
         requireFeature: 'hooks',
+        requireModule: 'extend.hooks',
       },
     ],
   },
@@ -119,39 +132,44 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     name: t('nav.settings'),
     href: '/settings',
     icon: Settings,
+    requireModule: 'system.settings',
     submenu: [
       {
         name: t('nav.settingsSubmenu.general'),
         href: '/settings/general',
         icon: Palette,
+        requireModule: 'system.settings',
       },
       {
         name: t('nav.settingsSubmenu.suppliers'),
         href: '/settings/suppliers',
         icon: Terminal,
         requireFeature: 'provider',
+        requireModule: 'system.settings',
       },
       {
         name: t('nav.settingsSubmenu.memory'),
         href: '/settings/memory',
         icon: Brain,
+        requireModule: 'system.settings',
       },
       {
         name: t('nav.settingsSubmenu.mcpAdmin'),
         href: '/settings/mcp-admin',
         icon: Key,
-        // Available for both Claude and Cursor engines
+        requireModule: 'system.mcp-admin',
       },
       {
         name: t('nav.settingsSubmenu.tunnel'),
         href: '/settings/tunnel',
         icon: Globe,
+        requireModule: 'system.tunnel',
       },
       {
         name: t('nav.settingsSubmenu.voice'),
         href: '/settings/voice',
         icon: Mic,
-        // Available for both Claude and Cursor engines
+        requireModule: 'system.voice',
       },
     ],
   },
@@ -174,8 +192,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
 
   // Get engine capabilities for filtering navigation items
   const { isFeatureSupported, isConfigSupported, engineType, isLoading: isEngineLoading } = useEngine();
+  // Get product module status for filtering
+  const { isModuleEnabled, isLoading: isProductLoading, isFullEdition } = useProduct();
 
-  // Filter navigation items based on engine capabilities
+  // Filter navigation items based on engine capabilities AND product modules
   const filterNavItems = (items: NavItem[]): NavItem[] => {
     return items
       .filter(item => {
@@ -189,6 +209,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         }
         // Check config requirement
         if (item.requireConfig && !isConfigSupported(item.requireConfig)) {
+          return false;
+        }
+        // Check product module requirement
+        if (item.requireModule && !isFullEdition && !isModuleEnabled(item.requireModule)) {
           return false;
         }
         return true;
@@ -211,12 +235,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   // Get filtered navigation items
   const navigationItems = useMemo(() => {
     const allItems = getNavigationItems(t);
-    // Don't filter while engine is loading to prevent flash
-    if (isEngineLoading) {
+    // Don't filter while engine or product config is loading to prevent flash
+    if (isEngineLoading || isProductLoading) {
       return allItems;
     }
     return filterNavItems(allItems);
-  }, [t, isEngineLoading, isFeatureSupported, isConfigSupported, engineType]);
+  }, [t, isEngineLoading, isProductLoading, isFeatureSupported, isConfigSupported, engineType, isModuleEnabled, isFullEdition]);
 
   const toggleMenu = (itemKey: string) => {
     setExpandedMenus(prev =>

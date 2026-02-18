@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PageGate } from './components/ProductGate';
 import { Toaster } from './components/ui/toaster';
 import { MobileProvider } from './contexts/MobileContext';
 import { TelemetryProvider } from './components/TelemetryProvider';
@@ -114,60 +115,82 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
 
-          {/* Admin pages with layout (protected) */}
+          {/* Admin pages with layout (protected + product gated) */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
-              <Layout><DashboardPage /></Layout>
+              <PageGate module="manage.dashboard">
+                <Layout><DashboardPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/agents" element={
             <ProtectedRoute>
-              <Layout><AgentsPage /></Layout>
+              <PageGate module="manage.agents">
+                <Layout><AgentsPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/projects" element={
             <ProtectedRoute>
-              <Layout><ProjectsPage /></Layout>
+              <PageGate module="manage.projects">
+                <Layout><ProjectsPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/mcp" element={
             <ProtectedRoute>
-              <Layout><McpPage /></Layout>
+              <PageGate module="manage.mcp">
+                <Layout><McpPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/rules" element={
             <ProtectedRoute>
-              <Layout><RulesPage /></Layout>
+              <PageGate module="extend.rules">
+                <Layout><RulesPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/hooks" element={
             <ProtectedRoute>
-              <Layout><HooksPage /></Layout>
+              <PageGate module="extend.hooks">
+                <Layout><HooksPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/skills" element={
             <ProtectedRoute>
-              <Layout><SkillsPage /></Layout>
+              <PageGate module="extend.skills">
+                <Layout><SkillsPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/plugins" element={
             <ProtectedRoute>
-              <Layout><PluginsPage /></Layout>
+              <PageGate module="extend.plugins">
+                <Layout><PluginsPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/models" element={
             <ProtectedRoute>
-              <Layout><ModelsPage /></Layout>
+              <PageGate module="system.settings">
+                <Layout><ModelsPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/scheduled-tasks" element={
             <ProtectedRoute>
-              <Layout><ScheduledTasksPage /></Layout>
+              <PageGate module="system.scheduler">
+                <Layout><ScheduledTasksPage /></Layout>
+              </PageGate>
             </ProtectedRoute>
           } />
           <Route path="/settings" element={
             <ProtectedRoute>
-              <Layout><SettingsLayout /></Layout>
+              <PageGate module="system.settings">
+                <Layout><SettingsLayout /></Layout>
+              </PageGate>
             </ProtectedRoute>
           }>
             <Route index element={<GeneralSettingsPage />} />

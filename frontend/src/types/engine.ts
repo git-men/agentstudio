@@ -74,6 +74,7 @@ export interface ServiceEngineConfig {
   version?: string;
   capabilities: ServiceEngineCapabilities;
   paths: EnginePathConfig;
+  product?: import('./product').ProductInfoResponse;
 }
 
 // =============================================================================
@@ -89,6 +90,7 @@ export interface EngineInfoResponse {
   version?: string;
   capabilities: ServiceEngineCapabilities;
   paths: EnginePathConfig;
+  product?: import('./product').ProductInfoResponse;
 }
 
 // =============================================================================

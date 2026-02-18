@@ -19,6 +19,7 @@ import {
   isCursorEngine,
 } from '../config/engineConfig.js';
 import type { EngineInfoResponse } from '../types/engine.js';
+import { getProductInfo } from '../config/productConfig.js';
 import {
   getMcpServers,
   getRules,
@@ -32,17 +33,19 @@ const router: RouterType = Router();
 
 /**
  * GET /api/engine
- * Get current engine configuration
+ * Get current engine configuration (includes product edition info)
  */
 router.get('/', (_req: Request, res: Response) => {
   try {
     const config = getEngineConfig();
+    const productInfo = getProductInfo();
     const response: EngineInfoResponse = {
       engine: config.engine,
       name: config.name,
       version: config.version,
       capabilities: config.capabilities,
       paths: config.paths,
+      product: productInfo,
     };
     res.json(response);
   } catch (error) {

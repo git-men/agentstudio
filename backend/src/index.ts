@@ -49,6 +49,8 @@ import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExe
 import { tunnelService } from './services/tunnelService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
+import { initializeProduct, logProductConfig } from './config/productConfig.js';
+import { productGateMiddleware } from './middleware/productGate.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
@@ -133,6 +135,10 @@ runMigrations();
 initializeEngine();
 logEngineConfig();
 logSdkConfig(); // Keep for backward compatibility
+
+// Initialize and log product edition configuration
+initializeProduct();
+logProductConfig();
 
 // Get version from package.json (works in both dev and npm package mode)
 const getVersion = () => {
@@ -348,6 +354,9 @@ const app: express.Express = express();
     express.json({ limit: '10mb' })(req, res, next);
   });
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+  // Product gate middleware - enforce feature module access based on product edition
+  app.use(productGateMiddleware);
 
   // Static files - serve slides directory
   const slidesDir = await getSlidesDir();

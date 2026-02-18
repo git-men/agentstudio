@@ -34,6 +34,7 @@ async function fetchEngineConfig(): Promise<ServiceEngineConfig> {
     version: data.version,
     capabilities: data.capabilities,
     paths: data.paths,
+    product: data.product,
   };
 }
 

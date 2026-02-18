@@ -364,6 +364,8 @@ export interface EngineInfoResponse {
   version?: string;
   capabilities: ServiceEngineCapabilities;
   paths: EnginePathConfig;
+  /** Product edition information */
+  product?: import('./product.js').ProductInfoResponse;
 }
 
 /**
