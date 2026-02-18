@@ -9,7 +9,7 @@
  * is placed in each legacy directory to avoid repeated migration.
  */
 
-import { existsSync, mkdirSync, copyFileSync, writeFileSync, readdirSync, statSync } from 'fs';
+import { existsSync, mkdirSync, copyFileSync, writeFileSync, readdirSync, statSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import {
   AGENTSTUDIO_HOME,
@@ -19,6 +19,7 @@ import {
   DATA_DIR,
   CONFIG_DIR,
   SLIDES_DIR,
+  CLAUDE_VERSIONS_FILE,
   SLACK_SESSION_LOCKS_DIR,
   SCHEDULED_TASKS_DIR,
   SCHEDULED_TASKS_HISTORY_DIR,
@@ -245,6 +246,83 @@ function ensureDirectories(): void {
 }
 
 /**
+ * Recover lost provider configs from legacy claude-versions.json.
+ *
+ * After directory migration, the current file may have lost custom providers
+ * (e.g., due to a file corruption + re-initialization cycle). This function
+ * checks if the legacy file has more providers than the current file and
+ * merges the missing ones back.
+ *
+ * This runs on every startup and is idempotent — providers are matched
+ * by ID to avoid duplicates.
+ */
+function recoverLegacyProviders(): void {
+  const legacySrc = join(LEGACY_CLAUDE_AGENT_DIR, 'claude-versions.json');
+  const currentDest = CLAUDE_VERSIONS_FILE;
+
+  if (!existsSync(legacySrc)) return;
+
+  let legacyData: { versions?: any[]; defaultVersionId?: string | null };
+  let currentData: { versions?: any[]; defaultVersionId?: string | null };
+
+  try {
+    legacyData = JSON.parse(readFileSync(legacySrc, 'utf-8'));
+  } catch {
+    return; // legacy file unreadable, skip
+  }
+
+  try {
+    currentData = existsSync(currentDest)
+      ? JSON.parse(readFileSync(currentDest, 'utf-8'))
+      : { versions: [], defaultVersionId: null };
+  } catch {
+    // current file corrupted — use legacy as source of truth
+    currentData = { versions: [], defaultVersionId: null };
+  }
+
+  const legacyVersions = Array.isArray(legacyData.versions) ? legacyData.versions : [];
+  const currentVersions = Array.isArray(currentData.versions) ? currentData.versions : [];
+
+  if (legacyVersions.length <= currentVersions.length) {
+    return; // Current already has at least as many, no recovery needed
+  }
+
+  const currentIds = new Set(currentVersions.map((v: any) => v.id));
+  let merged = 0;
+
+  for (const legacyVersion of legacyVersions) {
+    if (!legacyVersion.id || currentIds.has(legacyVersion.id)) continue;
+
+    // Skip system versions — the new system version is already initialized
+    if (legacyVersion.isSystem) continue;
+
+    currentVersions.push(legacyVersion);
+    currentIds.add(legacyVersion.id);
+    merged++;
+  }
+
+  if (merged > 0) {
+    // If the default provider from legacy is now present but current default is missing,
+    // restore the legacy default
+    if (legacyData.defaultVersionId && currentIds.has(legacyData.defaultVersionId)) {
+      const currentDefault = currentData.defaultVersionId;
+      if (!currentDefault || !currentIds.has(currentDefault) || currentDefault === 'claude') {
+        currentData.defaultVersionId = legacyData.defaultVersionId;
+      }
+    }
+
+    currentData.versions = currentVersions;
+
+    const destDir = dirname(currentDest);
+    if (!existsSync(destDir)) {
+      mkdirSync(destDir, { recursive: true });
+    }
+    writeFileSync(currentDest, JSON.stringify(currentData, null, 2), 'utf-8');
+    console.log(`[Migration] Recovered ${merged} provider(s) from legacy config (~/.claude-agent/claude-versions.json)`);
+  }
+}
+
+/**
  * Run all migrations. Safe to call on every startup.
  * Only performs actual work the first time legacy directories are detected.
  */
@@ -257,6 +335,9 @@ export function runMigrations(): void {
     migrateFromClaudeAgent();
     migrateFromAgentStudio();
     migrateWithinAgentstudio();
+
+    // Recover lost providers from legacy config (idempotent, safe to run always)
+    recoverLegacyProviders();
   } catch (error) {
     // Migration errors should never prevent startup
     console.error('[Migration] Warning: Migration encountered an error:', error);
