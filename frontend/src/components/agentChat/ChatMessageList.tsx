@@ -21,8 +21,7 @@ export interface ChatMessageListProps {
   isUserScrolling: boolean;
   newMessagesCount: number;
   onScrollToBottom: () => void;
-  // 用于 AskUserQuestion 工具的回调
-  onAskUserQuestionSubmit?: (toolUseId: string, response: string) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
@@ -33,7 +32,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   isStopping,
   messagesContainerRef,
   messagesEndRef,
-  onAskUserQuestionSubmit
+  onFrontendToolSubmit
 }) => {
   const { t } = useTranslation('components');
 
@@ -54,12 +53,12 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         >
           <ChatMessageRenderer 
             message={message as any} 
-            onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+            onFrontendToolSubmit={onFrontendToolSubmit}
           />
         </div>
       </div>
     ));
-  }, [messages, onAskUserQuestionSubmit]);
+  }, [messages, onFrontendToolSubmit]);
 
   return (
     <div

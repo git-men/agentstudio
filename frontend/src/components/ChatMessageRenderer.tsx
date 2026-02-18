@@ -278,7 +278,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
               isError={tool.isError}
               isExecuting={tool.isExecuting}
               claudeId={tool.claudeId}
-              onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+              onFrontendToolSubmit={onFrontendToolSubmit}
             />
           ))}
         </div>
