@@ -101,11 +101,13 @@ class FrontendToolBridge extends EventEmitter {
   }
 
   /**
-   * Cancel a single pending tool call.
+   * Cancel a single pending tool call, with optional ownership validation.
    */
-  cancel(toolCallId: string, reason?: string): boolean {
+  cancel(toolCallId: string, reason?: string, sessionId?: string, agentId?: string): boolean {
     const entry = this.pending.get(toolCallId);
     if (!entry) return false;
+    if (sessionId && entry.request.sessionId !== sessionId) return false;
+    if (agentId && entry.request.agentId !== agentId) return false;
     entry.reject(new Error(reason || 'Frontend tool call cancelled'));
     return true;
   }
@@ -115,10 +117,9 @@ class FrontendToolBridge extends EventEmitter {
    */
   cancelBySession(sessionId: string, reason?: string): number {
     let count = 0;
-    for (const [id, entry] of this.pending.entries()) {
+    for (const [, entry] of this.pending.entries()) {
       if (entry.request.sessionId === sessionId) {
         entry.reject(new Error(reason || 'Session terminated'));
-        this.pending.delete(id);
         count++;
       }
     }
@@ -189,11 +190,10 @@ class FrontendToolBridge extends EventEmitter {
   private cleanupExpired(): number {
     const now = Date.now();
     let count = 0;
-    for (const [id, entry] of this.pending.entries()) {
+    for (const [, entry] of this.pending.entries()) {
       const age = now - entry.request.createdAt;
       if (age > this.maxAgeMs) {
         entry.reject(new Error(`Request expired after ${Math.round(age / 1000 / 60)} minutes`));
-        this.pending.delete(id);
         count++;
       }
     }

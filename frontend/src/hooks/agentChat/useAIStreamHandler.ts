@@ -988,13 +988,17 @@ export const useAIStreamHandler = ({
 
     // Handle frontend tool invocations from the FrontendToolBridge.
     if (eventData.type === 'frontend_tool_call') {
-      const d = eventData as any;
+      const d = eventData as Record<string, unknown>;
+      if (!d.toolCallId || !d.toolName) {
+        console.warn('[FrontendTool] Malformed frontend_tool_call event:', d);
+        return;
+      }
       addPendingFrontendTool({
-        toolCallId: d.toolCallId,
-        toolName: d.toolName,
-        args: d.args || {},
-        sessionId: d.sessionId,
-        agentId: d.agentId,
+        toolCallId: d.toolCallId as string,
+        toolName: d.toolName as string,
+        args: (d.args as Record<string, unknown>) || {},
+        sessionId: d.sessionId as string,
+        agentId: d.agentId as string,
         timestamp: Date.now(),
       });
       return;

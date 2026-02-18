@@ -488,30 +488,25 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     return () => clearTimeout(timer);
   }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
 
-  // Submit a frontend tool result to the backend.
-  const handleFrontendToolSubmit = async (toolCallId: string, result: unknown) => {
-    try {
-      const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          toolCallId,
-          result,
-          sessionId: currentSessionId,
-          agentId: agent.id,
-        }),
-      });
+  const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown) => {
+    const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        toolCallId,
+        result,
+        sessionId: currentSessionId,
+        agentId: agent.id,
+      }),
+    });
 
-      if (!apiResponse.ok) {
-        const err = await apiResponse.json().catch(() => ({}));
-        throw new Error(err.error || `HTTP ${apiResponse.status}`);
-      }
-
-      removePendingFrontendTool(toolCallId);
-    } catch (error) {
-      console.error('[FrontendTool] Submit failed:', error);
+    if (!apiResponse.ok) {
+      const err = await apiResponse.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${apiResponse.status}`);
     }
-  };
+
+    removePendingFrontendTool(toolCallId);
+  }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
   // 为 AgentCommandSelector 创建键盘处理器
   const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({

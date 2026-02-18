@@ -15,12 +15,16 @@ export function initFrontendToolsModule(): void {
   if (initialized) return;
 
   frontendToolBridge.on('tool_invocation', async (request: FrontendToolRequest) => {
-    const sent = await notificationChannelManager.sendToolInvocation(request);
-    if (!sent) {
-      console.warn(
-        `[FrontendTools] No active channel for session ${request.sessionId}, ` +
-        `toolCallId=${request.toolCallId}. The request remains pending.`,
-      );
+    try {
+      const sent = await notificationChannelManager.sendToolInvocation(request);
+      if (!sent) {
+        console.warn(
+          `[FrontendTools] No active channel for session ${request.sessionId}, ` +
+          `toolCallId=${request.toolCallId}. The request remains pending.`,
+        );
+      }
+    } catch (error) {
+      console.error('[FrontendTools] Failed to dispatch tool invocation:', error);
     }
   });
 

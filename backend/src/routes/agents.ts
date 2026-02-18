@@ -1557,7 +1557,7 @@ router.post('/frontend-tool-result', async (req, res) => {
     const resultStr = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
 
     if (isError) {
-      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr);
+      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId);
       if (cancelOk) {
         return res.json({ success: true });
       }

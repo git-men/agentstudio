@@ -17,7 +17,40 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
   const input = execution.toolInput as any;
   const pendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
 
-  if (!input?.questions || !Array.isArray(input.questions)) {
+  const [selections, setSelections] = useState<Map<number, string[]>>(new Map());
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [customInputs, setCustomInputs] = useState<Map<number, string>>(new Map());
+  const inputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
+
+  const questions: any[] | null = input?.questions && Array.isArray(input.questions) ? input.questions : null;
+
+  const matchedPending: PendingFrontendToolCall | null = useMemo(() => {
+    if (!questions) return null;
+
+    // Prefer exact toolCallId match via execution.toolId (Claude SDK tool_use id)
+    const toolId = (execution as any).toolId;
+    if (toolId && pendingFrontendTools.has(toolId)) {
+      return pendingFrontendTools.get(toolId)!;
+    }
+
+    // Fallback: content-based match comparing ALL questions
+    for (const pending of pendingFrontendTools.values()) {
+      if (pending.toolName !== 'ask_user_question') continue;
+      const pendingQs = (pending.args as any)?.questions;
+      if (
+        pendingQs &&
+        pendingQs.length === questions.length &&
+        pendingQs.every((q: any, i: number) => q.question === questions[i]?.question)
+      ) {
+        return pending;
+      }
+    }
+    return null;
+  }, [pendingFrontendTools, questions, execution]);
+
+  const isInteractive = !!matchedPending && !execution.toolResult && !isSubmitting;
+
+  if (!questions) {
     return (
       <BaseToolComponent
         execution={execution}
@@ -30,35 +63,6 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       </BaseToolComponent>
     );
   }
-
-  const [selections, setSelections] = useState<Map<number, string[]>>(new Map());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [customInputs, setCustomInputs] = useState<Map<number, string>>(new Map());
-  const inputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
-
-  // Match this tool execution to a pending frontend tool call by toolCallId.
-  // The pending map is keyed by toolCallId which matches the MCP tool's ID.
-  const matchedPending: PendingFrontendToolCall | null = useMemo(() => {
-    for (const pending of pendingFrontendTools.values()) {
-      if (pending.toolName !== 'ask_user_question') continue;
-
-      // Best-effort match: compare questions content since the MCP-generated
-      // toolCallId may differ from the Claude SDK's tool_use id.
-      const pendingQs = (pending.args as any)?.questions;
-      const inputQs = input.questions;
-      if (
-        pendingQs &&
-        inputQs &&
-        pendingQs.length === inputQs.length &&
-        pendingQs[0]?.question === inputQs[0]?.question
-      ) {
-        return pending;
-      }
-    }
-    return null;
-  }, [pendingFrontendTools, input.questions]);
-
-  const isInteractive = !!matchedPending && !execution.toolResult && !isSubmitting;
 
   const submittedAnswer = useMemo(() => {
     if (!execution.toolResult) return null;
@@ -113,7 +117,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
   const canSubmit = useMemo(() => {
     if (!isInteractive) return false;
-    for (let i = 0; i < input.questions.length; i++) {
+    for (let i = 0; i < questions.length; i++) {
       const sel = selections.get(i) || [];
       if (sel.length === 0) return false;
       if (sel.includes(TYPE_SOMETHING_MARKER) && sel.length === 1 && !(customInputs.get(i) || '').trim()) {
@@ -121,17 +125,17 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       }
     }
     return true;
-  }, [isInteractive, input.questions.length, selections, customInputs]);
+  }, [isInteractive, questions.length, selections, customInputs]);
 
   const formatResponse = useCallback((): Record<string, unknown> => {
-    const questions = input.questions.map((_q: any, idx: number) => {
+    const formatted = questions.map((_q: any, idx: number) => {
       const sel = selections.get(idx) || [];
       const selectedOptions = sel.filter(s => s !== TYPE_SOMETHING_MARKER);
       const customText = sel.includes(TYPE_SOMETHING_MARKER) ? (customInputs.get(idx) || '').trim() : null;
       return { index: idx, selectedOptions, customInput: customText };
     });
-    return { questions };
-  }, [input.questions, selections, customInputs]);
+    return { questions: formatted };
+  }, [questions, selections, customInputs]);
 
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !onSubmit || !matchedPending) return;
@@ -147,7 +151,6 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
   }, [canSubmit, onSubmit, matchedPending, formatResponse]);
 
   const getSubtitle = () => {
-    const questions = input.questions;
     const first = questions[0];
     const title = first.header || (first.question.length > 30 ? first.question.substring(0, 30) + '...' : first.question);
     return questions.length === 1 ? title : `${title} (+${questions.length - 1})`;
@@ -185,7 +188,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
     >
       <div className="space-y-4">
         <div className="space-y-4">
-          {input.questions.map((question: any, questionIndex: number) => {
+          {questions.map((question: any, questionIndex: number) => {
             const selectedOptions = selections.get(questionIndex) || [];
             const showCustom = shouldShowCustomInput(question);
             const customConfig = getCustomInputConfig(question);
@@ -213,7 +216,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
                 </div>
 
                 <div className="space-y-2">
-                  {question.options.map((option: any, optionIndex: number) => {
+                  {(question.options || []).map((option: any, optionIndex: number) => {
                     const isSelected = selectedOptions.includes(option.label);
                     const canClick = isInteractive;
                     return (

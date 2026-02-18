@@ -423,7 +423,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   setAiTyping: (typing) => set({ isAiTyping: typing }),
   
-  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),
+  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId, pendingFrontendTools: new Map() }),
   
   clearMessages: () => set({ messages: [] }),
   

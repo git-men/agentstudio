@@ -54,7 +54,8 @@ export async function integrateFrontendTools(
     }
   } catch (error) {
     console.error('[FrontendTools] Failed to integrate MCP servers:', error);
-    return { queryOptions, sessionRef: null };
+    // Still return sessionRef so already-registered tools get session updates
+    return { queryOptions, sessionRef };
   }
 
   return { queryOptions, sessionRef };
