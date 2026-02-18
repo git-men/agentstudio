@@ -44,7 +44,9 @@ class NotificationChannelManager extends EventEmitter {
         channels.splice(idx, 1);
         if (channels.length === 0) this.channels.delete(sessionId);
 
-        (channel as any).sessionId = newSessionId;
+        // Directly reassign the mutable property. All concrete channel
+        // implementations (SSE, Slack) declare sessionId as a public field.
+        channel.sessionId = newSessionId;
 
         if (!this.channels.has(newSessionId)) {
           this.channels.set(newSessionId, []);
@@ -66,13 +68,13 @@ class NotificationChannelManager extends EventEmitter {
     }
     if (active.length === 0) return false;
 
-    let any = false;
+    let anySent = false;
     for (const ch of active) {
       try {
-        if (await ch.sendToolInvocation(request)) any = true;
+        if (await ch.sendToolInvocation(request)) anySent = true;
       } catch { /* swallow per-channel errors */ }
     }
-    return any;
+    return anySent;
   }
 
   getChannelsForSession(sessionId: string): NotificationChannel[] {
@@ -82,6 +84,23 @@ class NotificationChannelManager extends EventEmitter {
   hasActiveChannel(sessionId: string): boolean {
     const channels = this.channels.get(sessionId);
     return !!channels && channels.some(c => c.isActive());
+  }
+
+  /**
+   * Remove dead (inactive) channels across all sessions.
+   */
+  pruneDeadChannels(): number {
+    let removed = 0;
+    for (const [sessionId, channels] of this.channels.entries()) {
+      const active = channels.filter(c => c.isActive());
+      removed += channels.length - active.length;
+      if (active.length === 0) {
+        this.channels.delete(sessionId);
+      } else if (active.length !== channels.length) {
+        this.channels.set(sessionId, active);
+      }
+    }
+    return removed;
   }
 
   getStats(): { totalSessions: number; totalChannels: number } {

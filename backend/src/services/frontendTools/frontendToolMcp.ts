@@ -79,7 +79,7 @@ export async function createFrontendToolMcpServer(
     async (args: Record<string, unknown>, context: unknown) => {
       const toolCallId =
         (context as any)?.toolUseId ||
-        `ft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        `ft_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
       const currentSessionId = sessionRef.current;
 

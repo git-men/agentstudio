@@ -63,10 +63,14 @@ export class SSENotificationChannel implements NotificationChannel {
   }
 
   close(): void {
+    if (this.closed) return;
     this.closed = true;
+    try {
+      if (!this.res.writableEnded) this.res.end();
+    } catch { /* ignore — connection may already be gone */ }
   }
 }
 
 export function generateSSEChannelId(): string {
-  return `sse_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  return `sse_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 }

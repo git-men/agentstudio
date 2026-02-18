@@ -178,6 +178,7 @@ class FrontendToolBridge extends EventEmitter {
     if (this.cleanupInterval) return;
     this.maxAgeMs = maxAgeMs;
     this.cleanupInterval = setInterval(() => this.cleanupExpired(), intervalMs);
+    this.cleanupInterval.unref();
   }
 
   stopCleanupJob(): void {

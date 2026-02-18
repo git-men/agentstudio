@@ -29,6 +29,13 @@ export function initFrontendToolsModule(): void {
   });
 
   frontendToolBridge.startCleanupJob();
+
+  // Periodically prune dead notification channels (every 60s).
+  const pruneInterval = setInterval(() => {
+    notificationChannelManager.pruneDeadChannels();
+  }, 60_000);
+  pruneInterval.unref();
+
   initialized = true;
 }
 

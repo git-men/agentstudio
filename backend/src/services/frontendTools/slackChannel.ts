@@ -61,6 +61,15 @@ export class SlackNotificationChannel implements NotificationChannel {
   }
 
   private buildBlocks(request: FrontendToolRequest): any[] {
+    let argsText = JSON.stringify(request.args, null, 2);
+    const MAX_MRKDWN_LEN = 2900;
+    const prefix = `Tool \`${request.toolName}\` needs your input.\n\nArguments:\n\`\`\``;
+    const suffix = '```';
+    const available = MAX_MRKDWN_LEN - prefix.length - suffix.length;
+    if (argsText.length > available) {
+      argsText = argsText.substring(0, available - 12) + '\n… truncated';
+    }
+
     const blocks: any[] = [
       {
         type: 'header',
@@ -70,7 +79,7 @@ export class SlackNotificationChannel implements NotificationChannel {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `Tool \`${request.toolName}\` needs your input.\n\nArguments:\n\`\`\`${JSON.stringify(request.args, null, 2)}\`\`\``,
+          text: `${prefix}${argsText}${suffix}`,
         },
       },
       { type: 'divider' },
