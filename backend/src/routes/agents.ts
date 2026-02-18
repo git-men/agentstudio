@@ -1539,7 +1539,7 @@ router.post('/chat', async (req, res) => {
 
 const FrontendToolResultSchema = z.object({
   toolCallId: z.string().min(1, 'toolCallId is required'),
-  result: z.union([z.string(), z.record(z.any()), z.array(z.any())]),
+  result: z.union([z.string(), z.record(z.string(), z.any()), z.array(z.any())]),
   isError: z.boolean().optional(),
   sessionId: z.string().min(1, 'sessionId is required'),
   agentId: z.string().min(1, 'agentId is required'),

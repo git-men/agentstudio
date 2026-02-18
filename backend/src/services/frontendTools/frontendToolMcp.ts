@@ -48,7 +48,7 @@ function jsonSchemaToZod(params: FrontendToolDefinition['parameters']): z.ZodTyp
         field = z.array(z.any());
         break;
       case 'object':
-        field = z.record(z.any());
+        field = z.record(z.string(), z.any());
         break;
       default:
         field = z.any();
@@ -76,7 +76,7 @@ export async function createFrontendToolMcpServer(
     toolDef.name,
     toolDef.description,
     (zodSchema as z.ZodObject<any>).shape,
-    async (args: Record<string, unknown>, context: Record<string, unknown>) => {
+    async (args: Record<string, unknown>, context: unknown) => {
       const toolCallId =
         (context as any)?.toolUseId ||
         `ft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
