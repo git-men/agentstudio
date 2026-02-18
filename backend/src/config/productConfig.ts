@@ -276,13 +276,13 @@ const EDITION_PRESETS: Record<Exclude<ProductEdition, 'custom'>, ProductProfile>
   'chat-only': {
     edition: 'chat-only',
     name: 'Chat Edition',
-    description: 'Chat-focused deployment. Only chat, sessions, and read-only project/agent access.',
+    description: 'Chat-focused deployment. Only chat, sessions, and read-only project/agent access. File operations disabled.',
     modules: {
       ...allModulesAccess('disabled'),
-      // Core - always full
+      // Core - chat and sessions only, file access disabled for security
       'core.chat': 'full',
       'core.sessions': 'full',
-      'core.files': 'full',
+      'core.files': 'disabled',
       // Management - read-only (needed for agent/project selection in chat UI)
       'manage.agents': 'readonly',
       'manage.projects': 'readonly',
