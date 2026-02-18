@@ -7,11 +7,10 @@ import type { ChatMessage } from '../types/index';
 
 interface ChatMessageRendererProps {
   message: ChatMessage;
-  // 用于 AskUserQuestion 工具的回调
-  onAskUserQuestionSubmit?: (toolUseId: string, response: string) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
 }
 
-const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onAskUserQuestionSubmit }) => {
+const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onFrontendToolSubmit }) => {
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
 
@@ -176,7 +175,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 isError={part.toolData.isError}
                 isExecuting={part.toolData.isExecuting}
                 claudeId={part.toolData.claudeId}
-                onAskUserQuestionSubmit={onAskUserQuestionSubmit}
+                onFrontendToolSubmit={onFrontendToolSubmit}
               />
             );
           } else if (part.type === 'image' && part.imageData) {

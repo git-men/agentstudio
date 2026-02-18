@@ -35,21 +35,19 @@ import { CursorToolRenderer, isCursorTool } from './cursor';
 
 interface ToolRendererProps {
   execution: BaseToolExecution;
-  // 用于 AskUserQuestion 工具的回调
-  onAskUserQuestionSubmit?: (toolUseId: string, response: string) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
 }
 
 /**
  * 根据工具名称渲染对应的工具组件
  */
-export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onAskUserQuestionSubmit }) => {
+export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFrontendToolSubmit }) => {
   const { t } = useTranslation('components');
   // 首先检查是否是MCP工具
   const mcpToolInfo = parseMcpToolName(execution.toolName);
   if (mcpToolInfo) {
-    // 特殊处理：MCP 版本的 ask_user_question 使用 AskUserQuestionTool 组件
-    if (mcpToolInfo.serverName === 'ask-user-question' && mcpToolInfo.toolName === 'ask_user_question') {
-      return <AskUserQuestionTool execution={execution} onSubmit={onAskUserQuestionSubmit} />;
+    if (mcpToolInfo.serverName.startsWith('frontend-tool-') && mcpToolInfo.toolName === 'ask_user_question') {
+      return <AskUserQuestionTool execution={execution} onSubmit={onFrontendToolSubmit} />;
     }
     
     // 检查是否有自定义组件
@@ -121,7 +119,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onAskUser
       return <TimeMachineTool execution={execution} />;
 
     case 'AskUserQuestion':
-      return <AskUserQuestionTool execution={execution} onSubmit={onAskUserQuestionSubmit} />;
+      return <AskUserQuestionTool execution={execution} onSubmit={onFrontendToolSubmit} />;
 
     case 'WebFetch':
       return <WebFetchTool execution={execution} />;

@@ -13,7 +13,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
-import { integrateAskUserQuestionMcpServer, SessionRef } from '../services/askUserQuestion/askUserQuestionIntegration.js';
+import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
 import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
@@ -217,7 +217,7 @@ export async function getDefaultClaudeVersionEnv(): Promise<Record<string, strin
  */
 export interface BuildQueryOptionsResult {
   queryOptions: Options;
-  askUserSessionRef: SessionRef | null;
+  frontendToolSessionRef: SessionRef | null;
 }
 
 export async function buildQueryOptions(
@@ -486,15 +486,13 @@ export async function buildQueryOptions(
   const currentProjectId = projectPath || cwd;
   await integrateA2AMcpServer(queryOptions, currentProjectId, a2aStreamEnabled ?? false);
 
-  // Integrate AskUserQuestion SDK MCP server
-  // This provides user interaction capability for web channel
-  // Only integrate if sessionId and agentId are provided
-  let askUserSessionRef: SessionRef | null = null;
+  // Integrate frontend tool MCP servers (includes ask_user_question and any extras)
+  let frontendToolSessionRef: SessionRef | null = null;
   if (sessionIdForAskUser && agentIdForAskUser) {
-    const integration = await integrateAskUserQuestionMcpServer(queryOptions, sessionIdForAskUser, agentIdForAskUser);
-    askUserSessionRef = integration.sessionRef;
+    const integration = await integrateFrontendTools(queryOptions, sessionIdForAskUser, agentIdForAskUser);
+    frontendToolSessionRef = integration.sessionRef;
   }
 
-  return { queryOptions, askUserSessionRef };
+  return { queryOptions, frontendToolSessionRef };
 }
 

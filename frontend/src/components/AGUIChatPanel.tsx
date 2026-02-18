@@ -82,7 +82,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         isAiTyping,
         currentSessionId,
         mcpStatus,
-        pendingUserQuestion,
+        pendingFrontendTools,
         selectedEngine,
         engineUICapabilities,
         engineModels,
@@ -90,7 +90,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         interruptAllExecutingTools,
         setAiTyping,
         loadSessionMessages,
-        setPendingUserQuestion,
+        removePendingFrontendTool,
     } = useAgentStore();
 
     // Auto-send ref for initial message
@@ -555,15 +555,14 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setSearchTerm('');
     };
 
-    // Ask user question submit — memoized to avoid invalidating renderedMessages useMemo on every render
-    const handleAskUserQuestionSubmit = useCallback(async (toolUseId: string, response: string) => {
+    const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown) => {
         try {
-            const apiResponse = await authFetch(`${API_BASE}/agents/user-response`, {
+            const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    toolUseId,
-                    response,
+                    toolCallId,
+                    result,
                     sessionId: currentSessionId,
                     agentId: agent.id,
                 }),
@@ -572,11 +571,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             if (!apiResponse.ok) {
                 throw new Error(`HTTP ${apiResponse.status}`);
             }
-            setPendingUserQuestion(null);
+            removePendingFrontendTool(toolCallId);
         } catch (error) {
-            console.error('Submit failed:', error);
+            console.error('[FrontendTool] Submit failed:', error);
         }
-    }, [currentSessionId, agent.id, setPendingUserQuestion]);
+    }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
     // Render messages using existing renderer - matching original chat style
     const renderedMessages = useMemo(() => {
@@ -591,12 +590,12 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     <ChatMessageRenderer
                         // AgentMessage and ChatMessage have compatible shapes for rendering
                         message={message as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
-                        onAskUserQuestionSubmit={handleAskUserQuestionSubmit}
+                        onFrontendToolSubmit={handleFrontendToolSubmit}
                     />
                 </div>
             </div>
         ));
-    }, [messages, handleAskUserQuestionSubmit]);
+    }, [messages, handleFrontendToolSubmit]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -838,7 +837,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 handleCancelDialog={handleCancelDialog}
 
                 // Utility functions
-                isSendDisabled={() => isSendDisabled() || !!pendingUserQuestion}
+                isSendDisabled={() => isSendDisabled() || pendingFrontendTools.size > 0}
 
                 // Environment Variables
                 envVars={envVars}

@@ -62,13 +62,13 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     isAiTyping,
     currentSessionId,
     mcpStatus,
-    pendingUserQuestion,
+    pendingFrontendTools,
     selectedEngine,
     addMessage,
     interruptAllExecutingTools,
     setAiTyping,
     loadSessionMessages,
-    setPendingUserQuestion,
+    removePendingFrontendTool,
   } = useAgentStore();
 
   // 标记是否需要自动发送初始消息
@@ -488,41 +488,28 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     return () => clearTimeout(timer);
   }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
 
-  // 🎤 处理 AskUserQuestion 用户回答提交
-  // 新架构：调用 HTTP API 提交用户响应，MCP 工具会自动接收并返回
-  const handleAskUserQuestionSubmit = async (toolUseId: string, response: string) => {
-    console.log('🎤 [AskUserQuestion] Submitting response for tool:', toolUseId);
-
+  // Submit a frontend tool result to the backend.
+  const handleFrontendToolSubmit = async (toolCallId: string, result: unknown) => {
     try {
-      // 调用新的 API 提交用户响应
-      // 传入 sessionId 和 agentId 用于验证，防止伪造响应
-      const apiResponse = await authFetch(`${API_BASE}/agents/user-response`, {
+      const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          toolUseId,
-          response,
-          sessionId: currentSessionId,  // 用于验证
-          agentId: agent.id,             // 用于验证
+          toolCallId,
+          result,
+          sessionId: currentSessionId,
+          agentId: agent.id,
         }),
       });
 
       if (!apiResponse.ok) {
-        const errorData = await apiResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${apiResponse.status}`);
+        const err = await apiResponse.json().catch(() => ({}));
+        throw new Error(err.error || `HTTP ${apiResponse.status}`);
       }
 
-      console.log('✅ [AskUserQuestion] Response submitted successfully');
-      
-      // 清除待回答的问题状态
-      // MCP 工具会返回结果，Claude 会继续执行，SSE 会继续接收消息
-      setPendingUserQuestion(null);
-      
+      removePendingFrontendTool(toolCallId);
     } catch (error) {
-      console.error('🎤 [AskUserQuestion] Submit failed:', error);
-      // 提交失败时不清除待回答状态，让用户可以重试
+      console.error('[FrontendTool] Submit failed:', error);
     }
   };
 
@@ -795,7 +782,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
               isUserScrolling={isUserScrolling}
               newMessagesCount={newMessagesCount}
               onScrollToBottom={scrollToBottom}
-              onAskUserQuestionSubmit={handleAskUserQuestionSubmit}
+              onFrontendToolSubmit={handleFrontendToolSubmit}
             />
           )}
 
@@ -917,7 +904,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
         // Utility functions
         // 当有待回答的问题时，也禁用输入框
-        isSendDisabled={() => isSendDisabled() || !!pendingUserQuestion}
+        isSendDisabled={() => isSendDisabled() || pendingFrontendTools.size > 0}
 
         // Environment Variables
         envVars={envVars}

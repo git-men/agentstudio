@@ -12,12 +12,13 @@ import { sessionManager } from '../services/sessionManager';
 import { buildQueryOptions } from '../utils/claudeUtils.js';
 import { handleSessionManagement, buildUserMessageContent } from '../utils/sessionUtils.js';
 import {
-  userInputRegistry,
+  frontendToolBridge,
   notificationChannelManager,
   SSENotificationChannel,
   generateSSEChannelId,
-  initAskUserQuestionModule
-} from '../services/askUserQuestion/index.js';
+  initFrontendToolsModule,
+  isFrontendTool,
+} from '../services/frontendTools/index.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
@@ -563,9 +564,7 @@ router.post('/chat', async (req, res) => {
       let isReconnectClosed = false;
 
       // Register an SSE notification channel for the reconnected client so that
-      // AskUserQuestion's awaiting_user_input events can be delivered.  Without
-      // this, any new AskUserQuestion tool call would fail because the
-      // notificationChannelManager has no channel to send the event through.
+      // frontend tool invocation events can be delivered.
       const reconnectChannelId = generateSSEChannelId();
       const reconnectChannel = new SSENotificationChannel(
         reconnectChannelId,
@@ -575,24 +574,15 @@ router.post('/chat', async (req, res) => {
         () => {
           notificationChannelManager.unregisterChannel(reconnectChannelId);
 
-          // Only cancel pending inputs if the session is no longer processing.
-          // If still processing, a subsequent reconnect may replay them.
           const rcSession = sessionManager.getSession(sessionId!);
           if (rcSession && rcSession.isCurrentlyProcessing()) {
-            console.log(`🎤 [Reconnect] Keeping pending inputs alive for reconnectable session: ${sessionId}`);
+            // Keep pending tool calls alive — a subsequent reconnect may replay them.
           } else {
-            const cancelledCount = userInputRegistry.cancelAllBySession(
-              sessionId!,
-              'SSE connection closed'
-            );
-            if (cancelledCount > 0) {
-              console.log(`🎤 [Reconnect] Cancelled ${cancelledCount} pending inputs for session: ${sessionId}`);
-            }
+            frontendToolBridge.cancelBySession(sessionId!, 'SSE connection closed');
           }
         }
       );
       notificationChannelManager.registerChannel(reconnectChannel);
-      console.log(`📡 [Reconnect] Registered SSE notification channel: ${reconnectChannelId} for session: ${sessionId}`);
 
       res.on('close', () => { isReconnectClosed = true; });
 
@@ -613,19 +603,17 @@ router.post('/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
       } catch { /* connection already dead */ }
 
-      // Re-send any pending AskUserQuestion events that were lost when the old connection died
-      const pendingInputs = userInputRegistry.getPendingInputsBySession(sessionId);
-      console.log(`🔍 [Reconnect] Checked pending inputs for session ${sessionId}: found ${pendingInputs.length}`);
-      if (pendingInputs.length > 0) {
-        console.log(`🔄 [Reconnect] Re-sending ${pendingInputs.length} pending awaiting_user_input event(s)`);
-        for (const request of pendingInputs) {
+      // Re-send any pending frontend tool calls that were lost when the old connection died
+      const pendingCalls = frontendToolBridge.getPendingBySession(sessionId);
+      if (pendingCalls.length > 0) {
+        for (const request of pendingCalls) {
           try {
             if (!isReconnectClosed) {
               const event = {
-                type: 'awaiting_user_input',
-                toolUseId: request.toolUseId,
-                toolName: 'mcp__ask-user-question__ask_user_question',
-                toolInput: { questions: request.questions },
+                type: 'frontend_tool_call',
+                toolCallId: request.toolCallId,
+                toolName: request.toolName,
+                args: request.args,
                 agentId: request.agentId,
                 sessionId: request.sessionId,
                 timestamp: Date.now(),
@@ -841,47 +829,29 @@ router.post('/chat', async (req, res) => {
       clearInterval(heartbeatInterval);
     });
 
-    // 🎤 初始化 AskUserQuestion 模块（只会初始化一次）
-    initAskUserQuestionModule();
+    initFrontendToolsModule();
 
-    // 🎤 生成 SSE channel ID（用于通知渠道管理）
     const sseChannelId = generateSSEChannelId();
-    // 注意：SSE channel 需要 sessionId，但新会话还没有 sessionId
-    // 我们使用临时 ID，稍后在收到 Claude SDK 的 sessionId 时更新
     const tempSessionId = sessionId || `temp_${Date.now()}`;
 
-    // 创建 SSE channel，传入 onClose 回调用于自动注销和清理
     const sseChannel = new SSENotificationChannel(
       sseChannelId,
       tempSessionId,
       agentId,
       res,
       () => {
-        // 连接关闭时自动注销渠道，防止内存泄漏
         notificationChannelManager.unregisterChannel(sseChannelId);
 
-        // 🎤 取消该 session 的所有等待中的用户输入请求
-        // 使用 sseChannel.sessionId 获取最新的 sessionId（可能已从 temp 更新为真实 ID）
-        // BUT: if the session is still processing, a reconnect may arrive — preserve
-        // pending inputs so they can be replayed on the new connection.
         const currentSessionId = sseChannel.sessionId;
         const session = sessionManager.getSession(currentSessionId);
-        console.log(`🔍 [AskUserQuestion] onClose: sessionId=${currentSessionId}, sessionFound=${!!session}, isProcessing=${session?.isCurrentlyProcessing()}`);
         if (session && session.isCurrentlyProcessing()) {
-          console.log(`🎤 [AskUserQuestion] Keeping pending inputs alive for reconnectable session: ${currentSessionId}`);
+          // Keep pending tool calls alive — a reconnect may replay them.
         } else {
-          const cancelledCount = userInputRegistry.cancelAllBySession(
-            currentSessionId,
-            'SSE connection closed'
-          );
-          if (cancelledCount > 0) {
-            console.log(`🎤 [AskUserQuestion] Cancelled ${cancelledCount} pending inputs for session: ${currentSessionId}`);
-          }
+          frontendToolBridge.cancelBySession(currentSessionId, 'SSE connection closed');
         }
       }
     );
     notificationChannelManager.registerChannel(sseChannel);
-    console.log(`📡 [AskUserQuestion] Registered SSE channel: ${sseChannelId}`);
 
     // =================================================================================
     // A2A Stream Event Subscription
@@ -965,10 +935,7 @@ router.post('/chat', async (req, res) => {
     while (retryCount <= MAX_RETRIES) {
       try {
         console.log(`🔄 Attempt ${retryCount + 1}/${MAX_RETRIES + 1} for session: ${sessionId || 'new'}`);
-        // 构建查询选项（包含 AskUserQuestion MCP 工具）
-        // 使用 tempSessionId 作为 MCP 工具的 sessionId（新会话还没有真实 sessionId）
-        // Enable A2A streaming for web frontend (real-time updates for external agent calls)
-        const { queryOptions, askUserSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true);
+        const { queryOptions, frontendToolSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true);
 
         // 📊 输出传到 query 中的模型参数
         console.log('📊 [Chat API] QueryOptions 模型参数:');
@@ -1043,9 +1010,6 @@ router.post('/chat', async (req, res) => {
 
         // Initialize AGUI adapter if using AGUI output format
         // NOTE: RUN_STARTED is deferred until the init message arrives with the real session ID.
-        // This prevents a mismatch between RUN_STARTED.threadId and the sessionId used by
-        // awaiting_user_input (and other events), which previously caused the frontend to
-        // send a wrong sessionId when calling /user-response.
         let aguiAdapter: ClaudeAguiAdapter | null = null;
         let aguiRunStartedSent = false;
         if (outputFormat === 'agui') {
@@ -1284,15 +1248,12 @@ router.post('/chat', async (req, res) => {
               sessionManager.confirmSessionId(claudeSession, responseSessionId, configSnapshot);
               console.log(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
 
-              // 🎤 更新 NotificationChannel、UserInputRegistry 和 MCP Server 的 sessionId
               if (tempSessionId !== responseSessionId) {
                 notificationChannelManager.updateChannelSession(sseChannelId, responseSessionId);
-                userInputRegistry.updateSessionId(tempSessionId, responseSessionId);
-                // 更新 AskUserQuestion MCP Server 使用的 session ID
-                if (askUserSessionRef) {
-                  askUserSessionRef.current = responseSessionId;
+                frontendToolBridge.updateSessionId(tempSessionId, responseSessionId);
+                if (frontendToolSessionRef) {
+                  frontendToolSessionRef.current = responseSessionId;
                 }
-                console.log(`📡 [AskUserQuestion] Updated session: ${tempSessionId} -> ${responseSessionId}`);
               }
             } else if (currentSessionId && responseSessionId !== currentSessionId) {
               // Resume scenario: Claude SDK returned a new session ID (branch).
@@ -1363,13 +1324,10 @@ router.post('/chat', async (req, res) => {
             eventData.session_id = actualSessionId || currentSessionId;
           }
 
-          // 🎤 AskUserQuestion 工具调用说明（事件驱动架构）：
-          // 1. MCP 工具调用 userInputRegistry.waitForUserInput()
-          // 2. UserInputRegistry 发出 'awaiting_input' 事件
-          // 3. NotificationChannelManager 通过活跃渠道（SSE/Slack等）发送通知
-          // 4. 用户响应后，调用 /agents/user-response API
-          // 5. MCP 工具返回，Claude 继续执行
-          // 不需要在这里检测工具调用或关闭连接
+          // Frontend tool calls are handled via FrontendToolBridge:
+          // 1. MCP tool calls frontendToolBridge.waitForResult() → blocks
+          // 2. Bridge emits event → NotificationChannelManager sends to channels
+          // 3. User responds → POST /agents/frontend-tool-result → resolves Promise
 
           try {
             if (!res.destroyed && !connectionManager.isConnectionClosed()) {
@@ -1574,76 +1532,51 @@ router.post('/chat', async (req, res) => {
 });
 
 // =================================================================================
-// 🎤 AskUserQuestion: Submit User Response API
+// Frontend Tool Result API
 // =================================================================================
-// 当用户在前端交互组件中提交答案时，前端调用此 API
-// 这会 resolve MCP 工具中正在等待的 Promise，使工具返回用户答案
+// Generic endpoint for submitting frontend tool execution results.
+// Replaces the previous /user-response endpoint with a tool-agnostic version.
 
-const UserResponseSchema = z.object({
-  toolUseId: z.string().min(1, 'toolUseId is required'),
-  response: z.string().min(1, 'response is required'),
-  // 可选的验证参数，用于防止伪造响应
-  sessionId: z.string().optional(),
-  agentId: z.string().optional()
+const FrontendToolResultSchema = z.object({
+  toolCallId: z.string().min(1, 'toolCallId is required'),
+  result: z.union([z.string(), z.record(z.any()), z.array(z.any())]),
+  isError: z.boolean().optional(),
+  sessionId: z.string().min(1, 'sessionId is required'),
+  agentId: z.string().min(1, 'agentId is required'),
 });
 
-router.post('/user-response', async (req, res) => {
+router.post('/frontend-tool-result', async (req, res) => {
   try {
-    const validation = UserResponseSchema.safeParse(req.body);
-
+    const validation = FrontendToolResultSchema.safeParse(req.body);
     if (!validation.success) {
-      return res.status(400).json({
-        error: 'Invalid request body',
-        details: validation.error.issues
-      });
+      return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
     }
 
-    const { toolUseId, response, sessionId, agentId } = validation.data;
+    const { toolCallId, result: rawResult, isError, sessionId, agentId } = validation.data;
 
-    console.log(`🎤 [AskUserQuestion] Received user response for tool: ${toolUseId}`);
-    console.log(`🎤 [AskUserQuestion]   Frontend sessionId: ${sessionId || '(not provided)'}`);
-    console.log(`🎤 [AskUserQuestion]   Frontend agentId: ${agentId || '(not provided)'}`);
+    const resultStr = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
 
-    // Log the pending entry's expected values for debugging
-    const pendingEntry = userInputRegistry.getPendingInput(toolUseId);
-    if (pendingEntry) {
-      console.log(`🎤 [AskUserQuestion]   Pending sessionId: ${pendingEntry.sessionId}`);
-      console.log(`🎤 [AskUserQuestion]   Pending agentId: ${pendingEntry.agentId}`);
-    } else {
-      console.log(`🎤 [AskUserQuestion]   No pending entry found for toolUseId: ${toolUseId}`);
+    if (isError) {
+      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr);
+      if (cancelOk) {
+        return res.json({ success: true });
+      }
+      return res.status(404).json({ success: false, error: 'No pending tool call found' });
     }
 
-    // 使用带验证的提交方法，防止伪造响应
-    const result = userInputRegistry.validateAndSubmitUserResponse(
-      toolUseId,
-      response,
-      sessionId,
-      agentId
-    );
+    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId);
 
-    if (result.success) {
-      console.log(`✅ [AskUserQuestion] User response submitted successfully for tool: ${toolUseId}`);
-      res.json({
-        success: true,
-        message: 'User response submitted successfully'
-      });
+    if (outcome.success) {
+      res.json({ success: true });
     } else {
-      console.warn(`⚠️ [AskUserQuestion] Failed to submit response for tool: ${toolUseId}, error: ${result.error}`);
-
-      // 根据错误类型返回不同的状态码
-      const statusCode = result.error === 'No pending input found for this tool use ID' ? 404 : 403;
-      res.status(statusCode).json({
-        success: false,
-        error: result.error
-      });
+      const status = outcome.error?.includes('mismatch') ? 403 : 404;
+      res.status(status).json({ success: false, error: outcome.error });
     }
   } catch (error) {
-    console.error('❌ [AskUserQuestion] Error processing user response:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error'
-    });
+    console.error('[FrontendToolResult] Error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
+
 
 export default router;
