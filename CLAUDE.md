@@ -202,6 +202,29 @@ t('toolRenderer.executing');  // Never hardcode strings
 
 Translation files: `frontend/src/i18n/locales/{locale}/pages.json`
 
+## Product Edition System
+
+AgentStudio supports product editions to control which features are available per deployment. This layers on top of engine capabilities.
+
+**Preset editions:** `full` (default), `chat-only`, `lite`, `custom`
+
+```bash
+# Start with chat-only edition (only chat + read-only agents/projects)
+PRODUCT_EDITION=chat-only pnpm run dev
+
+# Custom profile from ~/.agentstudio/data/product-profile.json
+PRODUCT_EDITION=custom pnpm run dev
+```
+
+**Key files:**
+- `backend/src/types/product.ts` — Type definitions
+- `backend/src/config/productConfig.ts` — Module definitions, edition presets, route mapping
+- `backend/src/middleware/productGate.ts` — Centralized route middleware
+- `frontend/src/hooks/useProduct.tsx` — Frontend hook
+- `frontend/src/components/ProductGate.tsx` — Gate components (PageGate, ModuleGate, EditionGate)
+
+**Full documentation:** `docs/features/PRODUCT_EDITION.md` (in meta repo)
+
 ## Environment Configuration
 
 Backend `.env` file (`backend/.env`):
@@ -213,6 +236,10 @@ ANTHROPIC_API_KEY=your_key_here
 # Server
 PORT=4936
 NODE_ENV=development
+
+# Product Edition (optional, default: full)
+# Options: full | chat-only | lite | custom
+PRODUCT_EDITION=full
 
 # File System
 SLIDES_DIR=../slides  # Relative to backend/src
