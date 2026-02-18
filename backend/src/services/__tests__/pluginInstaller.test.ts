@@ -4,7 +4,8 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as fs from 'fs';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
+import { EventEmitter } from 'events';
 
 // Mock modules
 vi.mock('fs');
@@ -23,10 +24,20 @@ vi.mock('../pluginScanner');
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
 
+function createMockSpawnChild(exitCode = 0) {
+  const child = new EventEmitter() as any;
+  child.stdin = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  process.nextTick(() => child.emit('close', exitCode));
+  return child;
+}
+
 describe('PluginInstaller', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetModules();
+    vi.mocked(spawn).mockImplementation(() => createMockSpawnChild(0));
   });
 
   describe('addMarketplace', () => {
@@ -42,7 +53,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue(['plugin1', 'plugin2']);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'test-market',
         type: 'git',
@@ -67,7 +78,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'test-market',
         type: 'github',
@@ -92,7 +103,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'test-market',
         type: 'local',
@@ -109,7 +120,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'test-market',
         type: 'local',
@@ -136,7 +147,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue(['plugin1']);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.syncMarketplace('test-market');
 
       expect(result.success).toBe(true);
@@ -152,7 +163,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.syncMarketplace('test-market');
 
       expect(result.success).toBe(false);
@@ -217,7 +228,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginScanner.scanPlugin).mockResolvedValue(mockInstalledPlugin as any);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.installPlugin({
         pluginName: 'test-plugin',
         marketplaceName: 'test-market',
@@ -233,7 +244,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.pluginExists).mockReturnValue(false);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.installPlugin({
         pluginName: 'nonexistent',
         marketplaceName: 'test-market',
@@ -257,7 +268,7 @@ describe('PluginInstaller', () => {
       });
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.installPlugin({
         pluginName: 'invalid-plugin',
         marketplaceName: 'test-market',
@@ -303,7 +314,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginSymlink.removeSymlinks).mockResolvedValue(undefined);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.uninstallPlugin('test-plugin', 'test-market');
 
       expect(result).toBe(true);
@@ -316,7 +327,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getPluginPath).mockReturnValue('/test/path');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.uninstallPlugin('nonexistent', 'test-market');
 
       expect(result).toBe(false);
@@ -329,7 +340,7 @@ describe('PluginInstaller', () => {
       vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
       vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
       vi.mocked(fs.readdirSync).mockReturnValue([] as any);
-      
+
       // Mock fetch for archive download
       const mockResponse = {
         ok: true,
@@ -340,7 +351,7 @@ describe('PluginInstaller', () => {
         }
       };
       mockFetch.mockResolvedValue(mockResponse);
-      
+
       // Mock exec for tar extraction
       vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
         if (callback) callback(null, '', '');
@@ -352,7 +363,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue(['plugin1']);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'cos-market',
         type: 'cos',
@@ -374,7 +385,7 @@ describe('PluginInstaller', () => {
       vi.mocked(fs.renameSync).mockReturnValue(undefined);
       vi.mocked(fs.rmdirSync).mockReturnValue(undefined);
       vi.mocked(fs.rmSync).mockReturnValue(undefined);
-      
+
       // Mock fetch for archive download
       const mockResponse = {
         ok: true,
@@ -385,7 +396,7 @@ describe('PluginInstaller', () => {
         }
       };
       mockFetch.mockResolvedValue(mockResponse);
-      
+
       // Mock exec for tar extraction
       vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
         if (callback) callback(null, '', '');
@@ -397,7 +408,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'archive-market',
         type: 'archive' as any,
@@ -410,7 +421,7 @@ describe('PluginInstaller', () => {
     it('should fail if archive download fails', async () => {
       vi.mocked(fs.existsSync).mockReturnValue(false);
       vi.mocked(fs.rmSync).mockReturnValue(undefined);
-      
+
       // Mock fetch to return error
       mockFetch.mockResolvedValue({
         ok: false,
@@ -422,7 +433,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/failed-market');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'failed-market',
         type: 'archive' as any,
@@ -447,7 +458,7 @@ describe('PluginInstaller', () => {
         name: 'test-market',
         version: '1.0.0'
       }));
-      
+
       // Mock exec: promisify(exec) without custom symbol resolves with first
       // non-error callback arg, so pass { stdout, stderr } as a single object
       vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
@@ -465,7 +476,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.checkForUpdates('test-market');
 
       expect(result.marketplaceId).toBe('test-market');
@@ -481,7 +492,7 @@ describe('PluginInstaller', () => {
         name: 'test-market',
         version: '1.0.0'
       }));
-      
+
       // See comment above re: promisify(exec) mock behavior
       vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
         const cb = typeof options === 'function' ? options : callback;
@@ -494,7 +505,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/test-market');
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.checkForUpdates('test-market');
 
       expect(result.hasUpdate).toBe(false);
@@ -516,7 +527,7 @@ describe('PluginInstaller', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
 
       const { pluginInstaller } = await import('../pluginInstaller');
-      
+
       const result = await pluginInstaller.addMarketplace({
         name: 'auto-update-market',
         type: 'github',
@@ -528,7 +539,7 @@ describe('PluginInstaller', () => {
       });
 
       expect(result.success).toBe(true);
-      
+
       // Verify metadata was saved with autoUpdate config
       expect(fs.writeFileSync).toHaveBeenCalledWith(
         expect.stringContaining('.agentstudio-metadata.json'),
