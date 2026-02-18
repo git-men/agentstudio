@@ -4,7 +4,12 @@
  * Integrates built-in frontend tool MCP servers into Claude query options.
  */
 
-import { createFrontendToolMcpServer, getMcpToolName, type SessionRef } from './frontendToolMcp.js';
+import {
+  createFrontendToolMcpServer,
+  getMcpToolName,
+  registerServerName,
+  type SessionRef,
+} from './frontendToolMcp.js';
 import { BUILTIN_FRONTEND_TOOLS } from './builtinTools.js';
 import type { FrontendToolDefinition } from './types.js';
 
@@ -29,16 +34,17 @@ export async function integrateFrontendTools(
 
   try {
     for (const toolDef of allTools) {
-      const { server } = await createFrontendToolMcpServer(toolDef, sessionRef, agentId);
+      const { server, serverName } = await createFrontendToolMcpServer(toolDef, sessionRef, agentId);
 
       if (server) {
-        const serverName = `frontend-tool-${toolDef.name}`;
+        registerServerName(serverName);
+
         queryOptions.mcpServers = {
           ...queryOptions.mcpServers,
           [serverName]: server,
         };
 
-        const mcpName = getMcpToolName(toolDef.name);
+        const mcpName = getMcpToolName(toolDef);
         if (!queryOptions.allowedTools) {
           queryOptions.allowedTools = [mcpName];
         } else if (!queryOptions.allowedTools.includes(mcpName)) {

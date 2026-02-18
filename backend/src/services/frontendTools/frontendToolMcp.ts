@@ -105,25 +105,53 @@ export async function createFrontendToolMcpServer(
     },
   );
 
+  const serverName = resolveServerName(toolDef);
+
   const server = createSdkMcpServer({
-    name: `frontend-tool-${toolDef.name}`,
+    name: serverName,
     version: '1.0.0',
     tools: [mcpTool],
   });
 
-  return { server, tool: mcpTool, sessionRef };
+  return { server, tool: mcpTool, sessionRef, serverName };
 }
 
 /**
- * Return the MCP tool name as it appears to Claude for a given frontend tool.
+ * Resolve the MCP server name for a tool definition.
+ * Uses `mcpServerName` when explicitly set (for built-in tools that need
+ * a stable identity), otherwise falls back to `frontend-tool-${name}`.
  */
-export function getMcpToolName(toolName: string): string {
-  return `mcp__frontend-tool-${toolName}__${toolName}`;
+export function resolveServerName(toolDef: FrontendToolDefinition): string {
+  return toolDef.mcpServerName || `frontend-tool-${toolDef.name}`;
+}
+
+/**
+ * Return the full MCP tool name as it appears to Claude.
+ */
+export function getMcpToolName(toolDef: FrontendToolDefinition): string {
+  const serverName = resolveServerName(toolDef);
+  return `mcp__${serverName}__${toolDef.name}`;
+}
+
+/**
+ * Set of MCP server names registered through the frontend tool framework.
+ * Used by `isFrontendTool` to recognize tools with custom server names.
+ */
+const registeredServerNames = new Set<string>();
+
+export function registerServerName(name: string): void {
+  registeredServerNames.add(name);
 }
 
 /**
  * Check if a tool name belongs to the frontend tool framework.
+ * Matches both the default `frontend-tool-` prefix and any explicitly
+ * registered server names (e.g. 'ask-user-question').
  */
 export function isFrontendTool(toolName: string): boolean {
-  return toolName.startsWith('mcp__frontend-tool-');
+  if (toolName.startsWith('mcp__frontend-tool-')) return true;
+  for (const serverName of registeredServerNames) {
+    if (toolName.startsWith(`mcp__${serverName}__`)) return true;
+  }
+  return false;
 }

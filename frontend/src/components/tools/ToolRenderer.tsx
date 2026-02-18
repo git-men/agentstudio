@@ -46,7 +46,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFronten
   // 首先检查是否是MCP工具
   const mcpToolInfo = parseMcpToolName(execution.toolName);
   if (mcpToolInfo) {
-    if (mcpToolInfo.serverName.startsWith('frontend-tool-') && mcpToolInfo.toolName === 'ask_user_question') {
+    if (mcpToolInfo.serverName === 'ask-user-question' && mcpToolInfo.toolName === 'ask_user_question') {
       return <AskUserQuestionTool execution={execution} onSubmit={onFrontendToolSubmit} />;
     }
     

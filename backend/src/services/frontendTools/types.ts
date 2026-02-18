@@ -26,6 +26,15 @@ export interface FrontendToolDefinition {
   description: string;
   parameters: FrontendToolParameters;
   /**
+   * Override the MCP server name exposed to the agent.
+   * Defaults to `frontend-tool-${name}` for dynamically registered tools.
+   *
+   * Built-in tools like AskUserQuestion set this explicitly (e.g.
+   * 'ask-user-question') to maintain a stable MCP identity compatible
+   * with Claude Code's native tool of the same name.
+   */
+  mcpServerName?: string;
+  /**
    * Hint for how the result is formatted. 'json' means the result is a
    * JSON-serializable value; 'text' means it is a plain string.
    * The framework does not enforce this — it merely passes the value through.

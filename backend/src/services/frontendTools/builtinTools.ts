@@ -9,6 +9,7 @@ import type { FrontendToolDefinition } from './types.js';
 
 export const ASK_USER_QUESTION_TOOL: FrontendToolDefinition = {
   name: 'ask_user_question',
+  mcpServerName: 'ask-user-question',
   description: `Use this tool when you need to ask the user questions during execution. This allows you to:
 1. Gather user preferences or requirements
 2. Clarify ambiguous instructions

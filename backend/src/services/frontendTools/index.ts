@@ -14,6 +14,8 @@ export { SlackNotificationChannel, generateSlackChannelId } from './slackChannel
 export {
   createFrontendToolMcpServer,
   getMcpToolName,
+  resolveServerName,
+  registerServerName,
   isFrontendTool,
   type SessionRef,
 } from './frontendToolMcp.js';
