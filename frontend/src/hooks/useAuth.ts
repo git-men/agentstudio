@@ -5,7 +5,7 @@ import { getApiBase } from '../lib/config.js';
 import { isTokenExpired, extractToken, shouldRefreshToken as shouldRefreshTokenUtil } from '../utils/authHelpers';
 
 export function useAuth() {
-  const { token, setToken, removeToken, getToken } = useAuthStore();
+  const { token, tokens, setToken, removeToken, getToken } = useAuthStore();
   const { currentService } = useBackendServices();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | string | null>(null);
@@ -16,10 +16,11 @@ export function useAuth() {
   // Use only the service ID to avoid unnecessary re-renders
   const currentServiceId = currentService?.id;
 
-  // Check if the current service has a token - use useMemo to stabilize
+  // Depend on `tokens` (not `getToken`) so the memo recomputes when
+  // Zustand persist hydrates or setToken() is called.
   const currentServiceToken = useMemo(() =>
-    currentServiceId ? getToken(currentServiceId) : null,
-    [currentServiceId, getToken]
+    currentServiceId ? tokens[currentServiceId] || null : null,
+    [currentServiceId, tokens]
   );
   const isAuthenticated = !!currentServiceToken;
 
