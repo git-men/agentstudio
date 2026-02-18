@@ -13,10 +13,7 @@ import {
   Info,
   CheckCircle2,
   ExternalLink,
-  Cloud,
-  Link as LinkIcon,
   ChevronRight,
-  Trash2
 } from 'lucide-react';
 import { showSuccess, showError, showInfo } from '../../utils/toast';
 import { useConfirm } from '../../hooks/useConfirm';
@@ -58,48 +55,12 @@ interface TunnelServerInfo {
   };
   protocols: string[];    // e.g., ["https", "http"]
   instruction?: string;   // Optional instruction message from server
-  auth?: {
-    required: boolean;
-    type: string | null;
-  };
 }
 
 type TunelyConfigStep = 'server' | 'domain' | 'connected' | 'edit';
 
-// Cloudflare tunnel types
-interface CloudflareConfig {
-  hasApiToken: boolean;
-  hasAccountId: boolean;
-  activeTunnel: {
-    tunnelId: string;
-    tunnelName: string;
-    publicUrl: string;
-    createdAt: string;
-    localPort: number;
-  } | null;
-}
-
-interface CloudflareTunnelDetails {
-  id: string;
-  name: string;
-  publicUrl: string;
-  localUrl: string;
-  createdAt: string;
-  token: string;
-  instructions: {
-    cli: string;
-    docker: string;
-  };
-}
-
-type TunnelType = 'tunely' | 'cloudflare';
-type CloudflareWizardStep = 'intro' | 'credentials' | 'create' | 'start' | 'done';
-
 export const WebSocketTunnelPage: React.FC = () => {
   const confirm = useConfirm();
-  
-  // Tab state
-  const [activeTab, setActiveTab] = useState<TunnelType>('tunely');
 
   // Tunely state
   const [config, setConfig] = useState<TunnelConfig | null>(null);
@@ -115,36 +76,18 @@ export const WebSocketTunnelPage: React.FC = () => {
   const [copiedDomain, setCopiedDomain] = useState(false);
   const [accessToken, setAccessToken] = useState('');
 
+  // HTTP proxy URL copy state (for the proxy URL shown in Tunely connected step)
+  const [copiedProxyUrl, setCopiedProxyUrl] = useState(false);
+
   // Tunely server info state
   const [tunelyStep, setTunelyStep] = useState<TunelyConfigStep>('server');
   const [serverInfo, setServerInfo] = useState<TunnelServerInfo | null>(null);
   const [fetchingInfo, setFetchingInfo] = useState(false);
 
-  // Cloudflare state
-  const [cfConfig, setCfConfig] = useState<CloudflareConfig | null>(null);
-  const [cfApiToken, setCfApiToken] = useState('');
-  const [cfAccountId, setCfAccountId] = useState('');
-  const [cfSubdomain, setCfSubdomain] = useState('');
-  const [cfLocalPort, setCfLocalPort] = useState('4936');
-  const [cfLoading, setCfLoading] = useState(false);
-  const [cfSaving, setCfSaving] = useState(false);
-  const [cfCreating, setCfCreating] = useState(false);
-  const [cfError, setCfError] = useState<string | null>(null);
-  const [cfSuccess, setCfSuccess] = useState<string | null>(null);
-  const [cfCopiedUrl, setCfCopiedUrl] = useState(false);
-  const [cfCopiedCommand, setCfCopiedCommand] = useState(false);
-  const [cfTunnelDetails, setCfTunnelDetails] = useState<CloudflareTunnelDetails | null>(null);
-  const [cfCurrentStep, setCfCurrentStep] = useState<CloudflareWizardStep>('intro');
-  const [cfShowWizard, setCfShowWizard] = useState(true);
-
-  // HTTP proxy URL copy state (for the proxy URL shown in Tunely connected step)
-  const [copiedProxyUrl, setCopiedProxyUrl] = useState(false);
-
   // Load config and status on mount
   useEffect(() => {
     loadConfig();
     loadStatus();
-    loadCfConfig();
   }, []);
 
   // Poll status while connected
@@ -290,11 +233,6 @@ export const WebSocketTunnelPage: React.FC = () => {
       return;
     }
 
-    if (serverInfo?.auth?.required && !accessToken.trim()) {
-      showError('该服务器要求提供接入令牌，请先获取令牌');
-      return;
-    }
-
     setSaving(true);
 
     try {
@@ -311,7 +249,6 @@ export const WebSocketTunnelPage: React.FC = () => {
           protocol,
           websocketUrl: serverInfo?.websocket?.url,
           domainSuffix: serverInfo?.domain?.suffix,
-          ...(accessToken.trim() ? { accessToken: accessToken.trim() } : {}),
         })
       });
 
@@ -324,7 +261,6 @@ export const WebSocketTunnelPage: React.FC = () => {
       setConfig(data.config);
       setStatus(data.status);
       setCheckResult(null);
-      setAccessToken('');
 
       // Switch to connected step
       setTunelyStep('connected');
@@ -421,7 +357,7 @@ export const WebSocketTunnelPage: React.FC = () => {
     }
   };
 
-  // Get full domain with suffix (for IM access)
+  // Get full domain with suffix
   const getFullDomain = () => {
     if (!config?.tunnelName) return null;
     const suffix = config.domainSuffix || serverInfo?.domain?.suffix || '.agentstudio.woa.com';
@@ -450,163 +386,6 @@ export const WebSocketTunnelPage: React.FC = () => {
       navigator.clipboard.writeText(proxyUrl);
       setCopiedProxyUrl(true);
       setTimeout(() => setCopiedProxyUrl(false), 2000);
-    }
-  };
-
-  // Cloudflare functions
-  const loadCfConfig = async () => {
-    setCfLoading(true);
-    try {
-      const response = await fetch('/api/cloudflare-tunnel/config', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('jwt')}`
-        }
-      });
-
-      if (!response.ok) throw new Error('Failed to load Cloudflare configuration');
-
-      const data = await response.json();
-      setCfConfig(data);
-
-      // Auto-determine current step based on config
-      if (data.activeTunnel) {
-        setCfCurrentStep('done');
-        setCfShowWizard(false);
-      } else if (data.hasApiToken && data.hasAccountId) {
-        setCfCurrentStep('create');
-      } else {
-        setCfCurrentStep('credentials');
-      }
-    } catch (err) {
-      console.error('Error loading Cloudflare config:', err);
-    } finally {
-      setCfLoading(false);
-    }
-  };
-
-  const saveCfCredentials = async () => {
-    if (!cfApiToken || !cfAccountId) {
-      setCfError('请输入 API Token 和 Account ID');
-      return;
-    }
-
-    setCfSaving(true);
-    setCfError(null);
-    setCfSuccess(null);
-
-    try {
-      const response = await fetch('/api/cloudflare-tunnel/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('jwt')}`
-        },
-        body: JSON.stringify({ apiToken: cfApiToken, accountId: cfAccountId })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to save credentials');
-      }
-
-      setCfSuccess('凭证保存成功');
-      await loadCfConfig();
-      setCfCurrentStep('create');
-      setCfApiToken('');
-      setCfAccountId('');
-    } catch (err) {
-      setCfError(err instanceof Error ? err.message : 'Failed to save credentials');
-    } finally {
-      setCfSaving(false);
-    }
-  };
-
-  const createCfTunnel = async () => {
-    setCfCreating(true);
-    setCfError(null);
-    setCfSuccess(null);
-    setCfTunnelDetails(null);
-
-    try {
-      const response = await fetch('/api/cloudflare-tunnel/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('jwt')}`
-        },
-        body: JSON.stringify({
-          subdomain: cfSubdomain || undefined,
-          localPort: parseInt(cfLocalPort)
-        })
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to create tunnel');
-      }
-
-      const data = await response.json();
-      setCfTunnelDetails(data.tunnel);
-      setCfSuccess('隧道创建成功');
-      setCfCurrentStep('start');
-      await loadCfConfig();
-    } catch (err) {
-      setCfError(err instanceof Error ? err.message : 'Failed to create tunnel');
-    } finally {
-      setCfCreating(false);
-    }
-  };
-
-  const deleteCfTunnel = async (tunnelId: string) => {
-    const confirmed = await confirm({
-      title: '确认删除',
-      message: '确定要删除此隧道吗？',
-      confirmText: '删除',
-      cancelText: '取消',
-      variant: 'danger'
-    });
-    if (!confirmed) return;
-
-    setCfLoading(true);
-    setCfError(null);
-
-    try {
-      const response = await fetch(`/api/cloudflare-tunnel/delete/${tunnelId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('jwt')}`
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to delete tunnel');
-      }
-
-      setCfSuccess('隧道已删除');
-      setCfTunnelDetails(null);
-      setCfCurrentStep('intro');
-      setCfShowWizard(true);
-      await loadCfConfig();
-    } catch (err) {
-      setCfError(err instanceof Error ? err.message : 'Failed to delete tunnel');
-    } finally {
-      setCfLoading(false);
-    }
-  };
-
-  const copyCfToClipboard = async (text: string, type: 'url' | 'command') => {
-    try {
-      await navigator.clipboard.writeText(text);
-      if (type === 'url') {
-        setCfCopiedUrl(true);
-        setTimeout(() => setCfCopiedUrl(false), 2000);
-      } else {
-        setCfCopiedCommand(true);
-        setTimeout(() => setCfCopiedCommand(false), 2000);
-      }
-    } catch (err) {
-      console.error('Failed to copy:', err);
     }
   };
 
@@ -746,8 +525,8 @@ export const WebSocketTunnelPage: React.FC = () => {
             {/* Check result */}
             {checkResult && (
               <div className={`mt-2 text-sm flex items-center gap-1 ${checkResult.available
-                  ? 'text-green-600 dark:text-green-400'
-                  : 'text-red-600 dark:text-red-400'
+                ? 'text-green-600 dark:text-green-400'
+                : 'text-red-600 dark:text-red-400'
                 }`}>
                 {checkResult.available ? (
                   <>
@@ -785,30 +564,11 @@ export const WebSocketTunnelPage: React.FC = () => {
             </label>
           </div>
 
-          {/* Access Token (when server requires auth) */}
-          {serverInfo?.auth?.required && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                接入令牌 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="password"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="粘贴从管理平台获取的接入令牌"
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                该服务器要求提供接入令牌才能创建隧道，请从 <span className="font-medium">管理平台</span> 获取令牌后粘贴至此处。令牌仅在创建隧道时使用一次。
-              </p>
-            </div>
-          )}
-
           {/* Create Button */}
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={saveConfig}
-              disabled={saving || !tunnelName.trim() || (serverInfo?.auth?.required && !accessToken.trim())}
+              disabled={saving || !tunnelName.trim()}
               className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50"
             >
               {saving ? (
@@ -869,8 +629,8 @@ export const WebSocketTunnelPage: React.FC = () => {
       <>
         {/* Status Card */}
         <div className={`rounded-lg border p-4 ${status?.connected
-            ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
-            : 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700'
+          ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+          : 'bg-gray-50 border-gray-200 dark:bg-gray-800/50 dark:border-gray-700'
           }`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 flex-1">
@@ -962,80 +722,6 @@ export const WebSocketTunnelPage: React.FC = () => {
             </div>
           </div>
         </div>
-
-        {/* Access Methods - IM and Web */}
-        {status?.connected && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
-              <LinkIcon className="w-5 h-5" />
-              接入方式
-            </h2>
-
-            <div className="space-y-4">
-              {/* IM Access */}
-              <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-2 mb-2">
-                  <Wifi className="w-4 h-4 text-blue-500" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-gray-300">IM 接入</span>
-                  <span className="text-xs text-gray-400 dark:text-gray-500">（子域名模式，用于企微/IM 消息转发）</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600 break-all">
-                    {config?.protocol || 'https'}://{getFullDomain()}
-                  </code>
-                  <button
-                    onClick={copyDomain}
-                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="复制"
-                  >
-                    {copiedDomain ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                  <a
-                    href={`${config?.protocol || 'https'}://${getFullDomain()}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                    title="在新窗口打开"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                  </a>
-                </div>
-              </div>
-
-              {/* Web / HTTP Proxy Access */}
-              {getHttpProxyUrl() && (
-                <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Globe className="w-4 h-4 text-green-500" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">网页接入</span>
-                    <span className="text-xs text-gray-400 dark:text-gray-500">（HTTP 代理模式，用于公网 Web 前端访问后端）</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <code className="flex-1 text-sm text-gray-800 dark:text-gray-200 bg-white dark:bg-gray-800 px-3 py-1.5 rounded border border-gray-200 dark:border-gray-600 break-all">
-                      {getHttpProxyUrl()}
-                    </code>
-                    <button
-                      onClick={copyProxyUrl}
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                      title="复制"
-                    >
-                      {copiedProxyUrl ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                    </button>
-                    <a
-                      href={getHttpProxyUrl()!}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                      title="在新窗口打开"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Current Config Info */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
@@ -1258,405 +944,6 @@ export const WebSocketTunnelPage: React.FC = () => {
     );
   };
 
-  // Cloudflare content renderer
-  const renderCloudflareContent = () => {
-    if (cfLoading && !cfConfig) {
-      return (
-        <div className="flex items-center justify-center h-64">
-          <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-        </div>
-      );
-    }
-
-    const renderCfCredentialsStep = () => (
-      <div className="space-y-6">
-        <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-          <div className="flex items-start">
-            <Info className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mr-3 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-yellow-800 dark:text-yellow-200">
-              <p className="font-medium mb-2">如何获取凭证</p>
-              <ol className="list-decimal list-inside space-y-1 ml-2">
-                <li>登录 Cloudflare 控制面板</li>
-                <li>进入 API Tokens 页面创建 Token</li>
-                <li>在账户首页获取 Account ID</li>
-              </ol>
-              <a
-                href="https://dash.cloudflare.com/profile/api-tokens"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center mt-3 text-yellow-700 dark:text-yellow-300 hover:underline font-medium"
-              >
-                打开 Cloudflare 控制面板
-                <ExternalLink className="w-4 h-4 ml-1" />
-              </a>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              API Token
-            </label>
-            <input
-              type="password"
-              value={cfApiToken}
-              onChange={(e) => setCfApiToken(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="输入 Cloudflare API Token"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Account ID
-            </label>
-            <input
-              type="text"
-              value={cfAccountId}
-              onChange={(e) => setCfAccountId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="输入 Cloudflare Account ID"
-            />
-          </div>
-
-          <button
-            onClick={saveCfCredentials}
-            disabled={cfSaving || !cfApiToken || !cfAccountId}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            {cfSaving ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                <span>保存中...</span>
-              </>
-            ) : (
-              <>
-                <span>保存并继续</span>
-                <ChevronRight className="w-5 h-5" />
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    );
-
-    const renderCfCreateStep = () => (
-      <div className="space-y-6">
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-          <div className="flex items-start">
-            <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
-            <div className="text-sm text-blue-800 dark:text-blue-200">
-              <p>配置你的隧道参数，然后点击创建。隧道将通过 Cloudflare 的全球网络进行加速。</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              子域名 (可选)
-            </label>
-            <input
-              type="text"
-              value={cfSubdomain}
-              onChange={(e) => setCfSubdomain(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="my-tunnel"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              留空将自动生成随机子域名
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              本地端口
-            </label>
-            <input
-              type="number"
-              value={cfLocalPort}
-              onChange={(e) => setCfLocalPort(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              placeholder="4936"
-            />
-          </div>
-
-          <button
-            onClick={createCfTunnel}
-            disabled={cfCreating}
-            className="w-full px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
-          >
-            {cfCreating ? (
-              <>
-                <RefreshCw className="w-5 h-5 animate-spin" />
-                <span>创建中...</span>
-              </>
-            ) : (
-              <>
-                <LinkIcon className="w-5 h-5" />
-                <span>创建隧道</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    );
-
-    const renderCfStartStep = () => {
-      if (!cfTunnelDetails) return null;
-
-      return (
-        <div className="space-y-6">
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
-            <div className="flex items-start">
-              <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 mr-3 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-green-800 dark:text-green-200">
-                <p className="font-medium">隧道创建成功！</p>
-                <p className="mt-1">请启动 cloudflared 客户端来激活隧道。</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-            <h4 className="font-medium text-gray-900 dark:text-white mb-4">
-              你的公网地址
-            </h4>
-            <div className="flex items-center space-x-2 p-3 bg-gray-50 dark:bg-gray-900 rounded border border-gray-200 dark:border-gray-700">
-              <Globe className="w-5 h-5 text-blue-600 flex-shrink-0" />
-              <a
-                href={cfTunnelDetails.publicUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-blue-600 dark:text-blue-400 hover:underline font-mono text-sm break-all"
-              >
-                {cfTunnelDetails.publicUrl}
-              </a>
-              <button
-                onClick={() => copyCfToClipboard(cfTunnelDetails.publicUrl, 'url')}
-                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded flex-shrink-0"
-              >
-                {cfCopiedUrl ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <h4 className="font-medium text-gray-900 dark:text-white">
-              启动方式
-            </h4>
-
-            <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Docker 方式 (推荐)
-                </span>
-                <button
-                  onClick={() => copyCfToClipboard(cfTunnelDetails.instructions.docker, 'command')}
-                  className="text-xs px-2 py-1 bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 rounded flex items-center space-x-1"
-                >
-                  {cfCopiedCommand ? (
-                    <>
-                      <Check className="w-3 h-3" />
-                      <span>已复制</span>
-                    </>
-                  ) : (
-                    <>
-                      <Copy className="w-3 h-3" />
-                      <span>复制</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              <code className="block text-xs bg-white dark:bg-gray-800 p-3 rounded border border-gray-300 dark:border-gray-600 overflow-x-auto">
-                {cfTunnelDetails.instructions.docker}
-              </code>
-            </div>
-
-            <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <div className="mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                  CLI 方式
-                </span>
-              </div>
-              <div className="space-y-2 text-xs text-gray-600 dark:text-gray-400">
-                <p>1. 安装 cloudflared</p>
-                <code className="block bg-white dark:bg-gray-800 p-2 rounded border border-gray-300 dark:border-gray-600">
-                  brew install cloudflare/cloudflare/cloudflared
-                </code>
-                <p>2. 运行命令</p>
-                <code className="block bg-white dark:bg-gray-800 p-2 rounded border border-gray-300 dark:border-gray-600 overflow-x-auto">
-                  {cfTunnelDetails.instructions.cli}
-                </code>
-              </div>
-            </div>
-          </div>
-
-          <button
-            onClick={() => {
-              setCfCurrentStep('done');
-              setCfShowWizard(false);
-            }}
-            className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2"
-          >
-            <CheckCircle2 className="w-5 h-5" />
-            <span>完成设置</span>
-          </button>
-        </div>
-      );
-    };
-
-    const renderCfDoneStep = () => {
-      if (!cfConfig?.activeTunnel) return null;
-
-      return (
-        <div className="space-y-6">
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-6 text-center">
-            <CheckCircle2 className="w-16 h-16 text-green-600 dark:text-green-400 mx-auto mb-4" />
-            <h3 className="text-xl font-semibold text-green-900 dark:text-green-100 mb-2">
-              隧道配置完成
-            </h3>
-            <p className="text-green-800 dark:text-green-200">
-              你的 Agent Studio 已可通过公网访问
-            </p>
-          </div>
-
-          <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h4 className="font-medium text-gray-900 dark:text-white">
-                活动隧道
-              </h4>
-              <button
-                onClick={() => deleteCfTunnel(cfConfig.activeTunnel!.tunnelId)}
-                className="text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-sm flex items-center space-x-1"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span>删除隧道</span>
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <span className="text-sm text-gray-600 dark:text-gray-400">
-                  公网地址:
-                </span>
-                <div className="flex items-center space-x-2 mt-1 p-2 bg-gray-50 dark:bg-gray-900 rounded">
-                  <a
-                    href={cfConfig.activeTunnel.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex-1 text-blue-600 dark:text-blue-400 hover:underline font-mono text-sm break-all"
-                  >
-                    {cfConfig.activeTunnel.publicUrl}
-                  </a>
-                  <button
-                    onClick={() => copyCfToClipboard(cfConfig.activeTunnel!.publicUrl, 'url')}
-                    className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded"
-                  >
-                    {cfCopiedUrl ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">隧道名称:</span>
-                  <p className="font-mono text-gray-900 dark:text-white">{cfConfig.activeTunnel.tunnelName}</p>
-                </div>
-                <div>
-                  <span className="text-gray-600 dark:text-gray-400">本地端口:</span>
-                  <p className="font-mono text-gray-900 dark:text-white">{cfConfig.activeTunnel.localPort}</p>
-                </div>
-              </div>
-
-              <div className="text-xs text-gray-500 dark:text-gray-400">
-                创建时间: {new Date(cfConfig.activeTunnel.createdAt).toLocaleString()}
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-            <div className="flex items-start">
-              <Info className="w-5 h-5 text-blue-600 dark:text-blue-400 mr-3 mt-0.5 flex-shrink-0" />
-              <div className="text-sm text-blue-800 dark:text-blue-200">
-                <p className="font-medium mb-1">提示</p>
-                <p>请确保 cloudflared 客户端保持运行，否则隧道将无法访问。</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    return (
-      <div className="space-y-6">
-        {/* Error/Success Messages */}
-        {cfError && (
-          <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start space-x-3">
-            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-red-700 dark:text-red-400">{cfError}</p>
-          </div>
-        )}
-
-        {cfSuccess && (
-          <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 flex items-start space-x-3">
-            <Check className="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-green-700 dark:text-green-400">{cfSuccess}</p>
-          </div>
-        )}
-
-        {/* Wizard */}
-        {cfShowWizard && (
-          <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
-            {cfCurrentStep === 'intro' && (
-              <div className="space-y-6">
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
-                  <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-4 flex items-center">
-                    <Info className="w-5 h-5 mr-2" />
-                    什么是 Cloudflare Tunnel?
-                  </h3>
-                  <div className="space-y-3 text-sm text-blue-800 dark:text-blue-200">
-                    <p>Cloudflare Tunnel 可以安全地将你的本地服务暴露到互联网，无需公网 IP 或端口转发。</p>
-                    <ul className="list-disc list-inside space-y-2 ml-2">
-                      <li>自动 HTTPS 加密</li>
-                      <li>DDoS 防护</li>
-                      <li>全球 CDN 加速</li>
-                      <li>无需配置防火墙</li>
-                    </ul>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setCfCurrentStep('credentials')}
-                  className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center space-x-2"
-                >
-                  <span>开始配置</span>
-                  <ChevronRight className="w-5 h-5" />
-                </button>
-              </div>
-            )}
-            {cfCurrentStep === 'credentials' && renderCfCredentialsStep()}
-            {cfCurrentStep === 'create' && renderCfCreateStep()}
-            {cfCurrentStep === 'start' && renderCfStartStep()}
-            {cfCurrentStep === 'done' && renderCfDoneStep()}
-          </div>
-        )}
-
-        {/* Show wizard button when closed */}
-        {!cfShowWizard && cfConfig?.activeTunnel && (
-          <button
-            onClick={() => setCfShowWizard(true)}
-            className="text-blue-600 dark:text-blue-400 hover:underline text-sm flex items-center space-x-1"
-          >
-            <Info className="w-4 h-4" />
-            <span>查看设置向导</span>
-          </button>
-        )}
-      </div>
-    );
-  };
-
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -1670,7 +957,7 @@ export const WebSocketTunnelPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Security Warning - Global */}
+      {/* Security Warning */}
       <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 p-4">
         <div className="flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -1681,38 +968,7 @@ export const WebSocketTunnelPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab Navigation */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8">
-          <button
-            onClick={() => setActiveTab('tunely')}
-            className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${activeTab === 'tunely'
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-          >
-            <Wifi className="w-4 h-4" />
-            Tunely (WebSocket)
-          </button>
-          {/* Hide Cloudflare Tunnel in production */}
-          {!import.meta.env.PROD && (
-            <button
-              onClick={() => setActiveTab('cloudflare')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${activeTab === 'cloudflare'
-                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
-                }`}
-            >
-              <Cloud className="w-4 h-4" />
-              Cloudflare Tunnel
-            </button>
-          )}
-        </nav>
-      </div>
-
-      {/* Tab Content */}
-      {activeTab === 'tunely' && renderTunelyContent()}
-      {activeTab === 'cloudflare' && !import.meta.env.PROD && renderCloudflareContent()}
+      {renderTunelyContent()}
     </div>
   );
 };
