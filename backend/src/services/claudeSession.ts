@@ -456,28 +456,37 @@ export class ClaudeSession {
   }
 
   /**
-   * 关闭会话
+   * 关闭会话并终止底层 Claude CLI 子进程
    */
   async close(): Promise<void> {
     console.log(`🔚 Closing Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
 
-    // 如果已经不活跃，直接返回
     if (!this.isActive) {
       console.log(`⚠️  Session already inactive for agent: ${this.agentId}`);
       return;
     }
 
     this.isActive = false;
+    this.isProcessing = false;
 
-    // 清理所有待处理的回调，避免在关闭过程中继续处理响应
     const pendingCallbacks = this.responseCallbacks.size;
     this.responseCallbacks.clear();
     console.log(`🧹 Cleared ${pendingCallbacks} pending response callbacks`);
 
-    // 结束消息队列，这会让 async generator 完成
     this.messageQueue.end();
 
-    // 给 SDK 一些时间来优雅地处理队列结束
+    // Forcefully terminate the underlying Claude CLI subprocess via SDK close()
+    // This cleans up all resources including pending requests, MCP transports,
+    // and the CLI subprocess — preventing orphaned claude processes.
+    if (this.queryObject && typeof this.queryObject.close === 'function') {
+      try {
+        this.queryObject.close();
+        console.log(`🔪 Terminated Claude CLI subprocess for agent: ${this.agentId}`);
+      } catch (error) {
+        console.warn(`⚠️  Failed to close query object for agent ${this.agentId}:`, error);
+      }
+    }
+
     await new Promise(resolve => setTimeout(resolve, 100));
 
     console.log(`✅ Claude session closed for agent: ${this.agentId}`);

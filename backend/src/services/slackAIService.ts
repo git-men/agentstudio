@@ -1270,7 +1270,7 @@ Feel free to organize your files here as needed. This directory is managed by Ag
       let claudeSession = sessionId ? sessionManager.getSession(sessionId) : null;
 
       if (!claudeSession) {
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeConfig.versionId, claudeConfig.model, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeConfig.versionId, claudeConfig.model, configSnapshot);
         console.log(`🆕 Created new Claude session for Slack thread: ${threadTs}`);
       } else {
         console.log(`♻️  Reusing existing Claude session: ${sessionId}`);
@@ -1281,7 +1281,7 @@ Feel free to organize your files here as needed. This directory is managed by Ag
           if (configChanged) {
             console.log(`🔄 Config changed for Slack session ${sessionId}, removing old session and creating new one`);
             await sessionManager.removeSession(sessionId);
-            claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeConfig.versionId, claudeConfig.model, configSnapshot);
+            claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeConfig.versionId, claudeConfig.model, configSnapshot);
             console.log(`🆕 Created new Claude session due to config change for Slack thread: ${threadTs}`);
           }
         }

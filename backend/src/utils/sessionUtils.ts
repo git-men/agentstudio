@@ -53,16 +53,16 @@ export async function handleSessionManagement(
       if (sessionExists) {
         // Create new ClaudeSession with resume=sessionId (bypassing SessionManager cache)
         console.log(`🆕 [sessionMode=new] Creating fresh ClaudeSession with resume=${sessionId} for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
       } else {
         // No history to resume, create completely new session
         console.log(`🆕 [sessionMode=new] Creating fresh ClaudeSession (no history found) for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
       }
     } else {
       // No sessionId provided, create completely new session
       console.log(`🆕 [sessionMode=new] Creating fresh ClaudeSession (no sessionId) for agent: ${agentId}`);
-      claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+      claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
     }
     return { claudeSession, actualSessionId };
   }
@@ -81,12 +81,12 @@ export async function handleSessionManagement(
       if (sessionExists) {
         // Create new ClaudeSession with resume=sessionId to preserve history
         console.log(`🆕 Creating fresh ClaudeSession with resume=${sessionId} due to config change for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
         return { claudeSession, actualSessionId };
       } else {
         // No history to resume, create completely new session
         console.log(`🆕 Creating fresh ClaudeSession (no history) due to config change for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
         return { claudeSession, actualSessionId: null };
       }
     }
@@ -105,9 +105,9 @@ export async function handleSessionManagement(
 
         const sessionExists = sessionManager.checkSessionExists(sessionId, projectPath);
         if (sessionExists) {
-          claudeSession = sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
+          claudeSession = await sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
         } else {
-          claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+          claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
         }
         return { claudeSession, actualSessionId };
       }
@@ -129,16 +129,16 @@ export async function handleSessionManagement(
       if (sessionExists) {
         // Session history exists, resume session
         console.log(`🔄 Found session history for ${sessionId}, resuming session for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, sessionId, claudeVersionId, modelId, configSnapshot);
       } else {
         // Session history not found, create new session but keep original sessionId for frontend
         console.log(`⚠️  Session ${sessionId} not found in memory or project history, creating new session for agent: ${agentId}`);
-        claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+        claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
       }
     }
   } else {
     // Create new persistent session
-    claudeSession = sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
+    claudeSession = await sessionManager.createNewSession(agentId, queryOptions, undefined, claudeVersionId, modelId, configSnapshot);
     console.log(`🆕 Created new persistent Claude session for agent: ${agentId}`);
   }
 
