@@ -51,7 +51,7 @@ import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
 import { productGateMiddleware } from './middleware/productGate.js';
-import { fileSandboxMiddleware, logSandboxConfig } from './middleware/fileSandbox.js';
+
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
@@ -141,7 +141,6 @@ logSdkConfig(); // Keep for backward compatibility
 // Initialize and log product edition configuration
 initializeProduct();
 logProductConfig();
-logSandboxConfig();
 
 // Get version from package.json (works in both dev and npm package mode)
 const getVersion = () => {
@@ -558,7 +557,7 @@ const app: express.Express = express();
   });
 
   // Protected routes - Require authentication
-  app.use("/api/files", authMiddleware, fileSandboxMiddleware, filesRouter);
+  app.use("/api/files", authMiddleware, filesRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
   app.use('/api/mcp', authMiddleware, mcpRouter);
   app.use('/api/sessions', authMiddleware, sessionsRouter);
