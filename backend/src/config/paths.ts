@@ -172,6 +172,28 @@ export const SCRIPTS_DIR = join(AGENTSTUDIO_HOME, 'scripts');
  */
 export const SLACK_SESSION_LOCKS_DIR = join(AGENTSTUDIO_HOME, 'slack-session-locks');
 
+// ─── Platform Hooks ─────────────────────────────────────────────────────────
+
+/**
+ * Directory for platform hook configuration files.
+ * Default: ~/.agentstudio/hooks
+ */
+export const HOOKS_DIR = join(AGENTSTUDIO_HOME, 'hooks');
+
+/**
+ * File path for global hooks configuration.
+ * Default: ~/.agentstudio/hooks/global-hooks.json
+ */
+export const GLOBAL_HOOKS_FILE = join(HOOKS_DIR, 'global-hooks.json');
+
+/**
+ * Get the hooks file path for a specific project.
+ * Default: ~/.agentstudio/hooks/projects/<projectId>/hooks.json
+ */
+export function getProjectHooksFile(projectId: string): string {
+  return join(HOOKS_DIR, 'projects', projectId, 'hooks.json');
+}
+
 // ─── Scheduled Tasks ─────────────────────────────────────────────────────────
 
 /**
