@@ -1291,6 +1291,30 @@
       "deleteExternalAgent": "Are you sure you want to delete this external agent? This action cannot be undone."
     }
   },
+  "codexFileChange": {
+    "title": "File Changes",
+    "filesCount": "file(s)",
+    "added": "added",
+    "modified": "modified",
+    "deleted": "deleted",
+    "executing": "Applying changes...",
+    "status": "Status"
+  },
+  "codexWebSearch": {
+    "title": "Web Search",
+    "query": "Query",
+    "searching": "Searching...",
+    "completed": "Search completed"
+  },
+  "codexTodoList": {
+    "title": "Todo List",
+    "tasks": "tasks",
+    "loading": "Loading tasks...",
+    "completed": "{{completed}}/{{total}} completed"
+  },
+  "codexSdkToolRenderer": {
+    "unknownTool": "Unknown Codex SDK tool: {{toolName}}"
+  },
   "voiceInput": {
     "loading": "Loading...",
     "notConfigured": "Voice service not configured, click to configure",

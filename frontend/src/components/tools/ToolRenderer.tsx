@@ -32,6 +32,7 @@ import { parseMcpToolName } from './mcpUtils';
 import { BaseToolComponent } from './BaseToolComponent';
 import { CUSTOM_MCP_TOOLS } from './customMcpTools';
 import { CursorToolRenderer, isCursorTool } from './cursor';
+import { CodexSdkToolRenderer, isCodexSdkTool } from './codex-sdk';
 import { getToolRender, type FrontendToolSubmitResult, type FrontendToolStatus } from '../../services/frontendToolRegistry';
 import { useAgentStore } from '../../stores/useAgentStore';
 
@@ -158,6 +159,11 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFronten
   // 检查是否为 Cursor 工具
   if (isCursorTool(execution.toolName)) {
     return <CursorToolRenderer execution={execution} />;
+  }
+
+  // 检查是否为 Codex SDK 工具
+  if (isCodexSdkTool(execution.toolName)) {
+    return <CodexSdkToolRenderer execution={execution} />;
   }
 
   switch (execution.toolName) {

@@ -13,7 +13,7 @@
 /**
  * Supported engine types
  */
-export type EngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex';
+export type EngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex' | 'codex-sdk';
 
 /**
  * Image data for engine requests
@@ -60,6 +60,14 @@ export interface EngineConfig {
   /** Provider ID (only for Claude engine) */
   providerId?: string;
   
+  // Codex SDK-specific options
+  /** Reasoning effort level for Codex SDK */
+  reasoningEffort?: 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** Approval policy for Codex SDK */
+  approvalPolicy?: 'never' | 'on-request' | 'on-failure' | 'untrusted';
+  /** Additional directories accessible to Codex SDK */
+  additionalDirectories?: string[];
+
   // Cursor-specific options
   /** Command timeout in milliseconds */
   timeout?: number;

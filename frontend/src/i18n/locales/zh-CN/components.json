@@ -1288,6 +1288,30 @@
       "deleteExternalAgent": "确定要删除这个外部Agent吗？此操作不可撤销。"
     }
   },
+  "codexFileChange": {
+    "title": "文件变更",
+    "filesCount": "个文件",
+    "added": "新增",
+    "modified": "修改",
+    "deleted": "删除",
+    "executing": "正在应用变更...",
+    "status": "状态"
+  },
+  "codexWebSearch": {
+    "title": "网络搜索",
+    "query": "搜索词",
+    "searching": "搜索中...",
+    "completed": "搜索完成"
+  },
+  "codexTodoList": {
+    "title": "任务列表",
+    "tasks": "项任务",
+    "loading": "加载任务...",
+    "completed": "{{completed}}/{{total}} 已完成"
+  },
+  "codexSdkToolRenderer": {
+    "unknownTool": "未知 Codex SDK 工具：{{toolName}}"
+  },
   "voiceInput": {
     "loading": "加载中...",
     "notConfigured": "语音服务未配置，点击配置",

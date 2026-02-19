@@ -9,9 +9,10 @@
  * know which engine is active.
  */
 
-import { isCursorEngine } from '../config/engineConfig.js';
+import { isCursorEngine, isCodexEngine, isCodexSdkEngine } from '../config/engineConfig.js';
 import { pluginSymlink } from './pluginSymlink.js';
 import { pluginCopyInstall } from './pluginCopyInstall.js';
+import { pluginCodexInstall } from './pluginCodexInstall.js';
 import type { ParsedPlugin } from '../types/plugins.js';
 
 /**
@@ -30,7 +31,9 @@ export interface PluginInstaller {
  * - claude-sdk: returns pluginSymlink (symlink mode)
  */
 export function getPluginInstaller(): PluginInstaller {
-  return isCursorEngine() ? pluginCopyInstall : pluginSymlink;
+  if (isCursorEngine()) return pluginCopyInstall;
+  if (isCodexEngine() || isCodexSdkEngine()) return pluginCodexInstall;
+  return pluginSymlink;
 }
 
 /**

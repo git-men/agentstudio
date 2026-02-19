@@ -71,7 +71,7 @@ function detectEngineType(): ServiceEngineType {
  * Supports case-insensitive matching and common aliases
  */
 function validateEngineType(engine: string): ServiceEngineType {
-  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk', 'codex-cli'];
+  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk', 'codex-cli', 'codex-sdk'];
   const normalized = engine.trim().toLowerCase();
 
   // 直接匹配
@@ -94,6 +94,8 @@ function validateEngineType(engine: string): ServiceEngineType {
     'codex': 'codex-cli',
     'codex_cli': 'codex-cli',
     'codexcli': 'codex-cli',
+    'codex_sdk': 'codex-sdk',
+    'codexsdk': 'codex-sdk',
   };
 
   const mapped = aliasMap[normalized];
@@ -270,6 +272,55 @@ const CODEBUDDY_SDK_CAPABILITIES: ServiceEngineCapabilities = {
 /**
  * Codex CLI engine capabilities
  */
+const CODEX_SDK_CAPABILITIES: ServiceEngineCapabilities = {
+  mcp: {
+    supported: true,
+    scopes: ['global'],
+    canRead: true,
+    canWrite: false,
+  },
+  rules: {
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  commands: {
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  skills: {
+    supported: true,
+    scopes: ['user', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  plugins: {
+    supported: true,
+    scopes: ['user'],
+    canRead: true,
+    canWrite: false,
+  },
+  hooks: {
+    supported: false,
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  features: {
+    provider: false,
+    subagents: false,
+    a2a: false,
+    scheduledTasks: true,
+    mcpAdmin: true,
+    voice: true,
+    vision: true,
+    hooks: false,
+  },
+};
+
 const CODEX_CLI_CAPABILITIES: ServiceEngineCapabilities = {
   mcp: {
     supported: true,
@@ -431,6 +482,13 @@ export function initializeEngine(): ServiceEngineConfig {
       capabilities: CODEBUDDY_SDK_CAPABILITIES,
       paths: getCodebuddySdkPaths(),
     };
+  } else if (engineType === 'codex-sdk') {
+    _engineConfig = {
+      engine: 'codex-sdk',
+      name: 'Codex SDK',
+      capabilities: CODEX_SDK_CAPABILITIES,
+      paths: getCodexCliPaths(),
+    };
   } else if (engineType === 'codex-cli') {
     _engineConfig = {
       engine: 'codex-cli',
@@ -494,6 +552,13 @@ export function isCodebuddyEngine(): boolean {
  */
 export function isCodexEngine(): boolean {
   return getEngineType() === 'codex-cli';
+}
+
+/**
+ * Check if current engine is Codex SDK
+ */
+export function isCodexSdkEngine(): boolean {
+  return getEngineType() === 'codex-sdk';
 }
 
 /**
@@ -568,7 +633,7 @@ export { getEngineType as SDK_ENGINE_TYPE };
 export function getSdkDirName(): string {
   if (isCursorEngine()) return '.cursor';
   if (isCodebuddyEngine()) return '.codebuddy';
-  if (isCodexEngine()) return '.codex';
+  if (isCodexEngine() || isCodexSdkEngine()) return '.codex';
   return '.claude';
 }
 

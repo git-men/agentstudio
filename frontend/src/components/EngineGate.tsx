@@ -119,7 +119,7 @@ export function ConfigGate({
 
 interface EngineTypeGateProps {
   /** Engine type to check for */
-  engine: 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk' | 'codex-cli';
+  engine: 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk' | 'codex-cli' | 'codex-sdk';
   /** Content to render if engine matches */
   children: ReactNode;
   /** Fallback content if engine doesn't match */

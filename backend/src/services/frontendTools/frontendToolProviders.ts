@@ -98,6 +98,12 @@ export class InProcessProvider implements IFrontendToolProvider {
  * Used by engines that invoke an external CLI (Cursor CLI).
  */
 export class HttpMcpProvider implements IFrontendToolProvider {
+  private configWriter: McpConfigWriter;
+
+  constructor(configWriter?: McpConfigWriter) {
+    this.configWriter = configWriter || new CursorConfigWriter();
+  }
+
   async setup(
     sessionId: string,
     agentId: string,
@@ -111,9 +117,8 @@ export class HttpMcpProvider implements IFrontendToolProvider {
       httpMcpToolRegistry.registerSession(sessionId, agentId, allTools);
     }
 
-    if (context?.workspace && context?.backendBaseUrl && allTools.length > 0) {
-      const { writeMcpConfig } = await import('./mcpConfigManager.js');
-      await writeMcpConfig(context.workspace, context.backendBaseUrl, sessionId);
+    if (context?.backendBaseUrl && allTools.length > 0) {
+      await this.configWriter.write(context.workspace || '', context.backendBaseUrl, sessionId);
     }
 
     return { mcpServers: {}, allowedTools: [], sessionRef };
@@ -121,16 +126,59 @@ export class HttpMcpProvider implements IFrontendToolProvider {
 
   cleanup(sessionId: string): void {
     httpMcpToolRegistry.unregisterSession(sessionId);
+    this.configWriter.cleanup?.(sessionId);
+  }
+}
+
+// ── Config Writers ──────────────────────────────────────────────────
+
+export interface McpConfigWriter {
+  write(workspace: string, backendBaseUrl: string, sessionId: string): Promise<void>;
+  cleanup?(sessionId: string): Promise<void>;
+}
+
+export class CursorConfigWriter implements McpConfigWriter {
+  async write(workspace: string, backendBaseUrl: string, sessionId: string): Promise<void> {
+    const { writeMcpConfig } = await import('./mcpConfigManager.js');
+    await writeMcpConfig(workspace, backendBaseUrl, sessionId);
+  }
+}
+
+export class CodexConfigWriter implements McpConfigWriter {
+  async write(_workspace: string, backendBaseUrl: string, sessionId: string): Promise<void> {
+    const { writeCodexMcpToml } = await import('./mcpConfigManager.js');
+    await writeCodexMcpToml(backendBaseUrl, sessionId);
+  }
+
+  async cleanup(sessionId: string): Promise<void> {
+    const { removeCodexMcpTomlEntry } = await import('./mcpConfigManager.js');
+    await removeCodexMcpTomlEntry(sessionId);
   }
 }
 
 // ── Factory ─────────────────────────────────────────────────────────
 
 const inProcessProvider = new InProcessProvider();
-const httpMcpProvider = new HttpMcpProvider();
+const cursorHttpProvider = new HttpMcpProvider(new CursorConfigWriter());
+const codexHttpProvider = new HttpMcpProvider(new CodexConfigWriter());
 
-export type ProviderType = 'in-process' | 'http-mcp';
+export type ProviderType = 'in-process' | 'http-mcp' | 'http-mcp-codex';
 
 export function getFrontendToolProvider(type: ProviderType): IFrontendToolProvider {
-  return type === 'http-mcp' ? httpMcpProvider : inProcessProvider;
+  if (type === 'http-mcp-codex') return codexHttpProvider;
+  if (type === 'http-mcp') return cursorHttpProvider;
+  return inProcessProvider;
+}
+
+/**
+ * Determine the correct provider type for a given engine type.
+ */
+export function getProviderType(engineType: string): ProviderType {
+  if (engineType === 'codex' || engineType === 'codex-sdk') {
+    return 'http-mcp-codex';
+  }
+  if (engineType === 'cursor') {
+    return 'http-mcp';
+  }
+  return 'in-process';
 }

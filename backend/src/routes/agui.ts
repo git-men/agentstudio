@@ -69,7 +69,7 @@ const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
   // engineType is deprecated — backend uses its configured default engine.
   // Kept as optional for backward compatibility but ignored for routing.
-  engineType: z.enum(['claude', 'cursor', 'codebuddy', 'codex'] as const).optional(),
+  engineType: z.enum(['claude', 'cursor', 'codebuddy', 'codex', 'codex-sdk'] as const).optional(),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
   model: z.string().optional(),
@@ -313,8 +313,8 @@ router.post('/chat', async (req, res) => {
     }
 
     try {
-      if (engineType === 'cursor' || engineType === 'codebuddy' || engineType === 'codex') {
-        // Cursor / CodeBuddy / Codex engines: Use directly via AGUI
+      if (engineType === 'cursor' || engineType === 'codebuddy' || engineType === 'codex' || engineType === 'codex-sdk') {
+        // Cursor / CodeBuddy / Codex / Codex SDK engines: Use directly via AGUI
         const result = await engineManager.sendMessage(
           engineType,
           message,

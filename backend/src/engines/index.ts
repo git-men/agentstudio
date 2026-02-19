@@ -22,6 +22,9 @@ export { codebuddyEngine, CodeBuddyEngine } from './codebuddy/index.js';
 // Export Codex engine
 export { codexEngine, CodexEngine, CodexAguiAdapter } from './codex/index.js';
 
+// Export Codex SDK engine
+export { codexSdkEngine, CodexSdkEngine, CodexSdkAguiAdapter } from './codex-sdk/index.js';
+
 // =============================================================================
 // Engine Initialization
 // =============================================================================
@@ -31,6 +34,7 @@ import { claudeEngine } from './claude/index.js';
 import { cursorEngine } from './cursor/index.js';
 import { codebuddyEngine } from './codebuddy/index.js';
 import { codexEngine } from './codex/index.js';
+import { codexSdkEngine } from './codex-sdk/index.js';
 import { getEngineType } from '../config/engineConfig.js';
 import type { EngineType } from './types.js';
 
@@ -46,6 +50,9 @@ function mapServiceEngineToAguiEngine(serviceEngine: string): EngineType {
   }
   if (serviceEngine === 'codex-cli') {
     return 'codex';
+  }
+  if (serviceEngine === 'codex-sdk') {
+    return 'codex-sdk';
   }
   return 'claude';
 }
@@ -68,6 +75,9 @@ export function initializeEngines(): void {
 
   // Register Codex engine
   engineManager.registerEngine(codexEngine);
+
+  // Register Codex SDK engine
+  engineManager.registerEngine(codexSdkEngine);
   
   // Set default engine based on ENGINE environment variable
   const serviceEngineType = getEngineType();
