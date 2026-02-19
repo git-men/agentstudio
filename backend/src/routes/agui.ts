@@ -28,6 +28,8 @@ import { sessionEventBus, type SessionEvent } from '../services/sessionEventBus.
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 import { AgentStorage } from '../services/agentStorage.js';
 import { frontendToolBridge, type FrontendToolRequest } from '../services/frontendTools/index.js';
+import { platformEventBus } from '../services/hooks/platformEventBus.js';
+import { mapAguiEventToHookEvent, createSessionCounters } from '../services/hooks/aguiEventMapper.js';
 
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
@@ -272,6 +274,9 @@ router.post('/chat', async (req, res) => {
     // execute the hook and emit its events before the run-finished signal.
     let pendingRunFinished: AGUIEvent | null = null;
 
+    // Platform hook system: per-request counters for event enrichment
+    const hookCounters = createSessionCounters();
+
     // AGUI event callback (used by Cursor engine)
     const onAguiEvent = (event: AGUIEvent) => {
       if (isConnectionClosed) return;
@@ -279,6 +284,21 @@ router.post('/chat', async (req, res) => {
       // Extract session ID from RUN_STARTED event
       if (event.type === AGUIEventType.RUN_STARTED && 'threadId' in event) {
         activeSessionId = (event as any).threadId || activeSessionId;
+      }
+
+      // Platform hook system: map AGUI event → HookEvent and emit (fire-and-forget)
+      try {
+        const hookEvent = mapAguiEventToHookEvent(event, {
+          sessionId: activeSessionId || sessionId || 'unknown',
+          projectId: rawWorkspace || undefined,
+          agentId: requestAgentId || undefined,
+          engine: engineType,
+        }, hookCounters);
+        if (hookEvent) {
+          platformEventBus.emit(hookEvent);
+        }
+      } catch (hookErr) {
+        // Never let hook mapping disrupt the SSE stream
       }
 
       // Intercept RUN_FINISHED when an onRunFinished hook is configured

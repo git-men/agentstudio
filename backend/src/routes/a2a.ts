@@ -56,6 +56,8 @@ import {
 } from '../services/a2a/cursorA2aService.js';
 import { CursorA2AAdapter } from '../engines/cursor/a2aAdapter.js';
 import { isCursorEngine } from '../config/engineConfig.js';
+import { platformEventBus } from '../services/hooks/platformEventBus.js';
+import type { HookEvent } from '../types/platformHooks.js';
 
 const router: Router = express.Router({ mergeParams: true });
 
@@ -320,6 +322,24 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
 
       const startTime = Date.now();
 
+      // Platform hook system: helper to emit A2A lifecycle events (fire-and-forget)
+      const emitA2AHookEvent = (type: string, data: Record<string, unknown>) => {
+        try {
+          const hookEvent: HookEvent = {
+            type,
+            timestamp: new Date().toISOString(),
+            source: 'a2a-adapter',
+            data,
+            sessionId: sessionId || undefined,
+            projectId: a2aContext.projectId || undefined,
+            agentId: a2aContext.a2aAgentId || undefined,
+          };
+          platformEventBus.emit(hookEvent);
+        } catch {
+          // Never let hook emission disrupt the A2A response
+        }
+      };
+
       if (stream) {
         // Streaming Mode for Cursor
         res.setHeader('Content-Type', 'text/event-stream');
@@ -338,6 +358,8 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
           }
         }, 15000);
 
+        emitA2AHookEvent('run.start', { engine: 'cursor' });
+
         try {
           const result = await executeCursorA2AStreaming(
             cursorParams,
@@ -348,6 +370,11 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
               }
             }
           );
+
+          emitA2AHookEvent('run.end', {
+            engine: 'cursor',
+            durationMs: Date.now() - startTime,
+          });
 
           // Send completion event
           if (!isConnectionClosed) {
@@ -361,6 +388,10 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
             processingTimeMs: Date.now() - startTime,
           });
         } catch (error) {
+          emitA2AHookEvent('run.error', {
+            engine: 'cursor',
+            error: error instanceof Error ? error.message : String(error),
+          });
           console.error('[A2A] Cursor streaming error:', error);
           if (!isConnectionClosed) {
             res.write(`data: ${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) })}\n\n`);
@@ -374,9 +405,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         return;
       } else {
         // Synchronous Mode for Cursor
+        emitA2AHookEvent('run.start', { engine: 'cursor' });
         try {
           const result = await executeCursorA2AQuery(cursorParams, cursorConfig);
           const processingTimeMs = Date.now() - startTime;
+
+          emitA2AHookEvent('run.end', { engine: 'cursor', durationMs: processingTimeMs });
 
           console.info('[A2A] Cursor message processed:', {
             a2aAgentId: a2aContext.a2aAgentId,
@@ -397,6 +431,10 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
             },
           });
         } catch (error) {
+          emitA2AHookEvent('run.error', {
+            engine: 'cursor',
+            error: error instanceof Error ? error.message : String(error),
+          });
           console.error('[A2A] Cursor processing error:', error);
           throw error;
         }
