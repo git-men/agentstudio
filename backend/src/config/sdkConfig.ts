@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
+import { AGENTSTUDIO_HOME } from './paths.js';
 
 /**
  * SDK Engine Configuration
@@ -55,6 +56,32 @@ export function getSdkDir(): string {
  */
 export function getProjectsDir(): string {
   return path.join(getSdkDir(), 'projects');
+}
+
+/**
+ * Get all projects directories to search for Claude session files.
+ *
+ * On macOS, the EMFILE workaround in claudeUtils.ts sets CLAUDE_CONFIG_DIR to
+ * ~/.agentstudio/claude-sdk-config, causing the Claude CLI to write session files
+ * there instead of the default ~/.claude/projects. We need to search BOTH locations
+ * to support sessions created before and after the workaround was introduced.
+ *
+ * Returns directories in priority order (most recent first):
+ * - macOS: [~/.agentstudio/claude-sdk-config/projects, ~/.claude/projects]
+ * - other: [~/.claude/projects]
+ */
+export function getAllProjectsDirs(): string[] {
+  const defaultDir = getProjectsDir();
+
+  if (process.platform === 'darwin') {
+    const customDir = path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects');
+    // Return custom dir first (where new sessions go), then legacy dir
+    if (customDir !== defaultDir) {
+      return [customDir, defaultDir];
+    }
+  }
+
+  return [defaultDir];
 }
 
 /**

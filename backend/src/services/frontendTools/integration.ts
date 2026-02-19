@@ -11,6 +11,7 @@ import {
   type SessionRef,
 } from './frontendToolMcp.js';
 import { BUILTIN_FRONTEND_TOOLS } from './builtinTools.js';
+import { getDynamicTools } from './dynamicToolRegistry.js';
 import type { FrontendToolDefinition } from './types.js';
 
 export type { SessionRef };
@@ -21,7 +22,12 @@ export interface FrontendToolsIntegration {
 }
 
 /**
- * Integrate all built-in frontend tools as MCP servers into query options.
+ * Integrate all frontend tools (built-in + dynamically registered) as MCP
+ * servers into query options.
+ *
+ * The `extraTools` parameter is kept for backward compatibility but the
+ * preferred path for runtime registration is `registerDynamicTools()` +
+ * `POST /agents/register-frontend-tools`.
  */
 export async function integrateFrontendTools(
   queryOptions: any,
@@ -30,7 +36,12 @@ export async function integrateFrontendTools(
   extraTools?: FrontendToolDefinition[],
 ): Promise<FrontendToolsIntegration> {
   const sessionRef: SessionRef = { current: sessionId };
-  const allTools = [...BUILTIN_FRONTEND_TOOLS, ...(extraTools || [])];
+  const dynamicTools = getDynamicTools(agentId);
+  const allTools = [...BUILTIN_FRONTEND_TOOLS, ...dynamicTools, ...(extraTools || [])];
+
+  if (dynamicTools.length > 0) {
+    console.log(`[FrontendTools] Integrating ${dynamicTools.length} dynamic tool(s) for agent ${agentId}:`, dynamicTools.map(t => t.name));
+  }
 
   try {
     for (const toolDef of allTools) {

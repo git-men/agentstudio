@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { loadBackendServices, getCurrentService } from '../utils/backendServiceStorage';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
+import { getAllSchemas } from '../services/frontendToolRegistry';
 import { useMobileContext } from '../contexts/MobileContext';
 import {
   useImageUpload,
@@ -487,6 +488,29 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     
     return () => clearTimeout(timer);
   }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
+
+  // Sync any registered custom frontend tool schemas to the backend when the
+  // component mounts or when the agent changes. This runs once per agent so
+  // the backend can create MCP servers for the custom tools before the first
+  // chat message is sent.
+  useEffect(() => {
+    const schemas = getAllSchemas();
+    if (schemas.length === 0) return;
+
+    authFetch(`${API_BASE}/agents/register-frontend-tools`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentId: agent.id, tools: schemas }),
+    }).then(res => {
+      if (res.ok) {
+        console.log(`[FrontendTools] Synced ${schemas.length} custom tool schema(s) to backend for agent ${agent.id}`);
+      } else {
+        console.warn('[FrontendTools] Schema sync failed:', res.status);
+      }
+    }).catch(err => {
+      console.warn('[FrontendTools] Schema sync error:', err);
+    });
+  }, [agent.id]);
 
   const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown) => {
     const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {

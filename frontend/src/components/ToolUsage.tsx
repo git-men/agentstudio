@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ToolRenderer, type ToolExecution } from './tools';
 
 interface ToolUsageProps {
@@ -8,14 +8,13 @@ interface ToolUsageProps {
   toolUseResult?: Record<string, unknown>;
   isError?: boolean;
   isExecuting?: boolean;
-  claudeId?: string; // Claude's tool use ID for matching with sub-agent messages
+  claudeId?: string;
   onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
 }
 
-// 将旧格式转换为新的 ToolExecution 格式
-const convertToToolExecution = (props: ToolUsageProps): ToolExecution => {
-  return {
-    id: `tool_${Date.now()}_${Math.random()}`,
+export const ToolUsage: React.FC<ToolUsageProps> = (props) => {
+  const execution = useMemo((): ToolExecution & { claudeId?: string } => ({
+    id: props.claudeId || `tool_${props.toolName}`,
     toolName: props.toolName,
     toolInput: props.toolInput,
     toolResult: props.toolResult,
@@ -23,11 +22,9 @@ const convertToToolExecution = (props: ToolUsageProps): ToolExecution => {
     isExecuting: props.isExecuting || false,
     isError: props.isError || false,
     timestamp: new Date(),
-    claudeId: props.claudeId, // Pass through claudeId
-  } as ToolExecution & { claudeId?: string };
-};
+    claudeId: props.claudeId,
+  }), [props.toolName, props.toolInput, props.toolResult, props.toolUseResult,
+       props.isExecuting, props.isError, props.claudeId]);
 
-export const ToolUsage: React.FC<ToolUsageProps> = (props) => {
-  const execution = convertToToolExecution(props);
   return <ToolRenderer execution={execution} onFrontendToolSubmit={props.onFrontendToolSubmit} />;
 };

@@ -19,6 +19,7 @@ import {
   initFrontendToolsModule,
   isFrontendTool,
 } from '../services/frontendTools/index.js';
+import { registerDynamicTools } from '../services/frontendTools/dynamicToolRegistry.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
@@ -1578,5 +1579,45 @@ router.post('/frontend-tool-result', async (req, res) => {
   }
 });
 
+
+// ─── Dynamic Frontend Tool Registration ──────────────────────────────────────
+
+const RegisterFrontendToolsSchema = z.object({
+  agentId: z.string().min(1, 'agentId is required'),
+  tools: z.array(z.object({
+    name: z.string().min(1),
+    description: z.string().min(1),
+    parameters: z.object({
+      type: z.literal('object'),
+      properties: z.record(z.string(), z.unknown()),
+      required: z.array(z.string()).optional(),
+    }),
+    mcpServerName: z.string().optional(),
+    resultFormat: z.enum(['json', 'text']).optional(),
+  })),
+});
+
+/**
+ * Register custom frontend tool schemas for an agent.
+ * Called by the frontend before starting a chat session so the backend can
+ * create in-process MCP servers for these tools alongside the built-ins.
+ */
+router.post('/register-frontend-tools', async (req, res) => {
+  try {
+    const validation = RegisterFrontendToolsSchema.safeParse(req.body);
+    if (!validation.success) {
+      return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
+    }
+
+    const { agentId, tools } = validation.data;
+    registerDynamicTools(agentId, tools as any);
+
+    console.log(`[FrontendTools] Registered ${tools.length} dynamic tool(s) for agent ${agentId}:`, tools.map(t => t.name));
+    res.json({ success: true, registered: tools.map(t => t.name) });
+  } catch (error) {
+    console.error('[FrontendTools] Registration error:', error);
+    res.status(500).json({ success: false, error: 'Internal server error' });
+  }
+});
 
 export default router;

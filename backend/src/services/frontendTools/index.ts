@@ -37,3 +37,6 @@ export type {
 
 // Initialization
 export { initFrontendToolsModule, isFrontendToolsModuleInitialized } from './init.js';
+
+// Dynamic tool registry
+export { registerDynamicTools, getDynamicTools, clearDynamicTools } from './dynamicToolRegistry.js';

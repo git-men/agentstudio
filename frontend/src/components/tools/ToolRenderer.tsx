@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import type { BaseToolExecution } from './sdk-types';
 import { useTranslation } from 'react-i18next';
 
@@ -32,6 +32,8 @@ import { parseMcpToolName } from './mcpUtils';
 import { BaseToolComponent } from './BaseToolComponent';
 import { CUSTOM_MCP_TOOLS } from './customMcpTools';
 import { CursorToolRenderer, isCursorTool } from './cursor';
+import { getToolRender } from '../../services/frontendToolRegistry';
+import { useAgentStore } from '../../stores/useAgentStore';
 
 interface ToolRendererProps {
   execution: BaseToolExecution;
@@ -43,11 +45,44 @@ interface ToolRendererProps {
  */
 export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFrontendToolSubmit }) => {
   const { t } = useTranslation('components');
+  const pendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
+
+  // Build a stable onSubmit for custom frontend tools that mirrors AskUserQuestionTool
+  const handleCustomToolSubmit = useCallback((toolName: string, result: unknown) => {
+    if (!onFrontendToolSubmit) return;
+    // Find the pending tool call by tool name
+    for (const pending of pendingFrontendTools.values()) {
+      if (pending.toolName === toolName) {
+        onFrontendToolSubmit(pending.toolCallId, result);
+        return;
+      }
+    }
+    // Fallback: use claudeId if available
+    const claudeId = (execution as any).claudeId as string | undefined;
+    if (claudeId && onFrontendToolSubmit) {
+      onFrontendToolSubmit(claudeId, result);
+    }
+  }, [onFrontendToolSubmit, pendingFrontendTools, execution]);
+
   // 首先检查是否是MCP工具
   const mcpToolInfo = parseMcpToolName(execution.toolName);
   if (mcpToolInfo) {
     if (mcpToolInfo.serverName === 'ask-user-question' && mcpToolInfo.toolName === 'ask_user_question') {
       return <AskUserQuestionTool execution={execution} onSubmit={onFrontendToolSubmit} />;
+    }
+
+    // Check dynamic frontend tool registry (tools registered via useFrontendTool)
+    // Server name for dynamic tools is either 'frontend-tool-{name}' (default) or custom mcpServerName
+    const customRender = getToolRender(mcpToolInfo.toolName);
+    if (customRender) {
+      return (
+        <>
+          {customRender({
+            args: (execution.toolInput as Record<string, unknown>) || {},
+            onSubmit: (result) => handleCustomToolSubmit(mcpToolInfo.toolName, result),
+          })}
+        </>
+      );
     }
     
     // 检查是否有自定义组件

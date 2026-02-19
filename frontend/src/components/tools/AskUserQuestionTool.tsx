@@ -24,13 +24,14 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
   const questions: any[] | null = input?.questions && Array.isArray(input.questions) ? input.questions : null;
 
+  const claudeId = (execution as any).claudeId as string | undefined;
+
   const matchedPending: PendingFrontendToolCall | null = useMemo(() => {
     if (!questions) return null;
 
-    // Prefer exact toolCallId match via execution.toolId (Claude SDK tool_use id)
-    const toolId = (execution as any).toolId;
-    if (toolId && pendingFrontendTools.has(toolId)) {
-      return pendingFrontendTools.get(toolId)!;
+    // Prefer exact toolCallId match via claudeId (Claude SDK tool_use id)
+    if (claudeId && pendingFrontendTools.has(claudeId)) {
+      return pendingFrontendTools.get(claudeId)!;
     }
 
     // Fallback: content-based match comparing ALL questions
@@ -46,29 +47,30 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       }
     }
     return null;
-  }, [pendingFrontendTools, questions, execution]);
+  }, [pendingFrontendTools, questions, claudeId]);
 
   const isInteractive = !!matchedPending && !execution.toolResult && !isSubmitting;
 
-  if (!questions) {
-    return (
-      <BaseToolComponent
-        execution={execution}
-        hideToolName={false}
-        overrideToolName={t('askUserQuestionTool.title')}
-      >
-        <div className="text-red-600 text-sm">
-          {t('askUserQuestionTool.invalidInput', 'Invalid question input')}
-        </div>
-      </BaseToolComponent>
-    );
-  }
-
-  const submittedAnswer = useMemo(() => {
+  const parsedResult = useMemo(() => {
     if (!execution.toolResult) return null;
-    const result = String(execution.toolResult);
-    const match = result.match(/^User response:\s*(.+)$/s);
-    return match ? match[1].trim() : result.trim();
+    const raw = String(execution.toolResult);
+
+    // New JSON format: { "questions": [{ "index": 0, "selectedOptions": [...], "customInput": "..." }] }
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.questions && Array.isArray(parsed.questions)) {
+        return parsed.questions as Array<{
+          index: number;
+          selectedOptions: string[];
+          customInput: string | null;
+        }>;
+      }
+    } catch { /* not JSON */ }
+
+    // Legacy "User response: ..." format - treat as single-question plain text answer
+    const match = raw.match(/^User response:\s*(.+)$/s);
+    const text = match ? match[1].trim() : raw.trim();
+    return [{ index: 0, selectedOptions: [] as string[], customInput: text }];
   }, [execution.toolResult]);
 
   const handleOptionClick = useCallback((qIdx: number, optionLabel: string, multiSelect: boolean) => {
@@ -117,6 +119,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
   const canSubmit = useMemo(() => {
     if (!isInteractive) return false;
+    if (questions.length === 0) return false;
     for (let i = 0; i < questions.length; i++) {
       const sel = selections.get(i) || [];
       if (sel.length === 0) return false;
@@ -149,6 +152,20 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       setIsSubmitting(false);
     }
   }, [canSubmit, onSubmit, matchedPending, formatResponse]);
+
+  if (!questions) {
+    return (
+      <BaseToolComponent
+        execution={execution}
+        hideToolName={false}
+        overrideToolName={t('askUserQuestionTool.title')}
+      >
+        <div className="text-red-600 text-sm">
+          {t('askUserQuestionTool.invalidInput', 'Invalid question input')}
+        </div>
+      </BaseToolComponent>
+    );
+  }
 
   const getSubtitle = () => {
     const first = questions[0];
@@ -189,7 +206,13 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       <div className="space-y-4">
         <div className="space-y-4">
           {questions.map((question: any, questionIndex: number) => {
-            const selectedOptions = selections.get(questionIndex) || [];
+            const liveSelections = selections.get(questionIndex) || [];
+            const qResult = parsedResult?.[questionIndex];
+            const submittedOptions = qResult?.selectedOptions || [];
+            const submittedCustom = qResult?.customInput || null;
+
+            // When completed, show submitted answers; when interactive, show live selections
+            const displaySelected = execution.toolResult ? submittedOptions : liveSelections.filter(s => s !== TYPE_SOMETHING_MARKER);
             const showCustom = shouldShowCustomInput(question);
             const customConfig = getCustomInputConfig(question);
 
@@ -217,7 +240,8 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
                 <div className="space-y-2">
                   {(question.options || []).map((option: any, optionIndex: number) => {
-                    const isSelected = selectedOptions.includes(option.label);
+                    const isSelected = displaySelected.includes(option.label);
+                    const isSubmittedOption = execution.toolResult && submittedOptions.includes(option.label);
                     const canClick = isInteractive;
                     return (
                       <div
@@ -226,17 +250,19 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
                         className={`
                           flex items-start space-x-2 p-2 rounded border transition-all
                           ${canClick ? 'cursor-pointer' : 'cursor-default'}
-                          ${isSelected ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'border-gray-100 hover:bg-gray-50'}
-                          ${!canClick && !isSelected ? 'opacity-60' : ''}
+                          ${isSubmittedOption ? 'border-green-500 bg-green-50 ring-1 ring-green-500' : ''}
+                          ${isSelected && !isSubmittedOption ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : ''}
+                          ${!isSelected && !isSubmittedOption ? 'border-gray-100 hover:bg-gray-50' : ''}
+                          ${!canClick && !isSelected && !isSubmittedOption ? 'opacity-60' : ''}
                         `}
                       >
                         {question.multiSelect ? (
-                          <CheckSquare className={`w-4 h-4 mt-0.5 ${isSelected ? 'text-blue-500' : 'text-gray-400'}`} checked={isSelected} />
+                          <CheckSquare className={`w-4 h-4 mt-0.5 ${isSubmittedOption ? 'text-green-500' : isSelected ? 'text-blue-500' : 'text-gray-400'}`} checked={isSelected || isSubmittedOption} />
                         ) : (
-                          isSelected ? <CheckCircle className="w-4 h-4 mt-0.5 text-blue-500" /> : <Circle className="w-4 h-4 mt-0.5 text-gray-400" />
+                          (isSelected || isSubmittedOption) ? <CheckCircle className={`w-4 h-4 mt-0.5 ${isSubmittedOption ? 'text-green-500' : 'text-blue-500'}`} /> : <Circle className="w-4 h-4 mt-0.5 text-gray-400" />
                         )}
                         <div className="flex-1">
-                          <div className={`text-sm font-medium ${isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{option.label}</div>
+                          <div className={`text-sm font-medium ${isSubmittedOption ? 'text-green-700' : isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{option.label}</div>
                           {option.description && <div className="text-xs text-gray-500 mt-1">{option.description}</div>}
                         </div>
                       </div>
@@ -244,21 +270,22 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
                   })}
 
                   {showCustom && (() => {
-                    const isTypeSomethingSelected = selectedOptions.includes(TYPE_SOMETHING_MARKER);
+                    const isTypeSomethingSelected = liveSelections.includes(TYPE_SOMETHING_MARKER);
                     const customInputValue = customInputs.get(questionIndex) || '';
-                    const isCustomAnswer = submittedAnswer && !question.options.some((opt: any) => opt.label === submittedAnswer);
 
-                    if (execution.toolResult && isCustomAnswer) {
+                    if (execution.toolResult && submittedCustom) {
                       return (
                         <div className="flex items-start space-x-2 p-2 rounded border border-green-500 bg-green-50 ring-1 ring-green-500">
                           <CheckCircle className="w-4 h-4 mt-0.5 text-green-500" />
                           <div className="flex-1 flex items-center space-x-2">
                             <PenLine className="w-4 h-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-700">{t('askUserQuestionTool.typeSomething')} {submittedAnswer}</span>
+                            <span className="text-sm font-medium text-green-700">{submittedCustom}</span>
                           </div>
                         </div>
                       );
                     }
+
+                    if (execution.toolResult) return null;
 
                     return (
                       <div className="space-y-2">
