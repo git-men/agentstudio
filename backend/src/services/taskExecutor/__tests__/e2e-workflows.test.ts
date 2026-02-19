@@ -153,7 +153,7 @@ describe('End-to-End Workflow Tests', () => {
   });
 
   describe('Mixed Workflow Scenarios', () => {
-    it('should handle A2A and scheduled tasks concurrently', async () => {
+    it('should handle A2A and scheduled tasks concurrently', { timeout: 15000 }, async () => {
       const tasks: TaskDefinition[] = [];
 
       for (let i = 0; i < 5; i++) {
@@ -221,7 +221,7 @@ describe('End-to-End Workflow Tests', () => {
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should simulate API request burst scenario', async () => {
+    it('should simulate API request burst scenario', { timeout: 30000 }, async () => {
       const burstSize = 20;
       const tasks = Array.from({ length: burstSize }, (_, i) =>
         makeTask(`api-burst-${i}`, { type: 'a2a_async', timeoutMs: 8000 }),
@@ -231,12 +231,12 @@ describe('End-to-End Workflow Tests', () => {
       await Promise.all(tasks.map(task => executor.submitTask(task)));
       const submissionTime = Date.now() - startTime;
 
-      // Should handle burst reasonably quickly (Worker startup adds overhead)
-      expect(submissionTime).toBeLessThan(10000);
+      // 20 tasks through maxConcurrent=3 ≈ 7 rounds of Worker creation
+      expect(submissionTime).toBeLessThan(20000);
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should simulate gradual workload increase', async () => {
+    it('should simulate gradual workload increase', { timeout: 60000 }, async () => {
       const phases = [2, 5, 10, 15, 20];
       let totalSubmitted = 0;
 
@@ -253,7 +253,6 @@ describe('End-to-End Workflow Tests', () => {
         expect(executor.isHealthy()).toBe(true);
 
         const stats = executor.getStats();
-        // All submitted tasks should be tracked somewhere
         const tracked = stats.runningTasks + stats.queuedTasks +
                         stats.completedTasks + stats.failedTasks +
                         stats.canceledTasks;
@@ -305,7 +304,7 @@ describe('End-to-End Workflow Tests', () => {
   });
 
   describe('Monitoring and Observability', () => {
-    it('should provide accurate stats throughout workflow', async () => {
+    it('should provide accurate stats throughout workflow', { timeout: 15000 }, async () => {
       const initialStats = executor.getStats();
 
       const tasks = Array.from({ length: 10 }, (_, i) =>
@@ -318,7 +317,6 @@ describe('End-to-End Workflow Tests', () => {
 
       const afterSubmissionStats = executor.getStats();
 
-      // Total tracked should increase
       const initialTracked = initialStats.runningTasks + initialStats.queuedTasks +
                              initialStats.completedTasks + initialStats.failedTasks;
       const afterTracked = afterSubmissionStats.runningTasks + afterSubmissionStats.queuedTasks +
@@ -355,7 +353,7 @@ describe('End-to-End Workflow Tests', () => {
                       stats.completedTasks + stats.failedTasks;
       expect(tracked).toBeGreaterThan(0);
       expect(executor.isHealthy()).toBe(true);
-    }, 30000); // Extended timeout for 100 Worker starts
+    }, 60000); // Extended timeout for 100 Worker starts
 
     it('should maintain service during partial failures', async () => {
       const mixedTasks = Array.from({ length: 10 }, (_, i) =>

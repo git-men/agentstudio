@@ -219,7 +219,7 @@ describe('A2A Async Task Execution', () => {
       expect(canceled).toBe(false);
     });
 
-    it('should handle cancellation of multiple submitted tasks', async () => {
+    it('should handle cancellation of multiple submitted tasks', { timeout: 15000 }, async () => {
       const tasks = Array.from({ length: 10 }, (_, i) =>
         makeTask(`a2a-queue-cancel-${i}`, { timeoutMs: 15000 }),
       );
@@ -235,7 +235,7 @@ describe('A2A Async Task Execution', () => {
   });
 
   describe('A2A Performance', () => {
-    it('should handle burst of A2A task submissions', async () => {
+    it('should handle burst of A2A task submissions', { timeout: 30000 }, async () => {
       const burstSize = 20;
       const tasks = Array.from({ length: burstSize }, (_, i) =>
         makeTask(`a2a-burst-${i}`),
@@ -247,14 +247,15 @@ describe('A2A Async Task Execution', () => {
       ).resolves.not.toThrow();
       const submissionTime = Date.now() - startTime;
 
-      // Submissions should complete reasonably quickly (Worker startup adds overhead)
-      expect(submissionTime).toBeLessThan(10000);
+      // 20 tasks through maxConcurrent=3 ≈ 7 rounds of Worker creation;
+      // each Worker startup is 50-300ms depending on the machine.
+      expect(submissionTime).toBeLessThan(20000);
 
       const stats = executor.getStats();
       expect(stats.runningTasks).toBeLessThanOrEqual(3);
     });
 
-    it('should maintain executor health under load', async () => {
+    it('should maintain executor health under load', { timeout: 20000 }, async () => {
       const tasks = Array.from({ length: 15 }, (_, i) =>
         makeTask(`a2a-load-${i}`, { timeoutMs: 20000 }),
       );

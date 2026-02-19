@@ -45,7 +45,7 @@ describe('sessionUtils', () => {
     const mockQueryOptions = { cwd: '/test', model: 'sonnet' };
 
     it('should reuse existing session from memory', async () => {
-      const mockSession = { id: 'existing-session' };
+      const mockSession = { id: 'existing-session', isSessionActive: () => true };
       const { sessionManager } = await import('../../services/sessionManager');
       
       vi.mocked(sessionManager.getSession).mockReturnValue(mockSession as any);

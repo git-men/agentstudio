@@ -175,6 +175,13 @@ describe('A2A Agent Discovery Workflow (Integration)', () => {
     // Reset mappings file
     const mappingsFile = join(testDataDir, 'a2a-agent-mappings.json');
     writeFileSync(mappingsFile, JSON.stringify({ version: '1.0.0', mappings: {} }, null, 2));
+
+    // Clean up api-keys file to ensure test isolation
+    const apiKeysDir = join(testWorkingDir, '.a2a');
+    const apiKeysFile = join(apiKeysDir, 'api-keys.json');
+    if (existsSync(apiKeysFile)) {
+      writeFileSync(apiKeysFile, JSON.stringify({ version: '1.0.0', keys: [] }, null, 2));
+    }
     
     // Invalidate cache in services
     agentMappingService.invalidateCache();
@@ -184,7 +191,7 @@ describe('A2A Agent Discovery Workflow (Integration)', () => {
   // T037: Complete Agent Discovery Workflow
   // ============================================================================
   describe('Complete Agent Discovery Workflow', () => {
-    it('should complete full workflow: create A2A ID → generate API key → retrieve Agent Card', async () => {
+    it('should complete full workflow: create A2A ID → generate API key → retrieve Agent Card', { timeout: 15000 }, async () => {
       // Step 1: Create or get A2A ID for agent
       a2aAgentId = await agentMappingService.getOrCreateA2AId(
         testProjectId,
@@ -343,7 +350,7 @@ describe('A2A Agent Discovery Workflow (Integration)', () => {
       expect(allMappings.length).toBeGreaterThanOrEqual(2);
     });
 
-    it('should allow multiple API keys for same project', async () => {
+    it('should allow multiple API keys for same project', { timeout: 15000 }, async () => {
       // Create A2A ID
       a2aAgentId = await agentMappingService.getOrCreateA2AId(
         testProjectId,

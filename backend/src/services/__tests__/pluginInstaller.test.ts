@@ -11,6 +11,7 @@ import { EventEmitter } from 'events';
 vi.mock('fs');
 vi.mock('child_process', () => ({
   exec: vi.fn(),
+  spawn: vi.fn(),
 }));
 vi.mock('stream/promises', () => ({
   pipeline: vi.fn().mockResolvedValue(undefined),
@@ -374,77 +375,6 @@ describe('PluginInstaller', () => {
     });
   });
 
-  // Archive type tests - deprecated, archive marketplace type removed
-  describe.skip('addMarketplace - Archive type (deprecated)', () => {
-    it('should add an archive marketplace', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
-      vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
-      vi.mocked(fs.readdirSync).mockReturnValue(['single-dir'] as any);
-      vi.mocked(fs.statSync).mockReturnValue({ isDirectory: () => true } as any);
-      vi.mocked(fs.renameSync).mockReturnValue(undefined);
-      vi.mocked(fs.rmdirSync).mockReturnValue(undefined);
-      vi.mocked(fs.rmSync).mockReturnValue(undefined);
-
-      // Mock fetch for archive download
-      const mockResponse = {
-        ok: true,
-        body: {
-          [Symbol.asyncIterator]: async function* () {
-            yield Buffer.from('mock archive content');
-          }
-        }
-      };
-      mockFetch.mockResolvedValue(mockResponse);
-
-      // Mock exec for tar extraction
-      vi.mocked(exec).mockImplementation((cmd: any, callback?: any) => {
-        if (callback) callback(null, '', '');
-        return {} as any;
-      });
-
-      const { pluginPaths } = await import('../pluginPaths');
-      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/archive-market');
-      vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
-
-      const { pluginInstaller } = await import('../pluginInstaller');
-
-      const result = await pluginInstaller.addMarketplace({
-        name: 'archive-market',
-        type: 'archive' as any,
-        source: 'https://example.com/marketplace.tar.gz'
-      });
-
-      expect(result.success).toBe(true);
-    });
-
-    it('should fail if archive download fails', async () => {
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-      vi.mocked(fs.rmSync).mockReturnValue(undefined);
-
-      // Mock fetch to return error
-      mockFetch.mockResolvedValue({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found'
-      });
-
-      const { pluginPaths } = await import('../pluginPaths');
-      vi.mocked(pluginPaths.getMarketplacePath).mockReturnValue('/test/.claude/plugins/marketplaces/failed-market');
-
-      const { pluginInstaller } = await import('../pluginInstaller');
-
-      const result = await pluginInstaller.addMarketplace({
-        name: 'failed-market',
-        type: 'archive' as any,
-        source: 'https://example.com/nonexistent.tar.gz'
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Failed to download');
-    });
-  });
-
   describe('checkForUpdates', () => {
     it('should check for updates in a git marketplace', async () => {
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
@@ -463,8 +393,8 @@ describe('PluginInstaller', () => {
       // non-error callback arg, so pass { stdout, stderr } as a single object
       vi.mocked(exec).mockImplementation((cmd: any, options: any, callback?: any) => {
         const cb = typeof options === 'function' ? options : callback;
-        // Simulate "behind" status
-        if (cmd.includes('git status')) {
+        // buildGitCommand wraps commands as: git -c safe.directory="..." <args>
+        if (cmd.includes('status')) {
           cb(null, { stdout: 'Your branch is behind', stderr: '' });
         } else {
           cb(null, { stdout: '', stderr: '' });

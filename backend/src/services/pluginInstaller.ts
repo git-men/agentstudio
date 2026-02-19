@@ -50,7 +50,7 @@ function spawnAsync(command: string, args: string[]): Promise<void> {
 
 function getSafeDirectory(targetPath: string): string {
   try {
-    return fs.realpathSync(targetPath);
+    return fs.realpathSync(targetPath) || targetPath;
   } catch {
     return targetPath;
   }
