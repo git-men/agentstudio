@@ -7,10 +7,11 @@ import type { ChatMessage } from '../types/index';
 
 interface ChatMessageRendererProps {
   message: ChatMessage;
-  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => Promise<{ success: boolean; error?: string }>;
+  onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
 }
 
-const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onFrontendToolSubmit }) => {
+const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onFrontendToolSubmit, onFrontendToolCancel }) => {
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
 
@@ -176,6 +177,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 isExecuting={part.toolData.isExecuting}
                 claudeId={part.toolData.claudeId}
                 onFrontendToolSubmit={onFrontendToolSubmit}
+                onFrontendToolCancel={onFrontendToolCancel}
               />
             );
           } else if (part.type === 'image' && part.imageData) {
@@ -279,6 +281,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
               isExecuting={tool.isExecuting}
               claudeId={tool.claudeId}
               onFrontendToolSubmit={onFrontendToolSubmit}
+              onFrontendToolCancel={onFrontendToolCancel}
             />
           ))}
         </div>

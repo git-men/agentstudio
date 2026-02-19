@@ -19,7 +19,6 @@ import {
   initFrontendToolsModule,
   isFrontendTool,
 } from '../services/frontendTools/index.js';
-import { registerDynamicTools } from '../services/frontendTools/dynamicToolRegistry.js';
 import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEvent, type A2AStreamEndEvent } from '../services/a2a/a2aStreamEvents.js';
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
@@ -362,6 +361,17 @@ const ChatRequestSchema = z.object({
     customContext: z.record(z.string(), z.any()).optional()
   }).optional(),
   envVars: z.record(z.string(), z.string()).optional(),
+  frontendTools: z.array(z.object({
+    name: z.string(),
+    description: z.string(),
+    parameters: z.object({
+      type: z.literal('object'),
+      properties: z.record(z.string(), z.any()),
+      required: z.array(z.string()).optional(),
+    }),
+    mcpServerName: z.string().optional(),
+    resultFormat: z.enum(['json', 'text']).optional(),
+  })).optional(),
 }).refine(data => {
   // Either message text or images must be provided
   return data.message.trim().length > 0 || (data.images && data.images.length > 0);
@@ -525,7 +535,7 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect } = validation.data;
+    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect, frontendTools } = validation.data;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -936,7 +946,7 @@ router.post('/chat', async (req, res) => {
     while (retryCount <= MAX_RETRIES) {
       try {
         console.log(`🔄 Attempt ${retryCount + 1}/${MAX_RETRIES + 1} for session: ${sessionId || 'new'}`);
-        const { queryOptions, frontendToolSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true);
+        const { queryOptions, frontendToolSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, frontendTools as any);
 
         // 📊 输出传到 query 中的模型参数
         console.log('📊 [Chat API] QueryOptions 模型参数:');
@@ -1580,44 +1590,8 @@ router.post('/frontend-tool-result', async (req, res) => {
 });
 
 
-// ─── Dynamic Frontend Tool Registration ──────────────────────────────────────
-
-const RegisterFrontendToolsSchema = z.object({
-  agentId: z.string().min(1, 'agentId is required'),
-  tools: z.array(z.object({
-    name: z.string().min(1),
-    description: z.string().min(1),
-    parameters: z.object({
-      type: z.literal('object'),
-      properties: z.record(z.string(), z.unknown()),
-      required: z.array(z.string()).optional(),
-    }),
-    mcpServerName: z.string().optional(),
-    resultFormat: z.enum(['json', 'text']).optional(),
-  })),
-});
-
-/**
- * Register custom frontend tool schemas for an agent.
- * Called by the frontend before starting a chat session so the backend can
- * create in-process MCP servers for these tools alongside the built-ins.
- */
-router.post('/register-frontend-tools', async (req, res) => {
-  try {
-    const validation = RegisterFrontendToolsSchema.safeParse(req.body);
-    if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
-    }
-
-    const { agentId, tools } = validation.data;
-    registerDynamicTools(agentId, tools as any);
-
-    console.log(`[FrontendTools] Registered ${tools.length} dynamic tool(s) for agent ${agentId}:`, tools.map(t => t.name));
-    res.json({ success: true, registered: tools.map(t => t.name) });
-  } catch (error) {
-    console.error('[FrontendTools] Registration error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
+// NOTE: The old POST /register-frontend-tools endpoint has been removed.
+// Frontend tool schemas are now sent inline with each chat request via the
+// `frontendTools` field in the chat request body.
 
 export default router;

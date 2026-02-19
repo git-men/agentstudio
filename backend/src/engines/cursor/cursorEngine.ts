@@ -21,6 +21,8 @@ import type {
 import { CursorAguiAdapter } from './aguiAdapter.js';
 import { saveImageToHiddenDir } from '../../utils/sessionUtils.js';
 import { readCursorCliSessions, readCursorCliSession } from '../../utils/cursorCliHistoryParser.js';
+import { getFrontendToolProvider, type IFrontendToolProvider } from '../../services/frontendTools/frontendToolProviders.js';
+import { httpMcpToolRegistry } from '../../services/frontendTools/httpMcpServer.js';
 
 // Cache for Cursor models
 let cachedModels: ModelInfo[] | null = null;
@@ -81,7 +83,8 @@ export class CursorEngine implements IAgentEngine {
 
   readonly capabilities: EngineCapabilities = {
     mcp: {
-      supported: false, // Cursor uses its own tool system
+      supported: true,
+      configPath: '.cursor/mcp.json',
     },
     skills: {
       supported: true,
@@ -294,6 +297,19 @@ export class CursorEngine implements IAgentEngine {
           ? undefined
           : envTimeout;
 
+    // Integrate frontend tools via HTTP MCP + .cursor/mcp.json
+    const httpMcpProvider = getFrontendToolProvider('http-mcp');
+    const tempSessionId = existingSessionId || uuidv4();
+    if (config.frontendTools && config.frontendTools.length > 0) {
+      const port = process.env.PORT || '4936';
+      const backendBaseUrl = `http://localhost:${port}`;
+      await httpMcpProvider.setup(tempSessionId, 'cursor', config.frontendTools, {
+        workspace,
+        backendBaseUrl,
+      });
+      console.log(`[CursorEngine] Frontend tools registered for session ${tempSessionId}: ${config.frontendTools.map(t => t.name).join(', ')}`);
+    }
+
     // Process images: save to hidden directory and replace placeholders with @path
     const processedMessage = this.processImagesForCursor(message, images, workspace);
 
@@ -466,6 +482,7 @@ export class CursorEngine implements IAgentEngine {
       let buffer = '';
       let hasError = false;
       let hasOutput = false;
+      let lastKnownThreadId = sessionId;
 
       // Process stdout line by line
       cursorProcess.stdout?.on('data', (data: Buffer) => {
@@ -481,6 +498,13 @@ export class CursorEngine implements IAgentEngine {
           const events = adapter.parseStreamLine(line);
           for (const event of events) {
             onAguiEvent(event);
+          }
+
+          // Update HTTP MCP registry if CLI reported a new session ID
+          const currentThreadId = adapter.getThreadId();
+          if (currentThreadId !== lastKnownThreadId) {
+            httpMcpToolRegistry.updateSessionId(lastKnownThreadId, currentThreadId);
+            lastKnownThreadId = currentThreadId;
           }
         }
       });
@@ -501,6 +525,7 @@ export class CursorEngine implements IAgentEngine {
       cursorProcess.on('close', (code, signal) => {
         if (timeoutId) clearTimeout(timeoutId);
         this.activeSessions.delete(sessionId);
+        httpMcpToolRegistry.unregisterSession(lastKnownThreadId);
 
         console.log(`[CursorEngine] Process exited with code ${code}, signal ${signal}, hasOutput: ${hasOutput}`);
 

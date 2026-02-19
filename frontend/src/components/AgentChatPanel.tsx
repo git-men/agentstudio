@@ -13,7 +13,6 @@ import { useTranslation } from 'react-i18next';
 import { loadBackendServices, getCurrentService } from '../utils/backendServiceStorage';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
-import { getAllSchemas } from '../services/frontendToolRegistry';
 import { useMobileContext } from '../contexts/MobileContext';
 import {
   useImageUpload,
@@ -31,6 +30,8 @@ import {
   createAgentCommandSelectorKeyHandler,
   EngineSelector
 } from './agentChat';
+import { useRatingTool } from '../hooks/useRatingTool';
+import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
 
 interface AgentChatPanelProps {
   agent: AgentConfig;
@@ -42,6 +43,10 @@ interface AgentChatPanelProps {
 export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage }) => {
   const { t } = useTranslation('components');
   const { isCompactMode } = useResponsiveSettings();
+
+  // Register custom frontend tools
+  useRatingTool();
+  useConsoleLogsTool();
   const { isMobile } = useMobileContext();
 
   // Refs - 需要在hooks之前定义
@@ -489,47 +494,51 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     return () => clearTimeout(timer);
   }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
 
-  // Sync any registered custom frontend tool schemas to the backend when the
-  // component mounts or when the agent changes. This runs once per agent so
-  // the backend can create MCP servers for the custom tools before the first
-  // chat message is sent.
-  useEffect(() => {
-    const schemas = getAllSchemas();
-    if (schemas.length === 0) return;
+  // NOTE: Frontend tool schemas are now sent inline with each chat request
+  // (via the `frontendTools` field). Pre-registration is no longer needed.
 
-    authFetch(`${API_BASE}/agents/register-frontend-tools`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ agentId: agent.id, tools: schemas }),
-    }).then(res => {
-      if (res.ok) {
-        console.log(`[FrontendTools] Synced ${schemas.length} custom tool schema(s) to backend for agent ${agent.id}`);
-      } else {
-        console.warn('[FrontendTools] Schema sync failed:', res.status);
+  const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolCallId,
+          result,
+          sessionId: currentSessionId,
+          agentId: agent.id,
+        }),
+      });
+
+      if (!apiResponse.ok) {
+        const err = await apiResponse.json().catch(() => ({}));
+        return { success: false, error: err.error || `HTTP ${apiResponse.status}` };
       }
-    }).catch(err => {
-      console.warn('[FrontendTools] Schema sync error:', err);
-    });
-  }, [agent.id]);
 
-  const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown) => {
-    const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        toolCallId,
-        result,
-        sessionId: currentSessionId,
-        agentId: agent.id,
-      }),
-    });
-
-    if (!apiResponse.ok) {
-      const err = await apiResponse.json().catch(() => ({}));
-      throw new Error(err.error || `HTTP ${apiResponse.status}`);
+      removePendingFrontendTool(toolCallId);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
+  }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
-    removePendingFrontendTool(toolCallId);
+  const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
+    try {
+      await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolCallId,
+          result: reason || 'Cancelled by user',
+          isError: true,
+          sessionId: currentSessionId,
+          agentId: agent.id,
+        }),
+      });
+      removePendingFrontendTool(toolCallId);
+    } catch (error) {
+      console.warn('[FrontendTools] Cancel failed:', error);
+    }
   }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
   // 为 AgentCommandSelector 创建键盘处理器
@@ -802,6 +811,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
               newMessagesCount={newMessagesCount}
               onScrollToBottom={scrollToBottom}
               onFrontendToolSubmit={handleFrontendToolSubmit}
+              onFrontendToolCancel={handleFrontendToolCancel}
             />
           )}
 

@@ -21,7 +21,8 @@ export interface ChatMessageListProps {
   isUserScrolling: boolean;
   newMessagesCount: number;
   onScrollToBottom: () => void;
-  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => Promise<{ success: boolean; error?: string }>;
+  onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
@@ -32,7 +33,8 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   isStopping,
   messagesContainerRef,
   messagesEndRef,
-  onFrontendToolSubmit
+  onFrontendToolSubmit,
+  onFrontendToolCancel
 }) => {
   const { t } = useTranslation('components');
 
@@ -54,11 +56,12 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
           <ChatMessageRenderer 
             message={message as any} 
             onFrontendToolSubmit={onFrontendToolSubmit}
+            onFrontendToolCancel={onFrontendToolCancel}
           />
         </div>
       </div>
     ));
-  }, [messages, onFrontendToolSubmit]);
+  }, [messages, onFrontendToolSubmit, onFrontendToolCancel]);
 
   return (
     <div

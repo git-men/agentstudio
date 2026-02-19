@@ -9,7 +9,8 @@ interface ToolUsageProps {
   isError?: boolean;
   isExecuting?: boolean;
   claudeId?: string;
-  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => void;
+  onFrontendToolSubmit?: (toolCallId: string, result: unknown) => Promise<{ success: boolean; error?: string }>;
+  onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
 }
 
 export const ToolUsage: React.FC<ToolUsageProps> = (props) => {
@@ -26,5 +27,5 @@ export const ToolUsage: React.FC<ToolUsageProps> = (props) => {
   }), [props.toolName, props.toolInput, props.toolResult, props.toolUseResult,
        props.isExecuting, props.isError, props.claudeId]);
 
-  return <ToolRenderer execution={execution} onFrontendToolSubmit={props.onFrontendToolSubmit} />;
+  return <ToolRenderer execution={execution} onFrontendToolSubmit={props.onFrontendToolSubmit} onFrontendToolCancel={props.onFrontendToolCancel} />;
 };

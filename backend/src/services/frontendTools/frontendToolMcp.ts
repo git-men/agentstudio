@@ -63,16 +63,16 @@ function jsonSchemaToZod(params: FrontendToolDefinition['parameters']): z.ZodTyp
 }
 
 /**
- * Create an SDK MCP server for a single frontend tool definition.
+ * Build an MCP tool handler for a single frontend tool definition.
  */
-export async function createFrontendToolMcpServer(
+function buildMcpToolHandler(
   toolDef: FrontendToolDefinition,
   sessionRef: SessionRef,
   agentId: string,
 ) {
   const zodSchema = jsonSchemaToZod(toolDef.parameters);
 
-  const mcpTool = tool(
+  return tool(
     toolDef.name,
     toolDef.description,
     (zodSchema as z.ZodObject<any>).shape,
@@ -104,7 +104,18 @@ export async function createFrontendToolMcpServer(
       }
     },
   );
+}
 
+/**
+ * Create an SDK MCP server for a single frontend tool definition.
+ * Used for built-in tools that need a dedicated server name (e.g. AskUserQuestion).
+ */
+export async function createFrontendToolMcpServer(
+  toolDef: FrontendToolDefinition,
+  sessionRef: SessionRef,
+  agentId: string,
+) {
+  const mcpTool = buildMcpToolHandler(toolDef, sessionRef, agentId);
   const serverName = resolveServerName(toolDef);
 
   const server = createSdkMcpServer({
@@ -114,6 +125,32 @@ export async function createFrontendToolMcpServer(
   });
 
   return { server, tool: mcpTool, sessionRef, serverName };
+}
+
+/** Default server name for the unified dynamic frontend tools server. */
+export const UNIFIED_SERVER_NAME = 'frontend-tools';
+
+/**
+ * Create a single MCP server containing multiple frontend tools.
+ * All dynamic (user-registered) tools share this server, producing
+ * cleaner tool names like `mcp__frontend-tools__rate_response`.
+ */
+export async function createUnifiedFrontendToolServer(
+  toolDefs: FrontendToolDefinition[],
+  sessionRef: SessionRef,
+  agentId: string,
+) {
+  if (toolDefs.length === 0) return null;
+
+  const mcpTools = toolDefs.map(def => buildMcpToolHandler(def, sessionRef, agentId));
+
+  const server = createSdkMcpServer({
+    name: UNIFIED_SERVER_NAME,
+    version: '1.0.0',
+    tools: mcpTools,
+  });
+
+  return { server, serverName: UNIFIED_SERVER_NAME, sessionRef };
 }
 
 /**
@@ -145,10 +182,11 @@ export function registerServerName(name: string): void {
 
 /**
  * Check if a tool name belongs to the frontend tool framework.
- * Matches both the default `frontend-tool-` prefix and any explicitly
- * registered server names (e.g. 'ask-user-question').
+ * Matches the unified `frontend-tools` server, the legacy `frontend-tool-`
+ * prefix, and any explicitly registered server names (e.g. 'ask-user-question').
  */
 export function isFrontendTool(toolName: string): boolean {
+  if (toolName.startsWith(`mcp__${UNIFIED_SERVER_NAME}__`)) return true;
   if (toolName.startsWith('mcp__frontend-tool-')) return true;
   for (const serverName of registeredServerNames) {
     if (toolName.startsWith(`mcp__${serverName}__`)) return true;

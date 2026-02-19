@@ -38,6 +38,8 @@ import {
     EngineSelector
 } from './agentChat';
 import useEngine from '../hooks/useEngine';
+import { useRatingTool } from '../hooks/useRatingTool';
+import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
 
 
 interface AGUIChatPanelProps {
@@ -58,6 +60,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
+
+    // Register custom frontend tools
+    useRatingTool();
+    useConsoleLogsTool();
     const { isMobile } = useMobileContext();
     
     // Get engine type from service - this is the source of truth
@@ -555,7 +561,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setSearchTerm('');
     };
 
-    const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown) => {
+    // NOTE: Frontend tool schemas are now sent inline with each chat request
+    // (via the `frontendTools` field). Pre-registration is no longer needed.
+
+    const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
         try {
             const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
                 method: 'POST',
@@ -569,11 +578,32 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             });
 
             if (!apiResponse.ok) {
-                throw new Error(`HTTP ${apiResponse.status}`);
+                const err = await apiResponse.json().catch(() => ({}));
+                return { success: false, error: err.error || `HTTP ${apiResponse.status}` };
             }
             removePendingFrontendTool(toolCallId);
+            return { success: true };
         } catch (error) {
-            console.error('[FrontendTool] Submit failed:', error);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }, [currentSessionId, agent.id, removePendingFrontendTool]);
+
+    const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
+        try {
+            await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    toolCallId,
+                    result: reason || 'Cancelled by user',
+                    isError: true,
+                    sessionId: currentSessionId,
+                    agentId: agent.id,
+                }),
+            });
+            removePendingFrontendTool(toolCallId);
+        } catch (error) {
+            console.warn('[FrontendTools] Cancel failed:', error);
         }
     }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
@@ -588,14 +618,14 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                         }`}
                 >
                     <ChatMessageRenderer
-                        // AgentMessage and ChatMessage have compatible shapes for rendering
                         message={message as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
                         onFrontendToolSubmit={handleFrontendToolSubmit}
+                        onFrontendToolCancel={handleFrontendToolCancel}
                     />
                 </div>
             </div>
         ));
-    }, [messages, handleFrontendToolSubmit]);
+    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">

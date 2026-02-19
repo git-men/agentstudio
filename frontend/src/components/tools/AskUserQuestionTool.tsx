@@ -118,8 +118,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
   }, []);
 
   const canSubmit = useMemo(() => {
-    if (!isInteractive) return false;
-    if (questions.length === 0) return false;
+    if (!isInteractive || !questions || questions.length === 0) return false;
     for (let i = 0; i < questions.length; i++) {
       const sel = selections.get(i) || [];
       if (sel.length === 0) return false;
@@ -128,7 +127,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       }
     }
     return true;
-  }, [isInteractive, questions.length, selections, customInputs]);
+  }, [isInteractive, questions, selections, customInputs]);
 
   const formatResponse = useCallback((): Record<string, unknown> => {
     const formatted = questions.map((_q: any, idx: number) => {

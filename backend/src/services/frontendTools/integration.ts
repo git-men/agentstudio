@@ -1,17 +1,20 @@
 /**
  * Frontend Tools Integration Helper
  *
- * Integrates built-in frontend tool MCP servers into Claude query options.
+ * Integrates built-in and client-provided frontend tool MCP servers into
+ * engine query options using the Provider pattern.
+ *
+ * Provider selection:
+ *   - InProcessProvider  → Claude / CodeBuddy (SDK engines)
+ *   - HttpMcpProvider    → Cursor CLI         (external CLI)
  */
 
 import {
-  createFrontendToolMcpServer,
-  getMcpToolName,
-  registerServerName,
-  type SessionRef,
-} from './frontendToolMcp.js';
-import { BUILTIN_FRONTEND_TOOLS } from './builtinTools.js';
-import { getDynamicTools } from './dynamicToolRegistry.js';
+  getFrontendToolProvider,
+  type ProviderType,
+  type ProviderContext,
+} from './frontendToolProviders.js';
+import type { SessionRef } from './frontendToolMcp.js';
 import type { FrontendToolDefinition } from './types.js';
 
 export type { SessionRef };
@@ -22,52 +25,55 @@ export interface FrontendToolsIntegration {
 }
 
 /**
- * Integrate all frontend tools (built-in + dynamically registered) as MCP
- * servers into query options.
+ * Integrate all frontend tools (built-in + client-provided) as MCP servers
+ * into query options.
  *
- * The `extraTools` parameter is kept for backward compatibility but the
- * preferred path for runtime registration is `registerDynamicTools()` +
- * `POST /agents/register-frontend-tools`.
+ * @param providerType - Which provider to use ('in-process' or 'http-mcp')
+ * @param clientTools  - Tool definitions sent by the frontend with the chat
+ *   request. Replaces the old pre-registration mechanism.
+ * @param providerContext - Additional context for the provider (workspace, URL)
  */
 export async function integrateFrontendTools(
   queryOptions: any,
   sessionId: string,
   agentId: string,
-  extraTools?: FrontendToolDefinition[],
+  clientTools?: FrontendToolDefinition[],
+  providerType: ProviderType = 'in-process',
+  providerContext?: ProviderContext,
 ): Promise<FrontendToolsIntegration> {
-  const sessionRef: SessionRef = { current: sessionId };
-  const dynamicTools = getDynamicTools(agentId);
-  const allTools = [...BUILTIN_FRONTEND_TOOLS, ...dynamicTools, ...(extraTools || [])];
+  const dynamicTools = clientTools || [];
 
   if (dynamicTools.length > 0) {
-    console.log(`[FrontendTools] Integrating ${dynamicTools.length} dynamic tool(s) for agent ${agentId}:`, dynamicTools.map(t => t.name));
+    console.log(
+      `[FrontendTools] Integrating ${dynamicTools.length} dynamic tool(s) for agent ${agentId} via ${providerType}:`,
+      dynamicTools.map(t => t.name),
+    );
   }
 
+  const provider = getFrontendToolProvider(providerType);
+
   try {
-    for (const toolDef of allTools) {
-      const { server, serverName } = await createFrontendToolMcpServer(toolDef, sessionRef, agentId);
+    const result = await provider.setup(sessionId, agentId, dynamicTools, providerContext);
 
-      if (server) {
-        registerServerName(serverName);
+    // Merge MCP servers into queryOptions (only relevant for in-process provider)
+    if (Object.keys(result.mcpServers).length > 0) {
+      if (!queryOptions.mcpServers) queryOptions.mcpServers = {};
+      Object.assign(queryOptions.mcpServers, result.mcpServers);
+    }
 
-        queryOptions.mcpServers = {
-          ...queryOptions.mcpServers,
-          [serverName]: server,
-        };
-
-        const mcpName = getMcpToolName(toolDef);
-        if (!queryOptions.allowedTools) {
-          queryOptions.allowedTools = [mcpName];
-        } else if (!queryOptions.allowedTools.includes(mcpName)) {
-          queryOptions.allowedTools.push(mcpName);
+    // Merge allowed tools
+    if (result.allowedTools.length > 0) {
+      if (!queryOptions.allowedTools) queryOptions.allowedTools = [];
+      for (const tool of result.allowedTools) {
+        if (!queryOptions.allowedTools.includes(tool)) {
+          queryOptions.allowedTools.push(tool);
         }
       }
     }
+
+    return { queryOptions, sessionRef: result.sessionRef };
   } catch (error) {
     console.error('[FrontendTools] Failed to integrate MCP servers:', error);
-    // Still return sessionRef so already-registered tools get session updates
-    return { queryOptions, sessionRef };
+    return { queryOptions, sessionRef: null };
   }
-
-  return { queryOptions, sessionRef };
 }

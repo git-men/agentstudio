@@ -225,6 +225,7 @@ export const useAgentChat = () => {
       claudeVersion,
       envVars,
       channel,
+      frontendTools,
       abortController,
       onMessage,
       onError
@@ -241,6 +242,7 @@ export const useAgentChat = () => {
       claudeVersion?: string;
       envVars?: Record<string, string>;
       channel?: string;
+      frontendTools?: import('../services/frontendToolRegistry.js').FrontendToolSchema[];
       abortController?: AbortController;
       onMessage?: (data: unknown) => void;
       onError?: (error: unknown) => void;
@@ -260,7 +262,8 @@ export const useAgentChat = () => {
           model,
           claudeVersion,
           envVars,
-          channel: channel || 'web'
+          channel: channel || 'web',
+          frontendTools,
         };
 
         const response = await authFetch(`${API_BASE}/agents/chat`, {

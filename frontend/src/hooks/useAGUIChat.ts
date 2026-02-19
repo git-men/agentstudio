@@ -42,6 +42,7 @@ export interface AGUIChatParams {
   envVars?: Record<string, string>;
   images?: AGUIImageData[];
   channel?: string;
+  frontendTools?: import('../services/frontendToolRegistry.js').FrontendToolSchema[];
   // Cursor-specific
   timeout?: number;
   // Callbacks
@@ -190,6 +191,7 @@ export const useAGUIChat = () => {
       permissionMode,
       mcpTools,
       envVars,
+      frontendTools,
       timeout,
       onAguiEvent,
       onError,
@@ -258,7 +260,8 @@ export const useAGUIChat = () => {
           envVars,
           images,
           channel,
-          outputFormat: 'agui', // Key: This tells agents.ts to output AGUI format
+          outputFormat: 'agui',
+          frontendTools,
         };
       }
 

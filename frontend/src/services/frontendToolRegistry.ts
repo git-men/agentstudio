@@ -33,11 +33,24 @@ export interface FrontendToolSchema {
   resultFormat?: 'json' | 'text';
 }
 
+export interface FrontendToolSubmitResult {
+  success: boolean;
+  error?: string;
+}
+
+export type FrontendToolStatus = 'pending' | 'submitted' | 'error';
+
 export interface FrontendToolRenderProps {
   /** Tool call arguments from the agent. */
   args: Record<string, unknown>;
-  /** Call this to submit the tool result back to the agent. */
-  onSubmit: (result: unknown) => void;
+  /** Unique identifier for this tool invocation (matches the Claude tool_use id). */
+  toolCallId: string;
+  /** Current submission status of this tool call. */
+  status: FrontendToolStatus;
+  /** Submit the tool result back to the agent. Returns submission outcome. */
+  onSubmit: (result: unknown) => Promise<FrontendToolSubmitResult>;
+  /** Cancel this tool call. The agent will receive an error. */
+  onCancel: (reason?: string) => void;
 }
 
 export type FrontendToolRenderFn = (props: FrontendToolRenderProps) => React.ReactNode;

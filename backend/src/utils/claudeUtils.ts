@@ -232,6 +232,7 @@ export async function buildQueryOptions(
   sessionIdForAskUser?: string,
   agentIdForAskUser?: string,
   a2aStreamEnabled?: boolean,
+  frontendTools?: import('../services/frontendTools/types.js').FrontendToolDefinition[],
 ): Promise<BuildQueryOptionsResult> {
   // Determine working directory
   let cwd = process.cwd();
@@ -471,10 +472,10 @@ export async function buildQueryOptions(
   const currentProjectId = projectPath || cwd;
   await integrateA2AMcpServer(queryOptions, currentProjectId, a2aStreamEnabled ?? false);
 
-  // Integrate frontend tool MCP servers (includes ask_user_question and any extras)
+  // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)
   let frontendToolSessionRef: SessionRef | null = null;
   if (sessionIdForAskUser && agentIdForAskUser) {
-    const integration = await integrateFrontendTools(queryOptions, sessionIdForAskUser, agentIdForAskUser);
+    const integration = await integrateFrontendTools(queryOptions, sessionIdForAskUser, agentIdForAskUser, frontendTools);
     frontendToolSessionRef = integration.sessionRef;
   }
 

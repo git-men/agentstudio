@@ -11,6 +11,7 @@ import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
 import type { AGUIEvent } from '../../types/aguiTypes';
+import { getAllSchemas } from '../../services/frontendToolRegistry.js';
 
 export interface UseMessageSenderProps {
   agent: AgentConfig;
@@ -291,6 +292,10 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         ...(mcpToolsEnabled && selectedMcpTools.length > 0 ? selectedMcpTools : [])
       ];
 
+      // Collect frontend tool schemas to send inline with the chat request
+      const frontendToolSchemas = getAllSchemas();
+      const frontendToolsPayload = frontendToolSchemas.length > 0 ? frontendToolSchemas : undefined;
+
       if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
         // Cursor/CodeBuddy Engine: Use AGUI API with simplified stream handling
         console.log(`🚀 [MessageSender] Using ${selectedEngine === 'codebuddy' ? 'CodeBuddy' : 'Cursor'} Engine`);
@@ -492,6 +497,20 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 setCurrentSessionId(cliSessionId);
                 onSessionChange?.(cliSessionId);
               }
+              // Handle frontend tool invocations forwarded from the bridge
+              if (customEvent.name === 'frontend_tool_call' && customEvent.data) {
+                const d = customEvent.data as Record<string, unknown>;
+                if (d.toolCallId && d.toolName) {
+                  console.log(`[AGUI] Frontend tool call: ${d.toolName} (${d.toolCallId})`);
+                  useAgentStore.getState().addPendingFrontendTool({
+                    toolCallId: d.toolCallId as string,
+                    toolName: d.toolName as string,
+                    args: (d.args as Record<string, unknown>) || {},
+                    sessionId: d.sessionId as string,
+                    agentId: d.agentId as string,
+                  });
+                }
+              }
               // Handle auto-compact event (context window auto-compaction)
               if (customEvent.name === 'auto_compact') {
                 const preTokens = customEvent.data?.preTokens || 0;
@@ -514,10 +533,11 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           message: userMessage,
           engineType: selectedEngine as 'cursor' | 'codebuddy',
           workspace: projectPath || '.',
-          sessionId: currentSessionId || undefined, // Convert null to undefined
+          sessionId: currentSessionId || undefined,
           model: selectedModel,
-          images: imageData.length > 0 ? imageData : undefined, // Pass images
-          envVars: Object.keys(envVars).length > 0 ? envVars : undefined, // Pass env vars
+          images: imageData.length > 0 ? imageData : undefined,
+          envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+          frontendTools: frontendToolsPayload,
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {
@@ -552,6 +572,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           claudeVersion: selectedClaudeVersion,
           envVars,
           channel: 'web',
+          frontendTools: frontendToolsPayload,
           abortController,
           onMessage: handleStreamMessage,
           onError: handleStreamError

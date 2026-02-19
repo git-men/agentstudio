@@ -25,6 +25,7 @@ import { saveImageToHiddenDir } from '../../utils/sessionUtils.js';
 import { readMcpConfig } from '../../utils/claudeUtils.js';
 import { getEnginePaths } from '../../config/engineConfig.js';
 import { integrateA2AMcpServer } from '../../services/a2a/a2aIntegration.js';
+import { integrateFrontendTools, type SessionRef } from '../../services/frontendTools/index.js';
 import * as fs from 'fs';
 
 // Dynamic import for @tencent-ai/agent-sdk to handle cases where it's not installed
@@ -396,6 +397,20 @@ export class CodeBuddyEngine implements IAgentEngine {
       // Integrate A2A SDK MCP server (in-process)
       await integrateA2AMcpServer(queryOptions, workspace, true);
 
+      // Integrate frontend tools as in-process MCP servers
+      let frontendToolSessionRef: SessionRef | null = null;
+      if (config.frontendTools && config.frontendTools.length > 0) {
+        const ftResult = await integrateFrontendTools(
+          queryOptions,
+          sessionId,
+          'codebuddy',
+          config.frontendTools,
+          'in-process',
+        );
+        frontendToolSessionRef = ftResult.sessionRef;
+        console.log(`[CodeBuddyEngine] Frontend tools integrated: ${config.frontendTools.map(t => t.name).join(', ')}`);
+      }
+
       // Process images: save to hidden directory and replace placeholders with @path
       const processedMessage = this.processImages(message, images, workspace);
 
@@ -438,6 +453,10 @@ export class CodeBuddyEngine implements IAgentEngine {
             this.activeSessions.delete(sessionId);
             session.id = finalSid;
             this.activeSessions.set(finalSid, session);
+            // Update frontend tool session ref so bridge matches the real ID
+            if (frontendToolSessionRef) {
+              frontendToolSessionRef.current = finalSid;
+            }
             console.log(`[CodeBuddyEngine] SDK Session ID: ${finalSid}`);
 
             // NOW send RUN_STARTED with the real SDK session ID

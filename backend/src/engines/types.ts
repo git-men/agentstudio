@@ -63,6 +63,15 @@ export interface EngineConfig {
   // Cursor-specific options
   /** Command timeout in milliseconds */
   timeout?: number;
+  
+  /** Frontend tool definitions sent inline with the chat request */
+  frontendTools?: Array<{
+    name: string;
+    description: string;
+    parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] };
+    mcpServerName?: string;
+    resultFormat?: 'json' | 'text';
+  }>;
 }
 
 /**

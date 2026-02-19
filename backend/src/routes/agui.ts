@@ -27,6 +27,7 @@ import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
 import { sessionEventBus, type SessionEvent } from '../services/sessionEventBus.js';
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 import { AgentStorage } from '../services/agentStorage.js';
+import { frontendToolBridge, type FrontendToolRequest } from '../services/frontendTools/index.js';
 
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
@@ -62,6 +63,18 @@ const ImageSchema = z.object({
   filename: z.string().optional(),
 });
 
+const FrontendToolSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  parameters: z.object({
+    type: z.literal('object'),
+    properties: z.record(z.string(), z.unknown()),
+    required: z.array(z.string()).optional(),
+  }),
+  mcpServerName: z.string().optional(),
+  resultFormat: z.enum(['json', 'text']).optional(),
+});
+
 const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
   engineType: z.enum(['claude', 'cursor', 'codebuddy'] as const).optional().default('claude'),
@@ -75,6 +88,8 @@ const ChatRequestSchema = z.object({
   permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
   mcpTools: z.array(z.string()).optional(),
   envVars: z.record(z.string(), z.string()).optional(),
+  // Frontend tools (inline registration)
+  frontendTools: z.array(FrontendToolSchema).optional(),
   // Cursor-specific options
   timeout: z.number().optional(),
   // Reconnect: re-attach to an in-progress SSE stream
@@ -182,6 +197,7 @@ router.post('/chat', async (req, res) => {
       permissionMode,
       mcpTools,
       envVars,
+      frontendTools,
       timeout,
       reconnect,
     } = validation.data;
@@ -290,6 +306,28 @@ router.post('/chat', async (req, res) => {
       }
     };
 
+    // Set up bridge listener to forward frontend tool invocations as AGUI CUSTOM events
+    const bridgeListener = (request: FrontendToolRequest) => {
+      if (isConnectionClosed) return;
+      if (activeSessionId && request.sessionId !== activeSessionId) return;
+      onAguiEvent({
+        type: AGUIEventType.CUSTOM,
+        name: 'frontend_tool_call',
+        data: {
+          toolCallId: request.toolCallId,
+          toolName: request.toolName,
+          args: request.args,
+          sessionId: request.sessionId,
+          agentId: request.agentId,
+        },
+        timestamp: Date.now(),
+      });
+    };
+    const hasFrontendTools = frontendTools && frontendTools.length > 0;
+    if (hasFrontendTools) {
+      frontendToolBridge.on('tool_invocation', bridgeListener);
+    }
+
     try {
       if (engineType === 'cursor' || engineType === 'codebuddy') {
         // Cursor / CodeBuddy engine: Use directly via AGUI
@@ -305,6 +343,7 @@ router.post('/chat', async (req, res) => {
             permissionMode,
             mcpTools,
             envVars,
+            frontendTools,
             timeout,
           },
           onAguiEvent
@@ -379,6 +418,9 @@ router.post('/chat', async (req, res) => {
     } finally {
       // Clean up
       clearInterval(heartbeatInterval);
+      if (hasFrontendTools) {
+        frontendToolBridge.off('tool_invocation', bridgeListener);
+      }
       
       if (!isConnectionClosed) {
         res.end();

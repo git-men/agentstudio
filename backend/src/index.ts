@@ -55,6 +55,7 @@ import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } 
 import { getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
 import { syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
+import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
 
 dotenv.config();
 
@@ -490,6 +491,9 @@ const app: express.Express = express();
 
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aRouter);
+
+  // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
+  app.use('/api/mcp-bridge', express.json(), createHttpMcpRouter());
 
   // Health check
   app.get('/api/health', (req, res) => {
