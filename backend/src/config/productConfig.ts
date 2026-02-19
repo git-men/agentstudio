@@ -41,6 +41,7 @@ export const FEATURE_MODULES: FeatureModule[] = [
     routePatterns: [
       '/api/agents/chat',
       '/api/agents/user-response',
+      '/api/agents/frontend-tool-result',
       '/api/agui',
     ],
     frontendPaths: ['/chat'],

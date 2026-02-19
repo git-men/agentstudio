@@ -11,6 +11,22 @@ import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEn
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
 
+const SAFE_COMMAND_PATTERN = /^[a-zA-Z0-9_\-./~@:]+$/;
+
+export function validateMcpCommand(command: string): boolean {
+  if (!SAFE_COMMAND_PATTERN.test(command)) return false;
+  if (command.includes('..')) return false;
+  return true;
+}
+
+export function validateMcpArgs(args: string[]): boolean {
+  for (const arg of args) {
+    if (typeof arg !== 'string') return false;
+    if (/[`$|;&<>]/.test(arg)) return false;
+  }
+  return true;
+}
+
 // MCP configuration interface
 interface McpServerConfig {
   name: string;
@@ -228,6 +244,12 @@ router.post('/', (req, res) => {
       if (!restConfig.command || !Array.isArray(restConfig.args)) {
         return res.status(400).json({ error: 'For stdio type: command and args are required' });
       }
+      if (!validateMcpCommand(restConfig.command)) {
+        return res.status(400).json({ error: 'Invalid command: contains disallowed characters' });
+      }
+      if (!validateMcpArgs(restConfig.args)) {
+        return res.status(400).json({ error: 'Invalid args: contains disallowed characters' });
+      }
     } else if (type === 'http') {
       if (!restConfig.url) {
         return res.status(400).json({ error: 'For http type: url is required' });
@@ -277,6 +299,12 @@ router.put('/:name', (req, res) => {
     if (type === 'stdio') {
       if (!restConfig.command || !Array.isArray(restConfig.args)) {
         return res.status(400).json({ error: 'For stdio type: command and args are required' });
+      }
+      if (!validateMcpCommand(restConfig.command)) {
+        return res.status(400).json({ error: 'Invalid command: contains disallowed characters' });
+      }
+      if (!validateMcpArgs(restConfig.args)) {
+        return res.status(400).json({ error: 'Invalid args: contains disallowed characters' });
       }
     } else if (type === 'http') {
       if (!restConfig.url) {

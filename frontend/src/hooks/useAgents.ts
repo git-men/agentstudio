@@ -94,19 +94,18 @@ export const useDeleteAgent = () => {
   });
 };
 
-// Engine type for session queries
-export type SessionEngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex';
+
 
 // Agent session hooks
-export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, engine?: SessionEngineType, enabled: boolean = true) => {
+// Backend determines engine type from its startup config — no need to pass engine from frontend.
+export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, enabled: boolean = true) => {
   return useQuery({
-    queryKey: ['agent-sessions', agentId, searchTerm, projectPath, engine],
+    queryKey: ['agent-sessions', agentId, searchTerm, projectPath],
     queryFn: async () => {
       console.log(`🔍 [FRONTEND DEBUG] useAgentSessions called:`, {
         agentId,
         searchTerm,
         projectPath,
-        engine
       });
 
       const url = new URL(`${API_BASE}/sessions/${agentId}`);
@@ -115,9 +114,6 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
       }
       if (projectPath) {
         url.searchParams.set('projectPath', projectPath);
-      }
-      if (engine) {
-        url.searchParams.set('engine', engine);
       }
 
       console.log(`🌐 [FRONTEND DEBUG] Fetching sessions from: ${url.toString()}`);
@@ -142,30 +138,25 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
 
       return data;
     },
-    enabled: enabled && !!agentId  // Only fetch when enabled AND agentId is provided
+    enabled: enabled && !!agentId
   });
 };
 
 
 // Get agent session messages
-// Engine type is now explicitly passed via the `engine` parameter (from store's selectedEngine).
-// Session IDs no longer carry engine-specific prefixes.
-export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string, engine?: SessionEngineType) => {
-  const effectiveEngine = engine;
-
+// Backend determines engine type from its startup config — no need to pass engine from frontend.
+export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string) => {
   console.log('🎣 useAgentSessionMessages hook called:', {
     agentId,
     sessionId,
     projectPath,
-    engine,
-    effectiveEngine,
     enabled: !!agentId && !!sessionId
   });
 
   return useQuery({
-    queryKey: ['agent-session-messages', agentId, sessionId, projectPath, effectiveEngine],
+    queryKey: ['agent-session-messages', agentId, sessionId, projectPath],
     queryFn: async () => {
-      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath, engine: effectiveEngine });
+      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath });
 
       if (!sessionId) {
         return { messages: [] };
@@ -174,9 +165,6 @@ export const useAgentSessionMessages = (agentId: string, sessionId: string | nul
       const url = new URL(`${API_BASE}/sessions/${agentId}/${sessionId}/messages`);
       if (projectPath) {
         url.searchParams.set('projectPath', projectPath);
-      }
-      if (effectiveEngine) {
-        url.searchParams.set('engine', effectiveEngine);
       }
 
       console.log('🎣 Fetching from URL:', url.toString());
@@ -225,6 +213,7 @@ export const useAgentChat = () => {
       claudeVersion,
       envVars,
       channel,
+      frontendTools,
       abortController,
       onMessage,
       onError
@@ -241,6 +230,7 @@ export const useAgentChat = () => {
       claudeVersion?: string;
       envVars?: Record<string, string>;
       channel?: string;
+      frontendTools?: import('../services/frontendToolRegistry.js').FrontendToolSchema[];
       abortController?: AbortController;
       onMessage?: (data: unknown) => void;
       onError?: (error: unknown) => void;
@@ -260,7 +250,8 @@ export const useAgentChat = () => {
           model,
           claudeVersion,
           envVars,
-          channel: channel || 'web'
+          channel: channel || 'web',
+          frontendTools,
         };
 
         const response = await authFetch(`${API_BASE}/agents/chat`, {

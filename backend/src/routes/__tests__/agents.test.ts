@@ -79,7 +79,7 @@ describe('agents.ts - Channel-Specific Streaming', () => {
         pathToClaudeCodeExecutable: '/mock/claude',
         env: {}
       },
-      askUserSessionRef: null
+      frontendToolSessionRef: null
     } as any);
 
     // Mock handleSessionManagement

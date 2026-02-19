@@ -174,12 +174,15 @@ describe('A2A Streaming Tests', () => {
             .get(`/api/a2a/history/mock-project/${sessionId}?stream=true`);
 
         // Append to file after a delay to test tailing
-        setTimeout(async () => {
-            await fs.appendFile(historyPath, JSON.stringify({ type: 'text', text: 'History 2' }) + '\n');
+        const timer = setTimeout(async () => {
+            try {
+                await fs.appendFile(historyPath, JSON.stringify({ type: 'text', text: 'History 2' }) + '\n');
+            } catch {
+                // Directory may be cleaned up before timer fires
+            }
         }, 100);
 
-        // We can't easily test infinite stream with supertest, so we might need to abort or just check initial content
-        // For this test, we'll just check if it connects and gets the first event
-        // To properly test tailing, we'd need a real HTTP client that supports streams
+        // supertest doesn't support infinite streams well; clear the timer to avoid leaked handles
+        clearTimeout(timer);
     });
 });

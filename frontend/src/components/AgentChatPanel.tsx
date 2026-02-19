@@ -30,6 +30,8 @@ import {
   createAgentCommandSelectorKeyHandler,
   EngineSelector
 } from './agentChat';
+import { useRatingTool } from '../hooks/useRatingTool';
+import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
 
 interface AgentChatPanelProps {
   agent: AgentConfig;
@@ -41,6 +43,10 @@ interface AgentChatPanelProps {
 export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage }) => {
   const { t } = useTranslation('components');
   const { isCompactMode } = useResponsiveSettings();
+
+  // Register custom frontend tools
+  useRatingTool();
+  useConsoleLogsTool();
   const { isMobile } = useMobileContext();
 
   // Refs - 需要在hooks之前定义
@@ -62,13 +68,13 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     isAiTyping,
     currentSessionId,
     mcpStatus,
-    pendingUserQuestion,
+    pendingFrontendTools,
     selectedEngine,
     addMessage,
     interruptAllExecutingTools,
     setAiTyping,
     loadSessionMessages,
-    setPendingUserQuestion,
+    removePendingFrontendTool,
   } = useAgentStore();
 
   // 标记是否需要自动发送初始消息
@@ -280,8 +286,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
   }, []);
 
   const interruptSessionMutation = useInterruptSession();
-  const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine);
-  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
+  const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath);
+  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
   const { data: activeSessionsData } = useSessions();
 
   // 当打开会话历史下拉菜单时，自动刷新会话列表
@@ -488,43 +494,52 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     return () => clearTimeout(timer);
   }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
 
-  // 🎤 处理 AskUserQuestion 用户回答提交
-  // 新架构：调用 HTTP API 提交用户响应，MCP 工具会自动接收并返回
-  const handleAskUserQuestionSubmit = async (toolUseId: string, response: string) => {
-    console.log('🎤 [AskUserQuestion] Submitting response for tool:', toolUseId);
+  // NOTE: Frontend tool schemas are now sent inline with each chat request
+  // (via the `frontendTools` field). Pre-registration is no longer needed.
 
+  const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
-      // 调用新的 API 提交用户响应
-      // 传入 sessionId 和 agentId 用于验证，防止伪造响应
-      const apiResponse = await authFetch(`${API_BASE}/agents/user-response`, {
+      const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          toolUseId,
-          response,
-          sessionId: currentSessionId,  // 用于验证
-          agentId: agent.id,             // 用于验证
+          toolCallId,
+          result,
+          sessionId: currentSessionId,
+          agentId: agent.id,
         }),
       });
 
       if (!apiResponse.ok) {
-        const errorData = await apiResponse.json().catch(() => ({}));
-        throw new Error(errorData.error || `HTTP ${apiResponse.status}`);
+        const err = await apiResponse.json().catch(() => ({}));
+        return { success: false, error: err.error || `HTTP ${apiResponse.status}` };
       }
 
-      console.log('✅ [AskUserQuestion] Response submitted successfully');
-      
-      // 清除待回答的问题状态
-      // MCP 工具会返回结果，Claude 会继续执行，SSE 会继续接收消息
-      setPendingUserQuestion(null);
-      
+      removePendingFrontendTool(toolCallId);
+      return { success: true };
     } catch (error) {
-      console.error('🎤 [AskUserQuestion] Submit failed:', error);
-      // 提交失败时不清除待回答状态，让用户可以重试
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
-  };
+  }, [currentSessionId, agent.id, removePendingFrontendTool]);
+
+  const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
+    try {
+      await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          toolCallId,
+          result: reason || 'Cancelled by user',
+          isError: true,
+          sessionId: currentSessionId,
+          agentId: agent.id,
+        }),
+      });
+      removePendingFrontendTool(toolCallId);
+    } catch (error) {
+      console.warn('[FrontendTools] Cancel failed:', error);
+    }
+  }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
   // 为 AgentCommandSelector 创建键盘处理器
   const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({
@@ -795,7 +810,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
               isUserScrolling={isUserScrolling}
               newMessagesCount={newMessagesCount}
               onScrollToBottom={scrollToBottom}
-              onAskUserQuestionSubmit={handleAskUserQuestionSubmit}
+              onFrontendToolSubmit={handleFrontendToolSubmit}
+              onFrontendToolCancel={handleFrontendToolCancel}
             />
           )}
 
@@ -917,7 +933,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
         // Utility functions
         // 当有待回答的问题时，也禁用输入框
-        isSendDisabled={() => isSendDisabled() || !!pendingUserQuestion}
+        isSendDisabled={() => isSendDisabled() || pendingFrontendTools.size > 0}
 
         // Environment Variables
         envVars={envVars}

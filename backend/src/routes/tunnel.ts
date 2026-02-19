@@ -113,10 +113,13 @@ router.put('/config', async (req: Request, res: Response): Promise<any> => {
 /**
  * POST /api/tunnel/connect
  * Manually connect to the tunnel server
+ *
+ * Body: { force?: boolean }
  */
-router.post('/connect', async (_req: Request, res: Response): Promise<any> => {
+router.post('/connect', async (req: Request, res: Response): Promise<any> => {
   try {
-    await tunnelService.connect();
+    const force = req.body?.force === true;
+    await tunnelService.connect(force);
     res.json({
       success: true,
       status: tunnelService.getStatus(),

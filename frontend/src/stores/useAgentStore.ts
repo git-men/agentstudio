@@ -54,19 +54,15 @@ interface McpStatusData {
   lastUpdated?: number;
 }
 
-// 待回答的用户问题状态（用于 AskUserQuestion 工具）
-interface PendingUserQuestion {
-  toolUseId: string;
+/**
+ * Pending frontend tool call — agent invoked a tool that needs frontend execution.
+ */
+export interface PendingFrontendToolCall {
+  toolCallId: string;
   toolName: string;
-  questions: Array<{
-    question: string;
-    options: Array<{
-      label: string;
-      description?: string;
-    }>;
-    multiSelect?: boolean;
-    header?: string;
-  }>;
+  args: Record<string, unknown>;
+  sessionId: string;
+  agentId: string;
   timestamp: number;
 }
 
@@ -125,8 +121,8 @@ interface AgentState {
   // MCP status (MCP工具状态)
   mcpStatus: McpStatusData;
   
-  // AskUserQuestion 状态（等待用户回答的问题）
-  pendingUserQuestion: PendingUserQuestion | null;
+  // Pending frontend tool calls (keyed by toolCallId)
+  pendingFrontendTools: Map<string, PendingFrontendToolCall>;
   
   // A2A streaming state (keyed by agentUrl for matching with tool components)
   activeA2AStreams: Record<string, A2AStreamData>;
@@ -160,8 +156,10 @@ interface AgentState {
   updateMcpStatus: (status: Partial<McpStatusData>) => void;
   clearMcpStatus: () => void;
   
-  // AskUserQuestion actions
-  setPendingUserQuestion: (question: PendingUserQuestion | null) => void;
+  // Frontend tool actions
+  addPendingFrontendTool: (call: PendingFrontendToolCall) => void;
+  removePendingFrontendTool: (toolCallId: string) => void;
+  getPendingFrontendTool: (toolCallId: string) => PendingFrontendToolCall | undefined;
   
   // A2A stream actions
   setA2AStreamStart: (agentUrl: string, sessionId: string, message: string) => void;
@@ -189,7 +187,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     lastErrorDetails: undefined,
     lastUpdated: undefined
   },
-  pendingUserQuestion: null,
+  pendingFrontendTools: new Map(),
   activeA2AStreams: {},
   sidebarCollapsed: false,
   
@@ -425,7 +423,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
   setAiTyping: (typing) => set({ isAiTyping: typing }),
   
-  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId }),
+  setCurrentSessionId: (sessionId) => set({ currentSessionId: sessionId, pendingFrontendTools: new Map() }),
   
   clearMessages: () => set({ messages: [] }),
   
@@ -450,8 +448,20 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   }),
   
-  // AskUserQuestion actions
-  setPendingUserQuestion: (question) => set({ pendingUserQuestion: question }),
+  // Frontend tool actions
+  addPendingFrontendTool: (call) => set((state) => {
+    const next = new Map(state.pendingFrontendTools);
+    next.set(call.toolCallId, call);
+    return { pendingFrontendTools: next };
+  }),
+  removePendingFrontendTool: (toolCallId) => set((state) => {
+    const next = new Map(state.pendingFrontendTools);
+    next.delete(toolCallId);
+    return { pendingFrontendTools: next };
+  }),
+  getPendingFrontendTool: (toolCallId) => {
+    return useAgentStore.getState().pendingFrontendTools.get(toolCallId);
+  },
   
   // A2A stream actions
   setA2AStreamStart: (agentUrl, sessionId, message) => set((state) => ({

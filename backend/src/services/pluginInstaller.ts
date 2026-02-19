@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
@@ -20,9 +20,37 @@ import {
 
 const execAsync = promisify(exec);
 
+const SAFE_BRANCH_PATTERN = /^[a-zA-Z0-9_\-./]+$/;
+
+export function validateGitBranch(branch: string): boolean {
+  if (!SAFE_BRANCH_PATTERN.test(branch)) return false;
+  if (branch.includes('..')) return false;
+  if (branch.startsWith('-')) return false;
+  return true;
+}
+
+export function validateGitUrl(url: string): boolean {
+  if (url.startsWith('-')) return false;
+  if (/[`$|;&<>]/.test(url)) return false;
+  return true;
+}
+
+function spawnAsync(command: string, args: string[]): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, { stdio: 'pipe' });
+    let stderr = '';
+    child.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} failed with code ${code}: ${stderr}`));
+    });
+    child.on('error', reject);
+  });
+}
+
 function getSafeDirectory(targetPath: string): string {
   try {
-    return fs.realpathSync(targetPath);
+    return fs.realpathSync(targetPath) || targetPath;
   } catch {
     return targetPath;
   }
@@ -492,6 +520,10 @@ class PluginInstaller {
     branch: string,
     isGitHub: boolean
   ): Promise<void> {
+    if (!validateGitBranch(branch)) {
+      throw new Error(`Invalid branch name: ${branch}`);
+    }
+
     let gitUrl = source;
 
     // Convert GitHub shorthand (owner/repo) to full URL
@@ -499,9 +531,12 @@ class PluginInstaller {
       gitUrl = `https://github.com/${source}.git`;
     }
 
+    if (!validateGitUrl(gitUrl)) {
+      throw new Error(`Invalid git URL: ${gitUrl}`);
+    }
+
     try {
-      const command = `git clone --branch ${branch} --depth 1 ${gitUrl} "${targetPath}"`;
-      await execAsync(command);
+      await spawnAsync('git', ['clone', '--branch', branch, '--depth', '1', gitUrl, targetPath]);
       console.log(`Cloned marketplace from ${gitUrl}`);
     } catch (error) {
       throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`);

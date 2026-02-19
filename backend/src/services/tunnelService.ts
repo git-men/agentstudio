@@ -266,8 +266,9 @@ class TunnelService {
 
   /**
    * Connect to the tunnel server
+   * @param force Force takeover existing connection (for manual use via API)
    */
-  async connect(): Promise<void> {
+  async connect(force = false): Promise<void> {
     if (!this.config.token) {
       throw new Error('Tunnel token is not configured');
     }
@@ -284,6 +285,9 @@ class TunnelService {
     console.log(`[Tunnel] Connecting to ${wsUrl}...`);
     console.log(`[Tunnel] Token: ${this.config.token.slice(0, 10)}...`);
     console.log(`[Tunnel] Target: ${targetUrl}`);
+    if (force) {
+      console.log('[Tunnel] Force mode enabled - will takeover existing connection');
+    }
 
     const requestTimeout = this.config.requestTimeout || 300000; // Default: 5 minutes
     
@@ -294,6 +298,7 @@ class TunnelService {
       reconnectInterval: this.config.reconnectInterval || 5000,
       maxReconnectAttempts: this.config.maxReconnectAttempts || 0,
       requestTimeout,
+      force,
     };
     
     console.log(`[Tunnel] Request timeout: ${requestTimeout}ms (${requestTimeout / 1000}s)`);
@@ -314,10 +319,6 @@ class TunnelService {
       console.log('[Tunnel] Disconnected');
       this.status.connected = false;
       this.status.reconnectCount++;
-      
-      // Note: Tunely client has its own auto-reconnect mechanism
-      // (configured via reconnectInterval and maxReconnectAttempts)
-      // So we don't need to manually reconnect here
     });
 
     this.client.on('onError', (error: Error) => {
@@ -326,7 +327,6 @@ class TunnelService {
     });
 
     this.client.on('onRequest', (request: any) => {
-      // Log tunnel requests in a concise format
       const queryStr = request.query && Object.keys(request.query).length > 0 
         ? '?' + new URLSearchParams(request.query).toString() 
         : '';
@@ -334,7 +334,9 @@ class TunnelService {
       console.log(`[Tunnel] ${request.method} ${request.path}${queryStr}`);
     });
 
-    // Start the client (runs in background, doesn't block)
+    // Tunely client has built-in exponential backoff with jitter for reconnection.
+    // For "already connected" errors, it tracks consecutive rejections and
+    // increases delay up to 5 minutes max.
     this.client.run().catch((error) => {
       console.error('[Tunnel] Client run error:', error);
       this.status.lastError = error.message;

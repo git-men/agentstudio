@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuthStore } from '../stores/authStore';
 import { useBackendServices } from './useBackendServices';
 import { getApiBase } from '../lib/config.js';
 import { isTokenExpired, extractToken, shouldRefreshToken as shouldRefreshTokenUtil } from '../utils/authHelpers';
 
 export function useAuth() {
-  const { token, setToken, removeToken, getToken } = useAuthStore();
+  const { token, setToken, removeToken, tokens } = useAuthStore();
   const { currentService } = useBackendServices();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | string | null>(null);
@@ -16,12 +16,13 @@ export function useAuth() {
   // Use only the service ID to avoid unnecessary re-renders
   const currentServiceId = currentService?.id;
 
-  // Check if the current service has a token - use useMemo to stabilize
-  const currentServiceToken = useMemo(() =>
-    currentServiceId ? getToken(currentServiceId) : null,
-    [currentServiceId, getToken]
-  );
+  // Derive isAuthenticated directly from the tokens map so it updates immediately
+  // when the store changes (avoids stale useMemo with stable getToken reference)
+  const currentServiceToken = currentServiceId ? (tokens[currentServiceId] ?? null) : null;
   const isAuthenticated = !!currentServiceToken;
+
+  // Keep getToken as a stable accessor for imperative use (e.g. inside callbacks)
+  const getToken = useAuthStore.getState().getToken;
 
   /**
    * Check if the backend requires a password for login
@@ -275,22 +276,29 @@ export function useAuth() {
         return false;
       }
 
-      // Add timeout to prevent hanging requests
+      // Use a single AbortController that covers both fetch AND response.json()
+      // to prevent hanging if the backend sends headers but never completes the body
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
 
-      const response = await fetch(`${getApiBase()}/auth/verify`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ token: actualToken }),
-        signal: controller.signal,
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${getApiBase()}/auth/verify`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ token: actualToken }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        clearTimeout(timeoutId);
+        throw fetchErr;
+      }
 
-      clearTimeout(timeoutId);
-
+      // Keep the timeout active through response.json() to prevent body-read hang
       const data = await response.json();
+      clearTimeout(timeoutId);
 
       if (!response.ok || !data.valid) {
         // Only remove token if it's actually invalid (401)

@@ -156,7 +156,7 @@ vi.mock('../../utils/claudeUtils.js', () => ({
       cwd: './',
       env: {}
     },
-    askUserSessionRef: null
+    frontendToolSessionRef: null
   }),
   getDefaultClaudeVersionEnv: vi.fn().mockResolvedValue({
     ANTHROPIC_API_KEY: 'test-key'

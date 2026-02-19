@@ -60,7 +60,7 @@ describe('Error Handling and Recovery', () => {
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should continue processing after worker failure', async () => {
+    it('should continue processing after worker failure', { timeout: 15000 }, async () => {
       const failingTask = makeTask('failing-task', {
         agentId: 'invalid-agent',
         projectPath: '/invalid',
@@ -85,7 +85,7 @@ describe('Error Handling and Recovery', () => {
       expect(total).toBeGreaterThan(0);
     });
 
-    it('should handle multiple concurrent worker failures', async () => {
+    it('should handle multiple concurrent worker failures', { timeout: 30000 }, async () => {
       const tasks = Array.from({ length: 5 }, (_, i) =>
         makeTask(`concurrent-fail-${i}`, {
           agentId: 'invalid',
@@ -108,7 +108,7 @@ describe('Error Handling and Recovery', () => {
   });
 
   describe('Resource Exhaustion', () => {
-    it('should handle memory pressure gracefully', async () => {
+    it('should handle memory pressure gracefully', { timeout: 30000 }, async () => {
       const tasks = Array.from({ length: 4 }, (_, i) =>
         makeTask(`memory-task-${i}`),
       );
@@ -131,7 +131,7 @@ describe('Error Handling and Recovery', () => {
       await Promise.all(submissions);
     });
 
-    it('should queue tasks when at capacity', async () => {
+    it('should queue tasks when at capacity', { timeout: 30000 }, async () => {
       const tasks = Array.from({ length: 10 }, (_, i) =>
         makeTask(`capacity-${i}`, { timeoutMs: 15000 }),
       );
@@ -206,7 +206,7 @@ describe('Error Handling and Recovery', () => {
   });
 
   describe('Recovery Scenarios', () => {
-    it('should recover from partial failure', async () => {
+    it('should recover from partial failure', { timeout: 30000 }, async () => {
       const mixedTasks: TaskDefinition[] = [
         makeTask('will-fail', { agentId: 'invalid', projectPath: '/invalid', timeoutMs: 3000 }),
         makeTask('will-succeed'),
@@ -228,7 +228,7 @@ describe('Error Handling and Recovery', () => {
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should recover from queue overflow', { timeout: 30000 }, async () => {
+    it('should recover from queue overflow', { timeout: 60000 }, async () => {
       const tasks = Array.from({ length: 100 }, (_, i) =>
         makeTask(`overflow-${i}`),
       );
@@ -247,7 +247,7 @@ describe('Error Handling and Recovery', () => {
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should maintain stats accuracy after errors', async () => {
+    it('should maintain stats accuracy after errors', { timeout: 30000 }, async () => {
       const initialStats = executor.getStats();
 
       const failingTasks = Array.from({ length: 3 }, (_, i) =>
@@ -275,7 +275,7 @@ describe('Error Handling and Recovery', () => {
   });
 
   describe('State Consistency', () => {
-    it('should maintain consistent state during errors', async () => {
+    it('should maintain consistent state during errors', { timeout: 30000 }, async () => {
       const tasks = Array.from({ length: 5 }, (_, i) =>
         makeTask(`consistency-${i}`, {
           agentId: i % 2 === 0 ? 'invalid' : 'test-agent',

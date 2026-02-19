@@ -55,9 +55,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    const VERIFY_GUARD_MS = 15000; // 15s max: ensure we never stick on "Verifying..." forever
+
     const verify = async () => {
       // Skip verification if showing backend onboarding
       if (showBackendOnboarding) {
+        setIsVerifying(false);
         return;
       }
 
@@ -94,6 +98,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       if (!shouldVerify && !isVerifying) {
         // Token is still valid based on our local check
         setIsValid(true);
+        setIsVerifying(false);
         return;
       }
 
@@ -101,16 +106,38 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       lastServiceId.current = currentServiceId;
       lastVerifyTime.current = now;
 
-      if (isAuthenticated) {
-        const valid = await verifyToken();
-        setIsValid(valid);
-      } else {
-        setIsValid(false);
+      const guardTimer = setTimeout(() => {
+        if (!cancelled) {
+          setIsVerifying(false);
+          setIsValid(false);
+        }
+      }, VERIFY_GUARD_MS);
+
+      try {
+        if (isAuthenticated) {
+          const valid = await verifyToken();
+          if (!cancelled) {
+            setIsValid(valid);
+          }
+        } else {
+          if (!cancelled) setIsValid(false);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setIsValid(false);
+        }
+      } finally {
+        clearTimeout(guardTimer);
+        if (!cancelled) {
+          setIsVerifying(false);
+        }
       }
-      setIsVerifying(false);
     };
 
     verify();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentService?.id, showBackendOnboarding, isAuthenticated]); // Add isAuthenticated to dependency array
 

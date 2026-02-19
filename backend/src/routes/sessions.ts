@@ -7,7 +7,7 @@ import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-hist
 // Note: Cursor/CodeBuddy session reading is now handled via engine.readSessions()
 // Claude session reading still uses readClaudeHistorySessions() below (pending migration)
 import { sessionManager } from '../services/sessionManager';
-import { getProjectsDir } from '../config/sdkConfig.js';
+import { getProjectsDir, getAllProjectsDirs } from '../config/sdkConfig.js';
 // Note: getEngineType is no longer needed here - engine routing is handled via engineManager
 import { engineManager } from '../engines/index.js';
 
@@ -66,15 +66,23 @@ interface SubAgentMessage {
 function readSubAgentMessageFlow(projectPath: string, agentId: string): SubAgentMessage[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
-    const historyDir = path.join(getProjectsDir(), claudeProjectPath);
-    const agentFilePath = path.join(historyDir, `agent-${agentId}.jsonl`);
-    
-    console.log(`📂 [SUBAGENT] Reading sub-agent message flow: ${agentFilePath}`);
-    
-    if (!fs.existsSync(agentFilePath)) {
-      console.log(`❌ [SUBAGENT] Sub-agent file not found: ${agentFilePath}`);
+    // Search all directories (macOS EMFILE workaround may store files in custom dir)
+    let agentFilePath: string | null = null;
+    for (const projectsDir of getAllProjectsDirs()) {
+      const historyDir = path.join(projectsDir, claudeProjectPath);
+      const candidatePath = path.join(historyDir, `agent-${agentId}.jsonl`);
+      if (fs.existsSync(candidatePath)) {
+        agentFilePath = candidatePath;
+        break;
+      }
+    }
+
+    if (!agentFilePath) {
+      console.log(`❌ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}`);
       return [];
     }
+    
+    console.log(`📂 [SUBAGENT] Reading sub-agent message flow: ${agentFilePath}`);
 
     const content = fs.readFileSync(agentFilePath, 'utf-8');
     const lines = content.trim().split('\n').filter(line => line.trim());
@@ -334,24 +342,34 @@ function processCompactContextMessages(messages: ClaudeHistoryMessage[]): Claude
   return processedMessages;
 }
 
+
 function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
-    const historyDir = path.join(getProjectsDir(), claudeProjectPath);
-    
-    console.log(`📂 [DEBUG] Agent SDK history directory: ${historyDir}`);
-    
-    if (!fs.existsSync(historyDir)) {
-      console.log('❌ [DEBUG] Claude history directory not found:', historyDir);
-      return [];
-    }
+    const allDirs = getAllProjectsDirs();
 
-    const jsonlFiles = fs.readdirSync(historyDir)
-      .filter(file => file.endsWith('.jsonl'))
-      .filter(file => !file.startsWith('.'))
-      .filter(file => !file.startsWith('agent-')); // 过滤掉 agent-xxx.jsonl 文件
+    console.log(`📂 [DEBUG] Searching Claude history in dirs:`, allDirs.map(d => path.join(d, claudeProjectPath)));
 
-    const sessions: ClaudeHistorySession[] = [];
+    // Collect sessions from all directories; use a Map keyed by sessionId for deduplication.
+    // Earlier directories in allDirs have higher priority (they contain newer sessions).
+    const sessionMap = new Map<string, ClaudeHistorySession>();
+
+    for (const projectsDir of allDirs) {
+      const historyDir = path.join(projectsDir, claudeProjectPath);
+
+      if (!fs.existsSync(historyDir)) {
+        console.log(`⏭️  [DEBUG] Directory not found, skipping: ${historyDir}`);
+        continue;
+      }
+
+      console.log(`📂 [DEBUG] Reading from: ${historyDir}`);
+
+      const jsonlFiles = fs.readdirSync(historyDir)
+        .filter(file => file.endsWith('.jsonl'))
+        .filter(file => !file.startsWith('.'))
+        .filter(file => !file.startsWith('agent-')); // 过滤掉 agent-xxx.jsonl 文件
+
+      const sessions: ClaudeHistorySession[] = [];
 
     for (const filename of jsonlFiles) {
       const sessionId = filename.replace('.jsonl', '');
@@ -560,7 +578,9 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
                     if (toolPart && toolPart.toolData) {
                       toolPart.toolData.toolResult = typeof block.content === 'string' 
                         ? block.content 
-                        : JSON.stringify(block.content);
+                        : Array.isArray(block.content)
+                          ? block.content.map((c: any) => c.text || String(c)).join('')
+                          : JSON.stringify(block.content);
                       
                       // Check if the original message has toolUseResult (from Claude Code SDK)
                       if (msg.toolUseResult) {
@@ -618,8 +638,19 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
       }
     }
 
-    // Sort sessions by lastUpdated descending
-    const sortedSessions = sessions.sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime());
+      // Merge into the global map; earlier dirs have higher priority (don't overwrite)
+      for (const session of sessions) {
+        if (!sessionMap.has(session.id)) {
+          sessionMap.set(session.id, session);
+        }
+      }
+    }
+
+    // Sort merged sessions by lastUpdated descending
+    const sortedSessions = Array.from(sessionMap.values())
+      .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime());
+
+    console.log(`📊 [DEBUG] Total unique sessions found: ${sortedSessions.length}`);
 
     return sortedSessions;
 
@@ -819,13 +850,12 @@ router.get('/_status', (req, res) => {
 router.get('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { search, engine } = req.query;
+    const { search } = req.query;
     const projectPath = req.query.projectPath as string;
     
     console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
     console.log(`🔍 [DEBUG] Search term: "${search}"`);
     console.log(`🔍 [DEBUG] Project path: "${projectPath}"`);
-    console.log(`🔍 [DEBUG] Engine: "${engine}"`);
     
     // Verify agent exists
     const agent = globalAgentStorage.getAgent(agentId);
@@ -926,7 +956,6 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
     const projectPath = req.query.projectPath as string;
-    const engine = req.query.engine as string;
     
     let session: any = null;
     

@@ -11,6 +11,7 @@ import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
 import type { AGUIEvent } from '../../types/aguiTypes';
+import { getAllSchemas } from '../../services/frontendToolRegistry.js';
 
 export interface UseMessageSenderProps {
   agent: AgentConfig;
@@ -291,19 +292,23 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         ...(mcpToolsEnabled && selectedMcpTools.length > 0 ? selectedMcpTools : [])
       ];
 
+      // Collect frontend tool schemas to send inline with the chat request
+      const frontendToolSchemas = getAllSchemas();
+      const frontendToolsPayload = frontendToolSchemas.length > 0 ? frontendToolSchemas : undefined;
+
       if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') {
         // Cursor/CodeBuddy/Codex Engine: Use AGUI API with simplified stream handling
         console.log(`🚀 [MessageSender] Using ${selectedEngine} engine`);
-        
+
         // Track current message for AGUI events
         let currentAguiMessageId: string | null = null;
         let currentTextContent = '';
         const currentToolCalls = new Map<string, { name: string; args: string }>();
-        
+
         // Handle AGUI events
         const handleAguiEvent = (event: AGUIEvent) => {
           console.log(`📨 [AGUI] Event: ${event.type}`, event);
-          
+
           switch (event.type) {
             case 'RUN_STARTED':
               setIsInitializingSession(false);
@@ -313,12 +318,12 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 onSessionChange?.(event.threadId);
               }
               break;
-              
+
             case 'RUN_FINISHED':
               setAiTyping(false);
               setHasSuccessfulResponse(true);
               break;
-              
+
             case 'RUN_ERROR':
               // Skip error display if the request was intentionally aborted by the user
               if (abortControllerRef.current?.signal.aborted) {
@@ -332,7 +337,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               }
               setAiTyping(false);
               break;
-              
+
             case 'TEXT_MESSAGE_START':
               currentAguiMessageId = event.messageId;
               currentTextContent = '';
@@ -341,7 +346,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 content: '',
               });
               break;
-              
+
             case 'TEXT_MESSAGE_CONTENT':
               if (currentAguiMessageId) {
                 currentTextContent += event.content;
@@ -353,28 +358,28 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 }
               }
               break;
-              
+
             case 'TEXT_MESSAGE_END':
               // Message finalized
               break;
-              
+
             case 'THINKING_START': {
               // Ensure we have an assistant message to add thinking to
               let stateForThinking = useAgentStore.getState();
               let lastMsgForThinking = stateForThinking.messages[stateForThinking.messages.length - 1];
-              
+
               if (!lastMsgForThinking || lastMsgForThinking.role !== 'assistant') {
                 addMessage({ role: 'assistant', content: '' });
                 stateForThinking = useAgentStore.getState();
                 lastMsgForThinking = stateForThinking.messages[stateForThinking.messages.length - 1];
               }
-              
+
               if (lastMsgForThinking && lastMsgForThinking.role === 'assistant') {
                 addThinkingPartToMessage(lastMsgForThinking.id, '');
               }
               break;
             }
-              
+
             case 'THINKING_CONTENT': {
               const stateForThinkContent = useAgentStore.getState();
               const lastMsgForThinkContent = stateForThinkContent.messages[stateForThinkContent.messages.length - 1];
@@ -392,11 +397,11 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               }
               break;
             }
-              
+
             case 'THINKING_END':
               // Thinking block finalized
               break;
-              
+
             case 'TOOL_CALL_START':
               currentToolCalls.set(event.toolCallId, {
                 name: event.toolName,
@@ -405,7 +410,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               // Ensure we have an assistant message to add tool to
               let stateForTool = useAgentStore.getState();
               let lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
-              
+
               // If no assistant message exists, create one first
               if (!lastMsgForTool || lastMsgForTool.role !== 'assistant') {
                 addMessage({
@@ -416,7 +421,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 stateForTool = useAgentStore.getState();
                 lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
               }
-              
+
               // Add tool part to current message
               if (lastMsgForTool && lastMsgForTool.role === 'assistant') {
                 addToolPartToMessage(lastMsgForTool.id, {
@@ -427,7 +432,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 });
               }
               break;
-              
+
             case 'TOOL_CALL_ARGS':
               const toolCall = currentToolCalls.get(event.toolCallId);
               if (toolCall) {
@@ -445,7 +450,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 }
               }
               break;
-              
+
             case 'TOOL_CALL_END':
               const completedTool = currentToolCalls.get(event.toolCallId);
               if (completedTool) {
@@ -466,7 +471,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 }
               }
               break;
-              
+
             case 'TOOL_CALL_RESULT':
               const stateForResult = useAgentStore.getState();
               const lastMsgForResult = stateForResult.messages[stateForResult.messages.length - 1];
@@ -482,7 +487,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 });
               }
               break;
-            
+
             case 'CUSTOM': {
               const customEvent = event as { name?: string; data?: any };
               // Handle session ID sync from Cursor CLI
@@ -491,6 +496,20 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 console.log(`🔄 [AGUI] Session ID updated from CLI: ${cliSessionId}`);
                 setCurrentSessionId(cliSessionId);
                 onSessionChange?.(cliSessionId);
+              }
+              // Handle frontend tool invocations forwarded from the bridge
+              if (customEvent.name === 'frontend_tool_call' && customEvent.data) {
+                const d = customEvent.data as Record<string, unknown>;
+                if (d.toolCallId && d.toolName) {
+                  console.log(`[AGUI] Frontend tool call: ${d.toolName} (${d.toolCallId})`);
+                  useAgentStore.getState().addPendingFrontendTool({
+                    toolCallId: d.toolCallId as string,
+                    toolName: d.toolName as string,
+                    args: (d.args as Record<string, unknown>) || {},
+                    sessionId: d.sessionId as string,
+                    agentId: d.agentId as string,
+                  });
+                }
               }
               // Handle auto-compact event (context window auto-compaction)
               if (customEvent.name === 'auto_compact') {
@@ -509,15 +528,16 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
             }
           }
         };
-        
+
         await aguiChat.sendMessage({
           message: userMessage,
           engineType: selectedEngine as 'cursor' | 'codebuddy' | 'codex',
           workspace: projectPath || '.',
-          sessionId: currentSessionId || undefined, // Convert null to undefined
+          sessionId: currentSessionId || undefined,
           model: selectedModel,
-          images: imageData.length > 0 ? imageData : undefined, // Pass images
-          envVars: Object.keys(envVars).length > 0 ? envVars : undefined, // Pass env vars
+          images: imageData.length > 0 ? imageData : undefined,
+          envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+          frontendTools: frontendToolsPayload,
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {
@@ -538,7 +558,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
       } else {
         // Claude Engine: Use original agent chat API
         console.log('🚀 [MessageSender] Using Claude Engine');
-        
+
         await agentChatMutation.mutateAsync({
           agentId: agent.id,
           message: userMessage,
@@ -552,6 +572,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           claudeVersion: selectedClaudeVersion,
           envVars,
           channel: 'web',
+          frontendTools: frontendToolsPayload,
           abortController,
           onMessage: handleStreamMessage,
           onError: handleStreamError

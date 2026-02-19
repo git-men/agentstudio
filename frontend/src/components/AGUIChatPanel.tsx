@@ -38,6 +38,8 @@ import {
     EngineSelector
 } from './agentChat';
 import useEngine from '../hooks/useEngine';
+import { useRatingTool } from '../hooks/useRatingTool';
+import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
 
 
 interface AGUIChatPanelProps {
@@ -58,8 +60,12 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
+
+    // Register custom frontend tools
+    useRatingTool();
+    useConsoleLogsTool();
     const { isMobile } = useMobileContext();
-    
+
     // Get engine type from service - this is the source of truth
     const { engineType: serviceEngineType } = useEngine();
 
@@ -82,7 +88,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         isAiTyping,
         currentSessionId,
         mcpStatus,
-        pendingUserQuestion,
+        pendingFrontendTools,
         selectedEngine,
         engineUICapabilities,
         engineModels,
@@ -90,7 +96,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         interruptAllExecutingTools,
         setAiTyping,
         loadSessionMessages,
-        setPendingUserQuestion,
+        removePendingFrontendTool,
     } = useAgentStore();
 
     // Auto-send ref for initial message
@@ -251,7 +257,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setSelectedClaudeVersion,
         setIsVersionLocked
     } = claudeVersionManager;
-    
+
     // Reset model selection when switching engines
     useEffect(() => {
         if ((selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') && engineModels.length > 0) {
@@ -306,21 +312,12 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
     // API hooks
     const interruptSessionMutation = useInterruptSession();
-    
-    // Check if engine has synced - only fetch sessions when selectedEngine matches service engine
-    // This prevents fetching with wrong engine type (e.g., fetching claude sessions when service is cursor)
-    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor' | 'codebuddy' | 'codex'> = {
-        'cursor-cli': 'cursor',
-        'claude-sdk': 'claude',
-        'codebuddy-sdk': 'codebuddy',
-        'codex-cli': 'codex',
-    };
-    const expectedEngine = serviceEngineType ? SERVICE_TO_STORE_ENGINE[serviceEngineType] : undefined;
-    // Only fetch when: 1) service engine is loaded AND 2) selectedEngine matches expected engine
-    const isEngineSynced = !!expectedEngine && selectedEngine === expectedEngine;
-    
-    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine, isEngineSynced);
-    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
+
+    // Only fetch sessions once engine config is loaded from backend
+    const isEngineReady = !!serviceEngineType;
+
+    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, isEngineReady);
+    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
     const { data: activeSessionsData } = useSessions();
 
     // Refresh sessions when dropdown opens
@@ -494,7 +491,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
         try {
             setIsStopping(true);
-            
+
             // IMPORTANT: Abort the client-side SSE stream FIRST to prevent receiving
             // any more events (including error events from the server-side interrupt).
             // Then call the server to clean up the backend session.
@@ -514,13 +511,13 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ engineType: selectedEngine }),
+                    body: JSON.stringify({}),
                 }).catch(err => console.warn('[Stop] Server interrupt failed:', err));
             } else {
                 interruptSessionMutation.mutateAsync(currentSessionId)
                     .catch(err => console.warn('[Stop] Server interrupt failed:', err));
             }
-            
+
             setIsStopping(false);
         } catch (error) {
             console.error('Error stopping generation:', error);
@@ -556,28 +553,51 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setSearchTerm('');
     };
 
-    // Ask user question submit — memoized to avoid invalidating renderedMessages useMemo on every render
-    const handleAskUserQuestionSubmit = useCallback(async (toolUseId: string, response: string) => {
+    // NOTE: Frontend tool schemas are now sent inline with each chat request
+    // (via the `frontendTools` field). Pre-registration is no longer needed.
+
+    const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
         try {
-            const apiResponse = await authFetch(`${API_BASE}/agents/user-response`, {
+            const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    toolUseId,
-                    response,
+                    toolCallId,
+                    result,
                     sessionId: currentSessionId,
                     agentId: agent.id,
                 }),
             });
 
             if (!apiResponse.ok) {
-                throw new Error(`HTTP ${apiResponse.status}`);
+                const err = await apiResponse.json().catch(() => ({}));
+                return { success: false, error: err.error || `HTTP ${apiResponse.status}` };
             }
-            setPendingUserQuestion(null);
+            removePendingFrontendTool(toolCallId);
+            return { success: true };
         } catch (error) {
-            console.error('Submit failed:', error);
+            return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
-    }, [currentSessionId, agent.id, setPendingUserQuestion]);
+    }, [currentSessionId, agent.id, removePendingFrontendTool]);
+
+    const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
+        try {
+            await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    toolCallId,
+                    result: reason || 'Cancelled by user',
+                    isError: true,
+                    sessionId: currentSessionId,
+                    agentId: agent.id,
+                }),
+            });
+            removePendingFrontendTool(toolCallId);
+        } catch (error) {
+            console.warn('[FrontendTools] Cancel failed:', error);
+        }
+    }, [currentSessionId, agent.id, removePendingFrontendTool]);
 
     // Render messages using existing renderer - matching original chat style
     const renderedMessages = useMemo(() => {
@@ -590,14 +610,14 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                         }`}
                 >
                     <ChatMessageRenderer
-                        // AgentMessage and ChatMessage have compatible shapes for rendering
                         message={message as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
-                        onAskUserQuestionSubmit={handleAskUserQuestionSubmit}
+                        onFrontendToolSubmit={handleFrontendToolSubmit}
+                        onFrontendToolCancel={handleFrontendToolCancel}
                     />
                 </div>
             </div>
         ));
-    }, [messages, handleAskUserQuestionSubmit]);
+    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -624,7 +644,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     <div className="flex items-center space-x-2 flex-shrink-0 ml-2">
                         {/* Engine Sync (headless - syncs service engine to store) */}
                         <EngineSelector disabled={isAiTyping} />
-                        
+
                         <div className="flex space-x-1">
                             <button
                                 onClick={handleNewSessionWithUI}
@@ -633,25 +653,25 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             >
                                 <Plus className="w-4 h-4" />
                             </button>
-                        <div className="relative">
-                            <button
-                                onClick={() => setShowSessions(!showSessions)}
-                                className="p-1.5 hover:bg-white/50 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300"
-                                title={t('agentChat.sessionHistory')}
-                            >
-                                <Clock className="w-4 h-4" />
-                            </button>
-                            <SessionsDropdown
-                                isOpen={showSessions}
-                                onToggle={() => setShowSessions(!showSessions)}
-                                sessions={sessionsData?.sessions || []}
-                                currentSessionId={currentSessionId}
-                                onSwitchSession={handleSwitchSessionWithUI}
-                                isLoading={false}
-                                searchTerm={searchTerm}
-                                onSearchChange={setSearchTerm}
-                            />
-                        </div>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowSessions(!showSessions)}
+                                    className="p-1.5 hover:bg-white/50 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300"
+                                    title={t('agentChat.sessionHistory')}
+                                >
+                                    <Clock className="w-4 h-4" />
+                                </button>
+                                <SessionsDropdown
+                                    isOpen={showSessions}
+                                    onToggle={() => setShowSessions(!showSessions)}
+                                    sessions={sessionsData?.sessions || []}
+                                    currentSessionId={currentSessionId}
+                                    onSwitchSession={handleSwitchSessionWithUI}
+                                    isLoading={false}
+                                    searchTerm={searchTerm}
+                                    onSearchChange={setSearchTerm}
+                                />
+                            </div>
                             <button
                                 onClick={handleRefreshMessages}
                                 disabled={!currentSessionId || isLoadingMessages}
@@ -839,12 +859,12 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 handleCancelDialog={handleCancelDialog}
 
                 // Utility functions
-                isSendDisabled={() => isSendDisabled() || !!pendingUserQuestion}
+                isSendDisabled={() => isSendDisabled() || pendingFrontendTools.size > 0}
 
                 // Environment Variables
                 envVars={envVars}
                 onSetEnvVars={setEnvVars}
-                
+
                 // Engine UI capabilities
                 engineUICapabilities={engineUICapabilities}
             />

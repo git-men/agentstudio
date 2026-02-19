@@ -18,10 +18,11 @@ type ChatVersion = 'original' | 'agui';
 // LocalStorage key for chat version preference
 const CHAT_VERSION_KEY = 'agentstudio:chat-version';
 
-// Get default chat version based on engine type
-// Cursor / CodeBuddy / Codex engines use the AGUI protocol
-function getDefaultChatVersion(isAguiEngine: boolean): ChatVersion {
-  return isAguiEngine ? 'agui' : 'original';
+// AGUI is the default chat panel for all engines.
+// Cursor/CodeBuddy/Codex engines enforce it; Claude engine also benefits from
+// the richer frontend tool framework available in the AGUI panel.
+function getDefaultChatVersion(_isAguiEngine: boolean): ChatVersion {
+  return 'agui';
 }
 
 export const ChatPage: React.FC = () => {
@@ -43,32 +44,20 @@ export const ChatPage: React.FC = () => {
   const wasAiTypingRef = React.useRef(false);
 
   // Chat version state with localStorage persistence
-  // Initial value: use saved preference, or derive from engine type (including cached value)
+  // Default to AGUI for all engines; respect explicit user override
   const [chatVersion, setChatVersion] = useState<ChatVersion>(() => {
     const saved = localStorage.getItem(CHAT_VERSION_KEY);
     if (saved === 'agui' || saved === 'original') return saved;
-    // No saved preference: use engine-based default
-    // isAguiEngine may already be true from cached React Query data
-    // Also check localStorage cache for engine type as a fast path
-    const cachedEngine = localStorage.getItem('agentstudio:engine-type');
-    if (cachedEngine === 'cursor' || cachedEngine === 'codebuddy' || cachedEngine === 'codex') return 'agui';
-    return isAguiEngine ? 'agui' : 'original';
+    return 'agui';
   });
 
-  // Set chat version based on engine type when engine loads
-  // AGUI engines (Cursor, CodeBuddy) always force AGUI panel regardless of saved preference
+  // When engine finishes loading, AGUI engines force AGUI panel.
+  // For other engines, respect the persisted preference (already 'agui' by default).
   useEffect(() => {
     if (!isEngineLoading) {
       if (isAguiEngine) {
-        // AGUI engines must use AGUI panel - override any saved preference
         setChatVersion('agui');
         localStorage.setItem(CHAT_VERSION_KEY, 'agui');
-      } else {
-        const saved = localStorage.getItem(CHAT_VERSION_KEY);
-        if (!saved) {
-          // User hasn't set a preference, use engine-based default
-          setChatVersion('original');
-        }
       }
     }
   }, [isEngineLoading, isAguiEngine]);

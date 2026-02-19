@@ -26,7 +26,6 @@ import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
-import cloudflareTunnelRouter from './routes/cloudflareTunnel';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
@@ -51,10 +50,13 @@ import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
 import { productGateMiddleware } from './middleware/productGate.js';
+
+
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { initializeEngines, getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
 import { syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
+import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
 
 dotenv.config();
 
@@ -312,7 +314,7 @@ const app: express.Express = express();
       try {
         const originUrl = new URL(origin);
         const serverHost = `${originUrl.protocol}//${originUrl.host}`;
-        
+
         // Check if origin matches the server's actual address
         // In embedded mode, origin should be the same as the server address
         const serverPort = PORT;
@@ -500,6 +502,9 @@ const app: express.Express = express();
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aRouter);
 
+  // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
+  app.use('/api/mcp-bridge', express.json(), createHttpMcpRouter());
+
   // Health check
   app.get('/api/health', (req, res) => {
     try {
@@ -577,7 +582,6 @@ const app: express.Express = express();
   app.use('/api/marketplace-skills', authMiddleware, marketplaceSkillsRouter);
   app.use('/api/scheduled-tasks', authMiddleware, scheduledTasksRouter);
   app.use('/api/mcp-admin-management', authMiddleware, mcpAdminManagementRouter); // MCP Admin management with JWT auth
-  app.use('/api/cloudflare-tunnel', authMiddleware, cloudflareTunnelRouter); // Cloudflare Tunnel management
   app.use('/api/task-executor', authMiddleware, taskExecutorRouter);
   app.use('/api/version', authMiddleware, versionRouter);
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management

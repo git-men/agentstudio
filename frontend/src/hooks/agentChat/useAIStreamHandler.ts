@@ -93,7 +93,7 @@ export const useAIStreamHandler = ({
     addToolPartToMessage,
     updateToolPartInMessage,
     updateMcpStatus,
-    setPendingUserQuestion,
+    addPendingFrontendTool,
     setA2AStreamStart,
     setA2AStreamEnd,
     addA2AStreamEvent,
@@ -986,26 +986,21 @@ export const useAIStreamHandler = ({
       return;
     }
 
-    // 🎤 处理 AskUserQuestion 等待用户输入事件
-    // 新架构：MCP 工具会阻塞等待用户输入，SSE 连接保持打开
-    // 用户提交答案后，MCP 工具返回，Claude 继续执行
-    if (eventData.type === 'awaiting_user_input') {
-      console.log('🎤 [AskUserQuestion] Received awaiting_user_input event:', eventData);
-      
-      const awaitingData = eventData as any;
-      
-      // 设置待回答的问题到 store
-      setPendingUserQuestion({
-        toolUseId: awaitingData.toolUseId,
-        toolName: awaitingData.toolName,
-        questions: awaitingData.toolInput?.questions || [],
-        timestamp: Date.now()
+    // Handle frontend tool invocations from the FrontendToolBridge.
+    if (eventData.type === 'frontend_tool_call') {
+      const d = eventData as Record<string, unknown>;
+      if (!d.toolCallId || !d.toolName) {
+        console.warn('[FrontendTool] Malformed frontend_tool_call event:', d);
+        return;
+      }
+      addPendingFrontendTool({
+        toolCallId: d.toolCallId as string,
+        toolName: d.toolName as string,
+        args: (d.args as Record<string, unknown>) || {},
+        sessionId: d.sessionId as string,
+        agentId: d.agentId as string,
+        timestamp: Date.now(),
       });
-      
-      // 不停止 AI 输入状态 - MCP 工具正在阻塞等待，Claude session 仍在运行
-      // 当用户提交答案后，MCP 工具会返回，Claude 会继续执行
-      
-      console.log('🎤 [AskUserQuestion] Set pending question, MCP tool is waiting for user response');
       return;
     }
 
@@ -1557,7 +1552,7 @@ export const useAIStreamHandler = ({
     addToolPartToMessage,
     updateToolPartInMessage,
     updateMcpStatus,
-    setPendingUserQuestion,
+    addPendingFrontendTool,
     setA2AStreamStart,
     setA2AStreamEnd,
     addA2AStreamEvent,

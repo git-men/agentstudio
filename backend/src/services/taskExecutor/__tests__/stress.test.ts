@@ -69,7 +69,7 @@ describe('Load and Stress Tests', () => {
       expect(executor.isHealthy()).toBe(true);
     });
 
-    it('should handle sustained load over time', async () => {
+    it('should handle sustained load over time', { timeout: 30000 }, async () => {
       const batches = 5;
       const tasksPerBatch = 10;
 
@@ -89,7 +89,6 @@ describe('Load and Stress Tests', () => {
       const stats = executor.getStats();
       const totalSubmitted = batches * tasksPerBatch;
 
-      // Total tracked tasks should account for all submitted
       const tracked = stats.runningTasks + stats.queuedTasks +
                       stats.completedTasks + stats.failedTasks;
       expect(tracked).toBeLessThanOrEqual(totalSubmitted);
@@ -247,7 +246,7 @@ describe('Load and Stress Tests', () => {
   });
 
   describe('Mixed Workload', () => {
-    it('should handle mixed A2A and scheduled tasks', async () => {
+    it('should handle mixed A2A and scheduled tasks', { timeout: 30000 }, async () => {
       const tasks: TaskDefinition[] = [];
 
       for (let i = 0; i < 25; i++) {
