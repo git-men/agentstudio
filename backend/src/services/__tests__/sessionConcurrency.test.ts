@@ -11,9 +11,7 @@ import { ClaudeSession } from '../claudeSession.js';
 // Mock the claude-agent-sdk
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: vi.fn(() => {
-    // Return a mock async generator
     const mockGenerator = (async function* () {
-      // Yield a system init message
       yield {
         type: 'system',
         subtype: 'init',
@@ -21,8 +19,8 @@ vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
       };
     })();
     
-    // Add interrupt method to the generator
     (mockGenerator as any).interrupt = vi.fn();
+    (mockGenerator as any).close = vi.fn();
     return mockGenerator;
   })
 }));
@@ -58,7 +56,7 @@ describe('Session Concurrency Control', () => {
       expect(isBusy).toBe(false);
     });
 
-    it('should return false for idle session', () => {
+    it('should return false for idle session', async () => {
       const mockOptions = {
         systemPrompt: 'test prompt',
         allowedTools: [],
@@ -66,10 +64,8 @@ describe('Session Concurrency Control', () => {
         cwd: '/test/path'
       };
       
-      // Create a session with resume ID so it gets registered immediately
-      const session = sessionManager.createNewSession('test-agent', mockOptions, 'test-session-id');
+      const session = await sessionManager.createNewSession('test-agent', mockOptions, 'test-session-id');
       
-      // Session should not be busy initially
       const isBusy = sessionManager.isSessionBusy('test-session-id');
       expect(isBusy).toBe(false);
     });
@@ -105,7 +101,7 @@ describe('Session Concurrency Control', () => {
   });
 
   describe('SessionManager session lifecycle', () => {
-    it('should track sessions correctly', () => {
+    it('should track sessions correctly', async () => {
       const mockOptions = {
         systemPrompt: 'test prompt',
         allowedTools: [],
@@ -113,14 +109,11 @@ describe('Session Concurrency Control', () => {
         cwd: '/test/path'
       };
       
-      // Create session with resume ID
-      const session = sessionManager.createNewSession('test-agent', mockOptions, 'session-123');
+      const session = await sessionManager.createNewSession('test-agent', mockOptions, 'session-123');
       
-      // Should be retrievable
       const retrieved = sessionManager.getSession('session-123');
       expect(retrieved).toBe(session);
       
-      // hasActiveSession should return true
       expect(sessionManager.hasActiveSession('session-123')).toBe(true);
     });
 

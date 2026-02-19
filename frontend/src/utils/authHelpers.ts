@@ -62,7 +62,11 @@ export const shouldRefreshToken = (token: string | TokenData | null, thresholdHo
   const jwtString = typeof token === 'string' ? token : token.token;
   const decoded = parseJWT(jwtString);
 
-  if (!decoded || !decoded.exp) return true;
+  // If JWT can't be parsed or has no exp, don't trigger unnecessary re-verification.
+  // An unparseable token will be caught by isTokenExpired() which checks the 7-day
+  // timestamp fallback. Returning true here would cause shouldVerify=true on every
+  // effect re-run, leading to excessive verification calls.
+  if (!decoded || !decoded.exp) return false;
 
   const now = Math.floor(Date.now() / 1000);
   const thresholdSeconds = thresholdHours * 60 * 60;

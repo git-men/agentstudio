@@ -77,22 +77,19 @@ const FrontendToolSchema = z.object({
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
-  engineType: z.enum(['claude', 'cursor', 'codebuddy'] as const).optional().default('claude'),
+  // engineType is deprecated — backend uses its configured default engine.
+  // Kept as optional for backward compatibility but ignored for routing.
+  engineType: z.enum(['claude', 'cursor', 'codebuddy'] as const).optional(),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
   model: z.string().optional(),
-  // Images (for cursor engine, will be saved to workspace and referenced via @path)
   images: z.array(ImageSchema).optional(),
-  // Claude-specific options
   providerId: z.string().optional(),
   permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
   mcpTools: z.array(z.string()).optional(),
   envVars: z.record(z.string(), z.string()).optional(),
-  // Frontend tools (inline registration)
   frontendTools: z.array(FrontendToolSchema).optional(),
-  // Cursor-specific options
   timeout: z.number().optional(),
-  // Reconnect: re-attach to an in-progress SSE stream
   reconnect: z.boolean().optional(),
 }).refine(data => {
   if (data.reconnect) return true;
@@ -188,7 +185,6 @@ router.post('/chat', async (req, res) => {
 
     const {
       message,
-      engineType,
       workspace: rawWorkspace,
       sessionId,
       model,
@@ -201,6 +197,9 @@ router.post('/chat', async (req, res) => {
       timeout,
       reconnect,
     } = validation.data;
+
+    // Use server-configured engine type (ignoring any client-provided engineType)
+    const engineType = engineManager.getDefaultEngineType();
 
     // Resolve workspace: if it's a project name, get the actual path
     let resolvedWorkspace = rawWorkspace;
@@ -220,15 +219,10 @@ router.post('/chat', async (req, res) => {
       }
     }
 
-    console.log(`📤 [AGUI] Chat request via ${engineType} engine`);
+    console.log(`📤 [AGUI] Chat request via ${engineType} engine (server-configured)`);
     console.log(`   Workspace: ${resolvedWorkspace}`);
     console.log(`   Model: ${model || 'default'}`);
     console.log(`   Session: ${sessionId || 'new'}`);
-
-    // Validate engine exists
-    if (!engineManager.hasEngine(engineType)) {
-      return res.status(400).json({ error: `Unknown engine type: ${engineType}` });
-    }
 
     // Set up SSE headers
     res.setHeader('Content-Type', 'text/event-stream');
@@ -447,7 +441,7 @@ router.post('/chat', async (req, res) => {
 router.post('/sessions/:sessionId/interrupt', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { engineType = 'claude' } = req.body as { engineType?: EngineType };
+    const engineType = engineManager.getDefaultEngineType();
 
     console.log(`🛑 [AGUI] Interrupt request for session ${sessionId} on ${engineType} engine`);
 
@@ -521,12 +515,12 @@ router.get('/status', (_req, res) => {
 router.post('/sessions/:sessionId/inject', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { message, sender = 'facilitator-agent', engineType = 'cursor', workspace } = req.body as {
+    const { message, sender = 'facilitator-agent', workspace } = req.body as {
       message: string;
       sender?: string;
-      engineType?: EngineType;
       workspace?: string;
     };
+    const engineType = engineManager.getDefaultEngineType();
 
     if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ error: 'Message is required' });
@@ -537,11 +531,6 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
     }
 
     console.log(`💉 [AGUI] Inject request for session ${sessionId} from ${sender}`);
-
-    // Validate engine
-    if (!engineManager.hasEngine(engineType)) {
-      return res.status(400).json({ error: `Unknown engine type: ${engineType}` });
-    }
 
     // 1. Broadcast USER_MESSAGE event to all observers
     sessionEventBus.emit(sessionId, {

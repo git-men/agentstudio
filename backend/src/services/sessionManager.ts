@@ -37,6 +37,8 @@ export class SessionManager {
   private readonly cleanupIntervalMs = 1 * 60 * 1000; // 1 分钟检查一次
   private readonly defaultIdleTimeoutMs = 30 * 60 * 1000; // 30 分钟不活跃超时
   private readonly heartbeatTimeoutMs = 30 * 60 * 1000; // 30 分钟心跳超时
+  private readonly maxSessionsPerAgent = 1;
+  private readonly maxConcurrentSessions = 10;
 
   constructor() {
     // 定期清理空闲会话
@@ -145,18 +147,18 @@ export class SessionManager {
 
   /**
    * 创建新会话（还没有 sessionId）
-   * @param agentId Agent ID
-   * @param options Claude 查询选项
-   * @param resumeSessionId 可选的恢复会话ID
-   * @param claudeVersionId 可选的 Claude 版本ID
-   * @param modelId 可选的模型ID
-   * @param configSnapshot 可选的配置快照，用于后续检测配置变化
+   * Enforces per-agent and global session limits before creating.
    */
-  createNewSession(agentId: string, options: Options, resumeSessionId?: string, claudeVersionId?: string, modelId?: string, configSnapshot?: SessionConfigSnapshot): ClaudeSession {
+  async createNewSession(agentId: string, options: Options, resumeSessionId?: string, claudeVersionId?: string, modelId?: string, configSnapshot?: SessionConfigSnapshot): Promise<ClaudeSession> {
+    // Enforce per-agent session limit: close stale sessions for this agent
+    await this.enforceAgentSessionLimit(agentId, resumeSessionId);
+
+    // Enforce global concurrent session limit
+    await this.enforceGlobalSessionLimit();
+
     const session = new ClaudeSession(agentId, options, resumeSessionId, claudeVersionId, modelId);
     if (resumeSessionId) {
       this.sessions.set(resumeSessionId, session);
-      // 初始化心跳记录，防止被 cleanupIdleSessions 立即清理
       this.sessionHeartbeats.set(resumeSessionId, Date.now());
       const sessionForAgent = this.agentSessions.get(agentId);
       if (sessionForAgent) {
@@ -165,7 +167,6 @@ export class SessionManager {
         this.agentSessions.set(agentId, new Set([resumeSessionId]));
       }
 
-      // 存储配置快照
       if (configSnapshot) {
         this.sessionConfigs.set(resumeSessionId, configSnapshot);
         console.log(`📸 Stored config snapshot for session: ${resumeSessionId}`, configSnapshot);
@@ -174,11 +175,64 @@ export class SessionManager {
       console.log(`✅ Resumed persistent Claude session for agent: ${agentId} (sessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
       return session;
     }
-    // 生成临时键并存储
     const tempKey = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     this.tempSessions.set(tempKey, session);
     console.log(`🆕 Created new persistent Claude session for agent: ${agentId} (temp key: ${tempKey}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
     return session;
+  }
+
+  /**
+   * Close excess sessions for a given agent so that at most
+   * (maxSessionsPerAgent - 1) remain before creating a new one.
+   * Skips the session that is about to be resumed.
+   */
+  private async enforceAgentSessionLimit(agentId: string, reservedSessionId?: string): Promise<void> {
+    const agentSessionIds = this.agentSessions.get(agentId);
+    if (!agentSessionIds || agentSessionIds.size < this.maxSessionsPerAgent) {
+      return;
+    }
+
+    const sessionsToRemove: string[] = [];
+    for (const sessionId of agentSessionIds) {
+      if (sessionId === reservedSessionId) continue;
+      sessionsToRemove.push(sessionId);
+    }
+
+    // Keep the most-recently-active sessions, remove the oldest ones
+    sessionsToRemove.sort((a, b) => {
+      const sessionA = this.sessions.get(a);
+      const sessionB = this.sessions.get(b);
+      return (sessionA?.getLastActivity() ?? 0) - (sessionB?.getLastActivity() ?? 0);
+    });
+
+    const removeCount = Math.max(0, agentSessionIds.size - this.maxSessionsPerAgent + 1);
+    for (let i = 0; i < removeCount && i < sessionsToRemove.length; i++) {
+      console.log(`🔄 Enforcing per-agent limit: closing old session ${sessionsToRemove[i]} for agent ${agentId}`);
+      await this.removeSession(sessionsToRemove[i]);
+    }
+  }
+
+  /**
+   * If total sessions exceed maxConcurrentSessions, evict the oldest
+   * idle sessions to make room.
+   */
+  private async enforceGlobalSessionLimit(): Promise<void> {
+    const totalSessions = this.sessions.size + this.tempSessions.size;
+    if (totalSessions < this.maxConcurrentSessions) {
+      return;
+    }
+
+    // Collect confirmed sessions sorted by last activity (oldest first)
+    const candidates = Array.from(this.sessions.entries())
+      .map(([id, session]) => ({ id, lastActivity: session.getLastActivity(), busy: session.isCurrentlyProcessing() }))
+      .filter(s => !s.busy)
+      .sort((a, b) => a.lastActivity - b.lastActivity);
+
+    const removeCount = totalSessions - this.maxConcurrentSessions + 1;
+    for (let i = 0; i < removeCount && i < candidates.length; i++) {
+      console.log(`🔄 Enforcing global limit: closing idle session ${candidates[i].id}`);
+      await this.removeSession(candidates[i].id);
+    }
   }
 
   /**

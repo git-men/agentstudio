@@ -1,8 +1,12 @@
 /**
  * useAGUIChat Hook
  * 
- * Hook for calling the unified AGUI API endpoint.
- * Supports multiple engines (claude, cursor) with standardized AGUI event output.
+ * Hook for calling the AGUI API endpoint (/api/agui/chat).
+ * Used by Cursor and CodeBuddy engines. Claude uses /api/agents/chat directly.
+ * 
+ * The backend determines which engine to use based on its startup configuration
+ * (ENGINE env var). The frontend does NOT pass engineType to the backend;
+ * it only uses engine type locally to decide which API endpoint to call.
  */
 
 import { useCallback } from 'react';
@@ -27,6 +31,10 @@ export interface AGUIImageData {
 
 /**
  * AGUI Chat request parameters
+ * 
+ * Note: engineType is used locally by the frontend to decide which API endpoint
+ * to call. It is NOT sent to the backend — the backend determines its engine
+ * from the ENGINE env var at startup.
  */
 export interface AGUIChatParams {
   message: string;
@@ -176,9 +184,9 @@ export const useAGUIChat = () => {
   /**
    * Send a chat message via AGUI API
    * 
-   * Different engines use different endpoints:
+   * Endpoint routing is based on engineType (frontend-only decision):
    * - Claude: /api/agents/chat with outputFormat=agui
-   * - Cursor: /api/agui/chat with engineType=cursor
+   * - Cursor/CodeBuddy: /api/agui/chat (backend determines engine from its config)
    */
   const sendMessage = useCallback(async (params: AGUIChatParams): Promise<AGUIChatResult> => {
     const {
@@ -209,41 +217,35 @@ export const useAGUIChat = () => {
       let requestBody: Record<string, unknown>;
 
       if (engineType === 'cursor' || engineType === 'codebuddy') {
-        // Cursor / CodeBuddy Engine: Use /api/agui/chat directly
+        // Cursor / CodeBuddy Engine: Use /api/agui/chat
+        // Note: engineType is NOT sent — backend knows its engine from startup config
         endpoint = `${API_BASE}/agui/chat`;
         requestBody = {
           message,
-          engineType,
           workspace,
           timeout,
         };
-        // Only include sessionId if it's truthy
         if (sessionId) {
           requestBody.sessionId = sessionId;
         }
-        // Pass model parameter if provided
         if (model) {
           requestBody.model = model;
-          console.log(`🎯 [AGUI] ${engineType} model: ${model}`);
+          console.log(`🎯 [AGUI] model: ${model}`);
         }
-        // Pass permission mode for CodeBuddy
-        if (engineType === 'codebuddy' && permissionMode) {
+        if (permissionMode) {
           requestBody.permissionMode = permissionMode;
         }
-        // Pass MCP tools for dynamic tool loading
         if (mcpTools && mcpTools.length > 0) {
           requestBody.mcpTools = mcpTools;
-          console.log(`🔧 [AGUI] ${engineType} mcpTools: ${mcpTools.length} tool(s)`);
+          console.log(`🔧 [AGUI] mcpTools: ${mcpTools.length} tool(s)`);
         }
-        // Pass images (saved to workspace and referenced via @path)
         if (images && images.length > 0) {
           requestBody.images = images;
-          console.log(`🖼️ [AGUI] ${engineType} images: ${images.length} image(s)`);
+          console.log(`🖼️ [AGUI] images: ${images.length} image(s)`);
         }
-        // Pass env vars for CodeBuddy
         if (envVars && Object.keys(envVars).length > 0) {
           requestBody.envVars = envVars;
-          console.log(`🔑 [AGUI] ${engineType} envVars: ${Object.keys(envVars).length} var(s)`);
+          console.log(`🔑 [AGUI] envVars: ${Object.keys(envVars).length} var(s)`);
         }
       } else {
         // Claude Engine: Use /api/agents/chat with outputFormat=agui
@@ -392,10 +394,10 @@ export const useAGUIChat = () => {
 
   /**
    * Interrupt a session
+   * Backend determines which engine to use from its startup config.
    */
   const interruptSession = useCallback(async (
     sessionId: string,
-    engineType: EngineType = 'claude'
   ): Promise<boolean> => {
     try {
       const response = await authFetch(`${API_BASE}/agui/sessions/${sessionId}/interrupt`, {
@@ -403,7 +405,7 @@ export const useAGUIChat = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ engineType }),
+        body: JSON.stringify({}),
       });
 
       return response.ok;

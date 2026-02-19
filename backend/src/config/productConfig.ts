@@ -133,11 +133,16 @@ export const FEATURE_MODULES: FeatureModule[] = [
     name: 'Plugins & Marketplace',
     description: 'Plugin marketplace, installation, and management',
     category: 'extend',
-    routePatterns: [
-      '/api/plugins',
-      '/api/marketplace-skills',
-    ],
+    routePatterns: ['/api/plugins'],
     frontendPaths: ['/plugins'],
+  },
+  {
+    id: 'extend.marketplace-skills',
+    name: 'Marketplace Skills',
+    description: 'Marketplace skill toggle and batch operations (used by chat UI)',
+    category: 'extend',
+    routePatterns: ['/api/marketplace-skills'],
+    frontendPaths: [],
   },
   {
     id: 'extend.rules',
@@ -276,16 +281,17 @@ const EDITION_PRESETS: Record<Exclude<ProductEdition, 'custom'>, ProductProfile>
   'chat-only': {
     edition: 'chat-only',
     name: 'Chat Edition',
-    description: 'Chat-focused deployment. Only chat, sessions, and read-only project/agent access.',
+    description: 'Chat-focused deployment for VAG and similar verticals. Enables chat, sessions, version management, marketplace skills, and A2A history. File operations and management UI disabled.',
     modules: {
       ...allModulesAccess('disabled'),
-      // Core - always full
       'core.chat': 'full',
       'core.sessions': 'full',
-      'core.files': 'full',
-      // Management - read-only (needed for agent/project selection in chat UI)
+      'core.files': 'disabled',
       'manage.agents': 'readonly',
       'manage.projects': 'readonly',
+      'system.versions': 'full',
+      'extend.marketplace-skills': 'full',
+      'system.a2a': 'readonly',
     },
   },
 
@@ -593,6 +599,11 @@ export function getProductInfo(): ProductInfoResponse {
 /**
  * Log product configuration at startup.
  */
+/** @internal Reset singleton state for testing. */
+export function _resetProductConfig(): void {
+  _productConfig = null;
+}
+
 export function logProductConfig(): void {
   const profile = getProductProfile();
   console.log('🏷️  Product Configuration:');
