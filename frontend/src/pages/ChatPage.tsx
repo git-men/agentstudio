@@ -19,7 +19,7 @@ type ChatVersion = 'original' | 'agui';
 const CHAT_VERSION_KEY = 'agentstudio:chat-version';
 
 // Get default chat version based on engine type
-// Both Cursor and CodeBuddy engines use the AGUI protocol
+// Cursor / CodeBuddy / Codex engines use the AGUI protocol
 function getDefaultChatVersion(isAguiEngine: boolean): ChatVersion {
   return isAguiEngine ? 'agui' : 'original';
 }
@@ -51,7 +51,7 @@ export const ChatPage: React.FC = () => {
     // isAguiEngine may already be true from cached React Query data
     // Also check localStorage cache for engine type as a fast path
     const cachedEngine = localStorage.getItem('agentstudio:engine-type');
-    if (cachedEngine === 'cursor' || cachedEngine === 'codebuddy') return 'agui';
+    if (cachedEngine === 'cursor' || cachedEngine === 'codebuddy' || cachedEngine === 'codex') return 'agui';
     return isAguiEngine ? 'agui' : 'original';
   });
 

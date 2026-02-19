@@ -95,7 +95,7 @@ export const useDeleteAgent = () => {
 };
 
 // Engine type for session queries
-export type SessionEngineType = 'claude' | 'cursor';
+export type SessionEngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex';
 
 // Agent session hooks
 export const useAgentSessions = (agentId: string, searchTerm?: string, projectPath?: string, engine?: SessionEngineType, enabled: boolean = true) => {

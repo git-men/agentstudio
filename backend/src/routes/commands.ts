@@ -5,8 +5,7 @@ import os from 'os';
 import { promisify } from 'util';
 import matter from 'gray-matter';
 import { SlashCommand, SlashCommandCreate, SlashCommandUpdate, SlashCommandFilter } from '../types/commands';
-import { getCommandsDir, getSdkDirName } from '../config/sdkConfig.js';
-import { isCursorEngine, isCodebuddyEngine, getEngineType, getEnginePaths } from '../config/engineConfig.js';
+import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEngineType, getEnginePaths, getSdkDirName } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 const readdir = promisify(fs.readdir);
@@ -260,7 +259,7 @@ router.get('/', async (req, res) => {
     // Include readOnly flag for non-Claude engines
     res.json({
       commands,
-      readOnly: isCursorEngine() || isCodebuddyEngine(),
+      readOnly: isCursorEngine() || isCodebuddyEngine() || isCodexEngine(),
       engine: getEngineType(),
     });
   } catch (error) {
@@ -339,7 +338,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
         message: `Commands are read-only when using ${getEngineType()} engine`,
@@ -406,7 +405,7 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
         message: `Commands are read-only when using ${getEngineType()} engine`,
@@ -524,7 +523,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
         message: `Commands are read-only when using ${getEngineType()} engine`,

@@ -46,6 +46,20 @@ export const CommandsPage: React.FC = () => {
   const commands = data?.commands || [];
   const readOnly = data?.readOnly || false;
   const engineType = data?.engine || 'claude-sdk';
+  const engineLabel = engineType === 'cursor-cli'
+    ? 'Cursor'
+    : engineType === 'codebuddy-sdk'
+      ? 'CodeBuddy'
+      : engineType === 'codex-cli'
+        ? 'Codex'
+        : 'Claude';
+  const commandsPath = engineType === 'cursor-cli'
+    ? '~/.cursor/commands'
+    : engineType === 'codebuddy-sdk'
+      ? '~/.codebuddy/commands'
+      : engineType === 'codex-cli'
+        ? '~/.codex/commands'
+        : '~/.claude/commands';
 
   const deleteCommand = useDeleteCommand();
 
@@ -139,7 +153,7 @@ export const CommandsPage: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
               <Eye className="w-4 h-4" />
-              <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+              <span>只读模式 ({engineLabel})</span>
             </div>
           )}
         </div>
@@ -171,7 +185,7 @@ export const CommandsPage: React.FC = () => {
           )}
           {readOnly && (
             <p className="text-sm text-yellow-600 dark:text-yellow-400">
-              配置来自 ~/.cursor/commands（只读）
+              配置来自 {commandsPath}（只读）
             </p>
           )}
         </div>
@@ -251,23 +265,38 @@ export const CommandsPage: React.FC = () => {
 
                   {/* Actions */}
                   <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-200 dark:border-gray-700">
-                    <button
-                      onClick={() => {
-                        setEditingCommand(command);
-                        setShowForm(true);
-                      }}
-                      className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/50 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/70 transition-colors"
-                    >
-                      <Edit className="w-3 h-3 mr-1" />
-                      {t('commands.actions.edit')}
-                    </button>
-                    <button
-                      onClick={() => setShowDeleteConfirm(command)}
-                      className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-lg transition-colors"
-                      title={t('commands.actions.deleteCommand')}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {command.source === 'plugin' || readOnly ? (
+                      <button
+                        onClick={() => {
+                          setEditingCommand(command);
+                          setShowForm(true);
+                        }}
+                        className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/50 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/70 transition-colors"
+                      >
+                        <Eye className="w-3 h-3 mr-1" />
+                        {t('commands.actions.view')}
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            setEditingCommand(command);
+                            setShowForm(true);
+                          }}
+                          className="inline-flex items-center px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 dark:bg-blue-900/50 rounded-md hover:bg-blue-100 dark:hover:bg-blue-900/70 transition-colors"
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          {t('commands.actions.edit')}
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(command)}
+                          className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-lg transition-colors"
+                          title={t('commands.actions.deleteCommand')}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
@@ -410,6 +439,7 @@ export const CommandsPage: React.FC = () => {
       {showForm && (
         <CommandForm
           command={editingCommand}
+          readOnly={readOnly || editingCommand?.source === 'plugin'}
           onClose={() => {
             setShowForm(false);
             setEditingCommand(null);

@@ -90,9 +90,14 @@ export function useEngine() {
   const isCodebuddyEngine = config?.engine === 'codebuddy-sdk';
 
   /**
-   * Check if current engine uses AGUI protocol (Cursor or CodeBuddy)
+   * Check if current engine is Codex CLI
    */
-  const isAguiEngine = isCursorEngine || isCodebuddyEngine;
+  const isCodexEngine = config?.engine === 'codex-cli';
+
+  /**
+   * Check if current engine uses AGUI protocol (Cursor, CodeBuddy, Codex)
+   */
+  const isAguiEngine = isCursorEngine || isCodebuddyEngine || isCodexEngine;
 
   /**
    * Check if a feature is supported by current engine
@@ -150,6 +155,7 @@ export function useEngine() {
     isCursorEngine,
     isClaudeEngine,
     isCodebuddyEngine,
+    isCodexEngine,
     isAguiEngine,
 
     // Capability helpers

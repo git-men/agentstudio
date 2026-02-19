@@ -1,12 +1,12 @@
 import express from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as os from 'os';
 import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
-import { MCP_SERVER_CONFIG_FILE, CLAUDE_AGENT_DIR } from '../config/paths.js';
+import { parse as parseToml } from '@iarna/toml';
+import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
 import { getSdkConfigPath } from '../config/sdkConfig.js';
-import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
+import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEngineType } from '../config/engineConfig.js';
 
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
@@ -39,18 +39,103 @@ export interface McpConfigFile {
   mcpServers: Record<string, Omit<McpServerConfig, 'name'>>;
 }
 
+export const isMcpReadOnlyEngine = (): boolean => {
+  return isCursorEngine() || isCodebuddyEngine() || isCodexEngine();
+};
+
+function normalizeStringMap(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const result: Record<string, string> = {};
+  for (const [key, mapValue] of Object.entries(value)) {
+    result[key] = String(mapValue);
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+export function parseCodexTomlMcpConfig(content: string): McpConfigFile {
+  try {
+    const parsed = parseToml(content) as Record<string, unknown>;
+    const mcpServersRaw = parsed.mcp_servers;
+    if (!mcpServersRaw || typeof mcpServersRaw !== 'object') {
+      return { mcpServers: {} };
+    }
+
+    const mcpServers: Record<string, Omit<McpServerConfig, 'name'>> = {};
+
+    for (const [name, serverRaw] of Object.entries(mcpServersRaw)) {
+      if (!serverRaw || typeof serverRaw !== 'object') {
+        continue;
+      }
+
+      const server = serverRaw as Record<string, unknown>;
+      const explicitType = server.type === 'http' || server.type === 'stdio' ? server.type : undefined;
+      const transportType = server.transport === 'http' || server.transport === 'stdio' ? server.transport : undefined;
+      const inferredType: 'http' | 'stdio' = explicitType || transportType || (typeof server.url === 'string' ? 'http' : 'stdio');
+
+      const normalized: Omit<McpServerConfig, 'name'> = {
+        type: inferredType,
+        source: 'local',
+      };
+
+      if (typeof server.command === 'string') {
+        normalized.command = server.command;
+      }
+      if (Array.isArray(server.args)) {
+        normalized.args = server.args.map(String);
+      }
+      if (typeof server.url === 'string') {
+        normalized.url = server.url;
+      }
+
+      const env = normalizeStringMap(server.env);
+      if (env) normalized.env = env;
+      const headers = normalizeStringMap(server.headers);
+      if (headers) normalized.headers = headers;
+
+      if (Array.isArray(server.autoApprove)) {
+        normalized.autoApprove = server.autoApprove.map(String);
+      } else if (Array.isArray(server.auto_approve)) {
+        normalized.autoApprove = server.auto_approve.map(String);
+      }
+
+      if (server.status === 'active' || server.status === 'error' || server.status === 'validating') {
+        normalized.status = server.status;
+      }
+      if (typeof server.error === 'string') {
+        normalized.error = server.error;
+      }
+      if (Array.isArray(server.tools)) {
+        normalized.tools = server.tools.map(String);
+      }
+      if (typeof server.lastValidated === 'string') {
+        normalized.lastValidated = server.lastValidated;
+      } else if (typeof server.last_validated === 'string') {
+        normalized.lastValidated = server.last_validated;
+      }
+
+      mcpServers[name] = normalized;
+    }
+
+    return { mcpServers };
+  } catch (error) {
+    console.error('Failed to parse Codex MCP config from TOML:', error);
+    return { mcpServers: {} };
+  }
+}
+
 // Helper function to get MCP config file path (engine-aware)
 const getMcpConfigPath = (): string => {
-  if (isCursorEngine()) {
+  if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
     return getEnginePaths().mcpConfigPath;
   }
   return MCP_SERVER_CONFIG_FILE;
 };
 
 // Helper function to ensure config directory exists
-const ensureConfigDirectory = (): void => {
-  if (!fs.existsSync(CLAUDE_AGENT_DIR)) {
-    fs.mkdirSync(CLAUDE_AGENT_DIR, { recursive: true });
+const ensureConfigDirectory = (configPath: string): void => {
+  const configDir = path.dirname(configPath);
+  if (!fs.existsSync(configDir)) {
+    fs.mkdirSync(configDir, { recursive: true });
   }
 };
 
@@ -64,7 +149,16 @@ export const readMcpConfig = (): McpConfigFile => {
   
   try {
     const content = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(content);
+
+    if (isCodexEngine()) {
+      return parseCodexTomlMcpConfig(content);
+    }
+
+    const parsed = JSON.parse(content);
+    if (!parsed || typeof parsed !== 'object' || typeof (parsed as any).mcpServers !== 'object') {
+      return { mcpServers: {} };
+    }
+    return parsed as McpConfigFile;
   } catch (error) {
     console.error('Failed to read MCP config:', error);
     return { mcpServers: {} };
@@ -73,8 +167,13 @@ export const readMcpConfig = (): McpConfigFile => {
 
 // Helper function to write MCP config (exported for use by other modules)
 export const writeMcpConfig = (config: McpConfigFile): void => {
-  ensureConfigDirectory();
   const configPath = getMcpConfigPath();
+
+  if (isMcpReadOnlyEngine()) {
+    throw new Error(`MCP configuration is read-only for engine: ${getEngineType()}`);
+  }
+
+  ensureConfigDirectory(configPath);
   
   try {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
@@ -98,8 +197,8 @@ router.get('/', (req, res) => {
     // Include readOnly flag for Cursor engine
     res.json({ 
       servers,
-      readOnly: isCursorEngine(),
-      engine: isCursorEngine() ? 'cursor-cli' : 'claude-sdk',
+      readOnly: isMcpReadOnlyEngine(),
+      engine: getEngineType(),
     });
   } catch (error) {
     console.error('Failed to get MCP configs:', error);
@@ -111,10 +210,10 @@ router.get('/', (req, res) => {
 router.post('/', (req, res) => {
   try {
     // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    if (isMcpReadOnlyEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
-        message: 'MCP configuration is read-only when using Cursor CLI engine',
+        message: 'MCP configuration is read-only for the current engine',
       });
     }
 
@@ -160,6 +259,13 @@ router.post('/', (req, res) => {
 // Update MCP configuration
 router.put('/:name', (req, res) => {
   try {
+    if (isMcpReadOnlyEngine()) {
+      return res.status(403).json({
+        error: 'Read-only mode',
+        message: 'MCP configuration is read-only for the current engine',
+      });
+    }
+
     const { name } = req.params;
     const { type, ...restConfig } = req.body;
 
@@ -207,10 +313,10 @@ router.put('/:name', (req, res) => {
 router.delete('/:name', (req, res) => {
   try {
     // Check if in read-only mode (Cursor engine)
-    if (isCursorEngine()) {
+    if (isMcpReadOnlyEngine()) {
       return res.status(403).json({ 
         error: 'Read-only mode',
-        message: 'MCP configuration is read-only when using Cursor CLI engine',
+        message: 'MCP configuration is read-only for the current engine',
       });
     }
 
@@ -236,6 +342,7 @@ router.post('/:name/validate', async (req, res) => {
   try {
     const { name } = req.params;
     const config = readMcpConfig();
+    const persistValidationState = !isMcpReadOnlyEngine();
 
     if (!config.mcpServers[name]) {
       return res.status(404).json({ error: 'MCP configuration not found' });
@@ -253,18 +360,22 @@ router.post('/:name/validate', async (req, res) => {
         return res.status(400).json({ error: 'Cannot determine MCP server type. Please specify type, url, or command.' });
       }
 
-      // Update config with detected type
-      config.mcpServers[name] = serverConfig;
-      writeMcpConfig(config);
-      console.log(`Auto-detected type for ${name}: ${serverConfig.type}`);
+      if (persistValidationState) {
+        // Update config with detected type
+        config.mcpServers[name] = serverConfig;
+        writeMcpConfig(config);
+        console.log(`Auto-detected type for ${name}: ${serverConfig.type}`);
+      } else {
+        console.log(`Auto-detected type for ${name} (not persisted due to read-only engine): ${serverConfig.type}`);
+      }
     }
 
     if (serverConfig.type === 'http') {
       // Validate HTTP MCP server
-      await validateHttpMcpServer(name, serverConfig, config, res);
+      await validateHttpMcpServer(name, serverConfig, config, res, persistValidationState);
     } else if (serverConfig.type === 'stdio') {
       // Validate stdio MCP server
-      await validateStdioMcpServer(name, serverConfig, config, res);
+      await validateStdioMcpServer(name, serverConfig, config, res, persistValidationState);
     } else {
       res.status(400).json({ error: 'Invalid MCP server type. Must be "stdio" or "http".' });
     }
@@ -342,7 +453,13 @@ router.get('/claude-code', async (req, res) => {
 export default router;
 
 // Validate HTTP MCP server
-async function validateHttpMcpServer(name: string, serverConfig: any, config: any, res: any) {
+async function validateHttpMcpServer(
+  name: string,
+  serverConfig: any,
+  config: any,
+  res: any,
+  persistValidationState: boolean
+) {
   let responseSent = false;
 
   // Helper function to send response only once
@@ -464,7 +581,9 @@ async function validateHttpMcpServer(name: string, serverConfig: any, config: an
         lastValidated: currentTime,
         error: undefined
       };
-      writeMcpConfig(config);
+      if (persistValidationState) {
+        writeMcpConfig(config);
+      }
     }
 
     sendResponse(200, {
@@ -486,7 +605,9 @@ async function validateHttpMcpServer(name: string, serverConfig: any, config: an
         tools: undefined,
         lastValidated: currentTime
       };
-      writeMcpConfig(config);
+      if (persistValidationState) {
+        writeMcpConfig(config);
+      }
     }
 
     sendResponse(400, {
@@ -497,7 +618,13 @@ async function validateHttpMcpServer(name: string, serverConfig: any, config: an
 }
 
 // Validate stdio MCP server
-async function validateStdioMcpServer(name: string, serverConfig: any, config: any, res: any) {
+async function validateStdioMcpServer(
+  name: string,
+  serverConfig: any,
+  config: any,
+  res: any,
+  persistValidationState: boolean
+) {
   if (!serverConfig.command || !serverConfig.args) {
     return res.status(400).json({ error: 'Missing command or args for stdio MCP server' });
   }
@@ -672,7 +799,9 @@ async function validateStdioMcpServer(name: string, serverConfig: any, config: a
             lastValidated: currentTime,
             error: undefined
           };
-          writeMcpConfig(config);
+          if (persistValidationState) {
+            writeMcpConfig(config);
+          }
         }
 
         sendResponse(200, {
@@ -691,7 +820,9 @@ async function validateStdioMcpServer(name: string, serverConfig: any, config: a
             tools: undefined,
             lastValidated: currentTime
           };
-          writeMcpConfig(config);
+          if (persistValidationState) {
+            writeMcpConfig(config);
+          }
         }
 
         sendResponse(400, {
@@ -731,7 +862,9 @@ async function validateStdioMcpServer(name: string, serverConfig: any, config: a
           tools: undefined,
           lastValidated: new Date().toISOString()
         };
-        writeMcpConfig(config);
+        if (persistValidationState) {
+          writeMcpConfig(config);
+        }
       }
     } catch (configError) {
       console.error('Failed to update config with error status:', configError);

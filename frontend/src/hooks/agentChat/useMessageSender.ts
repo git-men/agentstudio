@@ -291,9 +291,9 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         ...(mcpToolsEnabled && selectedMcpTools.length > 0 ? selectedMcpTools : [])
       ];
 
-      if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
-        // Cursor/CodeBuddy Engine: Use AGUI API with simplified stream handling
-        console.log(`🚀 [MessageSender] Using ${selectedEngine === 'codebuddy' ? 'CodeBuddy' : 'Cursor'} Engine`);
+      if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') {
+        // Cursor/CodeBuddy/Codex Engine: Use AGUI API with simplified stream handling
+        console.log(`🚀 [MessageSender] Using ${selectedEngine} engine`);
         
         // Track current message for AGUI events
         let currentAguiMessageId: string | null = null;
@@ -512,7 +512,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         
         await aguiChat.sendMessage({
           message: userMessage,
-          engineType: selectedEngine as 'cursor' | 'codebuddy',
+          engineType: selectedEngine as 'cursor' | 'codebuddy' | 'codex',
           workspace: projectPath || '.',
           sessionId: currentSessionId || undefined, // Convert null to undefined
           model: selectedModel,

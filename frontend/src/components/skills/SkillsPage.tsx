@@ -24,9 +24,24 @@ import { showError } from '../../utils/toast';
 
 export const SkillsPage: React.FC = () => {
   const { t } = useTranslation('skills');
-  const { isCursorEngine, engineType } = useEngine();
+  const { isCursorEngine, isCodebuddyEngine, isCodexEngine, engineType, paths } = useEngine();
   const confirm = useConfirm();
-  const readOnly = isCursorEngine; // Skills are read-only in Cursor mode
+  const readOnly = isCursorEngine || isCodebuddyEngine || isCodexEngine;
+  const engineLabel = engineType === 'cursor-cli'
+    ? 'Cursor'
+    : engineType === 'codebuddy-sdk'
+      ? 'CodeBuddy'
+      : engineType === 'codex-cli'
+        ? 'Codex'
+        : 'Claude';
+  const skillsConfigPath = paths?.skillsDir
+    || (engineType === 'cursor-cli'
+      ? '~/.cursor/skills'
+      : engineType === 'codebuddy-sdk'
+        ? '~/.codebuddy/skills'
+        : engineType === 'codex-cli'
+          ? '~/.codex/skills'
+          : '~/.claude/skills');
   
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSkill, setSelectedSkill] = useState<SkillListItem | null>(null);
@@ -155,7 +170,7 @@ export const SkillsPage: React.FC = () => {
           ) : (
             <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
               <Eye className="w-4 h-4" />
-              <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+              <span>只读模式 ({engineLabel})</span>
             </div>
           )}
         </div>
@@ -186,7 +201,7 @@ export const SkillsPage: React.FC = () => {
           )}
           {readOnly && (
             <p className="text-sm text-yellow-600 dark:text-yellow-400">
-              配置来自 ~/.cursor/skills（只读）
+              配置来自 {skillsConfigPath}（只读）
             </p>
           )}
         </div>

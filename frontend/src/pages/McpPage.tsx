@@ -60,7 +60,7 @@ export const McpPage: React.FC = () => {
   const confirm = useConfirm();
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [loading, setLoading] = useState(true);
-  const [readOnly, setReadOnly] = useState(false); // Read-only mode for Cursor engine
+  const [readOnly, setReadOnly] = useState(false);
   const [engineType, setEngineType] = useState<string>('claude-sdk');
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
@@ -74,6 +74,20 @@ export const McpPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [expandedTools, setExpandedTools] = useState<Record<string, boolean>>({});
+  const engineLabel = engineType === 'cursor-cli'
+    ? 'Cursor'
+    : engineType === 'codebuddy-sdk'
+      ? 'CodeBuddy'
+      : engineType === 'codex-cli'
+        ? 'Codex'
+        : 'Claude';
+  const mcpConfigPath = engineType === 'cursor-cli'
+    ? '~/.cursor/mcp.json'
+    : engineType === 'codebuddy-sdk'
+      ? '~/.codebuddy/mcp.json'
+      : engineType === 'codex-cli'
+        ? '~/.codex/config.toml'
+        : '~/.agentstudio/data/mcp-server.json';
 
   // Load MCP configurations from backend
   const loadMcpConfigs = async () => {
@@ -553,7 +567,7 @@ export const McpPage: React.FC = () => {
             {readOnly && (
               <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
                 <Eye className="w-4 h-4" />
-                <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : engineType})</span>
+                <span>只读模式 ({engineLabel})</span>
               </div>
             )}
           </div>
@@ -580,7 +594,7 @@ export const McpPage: React.FC = () => {
           )}
           {readOnly && (
             <p className="text-sm text-yellow-600 dark:text-yellow-400">
-              配置来自 ~/.cursor/mcp.json（只读）
+              配置来自 {mcpConfigPath}（只读）
             </p>
           )}
         </div>

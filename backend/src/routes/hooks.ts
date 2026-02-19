@@ -11,8 +11,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { Hook, HookListItem, HookCreate, HookUpdate, HooksConfig } from '../types/hooks.js';
-import { isCursorEngine, getEnginePaths } from '../config/engineConfig.js';
-import { getSdkDirName } from '../config/sdkConfig.js';
+import { isCursorEngine, isCodexEngine, getEnginePaths, getSdkDirName } from '../config/engineConfig.js';
 
 const router: Router = Router();
 
@@ -80,7 +79,7 @@ function extractHooks(settings: Record<string, unknown>, scope: 'global' | 'loca
 router.get('/', async (req: Request, res: Response) => {
   try {
     // Hooks are only available in Claude SDK mode
-    if (isCursorEngine()) {
+    if (isCursorEngine() || isCodexEngine()) {
       res.status(400).json({
         error: 'Not available',
         message: 'Hooks are only available when using Claude SDK engine',
@@ -120,7 +119,7 @@ router.get('/', async (req: Request, res: Response) => {
 // GET /api/hooks/:id - Get a single hook
 router.get('/:id', async (req: Request, res: Response) => {
   try {
-    if (isCursorEngine()) {
+    if (isCursorEngine() || isCodexEngine()) {
       res.status(400).json({
         error: 'Not available',
         message: 'Hooks are only available when using Claude SDK engine',
@@ -173,7 +172,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 // POST /api/hooks - Create a new hook
 router.post('/', async (req: Request, res: Response) => {
   try {
-    if (isCursorEngine()) {
+    if (isCursorEngine() || isCodexEngine()) {
       res.status(400).json({
         error: 'Not available',
         message: 'Hooks are only available when using Claude SDK engine',
@@ -238,7 +237,7 @@ router.post('/', async (req: Request, res: Response) => {
 // PUT /api/hooks/:id - Update a hook
 router.put('/:id', async (req: Request, res: Response) => {
   try {
-    if (isCursorEngine()) {
+    if (isCursorEngine() || isCodexEngine()) {
       res.status(400).json({
         error: 'Not available',
         message: 'Hooks are only available when using Claude SDK engine',
@@ -301,7 +300,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 // DELETE /api/hooks/:id - Delete a hook
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
-    if (isCursorEngine()) {
+    if (isCursorEngine() || isCodexEngine()) {
       res.status(400).json({
         error: 'Not available',
         message: 'Hooks are only available when using Claude SDK engine',

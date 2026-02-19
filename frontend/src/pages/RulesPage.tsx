@@ -132,7 +132,7 @@ async function deleteRule(id: string): Promise<void> {
 }
 
 export const RulesPage: React.FC = () => {
-  const { engineType } = useEngine();
+  const { engineType, paths } = useEngine();
   const queryClient = useQueryClient();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -159,6 +159,22 @@ export const RulesPage: React.FC = () => {
 
   const rules = data?.rules || [];
   const readOnly = data?.readOnly || false;
+  const engineLabel = engineType === 'cursor-cli'
+    ? 'Cursor'
+    : engineType === 'codebuddy-sdk'
+      ? 'CodeBuddy'
+      : engineType === 'codex-cli'
+        ? 'Codex'
+        : 'Claude';
+  const rulesPath = paths?.rulesDir
+    || (engineType === 'cursor-cli'
+      ? '~/.cursor/rules'
+      : engineType === 'codebuddy-sdk'
+        ? '~/.codebuddy/rules'
+        : engineType === 'codex-cli'
+          ? '~/.codex/rules'
+          : '~/.claude/rules');
+  const ruleExt = engineType === 'cursor-cli' ? '.mdc' : '.md';
 
   // Mutations
   const createMutation = useMutation({
@@ -295,9 +311,7 @@ export const RulesPage: React.FC = () => {
           <div>
             <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Rules</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">
-              {engineType === 'cursor-cli' 
-                ? '管理 Cursor 规则 (~/.cursor/rules/*.mdc)' 
-                : '管理 Claude Code 规则 (~/.claude/rules/*.md)'}
+              管理 {engineLabel} 规则 ({rulesPath}/*{ruleExt})
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -316,7 +330,7 @@ export const RulesPage: React.FC = () => {
             ) : (
               <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-yellow-700 dark:text-yellow-400 text-sm">
                 <Eye className="w-4 h-4" />
-                <span>只读模式 ({engineType === 'cursor-cli' ? 'Cursor' : 'Claude'})</span>
+                <span>只读模式 ({engineLabel})</span>
               </div>
             )}
           </div>

@@ -10,8 +10,7 @@ import path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { Rule, RuleListItem, RuleCreate, RuleUpdate, RuleFilter, RuleFrontmatter } from '../types/rules.js';
-import { isCursorEngine, isCodebuddyEngine, getEngineType, getEnginePaths } from '../config/engineConfig.js';
-import { getSdkDirName } from '../config/sdkConfig.js';
+import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEngineType, getEnginePaths, getSdkDirName } from '../config/engineConfig.js';
 
 const router: Router = Router();
 
@@ -264,7 +263,7 @@ router.get('/', async (req: Request, res: Response) => {
     
     res.json({
       rules: ruleItems,
-      readOnly: isCursorEngine() || isCodebuddyEngine(),
+      readOnly: isCursorEngine() || isCodebuddyEngine() || isCodexEngine(),
       engine: getEngineType(),
     });
   } catch (error) {
@@ -337,7 +336,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
         message: `Rules are read-only when using ${getEngineType()} engine`,
@@ -401,7 +400,7 @@ router.post('/', async (req: Request, res: Response) => {
 router.put('/:id', async (req: Request, res: Response) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
         message: `Rules are read-only when using ${getEngineType()} engine`,
@@ -481,7 +480,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 router.delete('/:id', async (req: Request, res: Response) => {
   try {
     // Check if in read-only mode (non-Claude engines)
-    if (isCursorEngine() || isCodebuddyEngine()) {
+    if (isCursorEngine() || isCodebuddyEngine() || isCodexEngine()) {
       res.status(403).json({
         error: 'Read-only mode',
         message: `Rules are read-only when using ${getEngineType()} engine`,

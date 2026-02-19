@@ -235,11 +235,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     } = toolSelector;
 
     // Claude version manager
-    // Skip model validation when using AGUI engines (Cursor/CodeBuddy) to prevent resetting to Claude models
+    // Skip model validation when using AGUI engines (Cursor/CodeBuddy/Codex) to prevent resetting to Claude models
     const claudeVersionManager = useClaudeVersionManager({
         initialModel: projectDefaultModel || 'sonnet',
         initialVersion: projectDefaultProvider,
-        skipModelValidation: selectedEngine === 'cursor' || selectedEngine === 'codebuddy',
+        skipModelValidation: selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex',
     });
     const {
         selectedModel,
@@ -254,8 +254,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     
     // Reset model selection when switching engines
     useEffect(() => {
-        if ((selectedEngine === 'cursor' || selectedEngine === 'codebuddy') && engineModels.length > 0) {
-            // When switching to AGUI engine (Cursor/CodeBuddy), select the first available model
+        if ((selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') && engineModels.length > 0) {
+            // When switching to AGUI engine, select the first available model
             const firstModel = engineModels[0]?.id || 'auto';
             console.log(`[AGUIChatPanel] Switching to ${selectedEngine} engine, resetting model to: ${firstModel}`);
             setSelectedModel(firstModel);
@@ -309,10 +309,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     
     // Check if engine has synced - only fetch sessions when selectedEngine matches service engine
     // This prevents fetching with wrong engine type (e.g., fetching claude sessions when service is cursor)
-    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor' | 'codebuddy'> = {
+    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor' | 'codebuddy' | 'codex'> = {
         'cursor-cli': 'cursor',
         'claude-sdk': 'claude',
         'codebuddy-sdk': 'codebuddy',
+        'codex-cli': 'codex',
     };
     const expectedEngine = serviceEngineType ? SERVICE_TO_STORE_ENGINE[serviceEngineType] : undefined;
     // Only fetch when: 1) service engine is loaded AND 2) selectedEngine matches expected engine
@@ -509,7 +510,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             });
 
             // Now call server-side interrupt (fire-and-forget, don't await)
-            if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy') {
+            if (selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') {
                 authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -785,7 +786,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 // Data - use engine-specific models when AGUI engine (Cursor/CodeBuddy) is selected
                 // When AGUI engine models are still loading (empty), show empty array instead of
                 // falling back to Claude models to prevent toolbar flickering
-                availableModels={(selectedEngine === 'cursor' || selectedEngine === 'codebuddy') ? engineModels : availableModels}
+                availableModels={(selectedEngine === 'cursor' || selectedEngine === 'codebuddy' || selectedEngine === 'codex') ? engineModels : availableModels}
                 claudeVersionsData={claudeVersionsData}
                 agent={agent}
                 projectPath={projectPath}

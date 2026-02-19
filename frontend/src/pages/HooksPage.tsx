@@ -135,7 +135,7 @@ async function deleteHook(id: string): Promise<void> {
 }
 
 export const HooksPage: React.FC = () => {
-  const { isCursorEngine, isFeatureSupported } = useEngine();
+  const { engineType, isFeatureSupported } = useEngine();
   const queryClient = useQueryClient();
   
   const [showForm, setShowForm] = useState(false);
@@ -256,13 +256,20 @@ export const HooksPage: React.FC = () => {
     }
   };
 
-  // Show not supported message for Cursor
-  if (isCursorEngine || !hooksSupported) {
+  // Hooks are Claude-specific for now
+  if (!hooksSupported) {
+    const engineLabel = engineType === 'cursor-cli'
+      ? 'Cursor'
+      : engineType === 'codebuddy-sdk'
+        ? 'CodeBuddy'
+        : engineType === 'codex-cli'
+          ? 'Codex'
+          : '当前引擎';
     return (
       <div className="p-6">
         <NotSupportedMessage
           feature="Hooks"
-          description="Hooks 是 Claude Code 特有的功能，Cursor 不支持此功能。"
+          description={`Hooks 目前仅在 Claude SDK 下可用，${engineLabel} 不支持此功能。`}
         />
       </div>
     );

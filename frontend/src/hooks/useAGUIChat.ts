@@ -2,7 +2,7 @@
  * useAGUIChat Hook
  * 
  * Hook for calling the unified AGUI API endpoint.
- * Supports multiple engines (claude, cursor) with standardized AGUI event output.
+ * Supports multiple engines with standardized AGUI event output.
  */
 
 import { useCallback } from 'react';
@@ -13,7 +13,7 @@ import type { AGUIEvent } from '../types/aguiTypes';
 /**
  * Engine type
  */
-export type EngineType = 'claude' | 'cursor' | 'codebuddy';
+export type EngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex';
 
 /**
  * Image data for Claude vision
@@ -143,11 +143,24 @@ export const CODEBUDDY_UI_CAPABILITIES: EngineUICapabilities = {
 };
 
 /**
+ * Default UI capabilities for Codex engine
+ */
+export const CODEX_UI_CAPABILITIES: EngineUICapabilities = {
+  showMcpToolSelector: false,
+  showImageUpload: true,
+  showPermissionSelector: true,
+  showProviderSelector: false,
+  showModelSelector: true,
+  showEnvVars: true,
+};
+
+/**
  * Get default UI capabilities for an engine type
  */
 export function getDefaultUICapabilities(engineType: EngineType): EngineUICapabilities {
   if (engineType === 'cursor') return CURSOR_UI_CAPABILITIES;
   if (engineType === 'codebuddy') return CODEBUDDY_UI_CAPABILITIES;
+  if (engineType === 'codex') return CODEX_UI_CAPABILITIES;
   return CLAUDE_UI_CAPABILITIES;
 }
 
@@ -206,8 +219,8 @@ export const useAGUIChat = () => {
       let endpoint: string;
       let requestBody: Record<string, unknown>;
 
-      if (engineType === 'cursor' || engineType === 'codebuddy') {
-        // Cursor / CodeBuddy Engine: Use /api/agui/chat directly
+      if (engineType === 'cursor' || engineType === 'codebuddy' || engineType === 'codex') {
+        // Cursor / CodeBuddy / Codex engines: Use /api/agui/chat directly
         endpoint = `${API_BASE}/agui/chat`;
         requestBody = {
           message,
@@ -224,8 +237,8 @@ export const useAGUIChat = () => {
           requestBody.model = model;
           console.log(`🎯 [AGUI] ${engineType} model: ${model}`);
         }
-        // Pass permission mode for CodeBuddy
-        if (engineType === 'codebuddy' && permissionMode) {
+        // Pass permission mode for AGUI engines that support it
+        if ((engineType === 'codebuddy' || engineType === 'codex') && permissionMode) {
           requestBody.permissionMode = permissionMode;
         }
         // Pass MCP tools for dynamic tool loading
@@ -238,7 +251,7 @@ export const useAGUIChat = () => {
           requestBody.images = images;
           console.log(`🖼️ [AGUI] ${engineType} images: ${images.length} image(s)`);
         }
-        // Pass env vars for CodeBuddy
+        // Pass env vars for AGUI engines that support env injection
         if (envVars && Object.keys(envVars).length > 0) {
           requestBody.envVars = envVars;
           console.log(`🔑 [AGUI] ${engineType} envVars: ${Object.keys(envVars).length} var(s)`);

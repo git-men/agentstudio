@@ -6,7 +6,7 @@
  * capabilities system (engine.ts) to provide business-level feature gating.
  *
  * Architecture:
- *   Engine (how it runs)  : claude-sdk | cursor-cli | codebuddy-sdk
+ *   Engine (how it runs)  : claude-sdk | cursor-cli | codebuddy-sdk | codex-cli
  *   Product (what it offers): full | chat-only | lite | custom
  */
 

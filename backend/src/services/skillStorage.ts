@@ -8,7 +8,7 @@ import type {
   SkillValidationOptions,
   SkillStorageOptions
 } from '../types/skills';
-import { getSkillsDir, getSdkDirName } from '../config/sdkConfig.js';
+import { getSkillsDir, getSdkDirName } from '../config/engineConfig.js';
 
 export class SkillStorage {
   private userSkillsDir: string;
@@ -17,7 +17,7 @@ export class SkillStorage {
 
   constructor(
     userSkillsDir: string = getSkillsDir(),
-    projectSkillsDir: string = path.join(process.cwd(), getSdkDirName(), 'skills'),
+    projectSkillsDir: string = path.join(process.cwd(), '..', getSdkDirName(), 'skills'),
     options: SkillStorageOptions = {}
   ) {
     this.userSkillsDir = userSkillsDir;

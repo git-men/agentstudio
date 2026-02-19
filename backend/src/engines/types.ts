@@ -13,7 +13,7 @@
 /**
  * Supported engine types
  */
-export type EngineType = 'claude' | 'cursor' | 'codebuddy';
+export type EngineType = 'claude' | 'cursor' | 'codebuddy' | 'codex';
 
 /**
  * Image data for engine requests

@@ -11,6 +11,7 @@ import { useTranslation } from 'react-i18next';
 interface CommandFormProps {
   command?: SlashCommand | null;
   projectId?: string; // Optional project ID for project-specific commands
+  readOnly?: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -18,6 +19,7 @@ interface CommandFormProps {
 export const CommandForm: React.FC<CommandFormProps> = ({
   command,
   projectId,
+  readOnly = false,
   onClose,
   onSuccess,
 }) => {
@@ -213,6 +215,9 @@ export const CommandForm: React.FC<CommandFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (readOnly) {
+      return;
+    }
     console.log('Form submit triggered'); // 调试日志
 
     if (!validateForm()) {
@@ -263,13 +268,16 @@ export const CommandForm: React.FC<CommandFormProps> = ({
         <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center space-x-4">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              {isEditing ? t('commandForm.editTitle') : t('commandForm.createTitle')}
+              {readOnly
+                ? t('commandForm.viewTitle', { defaultValue: '查看命令' })
+                : (isEditing ? t('commandForm.editTitle') : t('commandForm.createTitle'))}
             </h2>
             {/* Mode Switch */}
             <div className="flex items-center bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
               <button
                 type="button"
                 onClick={() => handleModeSwitch(false)}
+                disabled={readOnly}
                 className={`flex items-center space-x-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
                   !isCodeMode
                     ? 'bg-white dark:bg-gray-800 text-blue-600 shadow-sm'
@@ -282,6 +290,7 @@ export const CommandForm: React.FC<CommandFormProps> = ({
               <button
                 type="button"
                 onClick={() => handleModeSwitch(true)}
+                disabled={readOnly}
                 className={`flex items-center space-x-1 px-3 py-1.5 rounded-md text-sm transition-colors ${
                   isCodeMode
                     ? 'bg-white dark:bg-gray-800 text-blue-600 shadow-sm'
@@ -301,26 +310,29 @@ export const CommandForm: React.FC<CommandFormProps> = ({
             >
               {tc('actions.cancel')}
             </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={createCommand.isPending || updateCommand.isPending}
-              className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-            >
-              <Save className="h-4 w-4" />
-              <span>
-                {createCommand.isPending || updateCommand.isPending
-                  ? tc('status.saving')
-                  : isEditing
-                  ? t('commandForm.saveChanges')
-                  : t('commandForm.createCommand')}
-              </span>
-            </button>
+            {!readOnly && (
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={createCommand.isPending || updateCommand.isPending}
+                className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                <Save className="h-4 w-4" />
+                <span>
+                  {createCommand.isPending || updateCommand.isPending
+                    ? tc('status.saving')
+                    : isEditing
+                    ? t('commandForm.saveChanges')
+                    : t('commandForm.createCommand')}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 
         {/* Form */}
         <form id="command-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
+          <fieldset disabled={readOnly}>
           <div className="p-6 space-y-6">
             {isCodeMode ? (
               /* Code Mode */
@@ -559,6 +571,7 @@ export const CommandForm: React.FC<CommandFormProps> = ({
               </>
             )}
           </div>
+          </fieldset>
 
         </form>
       </div>

@@ -11,7 +11,7 @@
 /**
  * Service-level engine type
  */
-export type ServiceEngineType = 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk';
+export type ServiceEngineType = 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk' | 'codex-cli';
 
 /**
  * Configuration scope levels

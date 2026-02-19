@@ -5,9 +5,11 @@
  * which AI engine backend the service uses. The engine type is set at service
  * startup and affects all subsequent operations.
  * 
- * Two engine types are supported:
+ * Service engines:
  * - cursor-cli: Uses Cursor CLI, reads from ~/.cursor/
  * - claude-sdk: Uses Claude Agent SDK, reads from ~/.claude/
+ * - codebuddy-sdk: Uses CodeBuddy Agent SDK, reads from ~/.codebuddy/
+ * - codex-cli: Uses Codex CLI, reads from ~/.codex/
  */
 
 // =============================================================================
@@ -20,7 +22,7 @@
  * This is different from the runtime EngineType in engines/types.ts which
  * represents the execution engine (claude/cursor) for individual chat sessions.
  */
-export type ServiceEngineType = 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk';
+export type ServiceEngineType = 'cursor-cli' | 'claude-sdk' | 'codebuddy-sdk' | 'codex-cli';
 
 /**
  * Configuration scope levels

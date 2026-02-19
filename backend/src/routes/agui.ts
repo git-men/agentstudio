@@ -17,7 +17,6 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import {
   engineManager,
-  initializeEngines,
   formatAguiEventAsSSE,
   AGUIEventType,
   type EngineType,
@@ -34,15 +33,6 @@ const projectStorage = new ProjectMetadataStorage();
 const agentStorage = new AgentStorage();
 
 const router: Router = express.Router();
-
-// Initialize engines on module load
-try {
-  console.log('🚀 [AGUI Router] Initializing engines...');
-  initializeEngines();
-  console.log('✅ [AGUI Router] Engines initialized');
-} catch (error) {
-  console.error('❌ [AGUI Router] Failed to initialize engines:', error);
-}
 
 // Simple test route
 router.get('/test', (_req, res) => {
@@ -64,7 +54,7 @@ const ImageSchema = z.object({
 
 const ChatRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
-  engineType: z.enum(['claude', 'cursor', 'codebuddy'] as const).optional().default('claude'),
+  engineType: z.enum(['claude', 'cursor', 'codebuddy', 'codex'] as const).optional().default('claude'),
   workspace: z.string().min(1, 'Workspace is required'),
   sessionId: z.string().optional(),
   model: z.string().optional(),
@@ -291,8 +281,8 @@ router.post('/chat', async (req, res) => {
     };
 
     try {
-      if (engineType === 'cursor' || engineType === 'codebuddy') {
-        // Cursor / CodeBuddy engine: Use directly via AGUI
+      if (engineType === 'cursor' || engineType === 'codebuddy' || engineType === 'codex') {
+        // Cursor / CodeBuddy / Codex engines: Use directly via AGUI
         const result = await engineManager.sendMessage(
           engineType,
           message,

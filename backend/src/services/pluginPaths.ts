@@ -285,5 +285,30 @@ class PluginPaths {
   }
 }
 
-export const pluginPaths = new PluginPaths();
+let pluginPathsInstance: PluginPaths | null = null;
 
+function getPluginPathsInstance(): PluginPaths {
+  if (!pluginPathsInstance) {
+    pluginPathsInstance = new PluginPaths();
+  }
+  return pluginPathsInstance;
+}
+
+// Lazily initialize PluginPaths so engine config can be loaded after dotenv.
+export const pluginPaths = {
+  getClaudeDir: () => getPluginPathsInstance().getClaudeDir(),
+  getPluginsDir: () => getPluginPathsInstance().getPluginsDir(),
+  getMarketplacesDir: () => getPluginPathsInstance().getMarketplacesDir(),
+  getMarketplacePath: (marketplaceName: string) => getPluginPathsInstance().getMarketplacePath(marketplaceName),
+  getMarketplacePluginsDir: (marketplaceName: string) => getPluginPathsInstance().getMarketplacePluginsDir(marketplaceName),
+  getPluginPath: (marketplaceName: string, pluginName: string) => getPluginPathsInstance().getPluginPath(marketplaceName, pluginName),
+  getCommandsDir: () => getPluginPathsInstance().getCommandsDir(),
+  getAgentsDir: () => getPluginPathsInstance().getAgentsDir(),
+  getSkillsDir: () => getPluginPathsInstance().getSkillsDir(),
+  getHooksDir: () => getPluginPathsInstance().getHooksDir(),
+  getMcpDir: () => getPluginPathsInstance().getMcpDir(),
+  marketplaceExists: (marketplaceName: string) => getPluginPathsInstance().marketplaceExists(marketplaceName),
+  pluginExists: (marketplaceName: string, pluginName: string) => getPluginPathsInstance().pluginExists(marketplaceName, pluginName),
+  listMarketplaces: () => getPluginPathsInstance().listMarketplaces(),
+  listPlugins: (marketplaceName: string) => getPluginPathsInstance().listPlugins(marketplaceName),
+};

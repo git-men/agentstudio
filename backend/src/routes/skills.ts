@@ -7,8 +7,10 @@ import type {
   UpdateSkillRequest,
   SkillValidationResult
 } from '../types/skills';
+import { getEngineType, isCodebuddyEngine, isCodexEngine, isCursorEngine } from '../config/engineConfig.js';
 
 const router: express.Router = express.Router();
+export const isSkillsReadOnlyEngine = (): boolean => isCursorEngine() || isCodebuddyEngine() || isCodexEngine();
 
 // Initialize skill storage
 const skillStorage = new SkillStorage();
@@ -47,7 +49,11 @@ router.get('/', (req, res) => {
     }
     
     skillsPromise.then(skills => {
-      res.json({ skills });
+      res.json({
+        skills,
+        readOnly: isSkillsReadOnlyEngine(),
+        engine: getEngineType(),
+      });
     }).catch(error => {
       console.error('Failed to get skills:', error);
       res.status(500).json({ error: 'Failed to retrieve skills' });
@@ -83,6 +89,13 @@ router.get('/:skillId', async (req, res) => {
 // Create new skill
 router.post('/', async (req, res) => {
   try {
+    if (isSkillsReadOnlyEngine()) {
+      return res.status(403).json({
+        error: 'Read-only mode',
+        message: `Skills are read-only when using ${getEngineType()} engine`,
+      });
+    }
+
     const validation = CreateSkillSchema.safeParse(req.body);
     if (!validation.success) {
       return res.status(400).json({ 
@@ -127,6 +140,13 @@ router.post('/', async (req, res) => {
 // Update skill
 router.put('/:skillId', async (req, res) => {
   try {
+    if (isSkillsReadOnlyEngine()) {
+      return res.status(403).json({
+        error: 'Read-only mode',
+        message: `Skills are read-only when using ${getEngineType()} engine`,
+      });
+    }
+
     const { skillId } = req.params;
     const validation = UpdateSkillSchema.safeParse(req.body);
     
@@ -180,6 +200,13 @@ router.put('/:skillId', async (req, res) => {
 // Delete skill
 router.delete('/:skillId', async (req, res) => {
   try {
+    if (isSkillsReadOnlyEngine()) {
+      return res.status(403).json({
+        error: 'Read-only mode',
+        message: `Skills are read-only when using ${getEngineType()} engine`,
+      });
+    }
+
     const { skillId } = req.params;
     const { scope } = req.query;
     
@@ -277,6 +304,13 @@ router.get('/:skillId/files/*', async (req, res, next) => {
 // Update skill file content
 router.put('/:skillId/files/*', async (req, res, next) => {
   try {
+    if (isSkillsReadOnlyEngine()) {
+      return res.status(403).json({
+        error: 'Read-only mode',
+        message: `Skills are read-only when using ${getEngineType()} engine`,
+      });
+    }
+
     const { skillId } = req.params;
     const filePath = (req.params as any)[0] || ''; // Get the wildcard part
     const { content } = req.body;

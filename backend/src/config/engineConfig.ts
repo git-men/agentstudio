@@ -8,6 +8,8 @@
  * Supported engines:
  * - cursor-cli: Uses Cursor CLI, reads from ~/.cursor/
  * - claude-sdk: Uses Claude Agent SDK, reads from ~/.claude/
+ * - codebuddy-sdk: Uses CodeBuddy Agent SDK, reads from ~/.codebuddy/
+ * - codex-cli: Uses Codex CLI, reads from ~/.codex/
  * 
  * Usage:
  * - Environment variable: ENGINE=cursor-cli
@@ -69,7 +71,7 @@ function detectEngineType(): ServiceEngineType {
  * Supports case-insensitive matching and common aliases
  */
 function validateEngineType(engine: string): ServiceEngineType {
-  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk'];
+  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk', 'codex-cli'];
   const normalized = engine.trim().toLowerCase();
 
   // 直接匹配
@@ -89,6 +91,9 @@ function validateEngineType(engine: string): ServiceEngineType {
     'codebuddy': 'codebuddy-sdk',
     'codebuddy_sdk': 'codebuddy-sdk',
     'codebuddysdk': 'codebuddy-sdk',
+    'codex': 'codex-cli',
+    'codex_cli': 'codex-cli',
+    'codexcli': 'codex-cli',
   };
 
   const mapped = aliasMap[normalized];
@@ -262,6 +267,58 @@ const CODEBUDDY_SDK_CAPABILITIES: ServiceEngineCapabilities = {
   },
 };
 
+/**
+ * Codex CLI engine capabilities
+ */
+const CODEX_CLI_CAPABILITIES: ServiceEngineCapabilities = {
+  mcp: {
+    supported: true,
+    scopes: ['global'],
+    canRead: true,
+    canWrite: false, // Managed by Codex CLI itself
+  },
+  rules: {
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  commands: {
+    supported: true,
+    scopes: ['global', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  skills: {
+    supported: true,
+    scopes: ['user', 'project'],
+    canRead: true,
+    canWrite: false,
+  },
+  plugins: {
+    supported: false,
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  hooks: {
+    supported: false,
+    scopes: [],
+    canRead: false,
+    canWrite: false,
+  },
+  features: {
+    provider: false,
+    subagents: false,
+    a2a: false,
+    scheduledTasks: true,
+    mcpAdmin: true,
+    voice: true,
+    vision: true,
+    hooks: false,
+  },
+};
+
 // =============================================================================
 // Engine Path Configurations
 // =============================================================================
@@ -324,6 +381,25 @@ function getCodebuddySdkPaths(): EnginePathConfig {
   };
 }
 
+/**
+ * Get Codex CLI paths
+ */
+function getCodexCliPaths(): EnginePathConfig {
+  const codexDir = path.join(os.homedir(), '.codex');
+  return {
+    userConfigDir: codexDir,
+    mcpConfigPath: path.join(codexDir, 'config.toml'),
+    mcpDir: path.join(codexDir, 'mcp'),
+    rulesDir: path.join(codexDir, 'rules'),
+    commandsDir: path.join(codexDir, 'commands'),
+    agentsDir: path.join(codexDir, 'agents'),
+    skillsDir: path.join(codexDir, 'skills'),
+    hooksDir: path.join(codexDir, 'hooks'),
+    pluginsDir: path.join(codexDir, 'plugins'),
+    projectsDataDir: path.join(codexDir, 'sessions'),
+  };
+}
+
 // =============================================================================
 // Engine Configuration Singleton
 // =============================================================================
@@ -354,6 +430,13 @@ export function initializeEngine(): ServiceEngineConfig {
       name: 'CodeBuddy Agent SDK',
       capabilities: CODEBUDDY_SDK_CAPABILITIES,
       paths: getCodebuddySdkPaths(),
+    };
+  } else if (engineType === 'codex-cli') {
+    _engineConfig = {
+      engine: 'codex-cli',
+      name: 'Codex CLI',
+      capabilities: CODEX_CLI_CAPABILITIES,
+      paths: getCodexCliPaths(),
     };
   } else {
     _engineConfig = {
@@ -404,6 +487,13 @@ export function isClaudeEngine(): boolean {
  */
 export function isCodebuddyEngine(): boolean {
   return getEngineType() === 'codebuddy-sdk';
+}
+
+/**
+ * Check if current engine is Codex CLI
+ */
+export function isCodexEngine(): boolean {
+  return getEngineType() === 'codex-cli';
 }
 
 /**
@@ -478,6 +568,7 @@ export { getEngineType as SDK_ENGINE_TYPE };
 export function getSdkDirName(): string {
   if (isCursorEngine()) return '.cursor';
   if (isCodebuddyEngine()) return '.codebuddy';
+  if (isCodexEngine()) return '.codex';
   return '.claude';
 }
 
