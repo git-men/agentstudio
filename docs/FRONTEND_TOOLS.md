@@ -376,7 +376,7 @@ CLI 引擎通过外部进程运行，`HttpMcpProvider` 将工具注册到 HTTP M
 
 ## 注意事项
 
-1. **时序问题**：工具的 `render` 函数在 AI 调用时渲染，但此时 `frontend_tool_call` SSE 事件可能还未到达。框架已在 `ToolRenderer.tsx` 中加了缓冲机制，`onSubmit` 可以在任何时机安全调用。
+1. **时序与 ID 映射**：SDK 流中的 tool_use ID（`toolu_xxx`）与 MCP bridge 内部 ID（`ft_xxx`）不同。`ToolRenderer` 通过 `toolName` 匹配 `pendingFrontendTools` 中的 bridge ID，而非直接使用 `execution.id`。如果 `onSubmit` 在 `frontend_tool_call` SSE 到达前调用，框架会自动缓冲并在事件到达后重试。
 
 2. **结果格式**：`onSubmit` 的参数会被 JSON 序列化后作为 MCP tool result 返回给 AI。
 
