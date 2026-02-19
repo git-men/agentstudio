@@ -307,19 +307,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // API hooks
     const interruptSessionMutation = useInterruptSession();
     
-    // Check if engine has synced - only fetch sessions when selectedEngine matches service engine
-    // This prevents fetching with wrong engine type (e.g., fetching claude sessions when service is cursor)
-    const SERVICE_TO_STORE_ENGINE: Record<string, 'claude' | 'cursor' | 'codebuddy'> = {
-        'cursor-cli': 'cursor',
-        'claude-sdk': 'claude',
-        'codebuddy-sdk': 'codebuddy',
-    };
-    const expectedEngine = serviceEngineType ? SERVICE_TO_STORE_ENGINE[serviceEngineType] : undefined;
-    // Only fetch when: 1) service engine is loaded AND 2) selectedEngine matches expected engine
-    const isEngineSynced = !!expectedEngine && selectedEngine === expectedEngine;
+    // Only fetch sessions once engine config is loaded from backend
+    const isEngineReady = !!serviceEngineType;
     
-    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, selectedEngine, isEngineSynced);
-    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, selectedEngine);
+    const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, isEngineReady);
+    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
     const { data: activeSessionsData } = useSessions();
 
     // Refresh sessions when dropdown opens
@@ -513,7 +505,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 authFetch(`${API_BASE}/agui/sessions/${currentSessionId}/interrupt`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ engineType: selectedEngine }),
+                    body: JSON.stringify({}),
                 }).catch(err => console.warn('[Stop] Server interrupt failed:', err));
             } else {
                 interruptSessionMutation.mutateAsync(currentSessionId)

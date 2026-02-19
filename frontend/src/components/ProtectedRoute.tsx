@@ -101,13 +101,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       lastServiceId.current = currentServiceId;
       lastVerifyTime.current = now;
 
-      if (isAuthenticated) {
-        const valid = await verifyToken();
-        setIsValid(valid);
-      } else {
-        setIsValid(false);
+      try {
+        if (isAuthenticated) {
+          const valid = await verifyToken();
+          setIsValid(valid);
+        } else {
+          setIsValid(false);
+        }
+      } finally {
+        setIsVerifying(false);
       }
-      setIsVerifying(false);
     };
 
     verify();

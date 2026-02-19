@@ -514,10 +514,10 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           message: userMessage,
           engineType: selectedEngine as 'cursor' | 'codebuddy',
           workspace: projectPath || '.',
-          sessionId: currentSessionId || undefined, // Convert null to undefined
+          sessionId: currentSessionId || undefined,
           model: selectedModel,
-          images: imageData.length > 0 ? imageData : undefined, // Pass images
-          envVars: Object.keys(envVars).length > 0 ? envVars : undefined, // Pass env vars
+          images: imageData.length > 0 ? imageData : undefined,
+          envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
           abortController,
           onAguiEvent: handleAguiEvent,
           onError: (error) => {

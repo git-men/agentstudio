@@ -560,7 +560,9 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
                     if (toolPart && toolPart.toolData) {
                       toolPart.toolData.toolResult = typeof block.content === 'string' 
                         ? block.content 
-                        : JSON.stringify(block.content);
+                        : Array.isArray(block.content)
+                          ? block.content.map((c: any) => c.text || String(c)).join('')
+                          : JSON.stringify(block.content);
                       
                       // Check if the original message has toolUseResult (from Claude Code SDK)
                       if (msg.toolUseResult) {
@@ -819,13 +821,12 @@ router.get('/_status', (req, res) => {
 router.get('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
-    const { search, engine } = req.query;
+    const { search } = req.query;
     const projectPath = req.query.projectPath as string;
     
     console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
     console.log(`🔍 [DEBUG] Search term: "${search}"`);
     console.log(`🔍 [DEBUG] Project path: "${projectPath}"`);
-    console.log(`🔍 [DEBUG] Engine: "${engine}"`);
     
     // Verify agent exists
     const agent = globalAgentStorage.getAgent(agentId);
@@ -926,7 +927,6 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
     const projectPath = req.query.projectPath as string;
-    const engine = req.query.engine as string;
     
     let session: any = null;
     
