@@ -60,6 +60,16 @@ export interface PlatformHook {
   priority: number;
   createdAt: string;
   updatedAt: string;
+  async?: boolean;
+}
+
+export type HookDecisionType = 'allow' | 'block' | 'rewrite';
+
+export interface HookDecision {
+  decision: HookDecisionType;
+  reason?: string;
+  rewrittenMessage?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export interface HookExecutionResult {
@@ -79,6 +89,12 @@ export interface HookExecutionRecord {
   eventType: string;
   timestamp: string;
   result: HookExecutionResult;
+  interceptor?: {
+    decision: HookDecisionType;
+    reason?: string;
+    rewriteApplied: boolean;
+    failurePolicyApplied?: 'abort' | 'ignore' | 'warn';
+  };
 }
 
 export interface EventTypeInfo {
@@ -87,6 +103,7 @@ export interface EventTypeInfo {
   category: string;
   phase: number;
   dataSchema: Record<string, string>;
+  blocking?: boolean;
 }
 
 export type HookCreateRequest = Omit<PlatformHook, 'id' | 'createdAt' | 'updatedAt'>;

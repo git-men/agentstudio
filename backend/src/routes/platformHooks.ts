@@ -1,9 +1,9 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { getHookManager } from '../services/hooks/index.js';
 import { getEventTypes, isValidEventType } from '../services/hooks/eventRegistry.js';
 import type { HookCreateRequest, HookUpdateRequest } from '../types/platformHooks.js';
 
-const router = Router();
+const router: express.Router = Router();
 
 function requireManager(res: Response) {
   const manager = getHookManager();

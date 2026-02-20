@@ -51,3 +51,5 @@ export function shutdownHookSystem(): void {
 export { platformEventBus } from './platformEventBus.js';
 export { HookManager } from './hookManager.js';
 export { HookStorage } from './hookStorage.js';
+export { parseHookDecision } from './decisionValidator.js';
+export { isInterceptorExecutor } from './executors/types.js';

@@ -59,12 +59,6 @@ export const CONFIG_DIR = join(AGENTSTUDIO_HOME, 'config');
  */
 export const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
-/**
- * Pre-send guard dedicated config file.
- * Default: ~/.agentstudio/config/pre-send-guard.json
- */
-export const PRE_SEND_GUARD_CONFIG_FILE = join(CONFIG_DIR, 'pre-send-guard.json');
-
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 /**

@@ -70,6 +70,7 @@ export interface PlatformHook {
   priority: number;
   createdAt: string;
   updatedAt: string;
+  async?: boolean;
 }
 
 // ─── Execution ──────────────────────────────────────────────────────────────
@@ -91,6 +92,12 @@ export interface HookExecutionRecord {
   eventType: string;
   timestamp: string;
   result: HookExecutionResult;
+  interceptor?: {
+    decision: HookDecisionType;
+    reason?: string;
+    rewriteApplied: boolean;
+    failurePolicyApplied?: 'abort' | 'ignore' | 'warn';
+  };
 }
 
 // ─── Storage ────────────────────────────────────────────────────────────────
@@ -105,6 +112,79 @@ export interface HookStorageFile {
 export type HookCreateRequest = Omit<PlatformHook, 'id' | 'createdAt' | 'updatedAt'>;
 export type HookUpdateRequest = Partial<Omit<PlatformHook, 'id' | 'createdAt' | 'updatedAt'>>;
 
+// ─── Interceptor Types ───────────────────────────────────────────────────────
+
+export type HookDecisionType = 'allow' | 'block' | 'rewrite';
+
+export interface HookDecision {
+  decision: HookDecisionType;
+  reason?: string;
+  rewrittenMessage?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ImageData {
+  id: string;
+  base64: string;
+  mediaType: string;
+  filePath?: string;
+}
+
+export interface HookContext {
+  event: {
+    type: string;
+    timestamp: string;
+    source: string;
+  };
+  session?: {
+    sessionId?: string;
+    projectId?: string;
+    agentId?: string;
+  };
+  data: {
+    message?: string;
+    images?: ImageData[];
+    toolName?: string;
+    toolInput?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
+  hookId: string;
+  hookName: string;
+  timeout: number;
+}
+
+export interface HookEvaluationStep {
+  hookId: string;
+  hookName: string;
+  decision: HookDecisionType;
+  reason?: string;
+  duration: number;
+  timedOut: boolean;
+  error?: string;
+  failurePolicyApplied?: 'abort' | 'ignore' | 'warn';
+}
+
+export interface HookEvaluationResult {
+  decision: HookDecisionType;
+  reason?: string;
+  rewrittenMessage?: string;
+  hookId?: string;
+  hookName?: string;
+  evaluatedCount: number;
+  skippedCount: number;
+  totalDuration: number;
+  steps: HookEvaluationStep[];
+}
+
+export interface InterceptorExecutionResult {
+  success: boolean;
+  duration: number;
+  timedOut: boolean;
+  error?: string;
+  decision?: HookDecision;
+  rawOutput?: string;
+}
+
 // ─── Event Registry ─────────────────────────────────────────────────────────
 
 export interface EventTypeInfo {
@@ -113,4 +193,5 @@ export interface EventTypeInfo {
   category: string;
   phase: number;
   dataSchema: Record<string, string>;
+  blocking?: boolean;
 }

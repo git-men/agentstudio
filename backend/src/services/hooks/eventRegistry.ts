@@ -1,6 +1,45 @@
 import type { EventTypeInfo, HookEvent } from '../../types/platformHooks.js';
 
 const EVENT_TYPES: EventTypeInfo[] = [
+  // ─── Before Events (interceptable, phase 0) ───────────────────────────────
+  {
+    type: 'message.pre_send',
+    description: 'Before user message is sent to the AI engine (interceptable)',
+    category: 'message',
+    phase: 0,
+    dataSchema: {
+      message: 'string',
+      images: 'ImageData[]?',
+      sender: 'string',
+      channel: 'string?',
+    },
+    blocking: true,
+  },
+  {
+    type: 'tool.pre_use',
+    description: 'Before a tool call is executed (interceptable)',
+    category: 'tool',
+    phase: 0,
+    dataSchema: {
+      toolName: 'string',
+      toolInput: 'Record<string,unknown>?',
+      toolId: 'string?',
+    },
+    blocking: true,
+  },
+  {
+    type: 'run.pre_start',
+    description: 'Before a new agent session begins (interceptable)',
+    category: 'run',
+    phase: 0,
+    dataSchema: {
+      engine: 'string',
+      agentId: 'string?',
+      projectId: 'string?',
+    },
+    blocking: true,
+  },
+  // ─── After Events (observational, phase 1+) ───────────────────────────────
   {
     type: 'run.start',
     description: 'Agent execution started',
@@ -113,6 +152,11 @@ export function isValidEventType(type: string): boolean {
 
 export function getEventTypeInfo(type: string): EventTypeInfo | undefined {
   return eventTypeMap.get(type);
+}
+
+export function isBeforeEvent(type: string): boolean {
+  const info = eventTypeMap.get(type);
+  return info?.blocking === true;
 }
 
 /**

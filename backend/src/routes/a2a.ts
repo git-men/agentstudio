@@ -57,6 +57,7 @@ import {
 import { CursorA2AAdapter } from '../engines/cursor/a2aAdapter.js';
 import { isCursorEngine } from '../config/engineConfig.js';
 import { platformEventBus } from '../services/hooks/platformEventBus.js';
+import { getHookManager } from '../services/hooks/index.js';
 import type { HookEvent } from '../types/platformHooks.js';
 
 const router: Router = express.Router({ mergeParams: true });
@@ -296,6 +297,54 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       stream,
     });
 
+    // ── Hook Interceptor: message.pre_send ────────────────────────────────
+    let interceptedMessage = message;
+    try {
+      const hookManager = getHookManager();
+      if (hookManager) {
+        const hookEvent: HookEvent = {
+          type: 'message.pre_send',
+          timestamp: new Date().toISOString(),
+          source: 'a2a-route',
+          data: {
+            message,
+            images: images || undefined,
+            sender: 'user',
+            channel: 'a2a',
+          },
+          sessionId: sessionId || undefined,
+          projectId: a2aContext.projectId,
+          agentId: a2aContext.a2aAgentId,
+        };
+
+        const evalResult = await hookManager.evaluate(hookEvent);
+        console.log('[HookInterceptor] message.pre_send evaluated (a2a):', {
+          decision: evalResult.decision,
+          evaluatedCount: evalResult.evaluatedCount,
+          skippedCount: evalResult.skippedCount,
+          totalDuration: evalResult.totalDuration,
+        });
+
+        if (evalResult.decision === 'block') {
+          return res.status(403).json({
+            error: 'Message blocked by hook interceptor',
+            decision: 'block',
+            reason: evalResult.reason,
+            hookId: evalResult.hookId,
+            hookName: evalResult.hookName,
+          });
+        }
+
+        if (evalResult.rewrittenMessage) {
+          interceptedMessage = evalResult.rewrittenMessage;
+          console.log('[HookInterceptor] Message rewritten by hook interceptor (a2a)');
+        }
+      }
+    } catch (hookError) {
+      console.error('[HookInterceptor] Error evaluating message.pre_send hooks (a2a):', hookError);
+    }
+    // ── End Hook Interceptor ──────────────────────────────────────────────
+
     // ============================================================================
     // Cursor Engine Handling
     // ============================================================================
@@ -303,7 +352,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       console.log(`🖱️ [A2A] Using Cursor engine for agentType: ${a2aContext.agentType}`);
       
       // Create A2A message from user input
-      const a2aMessage = createUserMessage(message, {
+      const a2aMessage = createUserMessage(interceptedMessage, {
         contextId: sessionId,
       });
 
@@ -507,7 +556,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
     // - Non-vision model: save images to .agentstudio-images/ directory,
     //   provide file paths in message so AI can use MCP tools to read them
     // ============================================================================
-    let processedMessage = message;
+    let processedMessage = interceptedMessage;
     let processedImages = images;
 
     if (images && images.length > 0) {
@@ -536,7 +585,7 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         // Append image file paths to message for non-vision model
         if (imagePaths.length > 0) {
           const pathInfo = imagePaths.map((p, i) => `图片${i + 1}: @${p}`).join('\n');
-          processedMessage = `${message}\n\n以下图片已保存到本地，你可以通过文件路径查看:\n${pathInfo}`;
+          processedMessage = `${interceptedMessage}\n\n以下图片已保存到本地，你可以通过文件路径查看:\n${pathInfo}`;
         }
 
         // Don't pass base64 images to non-vision model (already saved to disk)

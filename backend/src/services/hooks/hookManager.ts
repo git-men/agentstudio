@@ -1,14 +1,21 @@
 import { randomUUID } from 'crypto';
 import type {
+  HookContext,
+  HookDecisionType,
   HookEvent,
+  HookEvaluationResult,
+  HookEvaluationStep,
   HookExecutionResult,
   HookExecutionRecord,
+  ImageData,
+  InterceptorExecutionResult,
   PlatformHook,
   HookCreateRequest,
   HookUpdateRequest,
   HookFilter,
 } from '../../types/platformHooks.js';
 import type { ExecutorRegistry } from './executors/types.js';
+import { isInterceptorExecutor } from './executors/types.js';
 import type { HookStorage } from './hookStorage.js';
 import { isValidEventType, getSyntheticEvent } from './eventRegistry.js';
 
@@ -134,6 +141,275 @@ export class HookManager {
     return { executions, total };
   }
 
+  // ─── Interceptor Evaluation ────────────────────────────────────────────────
+
+  /**
+   * Synchronously evaluate all matching blocking hooks for a "before" event.
+   * Returns the aggregated decision. Async hooks matching the same event
+   * are dispatched in the background (fire-and-forget).
+   *
+   * Call this from route handlers BEFORE the guarded action.
+   * The existing handleEvent() path is NOT affected.
+   */
+  async evaluate(event: HookEvent): Promise<HookEvaluationResult> {
+    const matched = this.findMatchingHooks(event);
+
+    const blocking = matched.filter(h => h.async !== true);
+    const asyncHooks = matched.filter(h => h.async === true);
+
+    if (asyncHooks.length > 0) {
+      void this.dispatchHooks(asyncHooks, event).catch(err => {
+        console.error('[HookSystem] Async dispatch error during evaluate:', err);
+      });
+    }
+
+    let currentMessage = event.data.message as string | undefined;
+    const steps: HookEvaluationStep[] = [];
+    let finalDecision: HookDecisionType = 'allow';
+    let finalReason: string | undefined;
+    let finalHookId: string | undefined;
+    let finalHookName: string | undefined;
+    let rewriteOccurred = false;
+
+    for (const hook of blocking) {
+      const context = this.buildHookContext(hook, event, currentMessage);
+      const executor = this.executors.get(hook.action.type);
+
+      if (!executor) {
+        const step: HookEvaluationStep = {
+          hookId: hook.id,
+          hookName: hook.name,
+          decision: 'allow',
+          reason: `No executor found for action type "${hook.action.type}"`,
+          duration: 0,
+          timedOut: false,
+          error: `No executor found for action type "${hook.action.type}"`,
+          failurePolicyApplied: hook.failurePolicy,
+        };
+        steps.push(step);
+
+        if (hook.failurePolicy === 'abort') {
+          step.decision = 'block';
+          finalDecision = 'block';
+          finalReason = `Hook "${hook.name}" failed: no executor (failurePolicy: abort)`;
+          finalHookId = hook.id;
+          finalHookName = hook.name;
+          this.recordInterceptorExecution(hook, event, step);
+          break;
+        }
+        if (hook.failurePolicy === 'warn') {
+          console.warn(`[HookSystem] Hook "${hook.name}": no executor for "${hook.action.type}" (ignored)`);
+        }
+        this.recordInterceptorExecution(hook, event, step);
+        continue;
+      }
+
+      if (!isInterceptorExecutor(executor)) {
+        const step: HookEvaluationStep = {
+          hookId: hook.id,
+          hookName: hook.name,
+          decision: 'allow',
+          reason: 'Executor does not support interceptor mode',
+          duration: 0,
+          timedOut: false,
+          error: 'Executor does not support interceptor mode',
+          failurePolicyApplied: hook.failurePolicy,
+        };
+        steps.push(step);
+
+        if (hook.failurePolicy === 'abort') {
+          step.decision = 'block';
+          finalDecision = 'block';
+          finalReason = `Hook "${hook.name}" failed: executor does not support interceptor mode (failurePolicy: abort)`;
+          finalHookId = hook.id;
+          finalHookName = hook.name;
+          this.recordInterceptorExecution(hook, event, step);
+          break;
+        }
+        if (hook.failurePolicy === 'warn') {
+          console.warn(`[HookSystem] Hook "${hook.name}": executor does not support interceptor mode (ignored)`);
+        }
+        this.recordInterceptorExecution(hook, event, step);
+        continue;
+      }
+
+      let result: InterceptorExecutionResult;
+      try {
+        result = await executor.executeInterceptor(hook, context, { timeout: hook.timeout });
+      } catch (err) {
+        const step: HookEvaluationStep = {
+          hookId: hook.id,
+          hookName: hook.name,
+          decision: 'allow',
+          reason: err instanceof Error ? err.message : String(err),
+          duration: 0,
+          timedOut: false,
+          error: err instanceof Error ? err.message : String(err),
+          failurePolicyApplied: hook.failurePolicy,
+        };
+        steps.push(step);
+
+        if (hook.failurePolicy === 'abort') {
+          step.decision = 'block';
+          finalDecision = 'block';
+          finalReason = `Hook "${hook.name}" threw an error (failurePolicy: abort)`;
+          finalHookId = hook.id;
+          finalHookName = hook.name;
+          this.recordInterceptorExecution(hook, event, step);
+          break;
+        }
+        if (hook.failurePolicy === 'warn') {
+          console.warn(`[HookSystem] Hook "${hook.name}" error:`, err);
+        }
+        this.recordInterceptorExecution(hook, event, step);
+        continue;
+      }
+
+      if (result.timedOut || !result.success) {
+        const step: HookEvaluationStep = {
+          hookId: hook.id,
+          hookName: hook.name,
+          decision: 'allow',
+          reason: result.error ?? (result.timedOut ? 'Execution timed out' : 'Execution failed'),
+          duration: result.duration,
+          timedOut: result.timedOut,
+          error: result.error,
+          failurePolicyApplied: hook.failurePolicy,
+        };
+
+        if (hook.failurePolicy === 'abort') {
+          step.decision = 'block';
+          step.reason = result.timedOut
+            ? `Hook "${hook.name}" timed out after ${hook.timeout}ms (failurePolicy: abort)`
+            : `Hook "${hook.name}" failed (failurePolicy: abort)`;
+          steps.push(step);
+          finalDecision = 'block';
+          finalReason = step.reason;
+          finalHookId = hook.id;
+          finalHookName = hook.name;
+          this.recordInterceptorExecution(hook, event, step);
+          break;
+        }
+
+        if (hook.failurePolicy === 'warn') {
+          step.reason = result.timedOut
+            ? `Execution timed out (ignored)`
+            : `Execution failed (ignored)`;
+          console.warn(`[HookSystem] Hook "${hook.name}":`, step.reason);
+        }
+
+        steps.push(step);
+        this.recordInterceptorExecution(hook, event, step);
+        continue;
+      }
+
+      if (result.decision) {
+        const decision = result.decision;
+
+        if (decision.decision === 'block') {
+          const step: HookEvaluationStep = {
+            hookId: hook.id,
+            hookName: hook.name,
+            decision: 'block',
+            reason: decision.reason,
+            duration: result.duration,
+            timedOut: false,
+          };
+          steps.push(step);
+          finalDecision = 'block';
+          finalReason = decision.reason;
+          finalHookId = hook.id;
+          finalHookName = hook.name;
+          this.recordInterceptorExecution(hook, event, step);
+          break;
+        }
+
+        if (decision.decision === 'rewrite') {
+          if (event.type === 'message.pre_send' && decision.rewrittenMessage) {
+            currentMessage = decision.rewrittenMessage;
+            rewriteOccurred = true;
+            const step: HookEvaluationStep = {
+              hookId: hook.id,
+              hookName: hook.name,
+              decision: 'rewrite',
+              reason: decision.reason,
+              duration: result.duration,
+              timedOut: false,
+            };
+            steps.push(step);
+            this.recordInterceptorExecution(hook, event, step);
+          } else {
+            const step: HookEvaluationStep = {
+              hookId: hook.id,
+              hookName: hook.name,
+              decision: 'allow',
+              reason: decision.reason ?? 'Rewrite downgraded to allow (non-message event or missing rewrittenMessage)',
+              duration: result.duration,
+              timedOut: false,
+            };
+            steps.push(step);
+            this.recordInterceptorExecution(hook, event, step);
+          }
+          continue;
+        }
+
+        // decision === 'allow'
+        const step: HookEvaluationStep = {
+          hookId: hook.id,
+          hookName: hook.name,
+          decision: 'allow',
+          reason: decision.reason,
+          duration: result.duration,
+          timedOut: false,
+        };
+        steps.push(step);
+        this.recordInterceptorExecution(hook, event, step);
+        continue;
+      }
+
+      // No decision returned — treat as hook failure
+      const step: HookEvaluationStep = {
+        hookId: hook.id,
+        hookName: hook.name,
+        decision: 'allow',
+        reason: 'No decision returned by interceptor',
+        duration: result.duration,
+        timedOut: false,
+        error: 'No decision returned by interceptor',
+        failurePolicyApplied: hook.failurePolicy,
+      };
+      steps.push(step);
+
+      if (hook.failurePolicy === 'abort') {
+        step.decision = 'block';
+        finalDecision = 'block';
+        finalReason = `Hook "${hook.name}" returned no decision (failurePolicy: abort)`;
+        finalHookId = hook.id;
+        finalHookName = hook.name;
+        this.recordInterceptorExecution(hook, event, step);
+        break;
+      }
+      if (hook.failurePolicy === 'warn') {
+        console.warn(`[HookSystem] Hook "${hook.name}": no decision returned (ignored)`);
+      }
+      this.recordInterceptorExecution(hook, event, step);
+    }
+
+    const totalDuration = steps.reduce((sum, s) => sum + s.duration, 0);
+
+    return {
+      decision: finalDecision,
+      reason: finalReason,
+      rewrittenMessage: rewriteOccurred ? currentMessage : undefined,
+      hookId: finalHookId,
+      hookName: finalHookName,
+      evaluatedCount: steps.length,
+      skippedCount: asyncHooks.length,
+      totalDuration,
+      steps,
+    };
+  }
+
   // ─── Private ───────────────────────────────────────────────────────────────
 
   private findMatchingHooks(event: HookEvent): PlatformHook[] {
@@ -230,6 +506,66 @@ export class HookManager {
     }
 
     return executor.execute(hook, event, { timeout: hook.timeout });
+  }
+
+  private buildHookContext(hook: PlatformHook, event: HookEvent, currentMessage?: string): HookContext {
+    const images = Array.isArray(event.data.images)
+      ? (event.data.images as ImageData[])
+      : undefined;
+
+    const { message: _message, images: _images, ...restData } = event.data;
+
+    return {
+      event: {
+        type: event.type,
+        timestamp: event.timestamp,
+        source: event.source,
+      },
+      session: {
+        sessionId: event.sessionId,
+        projectId: event.projectId,
+        agentId: event.agentId,
+      },
+      data: {
+        message: currentMessage,
+        images,
+        ...restData,
+      },
+      hookId: hook.id,
+      hookName: hook.name,
+      timeout: hook.timeout,
+    };
+  }
+
+  private recordInterceptorExecution(
+    hook: PlatformHook,
+    event: HookEvent,
+    step: HookEvaluationStep,
+  ): void {
+    const record: HookExecutionRecord = {
+      id: `exec_${randomUUID()}`,
+      hookId: hook.id,
+      hookName: hook.name,
+      eventType: event.type,
+      timestamp: new Date().toISOString(),
+      result: {
+        success: step.decision !== 'block' && !step.error,
+        duration: step.duration,
+        timedOut: step.timedOut,
+        error: step.error,
+      },
+      interceptor: {
+        decision: step.decision,
+        reason: step.reason,
+        rewriteApplied: step.decision === 'rewrite',
+        failurePolicyApplied: step.failurePolicyApplied,
+      },
+    };
+
+    this.executionHistory.unshift(record);
+    if (this.executionHistory.length > MAX_HISTORY) {
+      this.executionHistory.length = MAX_HISTORY;
+    }
   }
 
   private recordExecution(hook: PlatformHook, event: HookEvent, result: HookExecutionResult): void {

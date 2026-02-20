@@ -23,9 +23,9 @@ import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEven
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
-import { evaluatePreSendGuard } from '../services/preSendGuard/index.js';
-import { resolvePreSendGuardConfig } from '../services/preSendGuard/configResolver.js';
 import { sessionEventBus } from '../services/sessionEventBus.js';
+import { getHookManager } from '../services/hooks/index.js';
+import type { HookEvent } from '../types/platformHooks.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -63,19 +63,6 @@ const SystemPromptSchema = z.union([
   PresetSystemPromptSchema
 ]);
 
-const PreSendGuardProviderConfigSchema = z.object({
-  name: z.string().min(1),
-  enabled: z.boolean().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  onError: z.enum(['allow', 'block']).optional(),
-  options: z.record(z.string(), z.unknown()).optional()
-});
-
-const PreSendGuardConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  providers: z.array(PreSendGuardProviderConfigSchema).optional()
-});
-
 const CreateAgentSchema = z.object({
   id: z.string().min(1).regex(/^[a-z0-9-_]+$/, 'ID must contain only lowercase letters, numbers, hyphens, and underscores'),
   name: z.string().min(1),
@@ -109,7 +96,6 @@ const CreateAgentSchema = z.object({
   homepage: z.string().url().optional(),
   tags: z.array(z.string()).optional().default([]),
   enabled: z.boolean().optional().default(true),
-  preSendGuard: PreSendGuardConfigSchema.optional(),
 });
 
 const UpdateAgentSchema = CreateAgentSchema.partial().omit({ id: true });
@@ -747,55 +733,52 @@ router.post('/chat', async (req, res) => {
       return res.status(403).json({ error: 'Agent is disabled' });
     }
 
-    // Evaluate optional pre-send guards (agent -> file-based global)
-    const requestId = (req as express.Request & { requestId?: string }).requestId;
-    const guardFileResolved = await resolvePreSendGuardConfig({
-      message,
-      agentId,
-      sessionId,
-      projectPath,
-      channel,
-      requestId,
-    });
+    // ── Hook Interceptor: message.pre_send ────────────────────────────────
+    try {
+      const hookManager = getHookManager();
+      if (hookManager) {
+        const hookEvent: HookEvent = {
+          type: 'message.pre_send',
+          timestamp: new Date().toISOString(),
+          source: 'agents-route',
+          data: {
+            message,
+            images: images || undefined,
+            sender: 'user',
+            channel,
+          },
+          sessionId: sessionId || undefined,
+          projectId: projectPath,
+          agentId,
+        };
 
-    const guardResult = await evaluatePreSendGuard({
-      globalConfig: guardFileResolved.config,
-      agentConfig: agent.preSendGuard,
-      context: {
-        message,
-        agentId,
-        sessionId,
-        projectPath,
-        channel,
-        requestId,
+        const evalResult = await hookManager.evaluate(hookEvent);
+        console.log('[HookInterceptor] message.pre_send evaluated:', {
+          decision: evalResult.decision,
+          evaluatedCount: evalResult.evaluatedCount,
+          skippedCount: evalResult.skippedCount,
+          totalDuration: evalResult.totalDuration,
+        });
+
+        if (evalResult.decision === 'block') {
+          return res.status(403).json({
+            error: 'Message blocked by hook interceptor',
+            decision: 'block',
+            reason: evalResult.reason,
+            hookId: evalResult.hookId,
+            hookName: evalResult.hookName,
+          });
+        }
+
+        if (evalResult.rewrittenMessage) {
+          message = evalResult.rewrittenMessage;
+          console.log('[HookInterceptor] Message rewritten by hook interceptor');
+        }
       }
-    });
-
-    if (guardResult.enabled || guardFileResolved.source !== 'none') {
-      console.log('[PreSendGuard] Evaluated:', {
-        configSource: guardFileResolved.source,
-        matchedRuleId: guardFileResolved.matchedRuleId,
-        decision: guardResult.decision,
-        blocked: guardResult.blocked,
-        code: guardResult.code,
-        steps: guardResult.steps,
-      });
+    } catch (hookError) {
+      console.error('[HookInterceptor] Error evaluating message.pre_send hooks:', hookError);
     }
-
-    if (guardResult.blocked) {
-      return res.status(403).json({
-        error: 'Message blocked by pre-send guard',
-        decision: guardResult.decision,
-        code: guardResult.code,
-        reason: guardResult.reason,
-        requestId,
-      });
-    }
-
-    if (guardResult.message !== message) {
-      message = guardResult.message;
-      console.log('[PreSendGuard] Message rewritten before model send');
-    }
+    // ── End Hook Interceptor ──────────────────────────────────────────────
 
     // Resolve onRunFinished hook config from the agent
     const onRunFinishedHook = agent.hooks?.onRunFinished;
