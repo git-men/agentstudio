@@ -643,6 +643,11 @@ router.post('/chat', async (req, res) => {
         }
       }
 
+      const writeReconnectAgui = (event: AGUIEvent, sid?: string | null) => {
+        res.write(formatAguiEventAsSSE(event));
+        broadcastToObservers(event, sid);
+      };
+
       // AGUI adapter for reconnect (if using AGUI output)
       let aguiReconnectAdapter: ClaudeAguiAdapter | null = null;
       if (outputFormat === 'agui') {
@@ -651,7 +656,7 @@ router.post('/chat', async (req, res) => {
         const runStartedEvent = aguiReconnectAdapter.createRunStarted({ message: '(reconnected)', projectPath });
         try {
           if (!isReconnectClosed) {
-            writeAguiAndBroadcast(runStartedEvent, sessionId);
+            writeReconnectAgui(runStartedEvent, sessionId);
             // Send a synthetic TEXT_MESSAGE_START so the frontend initializes
             // its text block tracking.  Without this, TEXT_MESSAGE_CONTENT events
             // arriving mid-stream won't produce textDelta (aguiState.textBlockIndex
@@ -663,7 +668,7 @@ router.post('/chat', async (req, res) => {
               role: 'assistant',
               timestamp: Date.now(),
             };
-            writeAguiAndBroadcast(textStartEvent, sessionId);
+            writeReconnectAgui(textStartEvent, sessionId);
           }
         } catch { /* connection gone */ }
       }
@@ -687,7 +692,7 @@ router.post('/chat', async (req, res) => {
             if (outputFormat === 'agui' && aguiReconnectAdapter) {
               const aguiEvents = aguiReconnectAdapter.convert(sdkMessage);
               for (const event of aguiEvents) {
-                writeAguiAndBroadcast(event, sessionId);
+                writeReconnectAgui(event, sessionId);
               }
             } else {
               res.write(`data: ${JSON.stringify(eventData)}\n\n`);
@@ -705,7 +710,7 @@ router.post('/chat', async (req, res) => {
               const finalEvents = aguiReconnectAdapter.finalize();
               for (const event of finalEvents) {
                 if (!res.destroyed && !isReconnectClosed) {
-                  writeAguiAndBroadcast(event, sessionId);
+                  writeReconnectAgui(event, sessionId);
                 }
               }
             } catch { /* ignore */ }
