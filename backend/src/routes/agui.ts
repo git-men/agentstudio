@@ -322,22 +322,15 @@ router.post('/chat', async (req, res) => {
       }
     };
 
-    // Set up bridge listener to forward frontend tool invocations as AGUI CUSTOM events
+    // Forward frontend tool invocations as standard TOOL_CALL events so that
+    // the client distinguishes frontend vs backend tools by name alone.
     const bridgeListener = (request: FrontendToolRequest) => {
       if (isConnectionClosed) return;
       if (activeSessionId && request.sessionId !== activeSessionId) return;
-      onAguiEvent({
-        type: AGUIEventType.CUSTOM,
-        name: 'frontend_tool_call',
-        data: {
-          toolCallId: request.toolCallId,
-          toolName: request.toolName,
-          args: request.args,
-          sessionId: request.sessionId,
-          agentId: request.agentId,
-        },
-        timestamp: Date.now(),
-      });
+      const now = Date.now();
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_START, toolCallId: request.toolCallId, toolName: request.toolName, timestamp: now } as any);
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_ARGS,  toolCallId: request.toolCallId, args: JSON.stringify(request.args), timestamp: now } as any);
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_END,   toolCallId: request.toolCallId, timestamp: now } as any);
     };
     const hasFrontendTools = frontendTools && frontendTools.length > 0;
     if (hasFrontendTools) {

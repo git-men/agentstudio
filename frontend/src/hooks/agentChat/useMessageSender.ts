@@ -11,7 +11,7 @@ import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
 import type { AGUIEvent } from '../../types/aguiTypes';
-import { getAllSchemas } from '../../services/frontendToolRegistry.js';
+import { getAllSchemas, getToolRender } from '../../services/frontendToolRegistry.js';
 
 export interface UseMessageSenderProps {
   agent: AgentConfig;
@@ -303,7 +303,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         // Track current message for AGUI events
         let currentAguiMessageId: string | null = null;
         let currentTextContent = '';
-        const currentToolCalls = new Map<string, { name: string; args: string }>();
+        const currentToolCalls = new Map<string, { name: string; args: string; isFrontendTool?: boolean }>();
         
         // Handle AGUI events
         const handleAguiEvent = (event: AGUIEvent) => {
@@ -402,11 +402,17 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               // Thinking block finalized
               break;
               
-            case 'TOOL_CALL_START':
+            case 'TOOL_CALL_START': {
+              const isFrontend = !!getToolRender(event.toolName);
               currentToolCalls.set(event.toolCallId, {
                 name: event.toolName,
                 args: '',
+                isFrontendTool: isFrontend,
               });
+              if (isFrontend) {
+                // Frontend tools are handled via pendingFrontendTools, not message parts
+                break;
+              }
               // Ensure we have an assistant message to add tool to
               let stateForTool = useAgentStore.getState();
               let lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
@@ -428,32 +434,47 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                   toolName: event.toolName,
                   toolInput: {},
                   isExecuting: true,
-                  claudeId: event.toolCallId, // Store toolCallId for later lookup
+                  claudeId: event.toolCallId,
                 });
               }
               break;
+            }
               
-            case 'TOOL_CALL_ARGS':
+            case 'TOOL_CALL_ARGS': {
               const toolCall = currentToolCalls.get(event.toolCallId);
               if (toolCall) {
                 toolCall.args += event.args;
-                // Try to parse and update
-                try {
-                  const toolInput = JSON.parse(toolCall.args);
-                  const stateForArgs = useAgentStore.getState();
-                  const lastMsgForArgs = stateForArgs.messages[stateForArgs.messages.length - 1];
-                  if (lastMsgForArgs && lastMsgForArgs.role === 'assistant') {
-                    updateToolPartInMessage(lastMsgForArgs.id, event.toolCallId, { toolInput });
+                if (!toolCall.isFrontendTool) {
+                  try {
+                    const toolInput = JSON.parse(toolCall.args);
+                    const stateForArgs = useAgentStore.getState();
+                    const lastMsgForArgs = stateForArgs.messages[stateForArgs.messages.length - 1];
+                    if (lastMsgForArgs && lastMsgForArgs.role === 'assistant') {
+                      updateToolPartInMessage(lastMsgForArgs.id, event.toolCallId, { toolInput });
+                    }
+                  } catch {
+                    // Args not complete yet
                   }
-                } catch {
-                  // Args not complete yet
                 }
               }
               break;
+            }
               
-            case 'TOOL_CALL_END':
+            case 'TOOL_CALL_END': {
               const completedTool = currentToolCalls.get(event.toolCallId);
-              if (completedTool) {
+              if (completedTool?.isFrontendTool) {
+                // Frontend tool: parse accumulated args → add to pending frontend tools
+                let parsedArgs: Record<string, unknown> = {};
+                try { parsedArgs = JSON.parse(completedTool.args); } catch { /* use empty */ }
+                console.log(`[AGUI] Frontend tool call: ${completedTool.name} (${event.toolCallId})`);
+                useAgentStore.getState().addPendingFrontendTool({
+                  toolCallId: event.toolCallId,
+                  toolName: completedTool.name,
+                  args: parsedArgs,
+                  sessionId: currentSessionId || '',
+                  agentId: '',
+                });
+              } else if (completedTool) {
                 try {
                   const toolInput = JSON.parse(completedTool.args);
                   const stateForEnd = useAgentStore.getState();
@@ -462,7 +483,6 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                     updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, { toolInput, isExecuting: false });
                   }
                 } catch {
-                  // Use empty input
                   const stateForEnd = useAgentStore.getState();
                   const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
                   if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
@@ -471,6 +491,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 }
               }
               break;
+            }
               
             case 'TOOL_CALL_RESULT':
               const stateForResult = useAgentStore.getState();
@@ -497,20 +518,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
                 setCurrentSessionId(cliSessionId);
                 onSessionChange?.(cliSessionId);
               }
-              // Handle frontend tool invocations forwarded from the bridge
-              if (customEvent.name === 'frontend_tool_call' && customEvent.data) {
-                const d = customEvent.data as Record<string, unknown>;
-                if (d.toolCallId && d.toolName) {
-                  console.log(`[AGUI] Frontend tool call: ${d.toolName} (${d.toolCallId})`);
-                  useAgentStore.getState().addPendingFrontendTool({
-                    toolCallId: d.toolCallId as string,
-                    toolName: d.toolName as string,
-                    args: (d.args as Record<string, unknown>) || {},
-                    sessionId: d.sessionId as string,
-                    agentId: d.agentId as string,
-                  });
-                }
-              }
+              // Frontend tool calls are now handled via standard TOOL_CALL_START/ARGS/END
+              // events above, no longer via CUSTOM events.
               // Handle auto-compact event (context window auto-compaction)
               if (customEvent.name === 'auto_compact') {
                 const preTokens = customEvent.data?.preTokens || 0;
