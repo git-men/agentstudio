@@ -100,15 +100,17 @@ describe('ClaudeSession.close() subprocess termination', () => {
 // ─────────────────────────────────────────────────────────────────────
 // 2. Per-agent session limit
 // ─────────────────────────────────────────────────────────────────────
-describe('Per-agent session limit (maxSessionsPerAgent = 1)', () => {
+describe('Per-agent session limit (env-configured)', () => {
   let sm: SessionManager;
 
   beforeEach(() => {
     mockClose.mockClear();
+    process.env.MAX_SESSIONS_PER_AGENT = '1';
     sm = new SessionManager();
   });
 
   afterEach(async () => {
+    delete process.env.MAX_SESSIONS_PER_AGENT;
     await sm.shutdown();
   });
 
@@ -167,17 +169,47 @@ describe('Per-agent session limit (maxSessionsPerAgent = 1)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 3. Global concurrent session limit
+// 2b. No limit when env not set (default = 0)
 // ─────────────────────────────────────────────────────────────────────
-describe('Global concurrent session limit (maxConcurrentSessions = 10)', () => {
+describe('Per-agent session limit disabled by default', () => {
   let sm: SessionManager;
 
   beforeEach(() => {
     mockClose.mockClear();
+    delete process.env.MAX_SESSIONS_PER_AGENT;
     sm = new SessionManager();
   });
 
   afterEach(async () => {
+    await sm.shutdown();
+  });
+
+  it('should allow unlimited sessions per agent when limit is 0', async () => {
+    await sm.createNewSession('agent-A', mockOptions, 'sess-1');
+    await sm.createNewSession('agent-A', mockOptions, 'sess-2');
+    await sm.createNewSession('agent-A', mockOptions, 'sess-3');
+
+    expect(sm.getSession('sess-1')).not.toBeNull();
+    expect(sm.getSession('sess-2')).not.toBeNull();
+    expect(sm.getSession('sess-3')).not.toBeNull();
+    expect(sm.getActiveSessionCount()).toBe(3);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// 3. Global concurrent session limit
+// ─────────────────────────────────────────────────────────────────────
+describe('Global concurrent session limit (env-configured)', () => {
+  let sm: SessionManager;
+
+  beforeEach(() => {
+    mockClose.mockClear();
+    process.env.MAX_CONCURRENT_SESSIONS = '10';
+    sm = new SessionManager();
+  });
+
+  afterEach(async () => {
+    delete process.env.MAX_CONCURRENT_SESSIONS;
     await sm.shutdown();
   });
 

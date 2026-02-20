@@ -37,16 +37,18 @@ export class SessionManager {
   private readonly cleanupIntervalMs = 1 * 60 * 1000; // 1 分钟检查一次
   private readonly defaultIdleTimeoutMs = 30 * 60 * 1000; // 30 分钟不活跃超时
   private readonly heartbeatTimeoutMs = 30 * 60 * 1000; // 30 分钟心跳超时
-  private readonly maxSessionsPerAgent = 1;
-  private readonly maxConcurrentSessions = 10;
+  private readonly maxSessionsPerAgent: number;
+  private readonly maxConcurrentSessions: number;
 
   constructor() {
+    this.maxSessionsPerAgent = parseInt(process.env.MAX_SESSIONS_PER_AGENT || '0', 10);
+    this.maxConcurrentSessions = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '0', 10);
     // 定期清理空闲会话
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleSessions();
     }, this.cleanupIntervalMs);
 
-    console.log('📋 SessionManager initialized for persistent Claude sessions');
+    console.log(`📋 SessionManager initialized (perAgent=${this.maxSessionsPerAgent || '∞'}, global=${this.maxConcurrentSessions || '∞'})`);
   }
 
   /**
@@ -187,6 +189,7 @@ export class SessionManager {
    * Skips the session that is about to be resumed.
    */
   private async enforceAgentSessionLimit(agentId: string, reservedSessionId?: string): Promise<void> {
+    if (this.maxSessionsPerAgent <= 0) return; // 0 = unlimited
     const agentSessionIds = this.agentSessions.get(agentId);
     if (!agentSessionIds || agentSessionIds.size < this.maxSessionsPerAgent) {
       return;
@@ -217,6 +220,7 @@ export class SessionManager {
    * idle sessions to make room.
    */
   private async enforceGlobalSessionLimit(): Promise<void> {
+    if (this.maxConcurrentSessions <= 0) return; // 0 = unlimited
     const totalSessions = this.sessions.size + this.tempSessions.size;
     if (totalSessions < this.maxConcurrentSessions) {
       return;
