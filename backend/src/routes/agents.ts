@@ -25,6 +25,7 @@ import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 import { evaluatePreSendGuard } from '../services/preSendGuard/index.js';
 import { resolvePreSendGuardConfig } from '../services/preSendGuard/configResolver.js';
+import { sessionEventBus } from '../services/sessionEventBus.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -540,6 +541,13 @@ router.post('/chat', async (req, res) => {
     
     console.log(`📡 Output format: ${outputFormat}`);
 
+    // Broadcast an AGUI event to session observers via sessionEventBus
+    const broadcastToObservers = (event: AGUIEvent, sid: string | null | undefined) => {
+      if (sid && sessionEventBus.hasObservers(sid)) {
+        sessionEventBus.emit(sid, event);
+      }
+    };
+
     console.log('[Backend] Received chat request:', {
       agentId,
       sessionId,
@@ -643,7 +651,7 @@ router.post('/chat', async (req, res) => {
         const runStartedEvent = aguiReconnectAdapter.createRunStarted({ message: '(reconnected)', projectPath });
         try {
           if (!isReconnectClosed) {
-            res.write(formatAguiEventAsSSE(runStartedEvent));
+            writeAguiAndBroadcast(runStartedEvent, sessionId);
             // Send a synthetic TEXT_MESSAGE_START so the frontend initializes
             // its text block tracking.  Without this, TEXT_MESSAGE_CONTENT events
             // arriving mid-stream won't produce textDelta (aguiState.textBlockIndex
@@ -655,7 +663,7 @@ router.post('/chat', async (req, res) => {
               role: 'assistant',
               timestamp: Date.now(),
             };
-            res.write(formatAguiEventAsSSE(textStartEvent));
+            writeAguiAndBroadcast(textStartEvent, sessionId);
           }
         } catch { /* connection gone */ }
       }
@@ -679,7 +687,7 @@ router.post('/chat', async (req, res) => {
             if (outputFormat === 'agui' && aguiReconnectAdapter) {
               const aguiEvents = aguiReconnectAdapter.convert(sdkMessage);
               for (const event of aguiEvents) {
-                res.write(formatAguiEventAsSSE(event));
+                writeAguiAndBroadcast(event, sessionId);
               }
             } else {
               res.write(`data: ${JSON.stringify(eventData)}\n\n`);
@@ -697,7 +705,7 @@ router.post('/chat', async (req, res) => {
               const finalEvents = aguiReconnectAdapter.finalize();
               for (const event of finalEvents) {
                 if (!res.destroyed && !isReconnectClosed) {
-                  res.write(formatAguiEventAsSSE(event));
+                  writeAguiAndBroadcast(event, sessionId);
                 }
               }
             } catch { /* ignore */ }
@@ -801,6 +809,13 @@ router.post('/chat', async (req, res) => {
     // 设置连接管理
     const connectionManager = setupSSEConnectionManagement(req, res, agentId);
 
+    // Write an AGUI event to the client response and broadcast to session observers.
+    // Guards (res.destroyed, connectionManager.isConnectionClosed) are the caller's responsibility.
+    const writeAguiAndBroadcast = (event: AGUIEvent, sid?: string | null) => {
+      res.write(formatAguiEventAsSSE(event));
+      broadcastToObservers(event, sid);
+    };
+
     // Safety net: ensure RUN_FINISHED is always sent before connection closes in AGUI mode
     let aguiRunFinishedSent = false;
     const ensureAguiRunFinished = () => {
@@ -813,7 +828,7 @@ router.post('/chat', async (req, res) => {
           runId: '',
           timestamp: Date.now(),
         };
-        res.write(formatAguiEventAsSSE(runFinishedEvent));
+        writeAguiAndBroadcast(runFinishedEvent, sessionId);
         aguiRunFinishedSent = true;
         console.log('🛡️ [Safety Net] Sent RUN_FINISHED before connection close');
       } catch {
@@ -1164,7 +1179,7 @@ router.post('/chat', async (req, res) => {
                     },
                     timestamp: Date.now(),
                   };
-                  res.write(formatAguiEventAsSSE(aguiCustomEvent));
+                  writeAguiAndBroadcast(aguiCustomEvent, actualSessionId || currentSessionId);
                 } else {
                   // 默认模式：发送自动压缩通知给前端
                   const autoCompactEvent = {
@@ -1293,7 +1308,7 @@ router.post('/chat', async (req, res) => {
               const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
               try {
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(formatAguiEventAsSSE(runStartedEvent));
+                  writeAguiAndBroadcast(runStartedEvent, actualSessionId || currentSessionId);
                   aguiRunStartedSent = true;
                   console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${aguiThreadId}`);
                 }
@@ -1346,7 +1361,7 @@ router.post('/chat', async (req, res) => {
                 // Convert SDK message to AGUI format
                 const aguiEvents = aguiAdapter.convert(sdkMessage as any);
                 for (const event of aguiEvents) {
-                  res.write(formatAguiEventAsSSE(event));
+                  writeAguiAndBroadcast(event, actualSessionId || currentSessionId);
                 }
               } else {
                 // Default SDK format
@@ -1400,9 +1415,10 @@ router.post('/chat', async (req, res) => {
                 const otherEvents = finalEvents.filter(e => e.type !== AGUIEventType.RUN_FINISHED);
 
                 // Send all non-RUN_FINISHED finalize events first
+                const sid = actualSessionId || currentSessionId;
                 for (const event of otherEvents) {
                   if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                    res.write(formatAguiEventAsSSE(event));
+                    writeAguiAndBroadcast(event, sid);
                   }
                 }
 
@@ -1416,7 +1432,7 @@ router.post('/chat', async (req, res) => {
                     });
                     for (const hookEvent of hookEvents) {
                       if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                        res.write(formatAguiEventAsSSE(hookEvent));
+                        writeAguiAndBroadcast(hookEvent, sid);
                       }
                     }
                   } catch (hookError: any) {
@@ -1426,7 +1442,7 @@ router.post('/chat', async (req, res) => {
 
                 // Now send the deferred RUN_FINISHED
                 if (runFinishedEvent && !res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(formatAguiEventAsSSE(runFinishedEvent));
+                  writeAguiAndBroadcast(runFinishedEvent, sid);
                 }
 
                 aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
