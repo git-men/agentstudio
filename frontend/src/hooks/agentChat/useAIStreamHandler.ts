@@ -6,6 +6,7 @@ import { useSubAgentStore } from '../../stores/useSubAgentStore';
 import { tabManager } from '../../utils/tabManager';
 import { eventBus, EVENTS } from '../../utils/eventBus';
 import type { StreamingBlock } from '../../types/index.js';
+import { getToolRender } from '../../services/frontendToolRegistry';
 
 /**
  * Container for managing streaming state
@@ -104,6 +105,9 @@ export const useAIStreamHandler = ({
 
   // 🎯 Track sub-agent stream block IDs for delta updates
   const subAgentStreamBlocksRef = useRef<Map<string, string>>(new Map());
+
+  // Track in-progress frontend tool call arg accumulation (TOOL_CALL_START→ARGS→END)
+  const pendingFrontendToolArgsRef = useRef<Map<string, { toolName: string; argChunks: string }>>(new Map());
 
   // T023: Track active streaming blocks (character-by-character streaming)
   const streamingStateRef = useRef<StreamingState>({
@@ -986,21 +990,43 @@ export const useAIStreamHandler = ({
       return;
     }
 
-    // Handle frontend tool invocations from the FrontendToolBridge.
-    if (eventData.type === 'frontend_tool_call') {
-      const d = eventData as Record<string, unknown>;
-      if (!d.toolCallId || !d.toolName) {
-        console.warn('[FrontendTool] Malformed frontend_tool_call event:', d);
-        return;
+    // Handle standard TOOL_CALL events for frontend tools.
+    // The backend now sends TOOL_CALL_START/ARGS/END instead of the legacy
+    // 'frontend_tool_call' event. We identify frontend tools by checking the
+    // client-side registry — same approach as CopilotKit / AG-UI spec.
+    if (eventData.type === 'TOOL_CALL_START') {
+      const toolCallId = eventData.toolCallId as string;
+      const toolCallName = (eventData.toolCallName ?? eventData.toolName) as string;
+      if (toolCallId && toolCallName && getToolRender(toolCallName)) {
+        // Track this as a pending frontend tool call; args arrive in TOOL_CALL_ARGS
+        pendingFrontendToolArgsRef.current.set(toolCallId, { toolName: toolCallName, argChunks: '' });
       }
-      addPendingFrontendTool({
-        toolCallId: d.toolCallId as string,
-        toolName: d.toolName as string,
-        args: (d.args as Record<string, unknown>) || {},
-        sessionId: d.sessionId as string,
-        agentId: d.agentId as string,
-        timestamp: Date.now(),
-      });
+      return;
+    }
+    if (eventData.type === 'TOOL_CALL_ARGS') {
+      const toolCallId = eventData.toolCallId as string;
+      const pending = pendingFrontendToolArgsRef.current.get(toolCallId);
+      if (pending) {
+        pending.argChunks += (eventData.delta ?? '') as string;
+      }
+      return;
+    }
+    if (eventData.type === 'TOOL_CALL_END') {
+      const toolCallId = eventData.toolCallId as string;
+      const pending = pendingFrontendToolArgsRef.current.get(toolCallId);
+      if (pending) {
+        pendingFrontendToolArgsRef.current.delete(toolCallId);
+        let parsedArgs: Record<string, unknown> = {};
+        try { parsedArgs = JSON.parse(pending.argChunks); } catch { /* use empty */ }
+        addPendingFrontendTool({
+          toolCallId,
+          toolName: pending.toolName,
+          args: parsedArgs,
+          sessionId: (eventData.sessionId as string) ?? '',
+          agentId: (eventData.agentId as string) ?? '',
+          timestamp: Date.now(),
+        });
+      }
       return;
     }
 

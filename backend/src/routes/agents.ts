@@ -614,22 +614,16 @@ router.post('/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
       } catch { /* connection already dead */ }
 
-      // Re-send any pending frontend tool calls that were lost when the old connection died
+      // Re-send any pending frontend tool calls as standard TOOL_CALL events
       const pendingCalls = frontendToolBridge.getPendingBySession(sessionId);
       if (pendingCalls.length > 0) {
         for (const request of pendingCalls) {
           try {
             if (!isReconnectClosed) {
-              const event = {
-                type: 'frontend_tool_call',
-                toolCallId: request.toolCallId,
-                toolName: request.toolName,
-                args: request.args,
-                agentId: request.agentId,
-                sessionId: request.sessionId,
-                timestamp: Date.now(),
-              };
-              res.write(`data: ${JSON.stringify(event)}\n\n`);
+              const now = Date.now();
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_START', toolCallId: request.toolCallId, toolCallName: request.toolName, timestamp: now })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_ARGS',  toolCallId: request.toolCallId, delta: JSON.stringify(request.args), timestamp: now })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_END',   toolCallId: request.toolCallId, timestamp: now })}\n\n`);
             }
           } catch { /* connection gone */ }
         }

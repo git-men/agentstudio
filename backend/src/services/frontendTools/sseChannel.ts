@@ -46,16 +46,18 @@ export class SSENotificationChannel implements NotificationChannel {
     if (!this.isActive()) return false;
 
     try {
-      const event = {
-        type: 'frontend_tool_call',
-        toolCallId: request.toolCallId,
-        toolName: request.toolName,
-        args: request.args,
-        agentId: request.agentId,
-        sessionId: request.sessionId,
-        timestamp: Date.now(),
-      };
-      this.res.write(`data: ${JSON.stringify(event)}\n\n`);
+      const now = Date.now();
+
+      // Emit standard AG-UI TOOL_CALL events so the frontend can handle
+      // frontend tools identically to backend tools — distinguished only
+      // by checking the local tool registry at the client side.
+      const start = { type: 'TOOL_CALL_START', toolCallId: request.toolCallId, toolCallName: request.toolName, timestamp: now };
+      const args  = { type: 'TOOL_CALL_ARGS',  toolCallId: request.toolCallId, delta: JSON.stringify(request.args), timestamp: now };
+      const end   = { type: 'TOOL_CALL_END',   toolCallId: request.toolCallId, timestamp: now };
+
+      this.res.write(`data: ${JSON.stringify(start)}\n\n`);
+      this.res.write(`data: ${JSON.stringify(args)}\n\n`);
+      this.res.write(`data: ${JSON.stringify(end)}\n\n`);
       return true;
     } catch {
       return false;
