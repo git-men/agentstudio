@@ -45,8 +45,23 @@ Ask: "你想怎么处理？"
 - **B) 跳转过去直接聊** → Construct link to target agent's chat
 
 ### Step 5: Execute
-- **Mode A**: Initiate A2A call to target agent with user's request
-- **Mode B**: Return formatted link: `[打开 {agent_name}](/agent/{agent_id}?project={project_path})`
+
+**Mode A — A2A 协调**:
+Use the `mcp__a2a-client__call_external_agent` tool to delegate. Construct the A2A endpoint URL as:
+```
+http://localhost:4936/a2a/{agentId}
+```
+Example call:
+```
+mcp__a2a-client__call_external_agent({
+  "agentUrl": "http://localhost:4936/a2a/code-reviewer",
+  "message": "用户的请求内容",
+  "projectPath": "/Users/.../project-path"
+})
+```
+
+**Mode B — 跳转链接**:
+Return formatted link: `[打开 {agent_name}](/chat/{agent_id}?project={encoded_project_path})`
 
 ## Agent Matching Strategy
 

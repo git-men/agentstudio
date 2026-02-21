@@ -30,6 +30,11 @@
       "name": "task-router",
       "path": "skills/task-router",
       "description": "业务任务路由"
+    },
+    {
+      "name": "mcp-developer",
+      "path": "skills/mcp-developer",
+      "description": "MCP Server 开发指南（从零创建 MCP 服务）"
     }
   ]
 }

@@ -13,6 +13,8 @@ export { scheduledTaskTools } from './scheduledTaskTools.js';
 export { skillTools } from './skillTools.js';
 export { ruleTools } from './ruleTools.js';
 export { commandTools } from './commandTools.js';
+export { hookTools } from './hookTools.js';
+export { marketplaceTools } from './marketplaceTools.js';
 
 import { projectTools } from './projectTools.js';
 import { agentTools } from './agentTools.js';
@@ -23,6 +25,8 @@ import { scheduledTaskTools } from './scheduledTaskTools.js';
 import { skillTools } from './skillTools.js';
 import { ruleTools } from './ruleTools.js';
 import { commandTools } from './commandTools.js';
+import { hookTools } from './hookTools.js';
+import { marketplaceTools } from './marketplaceTools.js';
 import type { ToolDefinition } from '../types.js';
 
 /**
@@ -38,4 +42,6 @@ export const allTools: ToolDefinition[] = [
   ...skillTools,
   ...ruleTools,
   ...commandTools,
+  ...hookTools,
+  ...marketplaceTools,
 ];
