@@ -676,6 +676,80 @@ export const previewAgentTool: ToolDefinition = {
 };
 
 /**
+ * Get chat URL for testing an agent
+ */
+export const getAgentChatUrlTool: ToolDefinition = {
+  tool: {
+    name: 'get_agent_chat_url',
+    description: 'Get the chat URL for a specific agent. Use this after creating an agent to give the user a link to start testing it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentId: {
+          type: 'string',
+          description: 'Agent ID',
+        },
+        projectPath: {
+          type: 'string',
+          description: 'Optional project path to open with the agent',
+        },
+      },
+      required: ['agentId'],
+    },
+  },
+  handler: async (params): Promise<McpToolCallResult> => {
+    try {
+      const agentId = params.agentId as string;
+      const projectPath = params.projectPath as string | undefined;
+
+      const agents = agentStorage.getAllAgents();
+      const agent = agents.find((a) => a.id === agentId);
+      if (!agent) {
+        return {
+          content: [{ type: 'text', text: `Agent "${agentId}" not found` }],
+          isError: true,
+        };
+      }
+
+      let url = `/chat/${agentId}`;
+      if (projectPath) {
+        url += `?project=${encodeURIComponent(projectPath)}`;
+      }
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              {
+                agentId,
+                agentName: agent.name,
+                chatUrl: url,
+                fullUrl: `http://localhost:4201${url}`,
+                message: `Open this URL to start chatting with "${agent.name}": ${url}`,
+              },
+              null,
+              2
+            ),
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error getting agent chat URL: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  },
+  requiredPermissions: ['agents:read'],
+};
+
+/**
  * All agent tools
  */
 export const agentTools: ToolDefinition[] = [
@@ -686,4 +760,5 @@ export const agentTools: ToolDefinition[] = [
   createAgentTool,
   deleteAgentTool,
   previewAgentTool,
+  getAgentChatUrlTool,
 ];

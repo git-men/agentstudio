@@ -156,7 +156,7 @@ export const getSkillTool: ToolDefinition = {
 export const createSkillTool: ToolDefinition = {
   tool: {
     name: 'create_skill',
-    description: 'Create a new skill with SKILL.md content',
+    description: 'Create a new skill with SKILL.md content. Supports multi-file skill packages via additionalFiles.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -181,6 +181,24 @@ export const createSkillTool: ToolDefinition = {
           items: { type: 'string' },
           description: 'List of tools this skill can use',
         },
+        additionalFiles: {
+          type: 'array',
+          description: 'Additional files for multi-file skill packages (e.g. reference docs, scripts)',
+          items: {
+            type: 'object',
+            properties: {
+              relativePath: {
+                type: 'string',
+                description: 'File path relative to skill directory, e.g. "reference/guide.md"',
+              },
+              content: {
+                type: 'string',
+                description: 'File content',
+              },
+            },
+            required: ['relativePath', 'content'],
+          },
+        },
       },
       required: ['name', 'description', 'content'],
     },
@@ -192,6 +210,7 @@ export const createSkillTool: ToolDefinition = {
       const content = params.content as string;
       const scope = (params.scope as 'user' | 'project') || 'user';
       const allowedTools = params.allowedTools as string[] | undefined;
+      const additionalFiles = params.additionalFiles as Array<{ relativePath: string; content: string }> | undefined;
 
       if (!name || !description || !content) {
         return {
@@ -200,12 +219,24 @@ export const createSkillTool: ToolDefinition = {
         };
       }
 
+      const mappedFiles = additionalFiles?.map((f) => {
+        const ext = f.relativePath.split('.').pop()?.toLowerCase() || '';
+        const type = ext === 'md' ? 'markdown' : ext === 'sh' || ext === 'js' || ext === 'ts' ? 'script' : 'text';
+        return {
+          name: f.relativePath.split('/').pop() || f.relativePath,
+          path: f.relativePath,
+          type: type as 'markdown' | 'text' | 'script' | 'template' | 'other',
+          content: f.content,
+        };
+      });
+
       const result = await skillStorage.createSkill({
         name,
         description,
         content,
         scope,
         allowedTools,
+        additionalFiles: mappedFiles,
       });
 
       if (!result.success) {
@@ -287,6 +318,24 @@ export const updateSkillTool: ToolDefinition = {
           items: { type: 'string' },
           description: 'Updated allowed tools list',
         },
+        additionalFiles: {
+          type: 'array',
+          description: 'Additional files to add/update in the skill package',
+          items: {
+            type: 'object',
+            properties: {
+              relativePath: {
+                type: 'string',
+                description: 'File path relative to skill directory',
+              },
+              content: {
+                type: 'string',
+                description: 'File content',
+              },
+            },
+            required: ['relativePath', 'content'],
+          },
+        },
       },
       required: ['skillId', 'scope'],
     },
@@ -308,6 +357,19 @@ export const updateSkillTool: ToolDefinition = {
       if (params.description !== undefined) updates.description = params.description;
       if (params.content !== undefined) updates.content = params.content;
       if (params.allowedTools !== undefined) updates.allowedTools = params.allowedTools;
+      if (params.additionalFiles !== undefined) {
+        const rawFiles = params.additionalFiles as Array<{ relativePath: string; content: string }>;
+        updates.additionalFiles = rawFiles.map((f) => {
+          const ext = f.relativePath.split('.').pop()?.toLowerCase() || '';
+          const type = ext === 'md' ? 'markdown' : ext === 'sh' || ext === 'js' || ext === 'ts' ? 'script' : 'text';
+          return {
+            name: f.relativePath.split('/').pop() || f.relativePath,
+            path: f.relativePath,
+            type: type as 'markdown' | 'text' | 'script' | 'template' | 'other',
+            content: f.content,
+          };
+        });
+      }
 
       const result = await skillStorage.updateSkill(skillId, scope, updates as any);
 

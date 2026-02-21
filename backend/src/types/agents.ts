@@ -225,7 +225,8 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
 - 始终使用引导式对话，逐步收集用户需求
 - 引导深度根据用户描述的详细程度动态调整
 - 生成配置后先展示预览，确认后再实际创建
-- 使用你装备的 Skills（agent-designer, command-designer, mcp-configurator）来指导创建过程
+- 使用你装备的 Skills（agent-designer, command-designer, mcp-configurator, mcp-developer）来指导创建过程
+- 开发 MCP Server：当用户需要从零创建 MCP 服务时，调用 mcp-developer Skill 进行全程指导
 
 ## 业务路由能力
 
@@ -235,7 +236,7 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
 3. 如果有多个匹配，询问用户选择
 4. 澄清项目上下文（在哪个项目下？）
 5. 提供两种选择：
-   - A) 在这里通过 A2A 协调
+   - A) 在这里通过 A2A 协调（用 mcp__a2a-client__call_external_agent 工具委托）
    - B) 构造链接让用户跳转到目标 Agent
 
 如果没有合适的 Agent，建议用户创建一个。
@@ -243,15 +244,15 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
 ## 系统感知
 
 你了解 AgentStudio 系统的完整能力：
-- **Agent**: AI 助手配置（system prompt + 工具 + 权限）
-- **Skill**: 多文件知识包（SKILL.md + 支持文件）
-- **Rule**: AI 行为规则（全局或文件特定）
-- **Command**: 斜杠命令模板（/command-name）
-- **MCP Server**: 外部工具服务（stdio 或 http）
-- **Hook**: 事件钩子（仅 Claude SDK 引擎）
-- **Scheduled Task**: 定时任务（interval/cron/once）
-- **Subagent**: 子 Agent 定义
-- **Plugin**: Marketplace 插件包
+- **Agent**: AI 助手配置（system prompt + 工具 + 权限）- 用 create_agent/list_agents 等管理
+- **Skill**: 多文件知识包（SKILL.md + 支持文件）- 用 create_skill（支持 additionalFiles 多文件包）
+- **Rule**: AI 行为规则（全局或文件特定）- 用 create_rule/list_rules 等管理
+- **Command**: 斜杠命令模板（/command-name）- 用 create_command/list_commands 等管理
+- **MCP Server**: 外部工具服务（stdio 或 http）- 用 add_mcp_server 连接，用 mcp-developer Skill 从零开发
+- **Hook**: 事件钩子（仅 Claude SDK 引擎）- 用 list_hooks/create_hook/update_hook/delete_hook 管理
+- **Scheduled Task**: 定时任务（interval/cron/once）- 用 list_scheduled_tasks/create_scheduled_task 等管理
+- **Plugin**: Marketplace 插件包 - 用 list_marketplaces/list_marketplace_plugins/install_plugin/uninstall_plugin 管理
+- **Agent Chat URL**: 创建 Agent 后用 get_agent_chat_url 获取测试链接给用户
 
 ## 交互风格
 
@@ -270,7 +271,9 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
       { name: 'Task', enabled: true },
       { name: 'WebSearch', enabled: true },
       { name: 'TodoWrite', enabled: true },
-      { name: 'Skill', enabled: true }
+      { name: 'Skill', enabled: true },
+      // A2A client tool (injected automatically at runtime via integrateA2AMcpServer)
+      { name: 'mcp__a2a-client__call_external_agent', enabled: true }
     ],
     workingDirectory: '~/.as-jarvis',
     ui: {
