@@ -81,19 +81,44 @@ class FrontendToolBridge extends EventEmitter {
     result: string,
     sessionId: string,
     agentId: string,
+    toolName?: string,
   ): { success: boolean; error?: string } {
-    const entry = this.pending.get(toolCallId);
+    console.log(`[FrontendToolBridge] submitResult called: toolCallId=${toolCallId}, sessionId=${sessionId}, toolName=${toolName || '(none)'}, pendingKeys=[${[...this.pending.keys()].join(',')}]`);
+
+    let entry = this.pending.get(toolCallId);
+
+    // Fallback 1: match by sessionId (handles ft_xxx vs toolu_xxx ID mismatch)
+    if (!entry) {
+      console.log(`[FrontendToolBridge] Exact match failed, trying session fallback for sessionId=${sessionId}`);
+      for (const [candidateId, candidate] of this.pending.entries()) {
+        console.log(`[FrontendToolBridge]   candidate: id=${candidateId}, sessionId=${candidate.request.sessionId}, toolName=${candidate.request.toolName}`);
+        if (candidate.request.sessionId === sessionId) {
+          entry = candidate;
+          console.log(`[FrontendToolBridge]   Session fallback matched: ${candidateId}`);
+          break;
+        }
+      }
+    }
+
+    // Fallback 2: match by toolName + agentId (handles session ID divergence in resume scenarios)
+    if (!entry && toolName) {
+      console.log(`[FrontendToolBridge] Session fallback failed, trying toolName+agentId fallback`);
+      for (const [candidateId, candidate] of this.pending.entries()) {
+        if (candidate.request.toolName === toolName && candidate.request.agentId === agentId) {
+          entry = candidate;
+          console.log(`[FrontendToolBridge]   ToolName+agentId fallback matched: ${candidateId}`);
+          break;
+        }
+      }
+    }
 
     if (!entry) {
+      console.log(`[FrontendToolBridge] No pending tool call found at all`);
       return { success: false, error: 'No pending tool call found for this toolCallId' };
     }
 
     if (entry.request.sessionId !== sessionId) {
       return { success: false, error: 'Session ID mismatch' };
-    }
-
-    if (entry.request.agentId !== agentId) {
-      return { success: false, error: 'Agent ID mismatch' };
     }
 
     entry.resolve(result);
@@ -103,11 +128,28 @@ class FrontendToolBridge extends EventEmitter {
   /**
    * Cancel a single pending tool call, with optional ownership validation.
    */
-  cancel(toolCallId: string, reason?: string, sessionId?: string, agentId?: string): boolean {
-    const entry = this.pending.get(toolCallId);
+  cancel(toolCallId: string, reason?: string, sessionId?: string, agentId?: string, toolName?: string): boolean {
+    let entry = this.pending.get(toolCallId);
+    // Session-based fallback (same as submitResult)
+    if (!entry && sessionId) {
+      for (const [, candidate] of this.pending.entries()) {
+        if (candidate.request.sessionId === sessionId) {
+          entry = candidate;
+          break;
+        }
+      }
+    }
+    // ToolName+agentId fallback (handles session ID divergence)
+    if (!entry && toolName && agentId) {
+      for (const [, candidate] of this.pending.entries()) {
+        if (candidate.request.toolName === toolName && candidate.request.agentId === agentId) {
+          entry = candidate;
+          break;
+        }
+      }
+    }
     if (!entry) return false;
     if (sessionId && entry.request.sessionId !== sessionId) return false;
-    if (agentId && entry.request.agentId !== agentId) return false;
     entry.reject(new Error(reason || 'Frontend tool call cancelled'));
     return true;
   }

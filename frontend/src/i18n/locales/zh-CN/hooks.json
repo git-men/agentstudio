@@ -18,8 +18,14 @@
       "eventType": "事件类型",
       "actionType": "动作类型",
       "scope": "作用域",
+      "source": "来源",
       "enabled": "启用",
       "actions": "操作"
+    },
+    "source": {
+      "manual": "手动",
+      "managed": "Marketplace",
+      "managedByMarketplace": "由 Marketplace 管理，请通过插件页面操作"
     },
     "filters": {
       "scope": "作用域",

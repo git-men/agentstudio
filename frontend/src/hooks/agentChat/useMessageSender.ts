@@ -11,7 +11,7 @@ import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
 import type { AGUIEvent } from '../../types/aguiTypes';
-import { getAllSchemas, getToolRender } from '../../services/frontendToolRegistry.js';
+import { getAllSchemas, isFrontendToolName, extractFrontendToolShortName } from '../../services/frontendToolRegistry.js';
 
 export interface UseMessageSenderProps {
   agent: AgentConfig;
@@ -403,32 +403,25 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               break;
               
             case 'TOOL_CALL_START': {
-              const isFrontend = !!getToolRender(event.toolName);
+              const isFrontend = isFrontendToolName(event.toolName);
               currentToolCalls.set(event.toolCallId, {
                 name: event.toolName,
                 args: '',
                 isFrontendTool: isFrontend,
               });
-              if (isFrontend) {
-                // Frontend tools are handled via pendingFrontendTools, not message parts
-                break;
-              }
-              // Ensure we have an assistant message to add tool to
+              // All tools (including frontend tools) get a tool part for UI rendering
               let stateForTool = useAgentStore.getState();
               let lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
               
-              // If no assistant message exists, create one first
               if (!lastMsgForTool || lastMsgForTool.role !== 'assistant') {
                 addMessage({
                   role: 'assistant',
                   content: '',
                 });
-                // Refresh state after adding message
                 stateForTool = useAgentStore.getState();
                 lastMsgForTool = stateForTool.messages[stateForTool.messages.length - 1];
               }
               
-              // Add tool part to current message
               if (lastMsgForTool && lastMsgForTool.role === 'assistant') {
                 addToolPartToMessage(lastMsgForTool.id, {
                   toolName: event.toolName,
@@ -443,18 +436,16 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
             case 'TOOL_CALL_ARGS': {
               const toolCall = currentToolCalls.get(event.toolCallId);
               if (toolCall) {
-                toolCall.args += event.args;
-                if (!toolCall.isFrontendTool) {
-                  try {
-                    const toolInput = JSON.parse(toolCall.args);
-                    const stateForArgs = useAgentStore.getState();
-                    const lastMsgForArgs = stateForArgs.messages[stateForArgs.messages.length - 1];
-                    if (lastMsgForArgs && lastMsgForArgs.role === 'assistant') {
-                      updateToolPartInMessage(lastMsgForArgs.id, event.toolCallId, { toolInput });
-                    }
-                  } catch {
-                    // Args not complete yet
+                toolCall.args += (event.args ?? '');
+                try {
+                  const toolInput = JSON.parse(toolCall.args);
+                  const stateForArgs = useAgentStore.getState();
+                  const lastMsgForArgs = stateForArgs.messages[stateForArgs.messages.length - 1];
+                  if (lastMsgForArgs && lastMsgForArgs.role === 'assistant') {
+                    updateToolPartInMessage(lastMsgForArgs.id, event.toolCallId, { toolInput });
                   }
+                } catch {
+                  // Args not complete yet (incremental JSON)
                 }
               }
               break;
@@ -462,33 +453,33 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               
             case 'TOOL_CALL_END': {
               const completedTool = currentToolCalls.get(event.toolCallId);
-              if (completedTool?.isFrontendTool) {
-                // Frontend tool: parse accumulated args → add to pending frontend tools
-                let parsedArgs: Record<string, unknown> = {};
-                try { parsedArgs = JSON.parse(completedTool.args); } catch { /* use empty */ }
-                console.log(`[AGUI] Frontend tool call: ${completedTool.name} (${event.toolCallId})`);
+              if (!completedTool) break;
+
+              // Parse final args and update tool part for ALL tools
+              let parsedArgs: Record<string, unknown> = {};
+              try { parsedArgs = JSON.parse(completedTool.args); } catch { /* use empty */ }
+
+              const stateForEnd = useAgentStore.getState();
+              const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
+              if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
+                updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, {
+                  toolInput: parsedArgs,
+                  // Frontend tools stay "executing" until the user submits
+                  isExecuting: completedTool.isFrontendTool,
+                });
+              }
+
+              // Frontend tools: also register as pending so the UI becomes interactive
+              if (completedTool.isFrontendTool) {
+                const shortName = extractFrontendToolShortName(completedTool.name);
+                console.log(`[AGUI] Frontend tool ready: ${shortName} (${event.toolCallId})`);
                 useAgentStore.getState().addPendingFrontendTool({
                   toolCallId: event.toolCallId,
-                  toolName: completedTool.name,
+                  toolName: shortName,
                   args: parsedArgs,
                   sessionId: currentSessionId || '',
                   agentId: '',
                 });
-              } else if (completedTool) {
-                try {
-                  const toolInput = JSON.parse(completedTool.args);
-                  const stateForEnd = useAgentStore.getState();
-                  const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
-                  if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
-                    updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, { toolInput, isExecuting: false });
-                  }
-                } catch {
-                  const stateForEnd = useAgentStore.getState();
-                  const lastMsgForEnd = stateForEnd.messages[stateForEnd.messages.length - 1];
-                  if (lastMsgForEnd && lastMsgForEnd.role === 'assistant') {
-                    updateToolPartInMessage(lastMsgForEnd.id, event.toolCallId, { isExecuting: false });
-                  }
-                }
               }
               break;
             }

@@ -37,6 +37,8 @@ export interface PluginComponent {
   path: string;
   relativePath: string;
   description?: string;
+  /** Raw hook package entry data, populated for type === 'hook'. */
+  hookData?: import('./platformHooks').HookPackageEntry;
 }
 
 export interface ParsedPlugin {

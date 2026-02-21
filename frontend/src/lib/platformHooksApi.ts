@@ -44,6 +44,13 @@ export interface WebhookAction {
 
 export type HookAction = ShellAction | ScriptAction | WebhookAction;
 
+export interface HookSource {
+  type: 'marketplace' | 'manual';
+  marketplace?: string;
+  plugin?: string;
+  installPath?: string;
+}
+
 export interface PlatformHook {
   id: string;
   name: string;
@@ -61,6 +68,7 @@ export interface PlatformHook {
   createdAt: string;
   updatedAt: string;
   async?: boolean;
+  source?: HookSource;
 }
 
 export type HookDecisionType = 'allow' | 'block' | 'rewrite';

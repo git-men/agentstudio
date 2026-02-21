@@ -181,6 +181,12 @@ export const HOOKS_DIR = join(AGENTSTUDIO_HOME, 'hooks');
 export const GLOBAL_HOOKS_FILE = join(HOOKS_DIR, 'global-hooks.json');
 
 /**
+ * Directory for marketplace-installed hook scripts (symlinked).
+ * Default: ~/.agentstudio/hooks/scripts
+ */
+export const HOOKS_SCRIPTS_DIR = join(HOOKS_DIR, 'scripts');
+
+/**
  * Get the hooks file path for a specific project.
  * Default: ~/.agentstudio/hooks/projects/<projectId>/hooks.json
  */

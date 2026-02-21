@@ -11,6 +11,7 @@ import {
   Trash2,
   Play,
   RefreshCw,
+  Package,
 } from 'lucide-react';
 import {
   Table,
@@ -131,6 +132,7 @@ export const HookList: React.FC<HookListProps> = ({ filters, onFiltersChange, on
                 <TableHead>{t('list.columns.eventType')}</TableHead>
                 <TableHead>{t('list.columns.actionType')}</TableHead>
                 <TableHead>{t('list.columns.scope')}</TableHead>
+                <TableHead>{t('list.columns.source', '来源')}</TableHead>
                 <TableHead>{t('list.columns.enabled')}</TableHead>
                 <TableHead className="text-right">{t('list.columns.actions')}</TableHead>
               </TableRow>
@@ -138,6 +140,7 @@ export const HookList: React.FC<HookListProps> = ({ filters, onFiltersChange, on
             <TableBody>
               {filteredHooks.map(hook => {
                 const category = hook.event.split('.')[0];
+                const isMarketplace = hook.source?.type === 'marketplace';
                 return (
                   <TableRow key={hook.id}>
                     <TableCell>
@@ -177,6 +180,19 @@ export const HookList: React.FC<HookListProps> = ({ filters, onFiltersChange, on
                       </span>
                     </TableCell>
                     <TableCell>
+                      {isMarketplace ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-300"
+                          title={`${hook.source!.marketplace}/${hook.source!.plugin}`}
+                        >
+                          <Package className="w-3 h-3" />
+                          {hook.source!.plugin}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">{t('list.source.manual', '手动')}</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Switch
                         checked={hook.enabled}
                         onCheckedChange={(checked) => toggleMutation.mutate({ id: hook.id, enabled: checked })}
@@ -186,24 +202,35 @@ export const HookList: React.FC<HookListProps> = ({ filters, onFiltersChange, on
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <HookTestButton hook={hook} />
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => onEdit(hook)}
-                          aria-label={t('actions.edit')}
-                          className="h-8 w-8"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setDeletingHook(hook)}
-                          aria-label={t('actions.delete')}
-                          className="h-8 w-8 text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {isMarketplace ? (
+                          <span
+                            className="text-xs text-gray-400 px-2"
+                            title={t('list.source.managedByMarketplace', '由 Marketplace 管理')}
+                          >
+                            {t('list.source.managed', 'Marketplace')}
+                          </span>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onEdit(hook)}
+                              aria-label={t('actions.edit')}
+                              className="h-8 w-8"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDeletingHook(hook)}
+                              aria-label={t('actions.delete')}
+                              className="h-8 w-8 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

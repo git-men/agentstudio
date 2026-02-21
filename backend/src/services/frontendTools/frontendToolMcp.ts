@@ -77,11 +77,15 @@ function buildMcpToolHandler(
     toolDef.description,
     (zodSchema as z.ZodObject<any>).shape,
     async (args: Record<string, unknown>, context: unknown) => {
+      const ctx = context as Record<string, any> | undefined;
       const toolCallId =
-        (context as any)?.toolUseId ||
+        ctx?._meta?.['claudecode/toolUseId'] ||
+        ctx?.toolUseId ||
         `ft_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
 
       const currentSessionId = sessionRef.current;
+
+      console.log(`[FrontendToolMcp] Tool "${toolDef.name}" called, toolCallId=${toolCallId}, sessionId=${currentSessionId}, ctxMeta=${JSON.stringify(ctx?._meta)}, ctxToolUseId=${ctx?.toolUseId}`);
 
       try {
         const result = await frontendToolBridge.waitForResult(

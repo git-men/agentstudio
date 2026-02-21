@@ -52,6 +52,15 @@ export interface WebhookAction {
 
 export type HookAction = ShellAction | ScriptAction | WebhookAction;
 
+// ─── Hook Source (provenance tracking) ───────────────────────────────────────
+
+export interface HookSource {
+  type: 'marketplace' | 'manual';
+  marketplace?: string;
+  plugin?: string;
+  installPath?: string;
+}
+
 // ─── Hook Configuration ─────────────────────────────────────────────────────
 
 export interface PlatformHook {
@@ -71,6 +80,33 @@ export interface PlatformHook {
   createdAt: string;
   updatedAt: string;
   async?: boolean;
+  source?: HookSource;
+}
+
+// ─── Marketplace Hook Package ───────────────────────────────────────────────
+
+export interface HookPackageBinding {
+  agents: string[];
+}
+
+export interface HookPackageEntry {
+  name: string;
+  description?: string;
+  event: string;
+  action: HookAction;
+  scope?: 'global' | 'project' | 'agent';
+  binding?: HookPackageBinding;
+  filter?: HookFilter;
+  timeout?: number;
+  failurePolicy?: 'ignore' | 'warn' | 'abort';
+  priority?: number;
+  enabled?: boolean;
+  async?: boolean;
+}
+
+export interface HookPackageFile {
+  version: string;
+  hooks: HookPackageEntry[];
 }
 
 // ─── Execution ──────────────────────────────────────────────────────────────

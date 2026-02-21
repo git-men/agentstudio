@@ -25,7 +25,12 @@ interface CollectLogsProps {
 }
 
 function CollectLogs({ limit, levels, onSubmit }: CollectLogsProps) {
+  const submittedRef = React.useRef(false);
+
   useEffect(() => {
+    if (submittedRef.current) return;
+    submittedRef.current = true;
+
     const allLogs = getCapturedLogs(limit);
     const filtered = levels
       ? allLogs.filter(e => levels.includes(e.level))
@@ -36,11 +41,10 @@ function CollectLogs({ limit, levels, onSubmit }: CollectLogsProps) {
       logs: filtered,
       capturedAt: new Date().toISOString(),
     });
-    // Run once on mount — no deps needed
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return null; // no visible UI in the chat
+  return null;
 }
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────

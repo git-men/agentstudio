@@ -18,8 +18,14 @@
       "eventType": "Event Type",
       "actionType": "Action Type",
       "scope": "Scope",
+      "source": "Source",
       "enabled": "Enabled",
       "actions": "Actions"
+    },
+    "source": {
+      "manual": "Manual",
+      "managed": "Marketplace",
+      "managedByMarketplace": "Managed by Marketplace — use the Plugins page to modify"
     },
     "filters": {
       "scope": "Scope",

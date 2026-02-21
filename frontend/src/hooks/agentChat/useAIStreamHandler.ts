@@ -6,7 +6,7 @@ import { useSubAgentStore } from '../../stores/useSubAgentStore';
 import { tabManager } from '../../utils/tabManager';
 import { eventBus, EVENTS } from '../../utils/eventBus';
 import type { StreamingBlock } from '../../types/index.js';
-import { getToolRender } from '../../services/frontendToolRegistry';
+import { isFrontendToolName, extractFrontendToolShortName } from '../../services/frontendToolRegistry';
 
 /**
  * Container for managing streaming state
@@ -106,8 +106,6 @@ export const useAIStreamHandler = ({
   // 🎯 Track sub-agent stream block IDs for delta updates
   const subAgentStreamBlocksRef = useRef<Map<string, string>>(new Map());
 
-  // Track in-progress frontend tool call arg accumulation (TOOL_CALL_START→ARGS→END)
-  const pendingFrontendToolArgsRef = useRef<Map<string, { toolName: string; argChunks: string }>>(new Map());
 
   // T023: Track active streaming blocks (character-by-character streaming)
   const streamingStateRef = useRef<StreamingState>({
@@ -518,12 +516,14 @@ export const useAIStreamHandler = ({
             const streamingBlock: StreamingBlock = {
               blockId,
               type: 'tool_use',
-              content: '',  // Will store partial JSON string
+              content: '',
               isComplete: false,
               messageId: aiMessageIdRef.current,
-              partId,  // Store the tool part ID for updates
+              partId,
               startedAt: currentTime,
               lastUpdatedAt: currentTime,
+              toolName: contentBlock.name,
+              claudeId: contentBlock.id,
             };
             streamingStateRef.current.activeBlocks.set(blockId, streamingBlock);
             console.log('🔧 [STREAMING] content_block_start: ✅ Initialized tool_use block', contentBlock.name, 'blockId:', blockId, 'partId:', partId, 'claudeId:', contentBlock.id);
@@ -735,8 +735,7 @@ export const useAIStreamHandler = ({
               updateThinkingPartInMessage(aiMessageIdRef.current, streamingBlock.partId, streamingBlock.content);
             }
           } else if (streamingBlock.type === 'tool_use' && streamingBlock.partId && streamingBlock.content) {
-            // ⚡ CRITICAL: Final parse of accumulated tool input JSON when block stops
-            // This ensures the complete tool parameters are saved even if they weren't parseable during streaming
+            // Final parse of accumulated tool input JSON when block stops
             console.log(`🔧 [STREAMING] content_block_stop: Finalizing tool_use block ${blockId}, accumulated JSON length: ${streamingBlock.content.length}`);
             try {
               const toolInput = JSON.parse(streamingBlock.content);
@@ -744,6 +743,21 @@ export const useAIStreamHandler = ({
                 toolInput,
               });
               console.log(`🔧 [STREAMING] content_block_stop: Successfully parsed final tool input for ${blockId}`);
+
+              // If this is a frontend tool, register it as pending so the UI becomes interactive.
+              // The frontend identifies frontend tools by name — no extra server event needed.
+              if (streamingBlock.toolName && streamingBlock.claudeId && isFrontendToolName(streamingBlock.toolName)) {
+                const shortName = extractFrontendToolShortName(streamingBlock.toolName);
+                console.log(`🔧 [STREAMING] content_block_stop: Frontend tool ready: ${shortName} (${streamingBlock.claudeId})`);
+                addPendingFrontendTool({
+                  toolCallId: streamingBlock.claudeId,
+                  toolName: shortName,
+                  args: toolInput,
+                  sessionId: (eventData.sessionId as string) ?? (eventData.session_id as string) ?? '',
+                  agentId: (eventData.agentId as string) ?? '',
+                  timestamp: Date.now(),
+                });
+              }
             } catch (e) {
               console.error(`🔧 [STREAMING] content_block_stop: Failed to parse final tool JSON for ${blockId}:`, e, 'content:', streamingBlock.content.substring(0, 200));
             }
@@ -987,46 +1001,6 @@ export const useAIStreamHandler = ({
       // 添加 compactSummary 到消息
       addCompactSummaryPartToMessage(aiMessageIdRef.current, tokenInfo);
 
-      return;
-    }
-
-    // Handle standard TOOL_CALL events for frontend tools.
-    // The backend now sends TOOL_CALL_START/ARGS/END instead of the legacy
-    // 'frontend_tool_call' event. We identify frontend tools by checking the
-    // client-side registry — same approach as CopilotKit / AG-UI spec.
-    if (eventData.type === 'TOOL_CALL_START') {
-      const toolCallId = eventData.toolCallId as string;
-      const toolCallName = (eventData.toolCallName ?? eventData.toolName) as string;
-      if (toolCallId && toolCallName && getToolRender(toolCallName)) {
-        // Track this as a pending frontend tool call; args arrive in TOOL_CALL_ARGS
-        pendingFrontendToolArgsRef.current.set(toolCallId, { toolName: toolCallName, argChunks: '' });
-      }
-      return;
-    }
-    if (eventData.type === 'TOOL_CALL_ARGS') {
-      const toolCallId = eventData.toolCallId as string;
-      const pending = pendingFrontendToolArgsRef.current.get(toolCallId);
-      if (pending) {
-        pending.argChunks += (eventData.delta ?? '') as string;
-      }
-      return;
-    }
-    if (eventData.type === 'TOOL_CALL_END') {
-      const toolCallId = eventData.toolCallId as string;
-      const pending = pendingFrontendToolArgsRef.current.get(toolCallId);
-      if (pending) {
-        pendingFrontendToolArgsRef.current.delete(toolCallId);
-        let parsedArgs: Record<string, unknown> = {};
-        try { parsedArgs = JSON.parse(pending.argChunks); } catch { /* use empty */ }
-        addPendingFrontendTool({
-          toolCallId,
-          toolName: pending.toolName,
-          args: parsedArgs,
-          sessionId: (eventData.sessionId as string) ?? '',
-          agentId: (eventData.agentId as string) ?? '',
-          timestamp: Date.now(),
-        });
-      }
       return;
     }
 

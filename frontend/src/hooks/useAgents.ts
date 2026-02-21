@@ -143,19 +143,10 @@ export const useAgentSessions = (agentId: string, searchTerm?: string, projectPa
 
 // Get agent session messages
 // Backend determines engine type from its startup config — no need to pass engine from frontend.
-export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string) => {
-  console.log('🎣 useAgentSessionMessages hook called:', {
-    agentId,
-    sessionId,
-    projectPath,
-    enabled: !!agentId && !!sessionId
-  });
-
+export const useAgentSessionMessages = (agentId: string, sessionId: string | null, projectPath?: string, paused?: boolean) => {
   return useQuery({
     queryKey: ['agent-session-messages', agentId, sessionId, projectPath],
     queryFn: async () => {
-      console.log('🎣 Fetching session messages for:', { agentId, sessionId, projectPath });
-
       if (!sessionId) {
         return { messages: [] };
       }
@@ -165,33 +156,30 @@ export const useAgentSessionMessages = (agentId: string, sessionId: string | nul
         url.searchParams.set('projectPath', projectPath);
       }
 
-      console.log('🎣 Fetching from URL:', url.toString());
-
       const response = await authFetch(url.toString());
 
       if (!response.ok) {
-        console.error('🎣 Fetch failed:', response.status, response.statusText);
         throw new Error('Failed to fetch agent session messages');
       }
 
       const data = await response.json();
 
-      console.log('🎣 Raw API response:', { messageCount: data.messages?.length });
-
-      // Convert timestamps from number to Date objects to match ChatMessage interface
       const convertedMessages = data.messages.map((msg: any) => ({
         ...msg,
         timestamp: new Date(msg.timestamp)
       }));
-
-      console.log('🎣 Converted messages:', { messageCount: convertedMessages.length });
 
       return {
         ...data,
         messages: convertedMessages
       };
     },
-    enabled: !!agentId && !!sessionId
+    // Disable the query entirely while streaming to prevent any fetches
+    // from returning stale data that could overwrite the live store.
+    enabled: !!agentId && !!sessionId && !paused,
+    staleTime: Infinity,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 };
 

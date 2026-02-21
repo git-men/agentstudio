@@ -88,6 +88,35 @@ export function getToolRender(name: string): FrontendToolRenderFn | null {
 }
 
 /**
+ * Built-in frontend tools that use the bridge/notification mechanism but are
+ * not registered in the dynamic registry (they have dedicated components).
+ */
+const BUILTIN_FRONTEND_TOOLS = new Set(['ask_user_question']);
+
+/**
+ * Parse an MCP tool name (e.g. `mcp__server__tool`) and return the short
+ * tool name portion, or return the input unchanged if it's already short.
+ */
+export function extractFrontendToolShortName(name: string): string {
+  const parts = name.split('__');
+  if (parts.length === 3 && parts[0] === 'mcp') {
+    return parts[2];
+  }
+  return name;
+}
+
+/**
+ * Check whether a tool name refers to a frontend tool (either registered in
+ * the dynamic registry or a known built-in frontend tool).
+ * Accepts both short names (`ask_user_question`) and full MCP names
+ * (`mcp__ask-user-question__ask_user_question`).
+ */
+export function isFrontendToolName(name: string): boolean {
+  const shortName = extractFrontendToolShortName(name);
+  return !!getToolRender(shortName) || BUILTIN_FRONTEND_TOOLS.has(shortName);
+}
+
+/**
  * Return all registered tool schemas (for syncing to the backend).
  */
 export function getAllSchemas(): FrontendToolSchema[] {

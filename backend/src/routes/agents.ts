@@ -1552,6 +1552,7 @@ const FrontendToolResultSchema = z.object({
   isError: z.boolean().optional(),
   sessionId: z.string().min(1, 'sessionId is required'),
   agentId: z.string().min(1, 'agentId is required'),
+  toolName: z.string().optional(),
 });
 
 router.post('/frontend-tool-result', async (req, res) => {
@@ -1561,19 +1562,19 @@ router.post('/frontend-tool-result', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
     }
 
-    const { toolCallId, result: rawResult, isError, sessionId, agentId } = validation.data;
+    const { toolCallId, result: rawResult, isError, sessionId, agentId, toolName } = validation.data;
 
     const resultStr = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
 
     if (isError) {
-      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId);
+      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId, toolName);
       if (cancelOk) {
         return res.json({ success: true });
       }
       return res.status(404).json({ success: false, error: 'No pending tool call found' });
     }
 
-    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId);
+    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId, toolName);
 
     if (outcome.success) {
       res.json({ success: true });
