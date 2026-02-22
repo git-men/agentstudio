@@ -1,28 +1,6 @@
 // Agent configuration types
-import * as fs from 'fs';
-import * as path from 'path';
-import matter from 'gray-matter';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import type { PreSendGuardConfig } from './preSendGuard.js';
-
-/**
- * Load an agent config from a .md file with YAML frontmatter.
- * The markdown body becomes the systemPrompt.
- * Returns null if the file doesn't exist or can't be parsed.
- */
-function loadAgentFromMd(mdPath: string): Partial<AgentConfig> | null {
-  try {
-    const content = fs.readFileSync(mdPath, 'utf-8');
-    const parsed = matter(content);
-    if (!parsed.data || Object.keys(parsed.data).length === 0) return null;
-    return {
-      ...parsed.data as Partial<AgentConfig>,
-      systemPrompt: parsed.content.trim(),
-    };
-  } catch {
-    return null;
-  }
-}
 
 export interface AgentTool {
   name: string;
@@ -225,28 +203,7 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
     enabled: true,
     source: 'local'
   },
-  // meta-agent config is loaded from the .md file at module init time.
-  // Edit: backend/src/builtins/meta-agent-plugin/agents/meta-agent.md
-  ...((): Partial<AgentConfig>[] => {
-    const mdPath = path.join(
-      __dirname,
-      '..', 'builtins', 'meta-agent-plugin', 'agents', 'meta-agent.md'
-    );
-    const loaded = loadAgentFromMd(mdPath);
-    if (loaded) {
-      return [{ ...loaded, source: 'local' as const }];
-    }
-    // Fallback: minimal definition so the agent ID is recognized as builtin
-    console.warn('[BUILTIN_AGENTS] Failed to load meta-agent.md, using minimal fallback');
-    return [{
-      id: 'meta-agent',
-      name: 'Meta Agent',
-      description: '系统配置助手 & 业务路由',
-      permissionMode: 'bypassPermissions' as PermissionMode,
-      maxTurns: undefined,
-      allowedTools: [],
-      enabled: true,
-      source: 'local' as const,
-    }];
-  })(),
+  // meta-agent and other first-party agents are provided via as-marketplace.
+  // They are auto-discovered from the sibling as-marketplace directory and
+  // imported on startup by builtinMarketplaceService.
 ];
