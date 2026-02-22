@@ -199,5 +199,8 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
     tags: ['development', 'code', 'system'],
     enabled: true,
     source: 'local'
-  }
+  },
+  // meta-agent and other first-party agents are provided via as-marketplace.
+  // They are auto-discovered from the sibling as-marketplace directory and
+  // imported on startup by builtinMarketplaceService.
 ];

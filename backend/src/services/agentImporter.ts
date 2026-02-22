@@ -2,16 +2,62 @@
  * Agent Importer Service
  * 
  * Imports AgentStudio-specific agents from marketplaces.
- * These agents are defined in marketplace.json under the 'agents' array
- * and are distinct from Claude Code's plugin agents (which are simple markdown files).
+ * Supports two agent definition formats:
+ * - JSON: traditional agent.json with full AgentConfig fields
+ * - Markdown: agent.md with YAML frontmatter (config) + markdown body (system prompt)
+ *
+ * These agents are distinct from Claude Code's native plugin agents (plain .md files
+ * without frontmatter that get symlinked to ~/.claude/agents/).
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import matter from 'gray-matter';
 import { pluginPaths } from './pluginPaths';
 import { AgentConfig, BUILTIN_AGENTS } from '../types/agents';
 import { MarketplaceManifest, MarketplaceAgent } from '../types/plugins';
 import { AGENTS_DIR } from '../config/paths.js';
+
+/**
+ * Parse an agent definition from a .md file with YAML frontmatter.
+ *
+ * Format:
+ * ```
+ * ---
+ * id: my-agent
+ * name: My Agent
+ * description: ...
+ * permissionMode: acceptEdits
+ * maxTurns: 25
+ * allowedTools:
+ *   - { name: Read, enabled: true }
+ * ui:
+ *   icon: 🤖
+ *   headerTitle: My Agent
+ * ---
+ * System prompt markdown content here...
+ * ```
+ */
+function parseAgentMd(content: string): Partial<AgentConfig> | null {
+  try {
+    const parsed = matter(content);
+    const frontmatter = parsed.data as Record<string, unknown>;
+    const systemPrompt = parsed.content.trim();
+
+    if (!frontmatter || Object.keys(frontmatter).length === 0) {
+      return null;
+    }
+
+    const agentConfig: Partial<AgentConfig> = {
+      ...frontmatter as Partial<AgentConfig>,
+      systemPrompt: systemPrompt || (frontmatter.systemPrompt as string),
+    };
+
+    return agentConfig;
+  } catch {
+    return null;
+  }
+}
 
 // ============================================================================
 // Types
@@ -106,7 +152,19 @@ class AgentImporter {
 
         try {
           const content = fs.readFileSync(agentFilePath, 'utf-8');
-          agentConfig = JSON.parse(content);
+          if (agentFilePath.endsWith('.md')) {
+            // Markdown format: YAML frontmatter + markdown body as system prompt
+            const parsed = parseAgentMd(content);
+            if (!parsed) {
+              return {
+                success: false,
+                error: `Failed to parse agent .md file: no YAML frontmatter found in ${agentFilePath}`,
+              };
+            }
+            agentConfig = parsed;
+          } else {
+            agentConfig = JSON.parse(content);
+          }
         } catch (error) {
           return {
             success: false,
