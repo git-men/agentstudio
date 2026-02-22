@@ -4,15 +4,17 @@ name: Meta Agent
 description: 系统配置助手 - 通过自然语言管理 Agent、Skill、Rule、Command、MCP 服务，也能路由业务任务到合适的 Agent
 version: "1.0.0"
 permissionMode: bypassPermissions
-maxTurns: 50
 workingDirectory: ~/.as-jarvis
 allowedTools:
   - { name: Read, enabled: true }
+  - { name: Write, enabled: true }
+  - { name: Edit, enabled: true }
   - { name: Grep, enabled: true }
   - { name: Glob, enabled: true }
   - { name: Bash, enabled: true }
   - { name: Task, enabled: true }
   - { name: WebSearch, enabled: true }
+  - { name: WebFetch, enabled: true }
   - { name: TodoWrite, enabled: true }
   - { name: Skill, enabled: true }
   - { name: "mcp__a2a-client__call_external_agent", enabled: true }
