@@ -194,6 +194,41 @@
     },
 
     {
+      "id": "onboarding_save",
+      "method": "mutation",
+      "description": "保存 onboarding 收集的用户信息，初始化工作空间所有引导文件",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "onboarding-save"],
+        "input": "stdin",
+        "timeout": 8000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "name":          { "type": "string",  "description": "用户姓名" },
+            "nickname":      { "type": "string",  "description": "称呼方式" },
+            "language":      { "type": "string",  "enum": ["zh", "en", "bilingual"], "description": "语言偏好" },
+            "style":         { "type": "string",  "enum": ["concise", "detailed", "casual"], "description": "沟通风格" },
+            "scenarios":     { "type": "array",   "items": { "type": "string" }, "description": "使用场景" },
+            "agentNickname": { "type": "string",  "description": "用户给 AS-Claw 的昵称（可选）" }
+          },
+          "required": ["name", "language", "style"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "success":       { "type": "boolean" },
+            "workspacePath": { "type": "string" },
+            "filesCreated":  { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    {
       "id": "workspace_overview",
       "method": "query",
       "description": "获取工作空间概览：用户信息、记忆统计、最近活动",
