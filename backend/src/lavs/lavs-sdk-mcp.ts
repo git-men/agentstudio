@@ -49,7 +49,7 @@ function jsonSchemaToZodShape(schema: any): z.ZodRawShape {
     return {};
   }
 
-  const shape: z.ZodRawShape = {};
+  const shape: Record<string, z.ZodTypeAny> = {};
 
   for (const [key, prop] of Object.entries(schema.properties)) {
     const propSchema = prop as any;

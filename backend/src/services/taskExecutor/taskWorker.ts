@@ -92,7 +92,7 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
     addLog('info', 'system', `Permission mode: ${permissionMode}`);
 
     // Extract MCP tools from agent configuration
-    // MCP tools have the format: mcp__serverName__toolName
+    // MCP tools are identified by the naming pattern: mcp__<serverName>__<toolName>
     const mcpTools = agent.allowedTools
       .filter((tool: any) => tool.enabled && tool.name.startsWith('mcp__'))
       .map((tool: any) => tool.name);
@@ -103,16 +103,6 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
 
     // Build query options
     addLog('info', 'system', 'Building query options...');
-
-    // Extract MCP tools from agent configuration
-    // MCP tools are identified by the naming pattern: mcp__<serverName>__<toolName>
-    const mcpTools = agent.allowedTools
-      .filter((tool: any) => tool.enabled && tool.name.startsWith('mcp__'))
-      .map((tool: any) => tool.name);
-
-    if (mcpTools.length > 0) {
-      addLog('info', 'system', `MCP tools found: ${mcpTools.join(', ')}`);
-    }
 
     const { queryOptions } = await buildQueryOptions(
       agent,
