@@ -447,6 +447,201 @@ function cmdWorkspaceOverview() {
 }
 
 // ============================================================================
+// onboarding-save
+// ============================================================================
+
+function cmdOnboardingSave(input) {
+  const {
+    name,
+    nickname      = name,
+    language      = 'zh',
+    style         = 'concise',
+    scenarios     = [],
+    agentNickname = 'AS-Claw',
+  } = input;
+
+  if (!name) {
+    return output({ success: false, error: 'name is required' });
+  }
+
+  try {
+    const workspace   = getWorkspacePath();
+    const memoryDir   = path.join(workspace, 'memory');
+    const todayDate   = today();
+    const filesCreated = [];
+
+    // Ensure directories exist
+    fs.mkdirSync(workspace,  { recursive: true });
+    fs.mkdirSync(memoryDir,  { recursive: true });
+
+    const langLabel   = language === 'zh' ? '中文' : language === 'en' ? '英文' : '双语';
+    const styleLabel  = style === 'concise' ? '简洁直接' : style === 'detailed' ? '详细解释' : '随意轻松';
+    const scenarioStr = scenarios.length > 0 ? scenarios.join(' / ') : '通用';
+
+    // ── USER.md ──
+    const userMd = `# 用户画像
+
+## 基本信息
+- **姓名**：${name}
+- **称呼**：${nickname}
+- **语言偏好**：${langLabel}
+
+## 使用场景
+${scenarioStr}
+
+## 沟通风格偏好
+- **回复风格**：${styleLabel}
+- **格式偏好**：视情况而定
+
+## 已知偏好与习惯
+
+_随对话逐步积累_
+
+## 进行中的项目
+
+_随对话逐步积累_
+
+---
+_最后更新：${todayDate}_
+`;
+    fs.writeFileSync(path.join(workspace, 'USER.md'), userMd, 'utf-8');
+    filesCreated.push('USER.md');
+
+    // ── IDENTITY.md ──
+    const identityMd = `# ${agentNickname} 身份
+
+- **名字**：${agentNickname}
+- **Emoji**：🦞
+- **定位**：记得你的私人 AI 助手
+- **版本**：1.0.0
+- **诞生日期**：${todayDate}
+- **主人**：${name}
+
+---
+_你可以修改名字和 emoji 来个性化你的助手。_
+`;
+    fs.writeFileSync(path.join(workspace, 'IDENTITY.md'), identityMd, 'utf-8');
+    filesCreated.push('IDENTITY.md');
+
+    // ── SOUL.md ──
+    const soulTone = style === 'casual'
+      ? '随意轻松，像老朋友聊天，偶尔用表情'
+      : style === 'detailed'
+      ? '耐心细致，解释清楚，确保用户完全理解'
+      : '亲切简洁，直接回答，不废话';
+
+    const soulMd = `# ${agentNickname} 人格设定
+
+## 身份
+我是 ${agentNickname} 🦞，${name} 的私人 AI 助手。我有记忆，我认识你。
+
+## 性格特点
+- 亲切但有分寸感
+- ${soulTone}
+- 好奇，喜欢了解你在做什么
+- 在恰当时机幽默，但不强迫
+
+## 语气
+- 默认用${langLabel}交流
+- 对话式，像朋友聊天
+- 记住对话内容并自然地引用（"上次你说过..."）
+
+## 边界
+- 不编造用户说过的话
+- 搜不到就直说，不猜测
+- 主动说明"这个我没有记录"
+
+## 记忆习惯
+- 主动记，不等用户要求
+- 日志是流水账，MEMORY.md 是精华
+
+---
+_${name} 可以随时修改这个文件来调整 ${agentNickname} 的性格。_
+`;
+    fs.writeFileSync(path.join(workspace, 'SOUL.md'), soulMd, 'utf-8');
+    filesCreated.push('SOUL.md');
+
+    // ── MEMORY.md ──
+    const memoryMd = `# 长期记忆
+
+> 跨 session 保留的核心事实、偏好和决策。每次 session 开始时自动加载。
+
+## 关于 ${name}
+- 语言偏好：${langLabel}
+- 沟通风格：${styleLabel}
+- 主要使用场景：${scenarioStr}
+
+## 明确偏好
+
+_随对话积累_
+
+## 进行中的项目
+
+_随对话积累_
+
+## 重要决策与结论
+
+_随对话积累_
+
+---
+_最后更新：${todayDate}_
+`;
+    fs.writeFileSync(path.join(workspace, 'MEMORY.md'), memoryMd, 'utf-8');
+    filesCreated.push('MEMORY.md');
+
+    // ── AGENTS.md (operating instructions) ──
+    const agentsMd = `# ${agentNickname} 操作规程
+
+## 记忆文件说明
+
+| 文件 | 作用 |
+|------|------|
+| \`MEMORY.md\` | 精选长期记忆：偏好、决策、持久事实 |
+| \`memory/YYYY-MM-DD.md\` | 每日日志，append-only |
+| \`USER.md\` | 用户画像 |
+| \`SOUL.md\` | ${agentNickname} 人格设定 |
+| \`IDENTITY.md\` | ${agentNickname} 身份 |
+
+## Session 记忆协议
+
+**开始时**：读取 USER.md、SOUL.md、MEMORY.md、今日日志（和昨日）。
+
+**期间**：
+- 用户说"记住"或出现重要偏好 → 立即写入 MEMORY.md
+- 日常上下文 → 追加到今日日志
+
+**结束/冲刷时**：往今日日志追加 \`## Retain\` 摘要（2-5 条）。
+
+## Retain 格式
+
+\`\`\`
+## Retain
+- W @实体: 客观事实
+- B @实体: 我（${agentNickname}）做了/学到了什么
+- O(c=0.85) @实体: 用户偏好/判断
+- S @实体: 总结或观察
+\`\`\`
+
+## 搜索命令
+
+\`\`\`bash
+rg -C 2 "关键词" MEMORY.md memory/ --sort=path 2>/dev/null
+\`\`\`
+
+---
+_此文件由 ${agentNickname} onboarding 自动创建，${name} 可修改。_
+`;
+    fs.writeFileSync(path.join(workspace, 'AGENTS.md'), agentsMd, 'utf-8');
+    filesCreated.push('AGENTS.md');
+
+    output({ success: true, workspacePath: workspace, filesCreated });
+  } catch (e) {
+    err('onboarding-save error: ' + e.message);
+    output({ success: false, error: e.message, workspacePath: getWorkspacePath(), filesCreated: [] });
+  }
+}
+
+// ============================================================================
 // Main
 // ============================================================================
 
@@ -456,12 +651,13 @@ const input   = readInput();
 err(`Command: ${command}, Input keys: ${Object.keys(input).join(', ')}`);
 
 switch (command) {
-  case 'memory-get':        cmdMemoryGet(input);        break;
-  case 'memory-search':     cmdMemorySearch(input);     break;
-  case 'memory-write':      cmdMemoryWrite(input);      break;
-  case 'memory-today':      cmdMemoryToday();           break;
-  case 'list-files':        cmdListFiles(input);        break;
-  case 'workspace-overview': cmdWorkspaceOverview();    break;
+  case 'memory-get':         cmdMemoryGet(input);         break;
+  case 'memory-search':      cmdMemorySearch(input);      break;
+  case 'memory-write':       cmdMemoryWrite(input);       break;
+  case 'memory-today':       cmdMemoryToday();            break;
+  case 'list-files':         cmdListFiles(input);         break;
+  case 'workspace-overview': cmdWorkspaceOverview();      break;
+  case 'onboarding-save':    cmdOnboardingSave(input);    break;
   default:
     err(`Unknown command: ${command}`);
     output({ error: `Unknown command: ${command}` });
