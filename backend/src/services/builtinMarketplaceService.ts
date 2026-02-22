@@ -5,7 +5,8 @@
  * 
  * Sync targets (in priority order):
  * 1. Paths from BUILTIN_MARKETPLACES env var (comma-separated local paths)
- * 2. If not set, falls back to all registered local-type marketplaces
+ * 2. Auto-discovered as-marketplace sibling directory (development convention)
+ * 3. If not set, falls back to all registered local-type marketplaces
  * 
  * Features:
  * - File lock to prevent concurrent sync operations
@@ -105,12 +106,41 @@ function releaseLock(): void {
 // ============================================================================
 
 /**
+ * Auto-discover the as-marketplace directory relative to the running process.
+ * 
+ * Checks multiple candidate locations based on typical development conventions:
+ * - Sibling to the agentstudio project directory
+ * - Relative to compiled dist output
+ * 
+ * Returns the path if found, undefined otherwise.
+ */
+function findDefaultMarketplacePath(): string | undefined {
+  const candidates = [
+    // Development: running from agentstudio/ — as-marketplace is a sibling
+    path.resolve(process.cwd(), '..', 'as-marketplace'),
+    // Running from workspace root
+    path.resolve(process.cwd(), 'as-marketplace'),
+    // From compiled dist/services/ — walk up to agent-studio/ root
+    path.resolve(__dirname, '..', '..', '..', '..', 'as-marketplace'),
+    path.resolve(__dirname, '..', '..', '..', '..', '..', 'as-marketplace'),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Resolve which marketplaces to sync.
  * 
  * Priority:
  * 1. Explicit builtinPaths parameter
  * 2. BUILTIN_MARKETPLACES env var (comma-separated local paths)
- * 3. Fallback: all registered local-type marketplaces
+ * 3. Auto-discovered as-marketplace sibling directory
+ * 4. Fallback: all registered local-type marketplaces
  * 
  * Returns a list of { name, sourcePath? } entries.
  */
@@ -126,7 +156,14 @@ async function resolveMarketplacesToSync(
     }));
   }
 
-  // 2. Fallback: all registered local-type marketplaces
+  // 2. Auto-discover as-marketplace (development convention: sibling directory)
+  const defaultMpPath = findDefaultMarketplacePath();
+  if (defaultMpPath) {
+    console.info(`[BuiltinMarketplaces] Auto-discovered as-marketplace at: ${defaultMpPath}`);
+    return [{ name: 'as-marketplace', sourcePath: defaultMpPath }];
+  }
+
+  // 3. Fallback: all registered local-type marketplaces
   console.info('[BuiltinMarketplaces] No BUILTIN_MARKETPLACES configured, falling back to all registered local marketplaces');
   const allMarketplaces = await pluginScanner.scanMarketplaces();
   const localMarketplaces = allMarketplaces.filter(mp => mp.type === 'local');
