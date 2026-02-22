@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AS-Claw Memory</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg:          #0a0a0f;
+      --bg2:         #12121a;
+      --bg3:         #1a1a26;
+      --bg4:         #22223a;
+      --hover:       #2a2a42;
+      --text:        #e8e8f0;
+      --text2:       #9999b8;
+      --text3:       #5555780;
+      --border:      #252538;
+      --border2:     #302f50;
+      --accent:      #7c6ff7;
+      --accent2:     #9d96ff;
+      --accent-bg:   rgba(124, 111, 247, 0.12);
+      --green:       #10b981;
+      --green-bg:    rgba(16, 185, 129, 0.1);
+      --amber:       #f59e0b;
+      --amber-bg:    rgba(245, 158, 11, 0.1);
+      --red:         #ef4444;
+      --r:           8px;
+      --r2:          12px;
+    }
+
+    html, body { height: 100%; overflow: hidden; background: var(--bg); color: var(--text); }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Segoe UI', sans-serif; font-size: 13px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+
+    /* ===== Layout ===== */
+    .app { height: 100vh; display: grid; grid-template-rows: 52px 1fr; grid-template-columns: 220px 1fr; grid-template-areas: "header header" "sidebar main"; }
+
+    /* ===== Header ===== */
+    .header { grid-area: header; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--bg); }
+    .logo { font-size: 20px; }
+    .header-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .header-sub { font-size: 11px; color: var(--text2); margin-left: 4px; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+    .date-badge { font-size: 11px; color: var(--text2); background: var(--bg3); padding: 3px 8px; border-radius: 20px; border: 1px solid var(--border); }
+
+    /* ===== Search ===== */
+    .search-wrap { display: flex; align-items: center; background: var(--bg3); border: 1px solid var(--border2); border-radius: var(--r); padding: 0 10px; gap: 6px; width: 220px; }
+    .search-icon { color: var(--text2); font-size: 12px; }
+    .search-input { background: none; border: none; outline: none; color: var(--text); font-size: 12px; width: 100%; padding: 6px 0; }
+    .search-input::placeholder { color: var(--text2); }
+
+    /* ===== Sidebar ===== */
+    .sidebar { grid-area: sidebar; overflow-y: auto; border-right: 1px solid var(--border); background: var(--bg2); display: flex; flex-direction: column; }
+    .sidebar-section { padding: 8px 0; }
+    .sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text2); padding: 8px 14px 4px; }
+    .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 6px 14px; cursor: pointer; border-radius: 0; transition: background 120ms; font-size: 12px; color: var(--text2); border-left: 2px solid transparent; }
+    .sidebar-item:hover { background: var(--bg3); color: var(--text); }
+    .sidebar-item.active { background: var(--accent-bg); color: var(--accent2); border-left-color: var(--accent); }
+    .sidebar-item .item-icon { font-size: 13px; width: 16px; flex-shrink: 0; }
+    .sidebar-item .item-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .sidebar-item .item-badge { font-size: 10px; color: var(--text2); flex-shrink: 0; }
+    .item-today { color: var(--green) !important; }
+    .sidebar-divider { height: 1px; background: var(--border); margin: 4px 12px; }
+
+    /* ===== Main ===== */
+    .main { grid-area: main; overflow: hidden; display: flex; flex-direction: column; }
+    .main-header { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+    .file-path { font-size: 12px; font-weight: 500; color: var(--text2); }
+    .file-path span { color: var(--text); }
+    .main-content { flex: 1; overflow-y: auto; padding: 20px; }
+
+    /* ===== Markdown-ish rendering ===== */
+    .md { max-width: 780px; line-height: 1.7; }
+    .md h1 { font-size: 20px; font-weight: 700; color: var(--text); margin: 0 0 16px; letter-spacing: -0.02em; }
+    .md h2 { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .md h3 { font-size: 13px; font-weight: 600; color: var(--text2); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; }
+    .md p { color: var(--text2); margin: 0 0 10px; }
+    .md ul, .md ol { padding-left: 20px; margin: 0 0 10px; }
+    .md li { color: var(--text2); margin: 3px 0; }
+    .md li strong { color: var(--text); }
+    .md code { font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace; font-size: 11.5px; background: var(--bg3); padding: 1px 5px; border-radius: 4px; color: var(--accent2); border: 1px solid var(--border); }
+    .md pre { background: var(--bg3); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; overflow-x: auto; margin: 10px 0; }
+    .md pre code { background: none; border: none; padding: 0; }
+    .md blockquote { border-left: 3px solid var(--accent); padding: 8px 14px; margin: 10px 0; background: var(--accent-bg); border-radius: 0 var(--r) var(--r) 0; }
+    .md blockquote p { color: var(--text2); margin: 0; }
+    .md table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12px; }
+    .md th { background: var(--bg3); padding: 7px 12px; text-align: left; color: var(--text2); font-weight: 600; border-bottom: 1px solid var(--border); }
+    .md td { padding: 6px 12px; border-bottom: 1px solid var(--border); color: var(--text2); }
+    .md tr:hover td { background: var(--bg3); }
+    .md strong { color: var(--text); font-weight: 600; }
+    .md em { color: var(--amber); font-style: italic; }
+    .md hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    /* Retain highlight */
+    .md .retain-section { background: var(--green-bg); border: 1px solid rgba(16,185,129,0.2); border-radius: var(--r); padding: 12px 16px; margin: 12px 0; }
+    .md .retain-line-w  { color: var(--text2); }
+    .md .retain-line-b  { color: #60a5fa; }
+    .md .retain-line-o  { color: var(--amber); }
+    .md .retain-line-s  { color: var(--text2); font-style: italic; }
+
+    /* ===== Search Results ===== */
+    .search-results { max-width: 780px; }
+    .search-results-header { margin-bottom: 16px; }
+    .search-results-title { font-size: 14px; font-weight: 600; }
+    .search-results-count { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .result-card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 10px; overflow: hidden; }
+    .result-file { padding: 8px 14px; background: var(--bg3); border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text2); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .result-file:hover { color: var(--accent2); }
+    .result-file .line-num { color: var(--accent); font-family: monospace; }
+    .result-lines { padding: 10px 14px; }
+    .result-line { font-size: 12px; font-family: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace; padding: 1px 0; color: var(--text2); }
+    .result-line.match { color: var(--text); background: var(--accent-bg); margin: 2px -14px; padding: 2px 14px; }
+    .result-line .highlight { color: var(--accent2); font-weight: 600; background: rgba(124,111,247,0.15); border-radius: 2px; padding: 0 2px; }
+
+    /* ===== States ===== */
+    .loading { display: flex; align-items: center; justify-content: center; height: 120px; gap: 8px; color: var(--text2); font-size: 12px; }
+    .spinner { width: 16px; height: 16px; border: 2px solid var(--border2); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 160px; gap: 8px; color: var(--text2); }
+    .empty-icon { font-size: 32px; opacity: 0.4; }
+    .empty-text { font-size: 13px; }
+    .empty-sub { font-size: 11px; opacity: 0.6; }
+
+    /* ===== Scrollbars ===== */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg4); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--border2); }
+
+    /* ===== Scope selector ===== */
+    .scope-bar { display: flex; gap: 4px; padding: 10px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .scope-btn { padding: 3px 10px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--text2); cursor: pointer; font-size: 11px; transition: all 120ms; }
+    .scope-btn:hover { border-color: var(--border2); color: var(--text); }
+    .scope-btn.active { background: var(--accent-bg); border-color: var(--accent); color: var(--accent2); }
+
+    /* ===== Stats strip ===== */
+    .stats-strip { display: flex; gap: 12px; padding: 8px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+    .stat-item { font-size: 11px; color: var(--text2); }
+    .stat-value { color: var(--text); font-weight: 600; }
+  </style>
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Header -->
+  <header class="header">
+    <span class="logo">🦞</span>
+    <span class="header-title">AS-Claw Memory</span>
+    <span class="header-sub" id="userLabel"></span>
+    <div class="header-right">
+      <span class="date-badge" id="todayBadge"></span>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input class="search-input" id="searchInput" type="text" placeholder="搜索记忆..." autocomplete="off">
+      </div>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-section">
+      <div class="sidebar-label">核心</div>
+      <div class="sidebar-item" data-file="MEMORY.md" onclick="openFile('MEMORY.md')">
+        <span class="item-icon">🧠</span><span class="item-text">MEMORY.md</span>
+      </div>
+      <div class="sidebar-item" data-file="__today__" id="todayItem" onclick="openToday()">
+        <span class="item-icon item-today">📅</span><span class="item-text item-today">今日日志</span>
+      </div>
+      <div class="sidebar-item" data-file="USER.md" onclick="openFile('USER.md')">
+        <span class="item-icon">👤</span><span class="item-text">USER.md</span>
+      </div>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-label">每日日志</div>
+      <div id="dailyList"></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Stats strip (shown when overview) -->
+    <div class="stats-strip" id="statsStrip" style="display:none">
+      <span class="stat-item">日志 <span class="stat-value" id="statLogs">-</span> 天</span>
+      <span class="stat-item">MEMORY.md <span class="stat-value" id="statLines">-</span> 行</span>
+      <span class="stat-item">今日 <span class="stat-value" id="statToday">-</span></span>
+    </div>
+
+    <!-- Scope bar (shown during search) -->
+    <div class="scope-bar" id="scopeBar" style="display:none">
+      <button class="scope-btn active" data-scope="all" onclick="setScope('all')">全部</button>
+      <button class="scope-btn" data-scope="memory_md" onclick="setScope('memory_md')">MEMORY.md</button>
+      <button class="scope-btn" data-scope="recent_7" onclick="setScope('recent_7')">近7天</button>
+      <button class="scope-btn" data-scope="recent_30" onclick="setScope('recent_30')">近30天</button>
+      <button class="scope-btn" data-scope="daily" onclick="setScope('daily')">所有日志</button>
+    </div>
+
+    <div class="main-header" id="mainHeader">
+      <span class="file-path">选择左侧文件查看内容</span>
+    </div>
+    <div class="main-content" id="mainContent">
+      <div class="loading" id="initialLoading">
+        <div class="spinner"></div>
+        <span>加载工作空间...</span>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // =====================================================================
+  // State
+  // =====================================================================
+  let S = {
+    overview: null,
+    files: [],
+    currentFile: null,
+    currentContent: '',
+    searchQuery: '',
+    searchScope: 'all',
+    searchResults: null,
+    loading: false,
+    searchDebounce: null,
+  };
+
+  // =====================================================================
+  // API
+  // =====================================================================
+  function agentId() { return window.LAVS_AGENT_ID || 'as-claw'; }
+  function apiBase() { return '/api/agents/' + agentId() + '/lavs'; }
+
+  async function call(endpoint, input) {
+    const h = { 'Content-Type': 'application/json' };
+    const t = localStorage.getItem('jwt') || localStorage.getItem('auth_token') || '';
+    if (t) h['Authorization'] = 'Bearer ' + t;
+    const r = await fetch(apiBase() + '/' + endpoint, {
+      method: 'POST', headers: h, body: JSON.stringify(input || {}),
+    });
+    if (!r.ok) throw new Error('API Error: ' + r.status);
+    const d = await r.json();
+    return d.result !== undefined ? d.result : d;
+  }
+
+  // =====================================================================
+  // Init
+  // =====================================================================
+  async function init() {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    document.getElementById('todayBadge').textContent = todayStr;
+    document.getElementById('todayItem').querySelector('.item-text').textContent =
+      '今日 · ' + todayStr.slice(5);
+
+    try {
+      const [overview, files] = await Promise.all([
+        call('workspace_overview', {}),
+        call('list_memory_files', { limit: 60 }),
+      ]);
+      S.overview = overview;
+      S.files = Array.isArray(files) ? files : [];
+
+      if (overview.user?.name) {
+        document.getElementById('userLabel').textContent = '· ' + overview.user.name;
+      }
+
+      renderStats(overview.stats);
+      renderSidebar(S.files);
+
+      document.getElementById('initialLoading').style.display = 'none';
+
+      // Auto-open today's log or MEMORY.md
+      if (overview.stats?.todayExists) {
+        await openToday();
+      } else {
+        await openFile('MEMORY.md');
+      }
+    } catch(e) {
+      document.getElementById('initialLoading').innerHTML =
+        '<span style="color:#ef4444">加载失败: ' + e.message + '</span>';
+    }
+  }
+
+  // =====================================================================
+  // Sidebar
+  // =====================================================================
+  function renderStats(stats) {
+    if (!stats) return;
+    document.getElementById('statsStrip').style.display = 'flex';
+    document.getElementById('statLogs').textContent = stats.dailyLogCount || 0;
+    document.getElementById('statLines').textContent = stats.memoryMdLines || 0;
+    document.getElementById('statToday').textContent = stats.todayExists ? '✓ 已记录' : '未记录';
+  }
+
+  function renderSidebar(files) {
+    const daily = files.filter(f => f.type === 'daily');
+    const list  = document.getElementById('dailyList');
+    list.innerHTML = daily.map(f => {
+      const label = f.isToday
+        ? `<span class="item-today">${f.date}</span>`
+        : f.date;
+      const preview = f.preview ? f.preview.slice(0, 28) : '';
+      return `<div class="sidebar-item" data-file="${f.file}" onclick="openFile('${f.file}')">
+        <span class="item-icon">${f.isToday ? '📅' : '📄'}</span>
+        <span class="item-text">${label}</span>
+        <span class="item-badge">${formatSize(f.size)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  function formatSize(bytes) {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + 'B';
+    return (bytes / 1024).toFixed(1) + 'K';
+  }
+
+  function setActiveFile(file) {
+    document.querySelectorAll('.sidebar-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.file === file);
+    });
+  }
+
+  // =====================================================================
+  // File Open
+  // =====================================================================
+  async function openFile(file) {
+    S.currentFile = file;
+    S.searchResults = null;
+    clearSearch();
+    setActiveFile(file);
+    showFileHeader(file);
+    showLoading();
+
+    try {
+      const result = await call('memory_get', { file });
+      S.currentContent = result.content || '';
+      renderMarkdown(S.currentContent, file, result);
+    } catch(e) {
+      showError(e.message);
+    }
+  }
+  window.openFile = openFile;
+
+  async function openToday() {
+    try {
+      const result = await call('memory_today', {});
+      S.currentFile = result.file;
+      S.searchResults = null;
+      clearSearch();
+      setActiveFile('__today__');
+      setActiveFile(result.file);
+      showFileHeader(result.file);
+
+      if (result.exists) {
+        S.currentContent = result.content;
+        renderMarkdown(result.content, result.file, { lines: result.content.split('\n').length });
+      } else {
+        document.getElementById('mainContent').innerHTML =
+          `<div class="empty">
+            <span class="empty-icon">📅</span>
+            <span class="empty-text">今日尚无日志记录</span>
+            <span class="empty-sub">与 AS-Claw 对话后，它会自动创建今日日志</span>
+          </div>`;
+      }
+    } catch(e) {
+      showError(e.message);
+    }
+  }
+  window.openToday = openToday;
+
+  function showFileHeader(file) {
+    const parts  = file.split('/');
+    const isMain = parts.length === 1;
+    document.getElementById('scopeBar').style.display = 'none';
+    document.getElementById('mainHeader').innerHTML =
+      `<span class="file-path">
+        ${isMain ? '' : '<span>' + parts.slice(0, -1).join('/') + '</span> / '}
+        <span>${parts[parts.length - 1]}</span>
+      </span>`;
+  }
+
+  // =====================================================================
+  // Markdown Renderer (lightweight, no deps)
+  // =====================================================================
+  function renderMarkdown(text, file, meta) {
+    const mc = document.getElementById('mainContent');
+    if (!text || !text.trim()) {
+      mc.innerHTML = '<div class="empty"><span class="empty-icon">📄</span><span class="empty-text">文件为空</span></div>';
+      return;
+    }
+
+    const lines = text.split('\n');
+    let html = '';
+    let inCode = false;
+    let inRetain = false;
+    let codeLang = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i];
+
+      // Code block fences
+      if (line.startsWith('```')) {
+        if (!inCode) {
+          inCode = true;
+          codeLang = line.slice(3).trim();
+          html += `<pre><code class="lang-${escHtml(codeLang)}">`;
+        } else {
+          inCode = false;
+          html += '</code></pre>';
+        }
+        continue;
+      }
+      if (inCode) { html += escHtml(line) + '\n'; continue; }
+
+      // Retain section tracking
+      if (line.startsWith('## Retain')) {
+        inRetain = true;
+        html += `<div class="retain-section"><h2>✅ Retain</h2>`;
+        continue;
+      }
+      if (inRetain && line.startsWith('## ') && !line.startsWith('## Retain')) {
+        html += '</div>';
+        inRetain = false;
+      }
+
+      // Headings
+      if (line.startsWith('# '))  { html += `<h1>${md(line.slice(2))}</h1>`; continue; }
+      if (line.startsWith('## ')) { html += `<h2>${md(line.slice(3))}</h2>`; continue; }
+      if (line.startsWith('### ')){ html += `<h3>${md(line.slice(4))}</h3>`; continue; }
+
+      // HR
+      if (/^-{3,}$|^\*{3,}$/.test(line.trim())) { html += '<hr>'; continue; }
+
+      // Blockquote
+      if (line.startsWith('> ')) {
+        html += `<blockquote><p>${md(line.slice(2))}</p></blockquote>`;
+        continue;
+      }
+
+      // Retain lines
+      if (inRetain && line.startsWith('- ')) {
+        const content = line.slice(2);
+        let cls = 'retain-line-b';
+        if (content.startsWith('W ')) cls = 'retain-line-w';
+        else if (content.startsWith('O(')) cls = 'retain-line-o';
+        else if (content.startsWith('S ')) cls = 'retain-line-s';
+        html += `<li class="${cls}">${md(content)}</li>`;
+        continue;
+      }
+
+      // Lists
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        html += `<li>${md(line.slice(2))}</li>`;
+        continue;
+      }
+      if (/^\d+\. /.test(line)) {
+        html += `<li>${md(line.replace(/^\d+\. /, ''))}</li>`;
+        continue;
+      }
+
+      // Table (basic)
+      if (line.includes('|') && line.trim().startsWith('|')) {
+        if (lines[i+1] && lines[i+1].includes('---')) {
+          html += '<table><thead><tr>';
+          line.split('|').filter((_,j,a) => j > 0 && j < a.length-1).forEach(c => {
+            html += `<th>${md(c.trim())}</th>`;
+          });
+          html += '</tr></thead><tbody>';
+          i += 1; continue;
+        } else if (lines[i-1] && lines[i-1].includes('---')) {
+          html += '<tr>';
+          line.split('|').filter((_,j,a) => j > 0 && j < a.length-1).forEach(c => {
+            html += `<td>${md(c.trim())}</td>`;
+          });
+          html += '</tr>';
+          continue;
+        }
+      }
+
+      // Blank line
+      if (!line.trim()) { html += '<br>'; continue; }
+
+      // Paragraph
+      html += `<p>${md(line)}</p>`;
+    }
+
+    if (inRetain) html += '</div>';
+
+    mc.innerHTML = `<div class="md">${html}</div>`;
+  }
+
+  // Inline markdown: bold, italic, code, @entity highlight
+  function md(text) {
+    return escHtml(text)
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      .replace(/@([\w\u4e00-\u9fa5-]+)/g, '<span style="color:var(--accent2);font-weight:600">@$1</span>')
+      .replace(/O\(c=([\d.]+)\)/g, '<span style="color:var(--amber)">O(c=$1)</span>');
+  }
+
+  function escHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // =====================================================================
+  // Search
+  // =====================================================================
+  const searchInput = document.getElementById('searchInput');
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim();
+    S.searchQuery = q;
+    clearTimeout(S.searchDebounce);
+    if (!q) { cancelSearch(); return; }
+    S.searchDebounce = setTimeout(() => doSearch(q), 350);
+  });
+
+  searchInput.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { cancelSearch(); searchInput.value = ''; }
+  });
+
+  function cancelSearch() {
+    S.searchResults = null;
+    S.searchQuery = '';
+    document.getElementById('scopeBar').style.display = 'none';
+    if (S.currentFile) openFile(S.currentFile);
+  }
+
+  function clearSearch() {
+    // don't clear input if user is typing
+    if (!S.searchQuery) searchInput.value = '';
+  }
+
+  async function doSearch(q) {
+    if (!q) return;
+    document.getElementById('scopeBar').style.display = 'flex';
+    document.getElementById('mainHeader').innerHTML =
+      `<span class="file-path">搜索 <span>"${escHtml(q)}"</span></span>`;
+    showLoading();
+
+    try {
+      const result = await call('memory_search', {
+        query: q,
+        context: 2,
+        scope: S.searchScope,
+        maxResults: 30,
+      });
+      S.searchResults = result;
+      renderSearchResults(result, q);
+    } catch(e) {
+      showError(e.message);
+    }
+  }
+
+  function renderSearchResults(data, q) {
+    const mc = document.getElementById('mainContent');
+    const results = data.results || [];
+
+    if (!results.length) {
+      mc.innerHTML = `<div class="empty">
+        <span class="empty-icon">🔍</span>
+        <span class="empty-text">未找到匹配项</span>
+        <span class="empty-sub">尝试使用不同关键词或扩大搜索范围</span>
+      </div>`;
+      return;
+    }
+
+    // Group by file
+    const byFile = new Map();
+    for (const r of results) {
+      if (!byFile.has(r.file)) byFile.set(r.file, []);
+      byFile.get(r.file).push(r);
+    }
+
+    let html = `<div class="search-results">
+      <div class="search-results-header">
+        <div class="search-results-title">搜索结果</div>
+        <div class="search-results-count">${results.length} 处匹配，来自 ${byFile.size} 个文件</div>
+      </div>`;
+
+    for (const [file, matches] of byFile) {
+      html += `<div class="result-card">
+        <div class="result-file" onclick="openFile('${escHtml(file)}')">
+          <span>📄 ${escHtml(file)}</span>
+          <span style="margin-left:auto;color:var(--accent)">${matches.length} 处</span>
+        </div>
+        <div class="result-lines">`;
+
+      for (const m of matches) {
+        const highlighted = escHtml(m.content)
+          .replace(new RegExp(escRegex(escHtml(q)), 'gi'),
+            s => `<span class="highlight">${s}</span>`);
+        html += `<div class="result-line match">
+          <span style="color:var(--text3);margin-right:8px;font-size:10px">${m.line}</span>${highlighted}
+        </div>`;
+      }
+
+      html += '</div></div>';
+    }
+
+    html += '</div>';
+    mc.innerHTML = html;
+  }
+
+  function escRegex(s) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function setScope(scope) {
+    S.searchScope = scope;
+    document.querySelectorAll('.scope-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.scope === scope);
+    });
+    if (S.searchQuery) doSearch(S.searchQuery);
+  }
+  window.setScope = setScope;
+
+  // =====================================================================
+  // Loading / Error
+  // =====================================================================
+  function showLoading() {
+    document.getElementById('mainContent').innerHTML =
+      '<div class="loading"><div class="spinner"></div><span>加载中...</span></div>';
+  }
+
+  function showError(msg) {
+    document.getElementById('mainContent').innerHTML =
+      `<div class="empty"><span class="empty-icon">⚠️</span><span class="empty-text">${escHtml(msg)}</span></div>`;
+  }
+
+  // =====================================================================
+  // Boot
+  // =====================================================================
+  init();
+})();
+</script>
+</body>
+</html>
