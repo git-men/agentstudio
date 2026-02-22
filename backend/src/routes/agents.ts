@@ -755,7 +755,9 @@ router.post('/chat', async (req, res) => {
         });
 
         if (evalResult.decision === 'block') {
-          return res.status(403).json({
+          // 422 Unprocessable Entity: request is well-formed but content violates policy
+          // (403 would imply an authorization/permission issue, which is semantically wrong here)
+          return res.status(422).json({
             error: 'Message blocked by hook interceptor',
             decision: 'block',
             reason: evalResult.reason,

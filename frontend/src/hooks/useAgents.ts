@@ -256,6 +256,19 @@ export const useAgentChat = () => {
         });
 
         if (!response.ok) {
+          // Try to read structured error body before throwing a generic error
+          let blockReason: string | undefined;
+          try {
+            const body = await response.json();
+            if (body.decision === 'block') {
+              blockReason = body.reason;
+            }
+          } catch {
+            // ignore JSON parse errors — fall through to generic error
+          }
+          if (blockReason !== undefined) {
+            throw new Error(`hook_block:${blockReason}`);
+          }
           throw new Error(`Agent chat request failed: ${response.status} ${response.statusText}`);
         }
 

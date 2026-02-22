@@ -1584,6 +1584,9 @@ export const useAIStreamHandler = ({
         errorMessage = t('agentChatPanel.errors.rateLimit');
       } else if (error.message.includes('unauthorized') || error.message.includes('401')) {
         errorMessage = t('agentChatPanel.errors.unauthorized');
+      } else if (error.message.startsWith('hook_block:')) {
+        const reason = error.message.slice('hook_block:'.length);
+        errorMessage = `🛡️ **${t('agentChatPanel.errors.contentBlocked')}**\n\n${reason}`;
       } else if (error.message.includes('forbidden') || error.message.includes('403')) {
         errorMessage = t('agentChatPanel.errors.forbidden');
       } else if (error.message.includes('500') || error.message.includes('internal server')) {
