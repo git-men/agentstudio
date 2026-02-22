@@ -243,7 +243,7 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
       name: 'Meta Agent',
       description: '系统配置助手 & 业务路由',
       permissionMode: 'bypassPermissions' as PermissionMode,
-      maxTurns: 50,
+      maxTurns: undefined,
       allowedTools: [],
       enabled: true,
       source: 'local' as const,
