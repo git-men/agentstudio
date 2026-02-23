@@ -112,7 +112,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
             if (isThinkingContent) {
               // Extract thinking content from the serialized data
               let thinkingText = part.content;
-              
+
               // Try to parse if it looks like JSON and extract thinking content
               try {
                 if (part.content.includes('"thinking":')) {
@@ -125,9 +125,9 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 // If parsing fails, use the original content
                 console.warn('Failed to parse thinking content:', e);
               }
-              
+
               return (
-                <details key={part.id} className="my-2">
+                <details key={part.id} className="my-2" open>
                   <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
                     💭 思考过程... (历史消息)
                   </summary>
@@ -154,7 +154,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
             );
           } else if (part.type === 'thinking' && part.content) {
             return (
-              <details key={part.id} className="my-2">
+              <details key={part.id} className="my-2" open>
                 <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
                   💭 思考过程...
                 </summary>
