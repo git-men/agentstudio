@@ -9,6 +9,7 @@ import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import { homedir } from 'os';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
@@ -239,7 +240,11 @@ export async function buildQueryOptions(
   if (projectPath) {
     cwd = projectPath;
   } else if (agent.workingDirectory) {
-    cwd = path.resolve(process.cwd(), agent.workingDirectory);
+    // Expand ~ to home directory
+    const resolvedDir = agent.workingDirectory.startsWith('~')
+      ? path.join(homedir(), agent.workingDirectory.slice(1))
+      : agent.workingDirectory;
+    cwd = path.resolve(process.cwd(), resolvedDir);
   }
 
   // Determine permission mode: request > agent config > default
@@ -471,6 +476,14 @@ export async function buildQueryOptions(
   // We use the determined project path or current working directory
   const currentProjectId = projectPath || cwd;
   await integrateA2AMcpServer(queryOptions, currentProjectId, a2aStreamEnabled ?? false);
+
+  // Integrate LAVS SDK MCP server
+  // This automatically registers LAVS endpoints as tools for the agent
+  // Pass projectPath for project-level data isolation
+  if (agent.id) {
+    const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
+    await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
+  }
 
   // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)
   let frontendToolSessionRef: SessionRef | null = null;

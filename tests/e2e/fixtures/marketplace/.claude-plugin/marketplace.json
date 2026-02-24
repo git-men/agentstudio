@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "name": "E2E Test Marketplace",
+    "version": "1.0.0",
+    "description": "Self-contained fixture marketplace for E2E tests. Not tied to any external service.",
+    "owner": {
+      "name": "AgentStudio E2E Team"
+    }
+  },
+  "plugins": [
+    {
+      "name": "content-safety",
+      "source": "./plugins/content-safety",
+      "description": "Content safety interceptor for E2E testing",
+      "version": "0.1.0",
+      "author": {
+        "name": "AgentStudio Platform Team"
+      }
+    }
+  ]
+}

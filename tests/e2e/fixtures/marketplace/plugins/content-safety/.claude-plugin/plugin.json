@@ -1,0 +1,9 @@
+{
+  "name": "content-safety",
+  "version": "0.1.0",
+  "description": "Content safety interceptor — checks user messages against a configurable safety API before they reach the AI engine.",
+  "author": {
+    "name": "AgentStudio Platform Team"
+  },
+  "keywords": ["security", "content-safety", "moderation", "interceptor"]
+}

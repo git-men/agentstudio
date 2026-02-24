@@ -132,6 +132,12 @@ export type AdminPermission =
   | 'system:write'
   | 'scheduled-tasks:read'
   | 'scheduled-tasks:write'
+  | 'skills:read'
+  | 'skills:write'
+  | 'rules:read'
+  | 'rules:write'
+  | 'commands:read'
+  | 'commands:write'
   | 'admin:*';
 
 // =============================================================================

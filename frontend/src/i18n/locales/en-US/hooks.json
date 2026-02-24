@@ -1,0 +1,210 @@
+{
+  "page": {
+    "title": "Hooks",
+    "description": "Automate workflows by triggering actions on platform events"
+  },
+  "tabs": {
+    "hooks": "Hooks",
+    "history": "Execution History"
+  },
+  "list": {
+    "emptyState": {
+      "title": "No hooks configured",
+      "description": "Create your first hook to automate workflows when events occur.",
+      "action": "Create Hook"
+    },
+    "columns": {
+      "name": "Name",
+      "eventType": "Event Type",
+      "actionType": "Action Type",
+      "scope": "Scope",
+      "source": "Source",
+      "enabled": "Enabled",
+      "actions": "Actions"
+    },
+    "source": {
+      "manual": "Manual",
+      "managed": "Marketplace",
+      "managedByMarketplace": "Managed by Marketplace — use the Plugins page to modify"
+    },
+    "filters": {
+      "scope": "Scope",
+      "eventCategory": "Event Category",
+      "allScopes": "All Scopes",
+      "allCategories": "All Categories",
+      "project": "Project",
+      "selectProject": "Select project..."
+    }
+  },
+  "form": {
+    "createTitle": "Create Hook",
+    "editTitle": "Edit Hook",
+    "name": "Name",
+    "namePlaceholder": "e.g. Auto Format on Run End",
+    "description": "Description",
+    "descriptionPlaceholder": "Optional description of what this hook does",
+    "eventType": "Event Type",
+    "eventTypePlaceholder": "Select event type...",
+    "actionType": "Action Type",
+    "scope": "Scope",
+    "scopeGlobal": "Global",
+    "scopeProject": "Project",
+    "scopeAgent": "Agent",
+    "projectId": "Project ID",
+    "projectIdPlaceholder": "e.g. my-project",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "e.g. my-agent",
+    "shell": {
+      "label": "Shell",
+      "command": "Command",
+      "commandPlaceholder": "e.g. npm run format",
+      "cwd": "Working Directory",
+      "cwdPlaceholder": "Optional working directory"
+    },
+    "script": {
+      "label": "Script",
+      "path": "Script Path",
+      "pathPlaceholder": "e.g. /path/to/script.js",
+      "args": "Arguments",
+      "argsPlaceholder": "Comma-separated arguments"
+    },
+    "webhook": {
+      "label": "Webhook",
+      "url": "URL",
+      "urlPlaceholder": "https://example.com/webhook",
+      "method": "HTTP Method",
+      "headers": "Headers (JSON)",
+      "headersPlaceholder": "{\"Content-Type\": \"application/json\"}",
+      "bodyTemplate": "Body Template",
+      "bodyTemplatePlaceholder": "{\"event\": \"{{event.type}}\"}"
+    },
+    "options": {
+      "title": "Execution Options",
+      "timeout": "Timeout (ms)",
+      "failurePolicy": "Failure Policy",
+      "failurePolicyIgnore": "Ignore",
+      "failurePolicyWarn": "Warn",
+      "failurePolicyAbort": "Abort",
+      "priority": "Priority",
+      "priorityHelp": "Lower number = higher priority (0-100)"
+    },
+    "validation": {
+      "nameRequired": "Name is required",
+      "nameTooLong": "Name must be 200 characters or less",
+      "eventRequired": "Event type is required",
+      "commandRequired": "Shell command is required",
+      "scriptPathRequired": "Script path is required",
+      "webhookUrlRequired": "Webhook URL is required",
+      "webhookUrlInvalid": "URL must start with http:// or https://",
+      "projectIdRequired": "Project ID is required for project scope",
+      "agentIdRequired": "Agent ID is required for agent scope",
+      "timeoutRange": "Timeout must be between 1000 and 300000 ms",
+      "priorityRange": "Priority must be between 0 and 100"
+    },
+    "save": "Save",
+    "saving": "Saving...",
+    "cancel": "Cancel"
+  },
+  "actions": {
+    "create": "Create Hook",
+    "edit": "Edit",
+    "delete": "Delete",
+    "test": "Test",
+    "toggle": "Toggle"
+  },
+  "deleteConfirm": {
+    "title": "Delete Hook",
+    "message": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+    "confirm": "Delete",
+    "deleting": "Deleting...",
+    "cancel": "Cancel"
+  },
+  "test": {
+    "running": "Testing...",
+    "success": "Success",
+    "failure": "Failed",
+    "duration": "{{ms}}ms",
+    "exitCode": "Exit code: {{code}}",
+    "httpStatus": "HTTP {{status}}",
+    "timedOut": "Timed out"
+  },
+  "history": {
+    "title": "Execution History",
+    "emptyState": {
+      "title": "No executions yet",
+      "description": "Hook execution records will appear here when hooks are triggered."
+    },
+    "columns": {
+      "hookName": "Hook Name",
+      "eventType": "Event Type",
+      "timestamp": "Timestamp",
+      "duration": "Duration",
+      "status": "Status"
+    },
+    "filters": {
+      "hookName": "Hook Name",
+      "allHooks": "All Hooks",
+      "eventType": "Event Type",
+      "allEvents": "All Events",
+      "status": "Status",
+      "allStatuses": "All Statuses",
+      "success": "Success",
+      "failed": "Failed"
+    },
+    "detail": {
+      "title": "Execution Detail",
+      "output": "Output",
+      "error": "Error",
+      "exitCode": "Exit Code",
+      "httpStatus": "HTTP Status",
+      "timedOut": "Timed Out",
+      "eventData": "Event Data",
+      "noOutput": "No output"
+    },
+    "pagination": {
+      "previous": "Previous",
+      "next": "Next",
+      "showing": "Showing {{from}}-{{to}} of {{total}}"
+    },
+    "timeAgo": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}} min ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    }
+  },
+  "events": {
+    "categories": {
+      "run": "Run",
+      "message": "Message",
+      "tool": "Tool",
+      "task": "Task",
+      "schedule": "Schedule",
+      "system": "System"
+    },
+    "comingSoon": "Coming soon",
+    "phase": "Phase {{phase}}"
+  },
+  "scope": {
+    "global": "Global",
+    "project": "Project",
+    "agent": "Agent"
+  },
+  "actionType": {
+    "shell": "Shell",
+    "script": "Script",
+    "webhook": "Webhook"
+  },
+  "status": {
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "errors": {
+    "loadFailed": "Failed to load hooks",
+    "saveFailed": "Failed to save hook",
+    "deleteFailed": "Failed to delete hook",
+    "testFailed": "Failed to test hook",
+    "serverError": "Server error: {{message}}",
+    "retry": "Retry"
+  }
+}

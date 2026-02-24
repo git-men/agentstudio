@@ -155,8 +155,9 @@ export const ChatPage: React.FC = () => {
   }, [agent, sessionId, setCurrentAgentAndSession]);
 
   // Show project selector if no project path is provided and agent is loaded
+  // Skip for agents with their own workingDirectory (e.g., Meta Agent)
   useEffect(() => {
-    if (agent && !projectPath) {
+    if (agent && !projectPath && !agent.workingDirectory) {
       setShowProjectSelector(true);
     }
   }, [agent, projectPath]);

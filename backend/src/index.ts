@@ -35,6 +35,8 @@ import speechToTextRouter from './routes/speechToText';
 import engineRouter from './routes/engine';
 import rulesRouter from './routes/rules';
 import hooksRouter from './routes/hooks';
+import platformHooksRouter from './routes/platformHooks';
+import lavsRouter from './routes/lavs';
 import { authMiddleware } from './middleware/auth';
 import { callChainMiddleware } from './middleware/callChain';
 import { requestIdMiddleware } from './middleware/requestId';
@@ -420,7 +422,17 @@ const app: express.Express = express();
     console.error('[Tunnel] Error initializing tunnel service:', error);
   }
 
-  // 5. Marketplace Update Service: Initialize background update checker
+  // 5. Platform Hook System
+  console.info('[HookSystem] Initializing platform hook system...');
+  try {
+    const { initHookSystem } = await import('./services/hooks/index.js');
+    await initHookSystem();
+    console.info('[HookSystem] Platform hook system initialized');
+  } catch (error) {
+    console.error('[HookSystem] Error initializing platform hook system:', error);
+  }
+
+  // 6. Marketplace Update Service: Initialize background update checker
   // Default to ENABLED - periodically checks for marketplace updates (especially local type)
   const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES !== 'false'; // Default to true
   console.info('[MarketplaceUpdate] Initializing marketplace update service...');
@@ -566,7 +578,9 @@ const app: express.Express = express();
   });
 
   // Protected routes - Require authentication
-  app.use("/api/files", authMiddleware, filesRouter);
+  app.use('/api/files', authMiddleware, filesRouter);
+  // LAVS routes (under /api/agents) - must come before agentsRouter to handle lavs-specific paths
+  app.use('/api/agents', authMiddleware, lavsRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
   app.use('/api/mcp', authMiddleware, mcpRouter);
   app.use('/api/sessions', authMiddleware, sessionsRouter);
@@ -591,6 +605,7 @@ const app: express.Express = express();
   app.use('/api/engine', engineRouter); // Engine configuration (public, no auth required)
   app.use('/api/rules', authMiddleware, rulesRouter); // Rules management (both Claude and Cursor)
   app.use('/api/hooks', authMiddleware, hooksRouter); // Hooks management (Claude only)
+  app.use('/api/platform-hooks', authMiddleware, platformHooksRouter); // Platform hooks (engine-agnostic)
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 

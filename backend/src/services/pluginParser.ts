@@ -312,21 +312,22 @@ class PluginParser {
       }
     }
 
-    // Parse hooks (hooks/hooks.json)
+    // Parse hooks (hooks/hooks.json) — full HookPackageFile format
     const hooksPath = path.join(pluginPath, 'hooks', 'hooks.json');
     if (fs.existsSync(hooksPath)) {
       try {
         const hooksContent = fs.readFileSync(hooksPath, 'utf-8');
-        const hooks = JSON.parse(hooksContent);
+        const hooksPkg = JSON.parse(hooksContent);
         const relativePath = path.relative(pluginPath, hooksPath);
-        if (hooks.hooks && Array.isArray(hooks.hooks)) {
-          for (const hook of hooks.hooks) {
+        if (hooksPkg.hooks && Array.isArray(hooksPkg.hooks)) {
+          for (const entry of hooksPkg.hooks) {
             components.hooks.push({
               type: 'hook',
-              name: hook.event || 'unknown',
+              name: entry.name || entry.event || 'unknown',
               path: hooksPath,
               relativePath,
-              description: hook.description,
+              description: entry.description,
+              hookData: entry,
             });
           }
         }

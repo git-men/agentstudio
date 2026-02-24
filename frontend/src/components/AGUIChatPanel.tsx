@@ -9,7 +9,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Clock, Plus, RefreshCw, ChevronDown } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
-import { useAgentSessions, useAgentSessionMessages, useInterruptSession } from '../hooks/useAgents';
+import { useAgentSessions, useInterruptSession } from '../hooks/useAgents';
 import { useSessions } from '../hooks/useSessions';
 import { useSessionHeartbeatOnSuccess } from '../hooks/useSessionHeartbeatOnSuccess';
 import { useResponsiveSettings } from '../hooks/useResponsiveSettings';
@@ -95,7 +95,6 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         addMessage,
         interruptAllExecutingTools,
         setAiTyping,
-        loadSessionMessages,
         removePendingFrontendTool,
     } = useAgentStore();
 
@@ -135,10 +134,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         handleCancelDialog
     } = uiState;
 
-    // Session management
+    // Session management (imperative message loading — no react-query)
     const sessionManager = useSessionManager({
         agentId: agent.id,
         currentSessionId,
+        projectPath,
         onSessionChange,
         textareaRef
     });
@@ -152,7 +152,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         setCurrentSessionId,
         handleSwitchSession,
         handleNewSession,
-        handleRefreshMessages
+        handleRefreshMessages,
+        loadMessagesForSession,
     } = sessionManager;
 
     // Image upload hook
@@ -317,7 +318,6 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     const isEngineReady = !!serviceEngineType;
 
     const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath, isEngineReady);
-    const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
     const { data: activeSessionsData } = useSessions();
 
     // Refresh sessions when dropdown opens
@@ -337,16 +337,19 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         hasSuccessfulResponse
     });
 
-    // Load session messages when data arrives
-    // NOTE: Do NOT include isLoadingMessages in deps — it would cause a re-trigger loop
-    // (effect sets isLoadingMessages → dep change → effect re-runs → loadSessionMessages again)
-    // Also skip loading during active streaming to avoid overwriting in-flight messages
+    // Load messages once on mount when a session is already selected (e.g. page
+    // refreshed with ?session=xxx in the URL). Subsequent session switches go
+    // through handleSwitchSession which loads messages imperatively.
+    const initialLoadDoneRef = useRef(false);
     useEffect(() => {
-        if (sessionMessagesData?.messages && currentSessionId && !isAiTyping) {
-            loadSessionMessages(sessionMessagesData.messages);
-            setIsLoadingMessages(false);
+        if (currentSessionId && !initialLoadDoneRef.current && !isAiTyping) {
+            initialLoadDoneRef.current = true;
+            setIsLoadingMessages(true);
+            loadMessagesForSession(currentSessionId).then(() => {
+                setIsLoadingMessages(false);
+            });
         }
-    }, [sessionMessagesData, currentSessionId, loadSessionMessages, isAiTyping, setIsLoadingMessages]);
+    }, [currentSessionId, isAiTyping, loadMessagesForSession, setIsLoadingMessages]);
 
     // Restore model/provider from active session when page refreshes
     useEffect(() => {
@@ -558,6 +561,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
     const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
         try {
+            const pending = pendingFrontendTools.get(toolCallId);
             const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -566,22 +570,26 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     result,
                     sessionId: currentSessionId,
                     agentId: agent.id,
+                    toolName: pending?.toolName,
                 }),
             });
 
             if (!apiResponse.ok) {
                 const err = await apiResponse.json().catch(() => ({}));
+                removePendingFrontendTool(toolCallId);
                 return { success: false, error: err.error || `HTTP ${apiResponse.status}` };
             }
             removePendingFrontendTool(toolCallId);
             return { success: true };
         } catch (error) {
+            removePendingFrontendTool(toolCallId);
             return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
         }
-    }, [currentSessionId, agent.id, removePendingFrontendTool]);
+    }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
 
     const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
         try {
+            const pending = pendingFrontendTools.get(toolCallId);
             await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -591,13 +599,14 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     isError: true,
                     sessionId: currentSessionId,
                     agentId: agent.id,
+                    toolName: pending?.toolName,
                 }),
             });
             removePendingFrontendTool(toolCallId);
         } catch (error) {
             console.warn('[FrontendTools] Cancel failed:', error);
         }
-    }, [currentSessionId, agent.id, removePendingFrontendTool]);
+    }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
 
     // Render messages using existing renderer - matching original chat style
     const renderedMessages = useMemo(() => {

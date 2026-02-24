@@ -7,9 +7,14 @@ import { useAgentStore, type PendingFrontendToolCall } from '../../stores/useAge
 
 const TYPE_SOMETHING_MARKER = '__TYPE_SOMETHING__';
 
+interface SubmitResult {
+  success: boolean;
+  error?: string;
+}
+
 interface AskUserQuestionToolProps {
   execution: BaseToolExecution;
-  onSubmit?: (toolCallId: string, result: unknown) => void;
+  onSubmit?: (toolCallId: string, result: unknown) => Promise<SubmitResult> | void;
 }
 
 export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execution, onSubmit }) => {
@@ -19,6 +24,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
   const [selections, setSelections] = useState<Map<number, string[]>>(new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [customInputs, setCustomInputs] = useState<Map<number, string>>(new Map());
   const inputRefs = useRef<Map<number, HTMLInputElement | null>>(new Map());
 
@@ -142,15 +148,20 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
   const handleSubmit = useCallback(async () => {
     if (!canSubmit || !onSubmit || !matchedPending) return;
     setIsSubmitting(true);
+    setSubmitError(null);
     try {
       const result = formatResponse();
-      await onSubmit(matchedPending.toolCallId, result);
+      const outcome = await onSubmit(matchedPending.toolCallId, result);
+      if (outcome && !outcome.success) {
+        setSubmitError(outcome.error || t('askUserQuestionTool.submitFailed', 'Submit failed'));
+      }
     } catch (error) {
       console.error('[AskUserQuestion] Submit failed:', error);
+      setSubmitError(error instanceof Error ? error.message : t('askUserQuestionTool.submitFailed', 'Submit failed'));
     } finally {
       setIsSubmitting(false);
     }
-  }, [canSubmit, onSubmit, matchedPending, formatResponse]);
+  }, [canSubmit, onSubmit, matchedPending, formatResponse, t]);
 
   if (!questions) {
     return (
@@ -362,14 +373,29 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
           </div>
         )}
 
-        {execution.toolResult && (
+        {execution.toolResult && !execution.isError && (
           <div className="flex items-center space-x-2 text-green-600 py-2">
             <Check className="w-4 h-4" />
             <span className="text-sm font-medium">{t('askUserQuestionTool.completed')}</span>
           </div>
         )}
 
-        {execution.isExecuting && !matchedPending && (
+        {submitError && (
+          <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-lg p-2 mt-1">
+            <div className="flex items-center space-x-2 text-red-600">
+              <MessageSquare className="w-4 h-4" />
+              <span className="text-sm">{submitError}</span>
+            </div>
+            <button
+              onClick={() => { setSubmitError(null); }}
+              className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-100"
+            >
+              {t('askUserQuestionTool.dismiss', 'Dismiss')}
+            </button>
+          </div>
+        )}
+
+        {execution.isExecuting && !matchedPending && !submitError && (
           <div className="flex items-center space-x-2 text-blue-600 py-2">
             <MessageSquare className="w-4 h-4 animate-pulse" />
             <span className="text-sm">{t('askUserQuestionTool.waitingForResponse')}</span>

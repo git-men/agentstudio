@@ -42,24 +42,12 @@ export class SSENotificationChannel implements NotificationChannel {
     return !this.closed && !this.res.destroyed;
   }
 
-  async sendToolInvocation(request: FrontendToolRequest): Promise<boolean> {
-    if (!this.isActive()) return false;
-
-    try {
-      const event = {
-        type: 'frontend_tool_call',
-        toolCallId: request.toolCallId,
-        toolName: request.toolName,
-        args: request.args,
-        agentId: request.agentId,
-        sessionId: request.sessionId,
-        timestamp: Date.now(),
-      };
-      this.res.write(`data: ${JSON.stringify(event)}\n\n`);
-      return true;
-    } catch {
-      return false;
-    }
+  async sendToolInvocation(_request: FrontendToolRequest): Promise<boolean> {
+    // No-op: the frontend now identifies frontend tools directly from the
+    // main AGUI / SDK event stream (by tool name), so a separate notification
+    // channel event is no longer needed. The channel is still kept alive for
+    // session lifecycle management (close → cancel pending bridge calls).
+    return this.isActive();
   }
 
   close(): void {

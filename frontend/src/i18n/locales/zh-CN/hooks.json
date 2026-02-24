@@ -1,0 +1,210 @@
+{
+  "page": {
+    "title": "钩子",
+    "description": "通过平台事件触发自动化工作流"
+  },
+  "tabs": {
+    "hooks": "钩子",
+    "history": "执行历史"
+  },
+  "list": {
+    "emptyState": {
+      "title": "暂无钩子配置",
+      "description": "创建第一个钩子，在事件发生时自动执行操作。",
+      "action": "创建钩子"
+    },
+    "columns": {
+      "name": "名称",
+      "eventType": "事件类型",
+      "actionType": "动作类型",
+      "scope": "作用域",
+      "source": "来源",
+      "enabled": "启用",
+      "actions": "操作"
+    },
+    "source": {
+      "manual": "手动",
+      "managed": "Marketplace",
+      "managedByMarketplace": "由 Marketplace 管理，请通过插件页面操作"
+    },
+    "filters": {
+      "scope": "作用域",
+      "eventCategory": "事件类别",
+      "allScopes": "所有作用域",
+      "allCategories": "所有类别",
+      "project": "项目",
+      "selectProject": "选择项目..."
+    }
+  },
+  "form": {
+    "createTitle": "创建钩子",
+    "editTitle": "编辑钩子",
+    "name": "名称",
+    "namePlaceholder": "例如：运行结束时自动格式化",
+    "description": "描述",
+    "descriptionPlaceholder": "可选的钩子说明",
+    "eventType": "事件类型",
+    "eventTypePlaceholder": "选择事件类型...",
+    "actionType": "动作类型",
+    "scope": "作用域",
+    "scopeGlobal": "全局",
+    "scopeProject": "项目",
+    "scopeAgent": "Agent",
+    "projectId": "项目 ID",
+    "projectIdPlaceholder": "例如：my-project",
+    "agentId": "Agent ID",
+    "agentIdPlaceholder": "例如：my-agent",
+    "shell": {
+      "label": "Shell 命令",
+      "command": "命令",
+      "commandPlaceholder": "例如：npm run format",
+      "cwd": "工作目录",
+      "cwdPlaceholder": "可选的工作目录"
+    },
+    "script": {
+      "label": "脚本",
+      "path": "脚本路径",
+      "pathPlaceholder": "例如：/path/to/script.js",
+      "args": "参数",
+      "argsPlaceholder": "逗号分隔的参数"
+    },
+    "webhook": {
+      "label": "Webhook",
+      "url": "URL",
+      "urlPlaceholder": "https://example.com/webhook",
+      "method": "HTTP 方法",
+      "headers": "请求头 (JSON)",
+      "headersPlaceholder": "{\"Content-Type\": \"application/json\"}",
+      "bodyTemplate": "请求体模板",
+      "bodyTemplatePlaceholder": "{\"event\": \"{{event.type}}\"}"
+    },
+    "options": {
+      "title": "执行选项",
+      "timeout": "超时时间 (毫秒)",
+      "failurePolicy": "失败策略",
+      "failurePolicyIgnore": "忽略",
+      "failurePolicyWarn": "警告",
+      "failurePolicyAbort": "终止",
+      "priority": "优先级",
+      "priorityHelp": "数字越小优先级越高 (0-100)"
+    },
+    "validation": {
+      "nameRequired": "名称不能为空",
+      "nameTooLong": "名称不能超过 200 个字符",
+      "eventRequired": "请选择事件类型",
+      "commandRequired": "Shell 命令不能为空",
+      "scriptPathRequired": "脚本路径不能为空",
+      "webhookUrlRequired": "Webhook URL 不能为空",
+      "webhookUrlInvalid": "URL 必须以 http:// 或 https:// 开头",
+      "projectIdRequired": "项目作用域需要指定项目 ID",
+      "agentIdRequired": "Agent 作用域需要指定 Agent ID",
+      "timeoutRange": "超时时间必须在 1000 到 300000 毫秒之间",
+      "priorityRange": "优先级必须在 0 到 100 之间"
+    },
+    "save": "保存",
+    "saving": "保存中...",
+    "cancel": "取消"
+  },
+  "actions": {
+    "create": "创建钩子",
+    "edit": "编辑",
+    "delete": "删除",
+    "test": "测试",
+    "toggle": "切换"
+  },
+  "deleteConfirm": {
+    "title": "删除钩子",
+    "message": "确定要删除「{{name}}」吗？此操作无法撤销。",
+    "confirm": "删除",
+    "deleting": "删除中...",
+    "cancel": "取消"
+  },
+  "test": {
+    "running": "测试中...",
+    "success": "成功",
+    "failure": "失败",
+    "duration": "{{ms}}ms",
+    "exitCode": "退出码: {{code}}",
+    "httpStatus": "HTTP {{status}}",
+    "timedOut": "已超时"
+  },
+  "history": {
+    "title": "执行历史",
+    "emptyState": {
+      "title": "暂无执行记录",
+      "description": "当钩子被触发执行后，记录将显示在这里。"
+    },
+    "columns": {
+      "hookName": "钩子名称",
+      "eventType": "事件类型",
+      "timestamp": "时间",
+      "duration": "耗时",
+      "status": "状态"
+    },
+    "filters": {
+      "hookName": "钩子名称",
+      "allHooks": "所有钩子",
+      "eventType": "事件类型",
+      "allEvents": "所有事件",
+      "status": "状态",
+      "allStatuses": "所有状态",
+      "success": "成功",
+      "failed": "失败"
+    },
+    "detail": {
+      "title": "执行详情",
+      "output": "输出",
+      "error": "错误",
+      "exitCode": "退出码",
+      "httpStatus": "HTTP 状态码",
+      "timedOut": "已超时",
+      "eventData": "事件数据",
+      "noOutput": "无输出"
+    },
+    "pagination": {
+      "previous": "上一页",
+      "next": "下一页",
+      "showing": "显示 {{from}}-{{to}}，共 {{total}} 条"
+    },
+    "timeAgo": {
+      "justNow": "刚刚",
+      "minutesAgo": "{{count}} 分钟前",
+      "hoursAgo": "{{count}} 小时前",
+      "daysAgo": "{{count}} 天前"
+    }
+  },
+  "events": {
+    "categories": {
+      "run": "运行",
+      "message": "消息",
+      "tool": "工具",
+      "task": "任务",
+      "schedule": "定时",
+      "system": "系统"
+    },
+    "comingSoon": "即将推出",
+    "phase": "阶段 {{phase}}"
+  },
+  "scope": {
+    "global": "全局",
+    "project": "项目",
+    "agent": "Agent"
+  },
+  "actionType": {
+    "shell": "Shell 命令",
+    "script": "脚本",
+    "webhook": "Webhook"
+  },
+  "status": {
+    "enabled": "已启用",
+    "disabled": "已禁用"
+  },
+  "errors": {
+    "loadFailed": "加载钩子失败",
+    "saveFailed": "保存钩子失败",
+    "deleteFailed": "删除钩子失败",
+    "testFailed": "测试钩子失败",
+    "serverError": "服务器错误: {{message}}",
+    "retry": "重试"
+  }
+}

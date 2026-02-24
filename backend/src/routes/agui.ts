@@ -27,6 +27,10 @@ import { sessionEventBus, type SessionEvent } from '../services/sessionEventBus.
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 import { AgentStorage } from '../services/agentStorage.js';
 import { frontendToolBridge, type FrontendToolRequest } from '../services/frontendTools/index.js';
+import { platformEventBus } from '../services/hooks/platformEventBus.js';
+import { mapAguiEventToHookEvent, createSessionCounters } from '../services/hooks/aguiEventMapper.js';
+import { getHookManager } from '../services/hooks/index.js';
+import type { HookEvent } from '../types/platformHooks.js';
 
 // Project storage for resolving project names to paths
 const projectStorage = new ProjectMetadataStorage();
@@ -262,6 +266,9 @@ router.post('/chat', async (req, res) => {
     // execute the hook and emit its events before the run-finished signal.
     let pendingRunFinished: AGUIEvent | null = null;
 
+    // Platform hook system: per-request counters for event enrichment
+    const hookCounters = createSessionCounters();
+
     // AGUI event callback (used by Cursor engine)
     const onAguiEvent = (event: AGUIEvent) => {
       if (isConnectionClosed) return;
@@ -269,6 +276,21 @@ router.post('/chat', async (req, res) => {
       // Extract session ID from RUN_STARTED event
       if (event.type === AGUIEventType.RUN_STARTED && 'threadId' in event) {
         activeSessionId = (event as any).threadId || activeSessionId;
+      }
+
+      // Platform hook system: map AGUI event → HookEvent and emit (fire-and-forget)
+      try {
+        const hookEvent = mapAguiEventToHookEvent(event, {
+          sessionId: activeSessionId || sessionId || 'unknown',
+          projectId: rawWorkspace || undefined,
+          agentId: requestAgentId || undefined,
+          engine: engineType,
+        }, hookCounters);
+        if (hookEvent) {
+          platformEventBus.emit(hookEvent);
+        }
+      } catch (hookErr) {
+        // Never let hook mapping disrupt the SSE stream
       }
 
       // Intercept RUN_FINISHED when an onRunFinished hook is configured
@@ -290,34 +312,85 @@ router.post('/chat', async (req, res) => {
       }
     };
 
-    // Set up bridge listener to forward frontend tool invocations as AGUI CUSTOM events
+    // Forward frontend tool invocations as standard TOOL_CALL events so that
+    // the client distinguishes frontend vs backend tools by name alone.
     const bridgeListener = (request: FrontendToolRequest) => {
       if (isConnectionClosed) return;
       if (activeSessionId && request.sessionId !== activeSessionId) return;
-      onAguiEvent({
-        type: AGUIEventType.CUSTOM,
-        name: 'frontend_tool_call',
-        data: {
-          toolCallId: request.toolCallId,
-          toolName: request.toolName,
-          args: request.args,
-          sessionId: request.sessionId,
-          agentId: request.agentId,
-        },
-        timestamp: Date.now(),
-      });
+      const now = Date.now();
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_START, toolCallId: request.toolCallId, toolName: request.toolName, timestamp: now } as any);
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_ARGS,  toolCallId: request.toolCallId, args: JSON.stringify(request.args), timestamp: now } as any);
+      onAguiEvent({ type: AGUIEventType.TOOL_CALL_END,   toolCallId: request.toolCallId, timestamp: now } as any);
     };
     const hasFrontendTools = frontendTools && frontendTools.length > 0;
     if (hasFrontendTools) {
       frontendToolBridge.on('tool_invocation', bridgeListener);
     }
 
+    // ── Hook Interceptor: message.pre_send ────────────────────────────────
+    let interceptedMessage = message;
+    try {
+      const hookManager = getHookManager();
+      if (hookManager) {
+        const hookEvent: HookEvent = {
+          type: 'message.pre_send',
+          timestamp: new Date().toISOString(),
+          source: 'agui-route',
+          data: {
+            message,
+            images: images || undefined,
+            sender: 'user',
+            channel: 'web',
+          },
+          sessionId: sessionId || undefined,
+          projectId: resolvedWorkspace,
+          agentId: requestAgentId,
+        };
+
+        const evalResult = await hookManager.evaluate(hookEvent);
+        console.log('[HookInterceptor] message.pre_send evaluated (agui):', {
+          decision: evalResult.decision,
+          evaluatedCount: evalResult.evaluatedCount,
+          skippedCount: evalResult.skippedCount,
+          totalDuration: evalResult.totalDuration,
+        });
+
+        if (evalResult.decision === 'block') {
+          // Send a RUN_ERROR event and close the SSE stream
+          if (!isConnectionClosed) {
+            onAguiEvent({
+              type: 'RUN_ERROR' as AGUIEventType.RUN_ERROR,
+              error: evalResult.reason || 'Message blocked by hook interceptor',
+              code: 'HOOK_BLOCKED',
+              timestamp: Date.now(),
+            });
+          }
+          clearInterval(heartbeatInterval);
+          if (hasFrontendTools) {
+            frontendToolBridge.off('tool_invocation', bridgeListener);
+          }
+          if (!isConnectionClosed) {
+            res.end();
+          }
+          return;
+        }
+
+        if (evalResult.rewrittenMessage) {
+          interceptedMessage = evalResult.rewrittenMessage;
+          console.log('[HookInterceptor] Message rewritten by hook interceptor (agui)');
+        }
+      }
+    } catch (hookError) {
+      console.error('[HookInterceptor] Error evaluating message.pre_send hooks (agui):', hookError);
+    }
+    // ── End Hook Interceptor ──────────────────────────────────────────────
+
     try {
       if (engineType === 'cursor' || engineType === 'codebuddy' || engineType === 'codex' || engineType === 'codex-sdk') {
         // Cursor / CodeBuddy / Codex / Codex SDK engines: Use directly via AGUI
         const result = await engineManager.sendMessage(
           engineType,
-          message,
+          interceptedMessage,
           {
             type: engineType,
             workspace: resolvedWorkspace,
@@ -368,7 +441,7 @@ router.post('/chat', async (req, res) => {
           message: 'Please use /api/agents/chat with outputFormat=agui for Claude engine',
           endpoint: '/api/agents/chat',
           params: {
-            message,
+            message: interceptedMessage,
             agentId: 'claude-code',
             sessionId,
             projectPath: resolvedWorkspace,

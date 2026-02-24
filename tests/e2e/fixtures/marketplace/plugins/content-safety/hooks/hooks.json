@@ -1,0 +1,23 @@
+{
+  "version": "1.0.0",
+  "hooks": [
+    {
+      "name": "content-safety-check",
+      "description": "Intercepts user messages before they reach the AI engine. Sends message content to the configured safety API endpoint for moderation. Blocks messages that violate safety policies.",
+      "event": "message.pre_send",
+      "action": {
+        "type": "script",
+        "path": "./scripts/content-safety-check.js",
+        "runtime": "node"
+      },
+      "scope": "agent",
+      "binding": {
+        "agents": ["*"]
+      },
+      "timeout": 10000,
+      "failurePolicy": "warn",
+      "priority": 1,
+      "enabled": true
+    }
+  ]
+}

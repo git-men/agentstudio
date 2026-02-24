@@ -1,17 +1,12 @@
 import { useState, useCallback } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { useAgentStore } from '../../stores/useAgentStore';
-
-/**
- * NOTE: Engine type is now tracked via the store's `selectedEngine` field.
- * Session IDs no longer carry engine-specific prefixes.
- * This function is kept for backward compatibility with old 'cursor-' prefixed sessions
- * but falls back to the current selectedEngine from the store.
- */
+import { authFetch } from '../../lib/authFetch';
+import { API_BASE } from '../../lib/config';
 
 export interface UseSessionManagerProps {
   agentId: string;
   currentSessionId: string | null;
+  projectPath?: string;
   onSessionChange?: (sessionId: string | null) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
@@ -27,85 +22,88 @@ export interface UseSessionManagerReturn {
   handleSwitchSession: (sessionId: string) => void;
   handleNewSession: () => void;
   handleRefreshMessages: () => void;
+  loadMessagesForSession: (sessionId: string) => Promise<void>;
 }
 
 /**
- * Hook for managing session-related state and operations
- * Handles session switching, creation, and message loading
+ * Hook for managing session-related state and operations.
+ *
+ * Message loading is fully imperative (no react-query) to avoid race
+ * conditions between automatic refetches and live-streamed store data.
  */
 export const useSessionManager = ({
   agentId,
   currentSessionId,
+  projectPath,
   onSessionChange,
   textareaRef
 }: UseSessionManagerProps): UseSessionManagerReturn => {
-  const queryClient = useQueryClient();
-  const { setCurrentSessionId, clearMessages } = useAgentStore();
+  const { setCurrentSessionId, clearMessages, loadSessionMessages } = useAgentStore();
 
-  // Session state
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isNewSession, setIsNewSession] = useState(false);
   const [hasSuccessfulResponse, setHasSuccessfulResponse] = useState(false);
 
   /**
-   * Switch to an existing session
-   * Loads messages for the selected session
+   * Imperatively fetch messages for a session and load them into the store.
+   * This is the ONLY path that calls loadSessionMessages, ensuring no
+   * react-query background refetch can overwrite live-streamed data.
    */
-  const handleSwitchSession = useCallback((sessionId: string) => {
-    // Engine type is already tracked in the store's selectedEngine field.
-    // No longer inferred from session ID prefix.
-    // Backward compat: old 'cursor-' prefixed sessions still work (backend strips prefix)
+  const loadMessagesForSession = useCallback(async (sessionId: string) => {
+    try {
+      const url = new URL(`${API_BASE}/sessions/${agentId}/${sessionId}/messages`);
+      if (projectPath) {
+        url.searchParams.set('projectPath', projectPath);
+      }
+      const response = await authFetch(url.toString());
+      if (!response.ok) {
+        console.warn(`[SessionManager] Failed to fetch messages for ${sessionId}: ${response.status}`);
+        return;
+      }
+      const data = await response.json();
+      const converted = (data.messages || []).map((msg: any) => ({
+        ...msg,
+        timestamp: new Date(msg.timestamp),
+      }));
+      loadSessionMessages(converted);
+    } catch (err) {
+      console.warn('[SessionManager] Error fetching messages:', err);
+    }
+  }, [agentId, projectPath, loadSessionMessages]);
+
+  const handleSwitchSession = useCallback(async (sessionId: string) => {
     console.log(`[SessionManager] Switching to session ${sessionId}`);
-    
     setCurrentSessionId(sessionId);
-    // Set loading state for message loading
     setIsLoadingMessages(true);
-    // Reset heartbeat states for resumed session
     setIsNewSession(false);
-    setHasSuccessfulResponse(false); // 恢复会话时重置，等待检查存在性
-    // Update URL with new session ID
+    setHasSuccessfulResponse(false);
     if (onSessionChange) {
       onSessionChange(sessionId);
     }
-    // NOTE: Don't call clearMessages() here — loadSessionMessages will fully replace
-    // the messages array when the new data arrives. Clearing before the query completes
-    // causes an unnecessary flash of empty state.
-    queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, sessionId] });
-  }, [agentId, onSessionChange, setCurrentSessionId, queryClient]);
+    await loadMessagesForSession(sessionId);
+    setIsLoadingMessages(false);
+  }, [onSessionChange, setCurrentSessionId, loadMessagesForSession]);
 
-  /**
-   * Create a new session
-   * Clears current session and messages
-   */
   const handleNewSession = useCallback(() => {
-    // Clear current session and messages
     setCurrentSessionId(null);
     clearMessages();
-    // Reset heartbeat states
     setIsNewSession(true);
     setHasSuccessfulResponse(false);
-    // Update URL to remove session ID
     if (onSessionChange) {
       onSessionChange(null);
     }
-    // Focus on textarea after state updates
     setTimeout(() => {
       textareaRef?.current?.focus();
     }, 0);
   }, [onSessionChange, setCurrentSessionId, clearMessages, textareaRef]);
 
-  /**
-   * Refresh messages for current session
-   * Reloads messages from backend
-   */
-  const handleRefreshMessages = useCallback(() => {
+  const handleRefreshMessages = useCallback(async () => {
     if (currentSessionId) {
-      // Set loading state
       setIsLoadingMessages(true);
-      // Invalidate to trigger fresh load — loadSessionMessages will replace messages when data arrives
-      queryClient.invalidateQueries({ queryKey: ['agent-session-messages', agentId, currentSessionId] });
+      await loadMessagesForSession(currentSessionId);
+      setIsLoadingMessages(false);
     }
-  }, [agentId, currentSessionId, queryClient]);
+  }, [currentSessionId, loadMessagesForSession]);
 
   return {
     isLoadingMessages,
@@ -117,6 +115,7 @@ export const useSessionManager = ({
     setCurrentSessionId,
     handleSwitchSession,
     handleNewSession,
-    handleRefreshMessages
+    handleRefreshMessages,
+    loadMessagesForSession,
   };
 };

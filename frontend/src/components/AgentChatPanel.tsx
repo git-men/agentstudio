@@ -287,7 +287,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
   const interruptSessionMutation = useInterruptSession();
   const { data: sessionsData, refetch: refetchSessions } = useAgentSessions(agent.id, searchTerm, projectPath);
-  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath);
+  const { data: sessionMessagesData } = useAgentSessionMessages(agent.id, currentSessionId, projectPath, isAiTyping);
   const { data: activeSessionsData } = useSessions();
 
   // 当打开会话历史下拉菜单时，自动刷新会话列表
@@ -345,7 +345,6 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
 
 
-  // 会话切换时需要额外关闭下拉菜单和清除搜索词
   const handleSwitchSessionWithUI = (sessionId: string) => {
     handleSwitchSession(sessionId);
     setShowSessions(false);
@@ -499,6 +498,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
   const handleFrontendToolSubmit = useCallback(async (toolCallId: string, result: unknown): Promise<{ success: boolean; error?: string }> => {
     try {
+      const pending = pendingFrontendTools.get(toolCallId);
       const apiResponse = await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -507,6 +507,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
           result,
           sessionId: currentSessionId,
           agentId: agent.id,
+          toolName: pending?.toolName,
         }),
       });
 
@@ -520,10 +521,11 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
-  }, [currentSessionId, agent.id, removePendingFrontendTool]);
+  }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
 
   const handleFrontendToolCancel = useCallback(async (toolCallId: string, reason?: string) => {
     try {
+      const pending = pendingFrontendTools.get(toolCallId);
       await authFetch(`${API_BASE}/agents/frontend-tool-result`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -533,13 +535,14 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
           isError: true,
           sessionId: currentSessionId,
           agentId: agent.id,
+          toolName: pending?.toolName,
         }),
       });
       removePendingFrontendTool(toolCallId);
     } catch (error) {
       console.warn('[FrontendTools] Cancel failed:', error);
     }
-  }, [currentSessionId, agent.id, removePendingFrontendTool]);
+  }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
 
   // 为 AgentCommandSelector 创建键盘处理器
   const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({
@@ -609,40 +612,28 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     adjustTextareaHeight();
   }, [inputMessage]);
 
-  // Load session messages when session changes or messages are available
+  // Load session messages into the store when query data arrives.
+  // The query is disabled during streaming (paused=isAiTyping), so
+  // sessionMessagesData only changes from explicit user actions.
   useEffect(() => {
-    console.log('🔍 Session messages effect triggered:', {
-      sessionMessagesData: sessionMessagesData?.messages?.length || 0,
-      currentSessionId,
-      hasSessionMessagesData: !!sessionMessagesData,
-      messagesLength: sessionMessagesData?.messages?.length,
-      isLoadingMessages
-    });
-
     if (sessionMessagesData?.messages && currentSessionId) {
-      console.log('✅ Loading session messages:', sessionMessagesData.messages.length);
       loadSessionMessages(sessionMessagesData.messages);
 
-      // If we were loading messages (from refresh), clear loading state after render
       if (isLoadingMessages) {
-        // Wait for next tick to ensure messages are rendered
         setTimeout(() => {
           setIsLoadingMessages(false);
         }, 100);
       }
     } else if (currentSessionId && sessionMessagesData && sessionMessagesData.messages?.length === 0) {
-      console.log('🗑️ Loading empty session messages');
-      // Handle empty session - clear messages
       loadSessionMessages([]);
 
-      // If we were loading messages (from refresh), clear loading state
       if (isLoadingMessages) {
         setTimeout(() => {
           setIsLoadingMessages(false);
         }, 100);
       }
     }
-  }, [sessionMessagesData, currentSessionId, loadSessionMessages, isLoadingMessages, t]);
+  }, [sessionMessagesData, currentSessionId, loadSessionMessages, isLoadingMessages]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {

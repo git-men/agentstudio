@@ -59,12 +59,6 @@ export const CONFIG_DIR = join(AGENTSTUDIO_HOME, 'config');
  */
 export const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
-/**
- * Pre-send guard dedicated config file.
- * Default: ~/.agentstudio/config/pre-send-guard.json
- */
-export const PRE_SEND_GUARD_CONFIG_FILE = join(CONFIG_DIR, 'pre-send-guard.json');
-
 // ─── Agents ──────────────────────────────────────────────────────────────────
 
 /**
@@ -172,6 +166,34 @@ export const SCRIPTS_DIR = join(AGENTSTUDIO_HOME, 'scripts');
  */
 export const SLACK_SESSION_LOCKS_DIR = join(AGENTSTUDIO_HOME, 'slack-session-locks');
 
+// ─── Platform Hooks ─────────────────────────────────────────────────────────
+
+/**
+ * Directory for platform hook configuration files.
+ * Default: ~/.agentstudio/hooks
+ */
+export const HOOKS_DIR = join(AGENTSTUDIO_HOME, 'hooks');
+
+/**
+ * File path for global hooks configuration.
+ * Default: ~/.agentstudio/hooks/global-hooks.json
+ */
+export const GLOBAL_HOOKS_FILE = join(HOOKS_DIR, 'global-hooks.json');
+
+/**
+ * Directory for marketplace-installed hook scripts (symlinked).
+ * Default: ~/.agentstudio/hooks/scripts
+ */
+export const HOOKS_SCRIPTS_DIR = join(HOOKS_DIR, 'scripts');
+
+/**
+ * Get the hooks file path for a specific project.
+ * Default: ~/.agentstudio/hooks/projects/<projectId>/hooks.json
+ */
+export function getProjectHooksFile(projectId: string): string {
+  return join(HOOKS_DIR, 'projects', projectId, 'hooks.json');
+}
+
 // ─── Scheduled Tasks ─────────────────────────────────────────────────────────
 
 /**
@@ -229,6 +251,15 @@ export function getProjectA2AConfigFile(projectPath: string): string {
 export function getProjectApiKeysFile(projectPath: string): string {
   return join(projectPath, '.a2a', 'api-keys.json');
 }
+
+// ─── Meta Agent ──────────────────────────────────────────────────────────────
+
+/**
+ * Default working directory for Meta Agent.
+ * Created on startup so Meta Agent always has a workspace.
+ * Default: ~/.as-jarvis
+ */
+export const META_AGENT_WORKING_DIR = join(homedir(), '.as-jarvis');
 
 // ─── Backward Compatibility Aliases ──────────────────────────────────────────
 // These aliases are kept for backward compatibility with code that still

@@ -23,8 +23,9 @@ import { a2aStreamEventEmitter, type A2AStreamStartEvent, type A2AStreamDataEven
 import { ClaudeAguiAdapter } from '../engines/claude/aguiAdapter.js';
 import { formatAguiEventAsSSE, AGUIEventType, type AGUIEvent } from '../engines/types.js';
 import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
-import { evaluatePreSendGuard } from '../services/preSendGuard/index.js';
-import { resolvePreSendGuardConfig } from '../services/preSendGuard/configResolver.js';
+import { sessionEventBus } from '../services/sessionEventBus.js';
+import { getHookManager } from '../services/hooks/index.js';
+import type { HookEvent } from '../types/platformHooks.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -62,19 +63,6 @@ const SystemPromptSchema = z.union([
   PresetSystemPromptSchema
 ]);
 
-const PreSendGuardProviderConfigSchema = z.object({
-  name: z.string().min(1),
-  enabled: z.boolean().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  onError: z.enum(['allow', 'block']).optional(),
-  options: z.record(z.string(), z.unknown()).optional()
-});
-
-const PreSendGuardConfigSchema = z.object({
-  enabled: z.boolean().optional(),
-  providers: z.array(PreSendGuardProviderConfigSchema).optional()
-});
-
 const CreateAgentSchema = z.object({
   id: z.string().min(1).regex(/^[a-z0-9-_]+$/, 'ID must contain only lowercase letters, numbers, hyphens, and underscores'),
   name: z.string().min(1),
@@ -108,7 +96,6 @@ const CreateAgentSchema = z.object({
   homepage: z.string().url().optional(),
   tags: z.array(z.string()).optional().default([]),
   enabled: z.boolean().optional().default(true),
-  preSendGuard: PreSendGuardConfigSchema.optional(),
 });
 
 const UpdateAgentSchema = CreateAgentSchema.partial().omit({ id: true });
@@ -540,6 +527,13 @@ router.post('/chat', async (req, res) => {
     
     console.log(`📡 Output format: ${outputFormat}`);
 
+    // Broadcast an AGUI event to session observers via sessionEventBus
+    const broadcastToObservers = (event: AGUIEvent, sid: string | null | undefined) => {
+      if (sid && sessionEventBus.hasObservers(sid)) {
+        sessionEventBus.emit(sid, event);
+      }
+    };
+
     console.log('[Backend] Received chat request:', {
       agentId,
       sessionId,
@@ -614,26 +608,25 @@ router.post('/chat', async (req, res) => {
         res.write(`data: ${JSON.stringify(sessionResumedEvent)}\n\n`);
       } catch { /* connection already dead */ }
 
-      // Re-send any pending frontend tool calls that were lost when the old connection died
+      // Re-send any pending frontend tool calls as standard TOOL_CALL events
       const pendingCalls = frontendToolBridge.getPendingBySession(sessionId);
       if (pendingCalls.length > 0) {
         for (const request of pendingCalls) {
           try {
             if (!isReconnectClosed) {
-              const event = {
-                type: 'frontend_tool_call',
-                toolCallId: request.toolCallId,
-                toolName: request.toolName,
-                args: request.args,
-                agentId: request.agentId,
-                sessionId: request.sessionId,
-                timestamp: Date.now(),
-              };
-              res.write(`data: ${JSON.stringify(event)}\n\n`);
+              const now = Date.now();
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_START', toolCallId: request.toolCallId, toolCallName: request.toolName, timestamp: now })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_ARGS',  toolCallId: request.toolCallId, delta: JSON.stringify(request.args), timestamp: now })}\n\n`);
+              res.write(`data: ${JSON.stringify({ type: 'TOOL_CALL_END',   toolCallId: request.toolCallId, timestamp: now })}\n\n`);
             }
           } catch { /* connection gone */ }
         }
       }
+
+      const writeReconnectAgui = (event: AGUIEvent, sid?: string | null) => {
+        res.write(formatAguiEventAsSSE(event));
+        broadcastToObservers(event, sid);
+      };
 
       // AGUI adapter for reconnect (if using AGUI output)
       let aguiReconnectAdapter: ClaudeAguiAdapter | null = null;
@@ -643,7 +636,7 @@ router.post('/chat', async (req, res) => {
         const runStartedEvent = aguiReconnectAdapter.createRunStarted({ message: '(reconnected)', projectPath });
         try {
           if (!isReconnectClosed) {
-            res.write(formatAguiEventAsSSE(runStartedEvent));
+            writeReconnectAgui(runStartedEvent, sessionId);
             // Send a synthetic TEXT_MESSAGE_START so the frontend initializes
             // its text block tracking.  Without this, TEXT_MESSAGE_CONTENT events
             // arriving mid-stream won't produce textDelta (aguiState.textBlockIndex
@@ -655,7 +648,7 @@ router.post('/chat', async (req, res) => {
               role: 'assistant',
               timestamp: Date.now(),
             };
-            res.write(formatAguiEventAsSSE(textStartEvent));
+            writeReconnectAgui(textStartEvent, sessionId);
           }
         } catch { /* connection gone */ }
       }
@@ -679,7 +672,7 @@ router.post('/chat', async (req, res) => {
             if (outputFormat === 'agui' && aguiReconnectAdapter) {
               const aguiEvents = aguiReconnectAdapter.convert(sdkMessage);
               for (const event of aguiEvents) {
-                res.write(formatAguiEventAsSSE(event));
+                writeReconnectAgui(event, sessionId);
               }
             } else {
               res.write(`data: ${JSON.stringify(eventData)}\n\n`);
@@ -697,7 +690,7 @@ router.post('/chat', async (req, res) => {
               const finalEvents = aguiReconnectAdapter.finalize();
               for (const event of finalEvents) {
                 if (!res.destroyed && !isReconnectClosed) {
-                  res.write(formatAguiEventAsSSE(event));
+                  writeReconnectAgui(event, sessionId);
                 }
               }
             } catch { /* ignore */ }
@@ -734,55 +727,54 @@ router.post('/chat', async (req, res) => {
       return res.status(403).json({ error: 'Agent is disabled' });
     }
 
-    // Evaluate optional pre-send guards (agent -> file-based global)
-    const requestId = (req as express.Request & { requestId?: string }).requestId;
-    const guardFileResolved = await resolvePreSendGuardConfig({
-      message,
-      agentId,
-      sessionId,
-      projectPath,
-      channel,
-      requestId,
-    });
+    // ── Hook Interceptor: message.pre_send ────────────────────────────────
+    try {
+      const hookManager = getHookManager();
+      if (hookManager) {
+        const hookEvent: HookEvent = {
+          type: 'message.pre_send',
+          timestamp: new Date().toISOString(),
+          source: 'agents-route',
+          data: {
+            message,
+            images: images || undefined,
+            sender: 'user',
+            channel,
+          },
+          sessionId: sessionId || undefined,
+          projectId: projectPath,
+          agentId,
+        };
 
-    const guardResult = await evaluatePreSendGuard({
-      globalConfig: guardFileResolved.config,
-      agentConfig: agent.preSendGuard,
-      context: {
-        message,
-        agentId,
-        sessionId,
-        projectPath,
-        channel,
-        requestId,
+        const evalResult = await hookManager.evaluate(hookEvent);
+        console.log('[HookInterceptor] message.pre_send evaluated:', {
+          decision: evalResult.decision,
+          evaluatedCount: evalResult.evaluatedCount,
+          skippedCount: evalResult.skippedCount,
+          totalDuration: evalResult.totalDuration,
+        });
+
+        if (evalResult.decision === 'block') {
+          // 422 Unprocessable Entity: request is well-formed but content violates policy
+          // (403 would imply an authorization/permission issue, which is semantically wrong here)
+          return res.status(422).json({
+            error: 'Message blocked by hook interceptor',
+            decision: 'block',
+            reason: evalResult.reason,
+            hookId: evalResult.hookId,
+            hookName: evalResult.hookName,
+          });
+        }
+
+        if (evalResult.rewrittenMessage) {
+          message = evalResult.rewrittenMessage;
+          console.log('[HookInterceptor] Message rewritten by hook interceptor');
+        }
       }
-    });
-
-    if (guardResult.enabled || guardFileResolved.source !== 'none') {
-      console.log('[PreSendGuard] Evaluated:', {
-        configSource: guardFileResolved.source,
-        matchedRuleId: guardFileResolved.matchedRuleId,
-        decision: guardResult.decision,
-        blocked: guardResult.blocked,
-        code: guardResult.code,
-        steps: guardResult.steps,
-      });
+    } catch (hookError) {
+      console.error('[HookInterceptor] Error evaluating message.pre_send hooks:', hookError);
     }
-
-    if (guardResult.blocked) {
-      return res.status(403).json({
-        error: 'Message blocked by pre-send guard',
-        decision: guardResult.decision,
-        code: guardResult.code,
-        reason: guardResult.reason,
-        requestId,
-      });
-    }
-
-    if (guardResult.message !== message) {
-      message = guardResult.message;
-      console.log('[PreSendGuard] Message rewritten before model send');
-    }
+    // ── End Hook Interceptor ──────────────────────────────────────────────
 
     // Resolve onRunFinished hook config from the agent
     const onRunFinishedHook = agent.hooks?.onRunFinished;
@@ -794,12 +786,20 @@ router.post('/chat', async (req, res) => {
     res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx/proxy buffering
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Cache-Control');
+    res.flushHeaders(); // Flush headers immediately to start streaming
 
     // Flush headers immediately to start SSE streaming
     res.flushHeaders();
 
     // 设置连接管理
     const connectionManager = setupSSEConnectionManagement(req, res, agentId);
+
+    // Write an AGUI event to the client response and broadcast to session observers.
+    // Guards (res.destroyed, connectionManager.isConnectionClosed) are the caller's responsibility.
+    const writeAguiAndBroadcast = (event: AGUIEvent, sid?: string | null) => {
+      res.write(formatAguiEventAsSSE(event));
+      broadcastToObservers(event, sid);
+    };
 
     // Safety net: ensure RUN_FINISHED is always sent before connection closes in AGUI mode
     let aguiRunFinishedSent = false;
@@ -813,7 +813,7 @@ router.post('/chat', async (req, res) => {
           runId: '',
           timestamp: Date.now(),
         };
-        res.write(formatAguiEventAsSSE(runFinishedEvent));
+        writeAguiAndBroadcast(runFinishedEvent, sessionId);
         aguiRunFinishedSent = true;
         console.log('🛡️ [Safety Net] Sent RUN_FINISHED before connection close');
       } catch {
@@ -1164,7 +1164,7 @@ router.post('/chat', async (req, res) => {
                     },
                     timestamp: Date.now(),
                   };
-                  res.write(formatAguiEventAsSSE(aguiCustomEvent));
+                  writeAguiAndBroadcast(aguiCustomEvent, actualSessionId || currentSessionId);
                 } else {
                   // 默认模式：发送自动压缩通知给前端
                   const autoCompactEvent = {
@@ -1293,7 +1293,7 @@ router.post('/chat', async (req, res) => {
               const runStartedEvent = aguiAdapter.createRunStarted({ message, projectPath });
               try {
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(formatAguiEventAsSSE(runStartedEvent));
+                  writeAguiAndBroadcast(runStartedEvent, actualSessionId || currentSessionId);
                   aguiRunStartedSent = true;
                   console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${aguiThreadId}`);
                 }
@@ -1346,7 +1346,7 @@ router.post('/chat', async (req, res) => {
                 // Convert SDK message to AGUI format
                 const aguiEvents = aguiAdapter.convert(sdkMessage as any);
                 for (const event of aguiEvents) {
-                  res.write(formatAguiEventAsSSE(event));
+                  writeAguiAndBroadcast(event, actualSessionId || currentSessionId);
                 }
               } else {
                 // Default SDK format
@@ -1400,9 +1400,10 @@ router.post('/chat', async (req, res) => {
                 const otherEvents = finalEvents.filter(e => e.type !== AGUIEventType.RUN_FINISHED);
 
                 // Send all non-RUN_FINISHED finalize events first
+                const sid = actualSessionId || currentSessionId;
                 for (const event of otherEvents) {
                   if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                    res.write(formatAguiEventAsSSE(event));
+                    writeAguiAndBroadcast(event, sid);
                   }
                 }
 
@@ -1416,7 +1417,7 @@ router.post('/chat', async (req, res) => {
                     });
                     for (const hookEvent of hookEvents) {
                       if (!res.destroyed && !connectionManager.isConnectionClosed()) {
-                        res.write(formatAguiEventAsSSE(hookEvent));
+                        writeAguiAndBroadcast(hookEvent, sid);
                       }
                     }
                   } catch (hookError: any) {
@@ -1426,7 +1427,7 @@ router.post('/chat', async (req, res) => {
 
                 // Now send the deferred RUN_FINISHED
                 if (runFinishedEvent && !res.destroyed && !connectionManager.isConnectionClosed()) {
-                  res.write(formatAguiEventAsSSE(runFinishedEvent));
+                  writeAguiAndBroadcast(runFinishedEvent, sid);
                 }
 
                 aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
@@ -1554,6 +1555,7 @@ const FrontendToolResultSchema = z.object({
   isError: z.boolean().optional(),
   sessionId: z.string().min(1, 'sessionId is required'),
   agentId: z.string().min(1, 'agentId is required'),
+  toolName: z.string().optional(),
 });
 
 router.post('/frontend-tool-result', async (req, res) => {
@@ -1563,19 +1565,19 @@ router.post('/frontend-tool-result', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
     }
 
-    const { toolCallId, result: rawResult, isError, sessionId, agentId } = validation.data;
+    const { toolCallId, result: rawResult, isError, sessionId, agentId, toolName } = validation.data;
 
     const resultStr = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
 
     if (isError) {
-      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId);
+      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId, toolName);
       if (cancelOk) {
         return res.json({ success: true });
       }
       return res.status(404).json({ success: false, error: 'No pending tool call found' });
     }
 
-    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId);
+    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId, toolName);
 
     if (outcome.success) {
       res.json({ success: true });

@@ -15,8 +15,13 @@ import {
   PluginInstallResult, 
   MarketplaceSyncResult,
   MarketplaceManifest,
-  MarketplaceUpdateCheckResult
+  MarketplaceUpdateCheckResult,
+  ParsedPlugin,
+  PluginComponent,
 } from '../types/plugins';
+import type { PlatformHook, HookPackageEntry } from '../types/platformHooks';
+import { HOOKS_SCRIPTS_DIR } from '../config/paths';
+import { HookStorage } from './hooks/hookStorage';
 
 const execAsync = promisify(exec);
 
@@ -443,6 +448,11 @@ class PluginInstaller {
       // Install plugin components (symlinks for claude-sdk, file copy for cursor-cli)
       await getPluginInstaller().createSymlinks(parsedPlugin);
 
+      // Install platform hooks (engine-agnostic, goes to HookStorage)
+      if (parsedPlugin.components.hooks.length > 0) {
+        await this.installHooks(parsedPlugin);
+      }
+
       // Get installed plugin info
       const installedPlugin = await pluginScanner.scanPlugin(marketplaceName, pluginName);
 
@@ -483,6 +493,9 @@ class PluginInstaller {
       // Remove installed plugin components
       await getPluginInstaller().removeSymlinks(parsedPlugin);
 
+      // Remove platform hooks installed by this plugin
+      await this.uninstallHooks(marketplaceName, pluginName);
+
       return true;
     } catch (error) {
       console.error('Failed to uninstall plugin:', error);
@@ -509,6 +522,207 @@ class PluginInstaller {
    */
   async disablePlugin(pluginName: string, marketplaceName: string): Promise<boolean> {
     return await this.uninstallPlugin(pluginName, marketplaceName);
+  }
+
+  // ─── Platform Hook Installation ──────────────────────────────────────────
+
+  /**
+   * Install platform hooks from a parsed plugin's hook components.
+   *
+   * For each hook entry in hooks/hooks.json:
+   * 1. If the action uses a script, create a symlink under ~/.agentstudio/hooks/scripts/{marketplace}/{plugin}/
+   * 2. Resolve binding.agents to determine scope (global vs per-agent)
+   * 3. Save hooks to HookStorage with source metadata for later uninstall
+   */
+  async installHooks(parsedPlugin: ParsedPlugin): Promise<string[]> {
+    const { components, marketplaceName, pluginName } = parsedPlugin;
+    if (components.hooks.length === 0) return [];
+
+    const hookStorage = new HookStorage();
+    const installedIds: string[] = [];
+
+    // Read the full hooks.json to get the package-level version
+    const hooksJsonPath = path.join(parsedPlugin.path, 'hooks', 'hooks.json');
+    if (!fs.existsSync(hooksJsonPath)) return [];
+
+    // Set up script symlink directory
+    const scriptsSourceDir = path.join(parsedPlugin.path, 'hooks', 'scripts');
+    const scriptsTargetDir = path.join(HOOKS_SCRIPTS_DIR, marketplaceName, pluginName);
+
+    if (fs.existsSync(scriptsSourceDir)) {
+      fs.mkdirSync(path.dirname(scriptsTargetDir), { recursive: true });
+
+      // Create symlink for the scripts directory
+      if (fs.existsSync(scriptsTargetDir)) {
+        const stats = fs.lstatSync(scriptsTargetDir);
+        if (stats.isSymbolicLink()) {
+          fs.unlinkSync(scriptsTargetDir);
+        }
+      }
+      fs.symlinkSync(scriptsSourceDir, scriptsTargetDir);
+      console.log(`[HookInstaller] Created scripts symlink: ${scriptsTargetDir} -> ${scriptsSourceDir}`);
+    }
+
+    for (const component of components.hooks) {
+      const entry = component.hookData;
+      if (!entry) continue;
+
+      const hookName = entry.name || component.name;
+
+      // Resolve action path for script actions
+      const action = { ...entry.action };
+      if (action.type === 'script' && (action as any).path) {
+        const scriptRelPath = (action as any).path as string;
+        // Resolve relative path (e.g. "./scripts/foo.js") against the symlinked scripts dir
+        if (scriptRelPath.startsWith('./scripts/') || scriptRelPath.startsWith('scripts/')) {
+          const scriptName = scriptRelPath.replace(/^\.?\/?scripts\//, '');
+          (action as any).path = path.join(scriptsTargetDir, scriptName);
+        } else {
+          // Absolute or other relative path — resolve against plugin hooks dir
+          (action as any).path = path.resolve(path.join(parsedPlugin.path, 'hooks'), scriptRelPath);
+        }
+      }
+
+      // Determine scope from binding
+      const binding = entry.binding;
+      const scope = this.resolveHookScope(entry, binding);
+
+      if (scope === 'global' || !binding?.agents || binding.agents.includes('*')) {
+        // Single global hook
+        const hook = this.buildPlatformHook(hookName, entry, action, 'global', marketplaceName, pluginName);
+        await hookStorage.saveHook(hook);
+        installedIds.push(hook.id);
+        console.log(`[HookInstaller] Installed global hook: ${hookName} (${hook.id})`);
+      } else {
+        // One hook per specified agent
+        for (const agentId of binding.agents) {
+          const hook = this.buildPlatformHook(hookName, entry, action, 'agent', marketplaceName, pluginName, agentId);
+          await hookStorage.saveHook(hook);
+          installedIds.push(hook.id);
+          console.log(`[HookInstaller] Installed agent hook: ${hookName} -> ${agentId} (${hook.id})`);
+        }
+      }
+    }
+
+    // Reload hook manager if it's initialized
+    try {
+      const { getHookManager } = await import('./hooks/index.js');
+      const manager = getHookManager();
+      if (manager) {
+        await manager.reloadHooks();
+        console.log(`[HookInstaller] Reloaded hook manager with ${installedIds.length} new hooks`);
+      }
+    } catch {
+      // Hook system may not be initialized yet
+    }
+
+    return installedIds;
+  }
+
+  /**
+   * Uninstall all platform hooks that were installed by a specific plugin.
+   * Matches hooks by their source metadata.
+   */
+  async uninstallHooks(marketplaceName: string, pluginName: string): Promise<number> {
+    const hookStorage = new HookStorage();
+    const allHooks = await hookStorage.loadAllHooks();
+
+    let removedCount = 0;
+    for (const hook of allHooks) {
+      if (
+        hook.source?.type === 'marketplace' &&
+        hook.source.marketplace === marketplaceName &&
+        hook.source.plugin === pluginName
+      ) {
+        await hookStorage.deleteHook(hook.id);
+        removedCount++;
+      }
+    }
+
+    // Remove script symlink directory
+    const scriptsTargetDir = path.join(HOOKS_SCRIPTS_DIR, marketplaceName, pluginName);
+    if (fs.existsSync(scriptsTargetDir)) {
+      const stats = fs.lstatSync(scriptsTargetDir);
+      if (stats.isSymbolicLink()) {
+        fs.unlinkSync(scriptsTargetDir);
+      } else {
+        fs.rmSync(scriptsTargetDir, { recursive: true, force: true });
+      }
+      console.log(`[HookInstaller] Removed scripts symlink: ${scriptsTargetDir}`);
+
+      // Clean up empty parent directory
+      const parentDir = path.join(HOOKS_SCRIPTS_DIR, marketplaceName);
+      try {
+        const remaining = fs.readdirSync(parentDir);
+        if (remaining.length === 0) {
+          fs.rmdirSync(parentDir);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (removedCount > 0) {
+      // Reload hook manager
+      try {
+        const { getHookManager } = await import('./hooks/index.js');
+        const manager = getHookManager();
+        if (manager) {
+          await manager.reloadHooks();
+        }
+      } catch {
+        // Hook system may not be initialized
+      }
+      console.log(`[HookInstaller] Removed ${removedCount} hooks from ${marketplaceName}/${pluginName}`);
+    }
+
+    return removedCount;
+  }
+
+  private resolveHookScope(
+    entry: HookPackageEntry,
+    binding?: { agents: string[] },
+  ): 'global' | 'project' | 'agent' {
+    if (entry.scope) return entry.scope;
+    if (!binding || !binding.agents || binding.agents.includes('*')) return 'global';
+    return 'agent';
+  }
+
+  private buildPlatformHook(
+    hookName: string,
+    entry: HookPackageEntry,
+    action: HookPackageEntry['action'],
+    scope: 'global' | 'project' | 'agent',
+    marketplaceName: string,
+    pluginName: string,
+    agentId?: string,
+  ): PlatformHook {
+    const now = new Date().toISOString();
+    const id = `hook_mp_${marketplaceName}_${pluginName}_${hookName}${agentId ? `_${agentId}` : ''}_${Date.now()}`;
+
+    return {
+      id,
+      name: hookName,
+      description: entry.description,
+      enabled: entry.enabled !== false,
+      event: entry.event,
+      filter: entry.filter,
+      action,
+      scope,
+      agentId,
+      timeout: entry.timeout ?? 30000,
+      failurePolicy: entry.failurePolicy ?? 'warn',
+      priority: entry.priority ?? 10,
+      createdAt: now,
+      updatedAt: now,
+      async: entry.async,
+      source: {
+        type: 'marketplace',
+        marketplace: marketplaceName,
+        plugin: pluginName,
+        installPath: path.join(HOOKS_SCRIPTS_DIR, marketplaceName, pluginName),
+      },
+    };
   }
 
   /**

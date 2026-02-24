@@ -139,6 +139,12 @@ export interface StreamingBlock {
    * Used for throttling and performance monitoring
    */
   lastUpdatedAt: number;
+
+  /** Tool name (only for tool_use blocks). Used to identify frontend tools on block stop. */
+  toolName?: string;
+
+  /** Claude SDK tool_use ID (only for tool_use blocks). Used as toolCallId for pending frontend tools. */
+  claudeId?: string;
 }
 
 export interface AIProvider {

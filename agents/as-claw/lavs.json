@@ -1,0 +1,314 @@
+{
+  "lavs": "1.0",
+  "name": "as-claw",
+  "version": "1.0.0",
+  "description": "AS-Claw 记忆系统 - 基于 Markdown 文件的本地持久化记忆",
+
+  "endpoints": [
+    {
+      "id": "memory_get",
+      "method": "query",
+      "description": "读取工作空间中的记忆文件（等价于 OpenClaw 的 memory_get 工具）",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "memory-get"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "相对于工作空间的文件路径，例如 'MEMORY.md' 或 'memory/2026-02-21.md'"
+            },
+            "startLine": {
+              "type": "number",
+              "description": "起始行（可选，1-indexed）"
+            },
+            "endLine": {
+              "type": "number",
+              "description": "结束行（可选）"
+            }
+          },
+          "required": ["file"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "file": { "type": "string" },
+            "content": { "type": "string" },
+            "exists": { "type": "boolean" },
+            "lines": { "type": "number" },
+            "size": { "type": "number" }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "memory_search",
+      "method": "query",
+      "description": "用 ripgrep 搜索记忆文件（等价于 OpenClaw 的 memory_search 工具）",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "memory-search"],
+        "input": "stdin",
+        "timeout": 10000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "搜索关键词或正则表达式"
+            },
+            "context": {
+              "type": "number",
+              "description": "匹配行前后显示的上下文行数（默认 2）"
+            },
+            "scope": {
+              "type": "string",
+              "enum": ["all", "memory_md", "daily", "recent_7", "recent_30"],
+              "description": "搜索范围（默认 all）"
+            },
+            "maxResults": {
+              "type": "number",
+              "description": "最大结果数（默认 20）"
+            }
+          },
+          "required": ["query"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": { "$ref": "#/types/SearchResult" }
+            },
+            "total": { "type": "number" },
+            "query": { "type": "string" },
+            "scope": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "memory_write",
+      "method": "mutation",
+      "description": "向记忆文件写入内容（新建、覆盖或追加）",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "memory-write"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "相对于工作空间的文件路径"
+            },
+            "content": {
+              "type": "string",
+              "description": "写入内容"
+            },
+            "append": {
+              "type": "boolean",
+              "description": "是否追加（false=覆盖，默认 false）"
+            }
+          },
+          "required": ["file", "content"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "file": { "type": "string" },
+            "saved": { "type": "boolean" },
+            "size": { "type": "number" },
+            "lines": { "type": "number" }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "memory_today",
+      "method": "query",
+      "description": "获取今日记忆日志（若不存在则返回空内容）",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "memory-today"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string" },
+            "file": { "type": "string" },
+            "content": { "type": "string" },
+            "exists": { "type": "boolean" }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "list_memory_files",
+      "method": "query",
+      "description": "列出工作空间中的记忆文件（MEMORY.md + 日志文件）",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "list-files"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "limit": { "type": "number", "description": "日志文件数量上限（默认 30）" }
+          }
+        },
+        "output": {
+          "type": "array",
+          "items": { "$ref": "#/types/MemoryFile" }
+        }
+      }
+    },
+
+    {
+      "id": "onboarding_save",
+      "method": "mutation",
+      "description": "保存 onboarding 收集的用户信息，初始化工作空间所有引导文件",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "onboarding-save"],
+        "input": "stdin",
+        "timeout": 8000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {
+            "name":          { "type": "string",  "description": "用户姓名" },
+            "nickname":      { "type": "string",  "description": "称呼方式" },
+            "language":      { "type": "string",  "enum": ["zh", "en", "bilingual"], "description": "语言偏好" },
+            "style":         { "type": "string",  "enum": ["concise", "detailed", "casual"], "description": "沟通风格" },
+            "scenarios":     { "type": "array",   "items": { "type": "string" }, "description": "使用场景" },
+            "agentNickname": { "type": "string",  "description": "用户给 AS-Claw 的昵称（可选）" }
+          },
+          "required": ["name", "language", "style"]
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "success":       { "type": "boolean" },
+            "workspacePath": { "type": "string" },
+            "filesCreated":  { "type": "array", "items": { "type": "string" } }
+          }
+        }
+      }
+    },
+
+    {
+      "id": "workspace_overview",
+      "method": "query",
+      "description": "获取工作空间概览：用户信息、记忆统计、最近活动",
+      "handler": {
+        "type": "script",
+        "command": "node",
+        "args": ["scripts/as-claw-memory.cjs", "workspace-overview"],
+        "input": "stdin",
+        "timeout": 5000
+      },
+      "schema": {
+        "input": {
+          "type": "object",
+          "properties": {}
+        },
+        "output": {
+          "type": "object",
+          "properties": {
+            "workspaceExists": { "type": "boolean" },
+            "workspacePath": { "type": "string" },
+            "user": {
+              "type": "object",
+              "properties": {
+                "name": { "type": "string" },
+                "exists": { "type": "boolean" }
+              }
+            },
+            "stats": {
+              "type": "object",
+              "properties": {
+                "memoryMdLines": { "type": "number" },
+                "dailyLogCount": { "type": "number" },
+                "todayExists": { "type": "boolean" },
+                "todayDate": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+
+  "view": {
+    "component": {
+      "type": "local",
+      "path": "view/index.html"
+    },
+    "fallback": "table",
+    "icon": "brain"
+  },
+
+  "types": {
+    "SearchResult": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" },
+        "line": { "type": "number" },
+        "content": { "type": "string" },
+        "contextBefore": { "type": "array", "items": { "type": "string" } },
+        "contextAfter": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["file", "line", "content"]
+    },
+    "MemoryFile": {
+      "type": "object",
+      "properties": {
+        "file": { "type": "string" },
+        "type": { "type": "string", "enum": ["core", "daily", "other"] },
+        "date": { "type": "string" },
+        "size": { "type": "number" },
+        "lines": { "type": "number" },
+        "preview": { "type": "string" },
+        "isToday": { "type": "boolean" }
+      }
+    }
+  },
+
+  "permissions": {
+    "fileAccess": ["~/.as-claw/workspace/**/*"],
+    "networkAccess": false,
+    "maxExecutionTime": 15000
+  }
+}

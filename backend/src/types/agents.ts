@@ -1,6 +1,5 @@
 // Agent configuration types
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import type { PreSendGuardConfig } from './preSendGuard.js';
 
 export interface AgentTool {
   name: string;
@@ -76,9 +75,6 @@ export interface AgentConfig {
 
   // Lifecycle hooks — executed by the platform at specific points
   hooks?: AgentHooks;
-
-  // Optional pre-send guard pipeline config (message safety/moderation, etc.)
-  preSendGuard?: PreSendGuardConfig;
 }
 
 // =============================================================================
@@ -203,5 +199,8 @@ export const BUILTIN_AGENTS: Partial<AgentConfig>[] = [
     tags: ['development', 'code', 'system'],
     enabled: true,
     source: 'local'
-  }
+  },
+  // meta-agent and other first-party agents are provided via as-marketplace.
+  // They are auto-discovered from the sibling as-marketplace directory and
+  // imported on startup by builtinMarketplaceService.
 ];
