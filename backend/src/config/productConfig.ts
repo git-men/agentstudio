@@ -36,15 +36,24 @@ export const FEATURE_MODULES: FeatureModule[] = [
   {
     id: 'core.chat',
     name: 'Chat',
-    description: 'Main chat interface, AGUI protocol, and interactive responses',
+    description: 'Main chat interface and interactive responses',
     category: 'core',
     routePatterns: [
       '/api/agents/chat',
       '/api/agents/user-response',
-      '/api/agents/frontend-tool-result',
-      '/api/agui',
     ],
     frontendPaths: ['/chat'],
+  },
+  {
+    id: 'core.agui',
+    name: 'AGUI Protocol',
+    description: 'AGUI protocol endpoints and frontend tool results',
+    category: 'core',
+    routePatterns: [
+      '/api/agui',
+      '/api/agents/frontend-tool-result',
+    ],
+    frontendPaths: [],
   },
   {
     id: 'core.sessions',
@@ -90,9 +99,13 @@ export const FEATURE_MODULES: FeatureModule[] = [
   {
     id: 'manage.projects',
     name: 'Project Management',
-    description: 'Project CRUD, import, and configuration',
+    description: 'Project CRUD, import, configuration, A2A config and API keys',
     category: 'manage',
-    routePatterns: ['/api/projects'],
+    routePatterns: [
+      '/api/projects',
+      '/api/projects/*/a2a-config',
+      '/api/projects/*/api-keys',
+    ],
     frontendPaths: ['/projects'],
   },
   {
@@ -209,13 +222,11 @@ export const FEATURE_MODULES: FeatureModule[] = [
   {
     id: 'system.a2a',
     name: 'A2A Protocol',
-    description: 'Agent-to-Agent protocol and API key management',
+    description: 'Agent-to-Agent protocol endpoints',
     category: 'system',
     routePatterns: [
       '/api/a2a',
       '/a2a',
-      '/api/projects/*/a2a-config',
-      '/api/projects/*/api-keys',
     ],
     frontendPaths: [],
   },
@@ -282,17 +293,14 @@ const EDITION_PRESETS: Record<Exclude<ProductEdition, 'custom'>, ProductProfile>
   'chat-only': {
     edition: 'chat-only',
     name: 'Chat Edition',
-    description: 'Chat-focused deployment for VAG and similar verticals. Enables chat, sessions, version management, marketplace skills, and A2A history. File operations and management UI disabled.',
+    description: 'Chat-focused deployment for VAG. Aligned with sandbox-proxy route-guard business whitelist. Enables chat, sessions, project read, version management, and marketplace skills.',
     modules: {
       ...allModulesAccess('disabled'),
       'core.chat': 'full',
       'core.sessions': 'full',
-      'core.files': 'disabled',
-      'manage.agents': 'readonly',
       'manage.projects': 'readonly',
       'system.versions': 'full',
       'extend.marketplace-skills': 'full',
-      'system.a2a': 'readonly',
     },
   },
 
@@ -304,6 +312,7 @@ const EDITION_PRESETS: Record<Exclude<ProductEdition, 'custom'>, ProductProfile>
       ...allModulesAccess('disabled'),
       // Core - full
       'core.chat': 'full',
+      'core.agui': 'full',
       'core.sessions': 'full',
       'core.files': 'full',
       // Management - full
