@@ -299,6 +299,11 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
+      // Allow browser extension origins (Chrome, Firefox, Edge)
+      if (origin.match(/^(chrome|moz|edge)-extension:\/\//)) {
+        return callback(null, true);
+      }
+
       // For embedded mode: Allow same-origin requests from any host/IP
       // This allows the frontend (served from the same server) to access the API
       // Extract protocol, host, and port from origin

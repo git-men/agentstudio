@@ -1,0 +1,38 @@
+#agentstudio-floating-root {
+  position: fixed;
+  /* left/top 由 inject.js 根据拖动位置设置 */
+  z-index: 2147483646;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.agentstudio-floating-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  color: #fff;
+  cursor: grab;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.agentstudio-floating-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+}
+
+.agentstudio-floating-btn:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.agentstudio-floating-icon {
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}

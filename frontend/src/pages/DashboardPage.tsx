@@ -27,6 +27,7 @@ import { useAgents, useCreateProject } from '../hooks/useAgents';
 import { useSessions, closeSession, clearAllSessions } from '../hooks/useSessions';
 import { useQueryClient } from '@tanstack/react-query';
 import { showSuccess, showError } from '../utils/toast';
+import { openUrlInContext } from '../utils/navigation';
 
 export const DashboardPage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -111,7 +112,7 @@ export const DashboardPage: React.FC = () => {
     // 在新标签页打开聊天页面，带上消息参数
     const encodedMessage = encodeURIComponent(inputMessage);
     const url = `/chat/${targetAgent.id}?project=${encodeURIComponent(selectedProject.path)}&message=${encodedMessage}`;
-    window.open(url, '_blank');
+    openUrlInContext(url, navigate);
   };
 
   // 关闭单个会话
@@ -230,7 +231,7 @@ export const DashboardPage: React.FC = () => {
       if (selectedProject && targetAgent) {
         const encodedMessage = encodeURIComponent(prompt);
         const url = `/chat/${targetAgent.id}?project=${encodeURIComponent(selectedProject.path)}&message=${encodedMessage}`;
-        window.open(url, '_blank');
+        openUrlInContext(url, navigate);
       } else {
         // 没有项目时，填充到输入框
         setInputMessage(prompt);

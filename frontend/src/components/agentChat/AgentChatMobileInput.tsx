@@ -93,7 +93,7 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
     >
       {/* Selected Images Preview */}
       {selectedImages.length > 0 && (
-        <div className="p-3 pb-2 border-b border-gray-100 dark:border-gray-700">
+        <div className="px-2 py-2 border-b border-gray-100 dark:border-gray-700">
           <div className="flex flex-wrap gap-2">
             {selectedImages.map((img) => (
               <div key={img.id} className="relative group">
@@ -127,9 +127,9 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
       )}
 
       {/* Mobile Chat Input */}
-      <div className="p-3">
+      <div className="px-2 py-2 sm:px-3 sm:py-3">
         {/* Top row: Settings and Tools */}
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           {/* Left: Tool selector and Image upload */}
           <div className="flex space-x-2">
             {/* Tool selector button */}
@@ -210,7 +210,7 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
         </div>
 
         {/* Bottom row: Text input and Send button */}
-        <div className="flex items-end space-x-2">
+        <div className="flex items-center space-x-2">
           {/* Text input */}
           <div className="flex-1 relative">
             <textarea

@@ -14,6 +14,7 @@ import { loadBackendServices, getCurrentService } from '../utils/backendServiceS
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 import { useMobileContext } from '../contexts/MobileContext';
+import { openUrlInContext } from '../utils/navigation';
 import {
   useImageUpload,
   useScrollManagement,
@@ -421,7 +422,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
 
   // 打开语音设置页面
   const handleOpenVoiceSettings = useCallback(() => {
-    window.open('/settings/voice', '_blank');
+    openUrlInContext('/settings/voice');
   }, []);
 
   // Use message sender hook (must be after handleNewSession is defined)

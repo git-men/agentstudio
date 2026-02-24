@@ -70,3 +70,6 @@ specs/
 backend/.telemetry/
 backend/config.local.json
 .worktrees/
+
+# Chrome extension build output
+extension/sidepanel/

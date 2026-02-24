@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useMobileContext } from '../contexts/MobileContext';
 import { PanelToggle } from './PanelToggle';
+import { isExtensionEnvironment } from '../utils/navigation';
 
 interface SplitLayoutProps {
   children: [React.ReactNode, React.ReactNode];
@@ -80,8 +81,8 @@ export const SplitLayout: React.FC<SplitLayoutProps> = ({
   // 移动端布局渲染
   if (isMobile) {
     if (mobileLayout === 'tabs') {
-      // 只有当右侧面板存在且未隐藏时才显示 tabs
-      const shouldShowTabs = !hideRightPanel;
+      // 扩展环境下不显示 tabs，直接展示聊天面板
+      const shouldShowTabs = !hideRightPanel && !isExtensionEnvironment();
 
       return (
         <div className="flex flex-col h-full bg-gray-100">

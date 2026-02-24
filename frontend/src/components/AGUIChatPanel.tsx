@@ -437,6 +437,30 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         envVars,
     });
 
+    // Auto-send initial message when conditions are met
+    useEffect(() => {
+        if (!shouldAutoSendRef.current || !inputMessage) return;
+
+        const checkAndSend = () => {
+            if (!isSendDisabled() && !isAiTyping) {
+                shouldAutoSendRef.current = false;
+                handleSendMessage();
+                return true;
+            }
+            return false;
+        };
+
+        if (checkAndSend()) return;
+
+        const timer = setTimeout(() => {
+            if (shouldAutoSendRef.current) {
+                checkAndSend();
+            }
+        }, 500);
+
+        return () => clearTimeout(timer);
+    }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
+
     // Agent command selector key handler
     const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({
         showCommandSelector,
