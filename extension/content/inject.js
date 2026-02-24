@@ -4,7 +4,7 @@
 (function () {
   const ROOT_ID = 'agentstudio-floating-root';
   const STORAGE_KEY = 'agentstudio_floating_pos';
-  const BTN_SIZE = 48;
+  const BTN_SIZE = 36;
   const PADDING = 8;
   const DRAG_THRESHOLD = 5;
 
@@ -61,8 +61,26 @@
   btn.setAttribute('aria-label', 'Open AgentStudio');
   btn.className = 'agentstudio-floating-btn';
   btn.innerHTML = `
-    <svg class="agentstudio-floating-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-      <path d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+    <svg class="agentstudio-floating-icon" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M18 12h64a10 10 0 0 1 10 10v56a10 10 0 0 1-10 10H30L14 98V22a10 10 0 0 1 10-10z" fill="#fff" stroke="#b8a99a" stroke-width="5" stroke-linejoin="round"/>
+      <g transform="translate(52,50)" stroke="#e0784f" stroke-width="4.2" stroke-linecap="round">
+        <line x1="0" y1="0" x2="0" y2="-22"/>
+        <line x1="0" y1="0" x2="15.6" y2="-15.6"/>
+        <line x1="0" y1="0" x2="22" y2="0"/>
+        <line x1="0" y1="0" x2="15.6" y2="15.6"/>
+        <line x1="0" y1="0" x2="0" y2="22"/>
+        <line x1="0" y1="0" x2="-15.6" y2="15.6"/>
+        <line x1="0" y1="0" x2="-22" y2="0"/>
+        <line x1="0" y1="0" x2="-15.6" y2="-15.6"/>
+        <line x1="0" y1="0" x2="-8" y2="-20"/>
+        <line x1="0" y1="0" x2="8" y2="-20"/>
+        <line x1="0" y1="0" x2="20" y2="-8"/>
+        <line x1="0" y1="0" x2="20" y2="8"/>
+        <line x1="0" y1="0" x2="8" y2="20"/>
+        <line x1="0" y1="0" x2="-8" y2="20"/>
+        <line x1="0" y1="0" x2="-20" y2="8"/>
+        <line x1="0" y1="0" x2="-20" y2="-8"/>
+      </g>
     </svg>
   `;
 

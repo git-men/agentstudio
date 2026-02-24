@@ -9,30 +9,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: #fff;
+  border-radius: 10px;
+  background: transparent;
   cursor: grab;
-  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45);
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.15));
+  transition: transform 0.15s ease, filter 0.15s ease;
 }
 
 .agentstudio-floating-btn:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.5);
+  transform: scale(1.1);
+  filter: drop-shadow(0 3px 12px rgba(0, 0, 0, 0.22));
 }
 
 .agentstudio-floating-btn:active {
   cursor: grabbing;
-  transform: scale(0.98);
+  transform: scale(0.95);
 }
 
 .agentstudio-floating-icon {
-  width: 24px;
-  height: 24px;
+  width: 36px;
+  height: 36px;
   pointer-events: none;
 }
