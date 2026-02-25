@@ -297,6 +297,7 @@ const EDITION_PRESETS: Record<Exclude<ProductEdition, 'custom'>, ProductProfile>
     modules: {
       ...allModulesAccess('disabled'),
       'core.chat': 'full',
+      'core.agui': 'full',
       'core.sessions': 'full',
       'manage.projects': 'readonly',
       'system.versions': 'full',

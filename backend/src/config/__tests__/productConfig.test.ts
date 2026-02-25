@@ -184,9 +184,9 @@ describe('edition presets', () => {
       expect(getModuleAccess('core.sessions')).toBe('full');
     });
 
-    it('disables core.agui (not in proxy whitelist)', () => {
-      expect(getModuleAccess('core.agui')).toBe('disabled');
-      expect(isModuleEnabled('core.agui')).toBe(false);
+    it('enables core.agui (needed for frontend-tool-result and AGUI chat)', () => {
+      expect(getModuleAccess('core.agui')).toBe('full');
+      expect(isModuleEnabled('core.agui')).toBe(true);
     });
 
     it('disables core.files', () => {
@@ -391,6 +391,11 @@ describe('VAG frontend API validation under chat-only', () => {
     { method: 'POST', path: '/api/projects/proj-1/versions/tag',               expectedModule: 'system.versions' },
     { method: 'POST', path: '/api/projects/proj-1/versions/checkout',          expectedModule: 'system.versions' },
     { method: 'POST', path: '/api/projects/proj-1/versions/rollback',          expectedModule: 'system.versions' },
+    // core.agui (full) — AGUI protocol and frontend tool results
+    { method: 'POST', path: '/api/agui/chat',                                  expectedModule: 'core.agui' },
+    { method: 'POST', path: '/api/agui/sessions/sess-1/interrupt',             expectedModule: 'core.agui' },
+    { method: 'GET',  path: '/api/agui/engines/cursor',                        expectedModule: 'core.agui' },
+    { method: 'POST', path: '/api/agents/frontend-tool-result',                expectedModule: 'core.agui' },
     // extend.marketplace-skills (full) — /api/marketplace-skills*
     { method: 'GET',  path: '/api/marketplace-skills',                         expectedModule: 'extend.marketplace-skills' },
     { method: 'POST', path: '/api/marketplace-skills/toggle',                  expectedModule: 'extend.marketplace-skills' },
@@ -429,11 +434,6 @@ describe('VAG frontend API validation under chat-only', () => {
     path: string;
     expectedModule: string;
   }> = [
-    // core.agui (disabled) — AGUI protocol not in proxy whitelist
-    { method: 'POST', path: '/api/agui/chat',                                  expectedModule: 'core.agui' },
-    { method: 'POST', path: '/api/agui/sessions/sess-1/interrupt',             expectedModule: 'core.agui' },
-    { method: 'GET',  path: '/api/agui/engines/cursor',                        expectedModule: 'core.agui' },
-    { method: 'POST', path: '/api/agents/frontend-tool-result',                expectedModule: 'core.agui' },
     // manage.agents (disabled) — agent listing not in proxy whitelist
     { method: 'GET',  path: '/api/agents',                                     expectedModule: 'manage.agents' },
     { method: 'GET',  path: '/api/agents/agent-1',                             expectedModule: 'manage.agents' },
