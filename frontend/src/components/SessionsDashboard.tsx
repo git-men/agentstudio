@@ -19,6 +19,7 @@ import { useClaudeVersions } from '../hooks/useClaudeVersions';
 import { smartNavigate, showNavigationNotification } from '../utils/smartNavigation';
 import { useTranslation } from 'react-i18next';
 import { showError } from '../utils/toast';
+import { openUrlInContext } from '../utils/navigation';
 
 export const SessionsDashboard: React.FC = () => {
   const { t } = useTranslation('components');
@@ -57,7 +58,7 @@ export const SessionsDashboard: React.FC = () => {
     } catch (error) {
       console.error('Navigation failed:', error);
       // 降级：直接打开链接
-      window.open(url);
+      openUrlInContext(url);
       showNavigationNotification({
         action: 'failed',
         success: false,

@@ -1,6 +1,7 @@
 packages:
   - frontend
   - backend
+  - extension-pure
 
 ignoredBuiltDependencies:
   - better-sqlite3
