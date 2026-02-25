@@ -73,3 +73,5 @@ backend/config.local.json
 
 # Chrome extension build output
 extension/sidepanel/
+extension-pure/sidepanel/
+extension-pure/icons/
