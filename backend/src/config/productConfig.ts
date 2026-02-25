@@ -463,14 +463,10 @@ function loadCustomProfile(): ProductProfile | null {
     const data = JSON.parse(raw);
 
     const modules: Record<string, ModuleAccess> = {};
-    // Start with all disabled, then override from config
+    // Start with all disabled, then override from config (pure whitelist)
     for (const mod of FEATURE_MODULES) {
       modules[mod.id] = 'disabled';
     }
-    // Core modules always at least readonly
-    modules['core.chat'] = 'full';
-    modules['core.sessions'] = 'full';
-    modules['core.files'] = 'full';
 
     if (data.modules && typeof data.modules === 'object') {
       for (const [key, value] of Object.entries(data.modules)) {
