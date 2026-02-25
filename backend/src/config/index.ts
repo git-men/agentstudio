@@ -61,6 +61,11 @@ export interface AgentStudioConfig {
   slackDefaultAgentId?: string;
   slackDefaultProject?: string;
   enableSlackStreaming?: boolean;
+
+  // Tracing (OTLP)
+  traceEnabled?: boolean;
+  traceEndpoint?: string;
+  traceBkToken?: string;
 }
 
 let cachedConfig: AgentStudioConfig | null = null;
@@ -134,6 +139,11 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     slackDefaultAgentId: process.env.SLACK_DEFAULT_AGENT_ID || configData.slackDefaultAgentId || 'general-chat',
     slackDefaultProject: process.env.SLACK_DEFAULT_PROJECT || configData.slackDefaultProject,
     enableSlackStreaming: process.env.ENABLE_SLACK_STREAMING === 'true' || configData.enableSlackStreaming || false,
+
+    // Tracing (OTLP)
+    traceEnabled: process.env.TRACE_ENABLED === 'true' || configData.traceEnabled || false,
+    traceEndpoint: process.env.TRACE_ENDPOINT || configData.traceEndpoint,
+    traceBkToken: process.env.TRACE_BK_TOKEN || configData.traceBkToken,
   };
 
   cachedConfig = finalConfig;
