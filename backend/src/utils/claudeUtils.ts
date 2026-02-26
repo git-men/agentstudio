@@ -340,6 +340,7 @@ export async function buildQueryOptions(
   const queryOptions: Options = {
     systemPrompt: finalSystemPrompt,
     allowedTools,
+    disallowedTools: ['AskUserQuestion'],
     maxTurns: agent.maxTurns,
     cwd,
     permissionMode: finalPermissionMode as any,
