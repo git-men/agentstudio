@@ -58,7 +58,12 @@ class OTLPFetchTraceExporter implements SpanExporter {
     spans: ReadableSpan[],
     resultCallback: (result: { code: number; error?: Error }) => void,
   ): void {
-    const body = JsonTraceSerializer.serializeRequest(spans);
+    const serialized = JsonTraceSerializer.serializeRequest(spans);
+    if (!serialized) {
+      resultCallback({ code: 1, error: new Error('Failed to serialize trace spans') });
+      return;
+    }
+    const body = Buffer.from(serialized);
 
     fetch(this.url, {
       method: 'POST',
