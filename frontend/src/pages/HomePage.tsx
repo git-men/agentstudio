@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Settings, Play, Plus, Eye, EyeOff } from 'lucide-react';
 import { useAgents, useUpdateAgent } from '../hooks/useAgents';
 import { useQueryClient } from '@tanstack/react-query';
@@ -6,9 +7,11 @@ import { ProjectSelector } from '../components/ProjectSelector';
 import type { AgentConfig } from '../types/index.js';
 import { useTranslation } from 'react-i18next';
 import { showError, showInfo } from '../utils/toast';
+import { openUrlInContext } from '../utils/navigation';
 
 export const HomePage: React.FC = () => {
   const { t } = useTranslation('home');
+  const navigate = useNavigate();
   const { data: agentsData, isLoading } = useAgents(); // 获取所有agent，包括禁用的
   const updateAgent = useUpdateAgent();
   const queryClient = useQueryClient();
@@ -29,7 +32,7 @@ export const HomePage: React.FC = () => {
       const params = new URLSearchParams();
       params.set('project', projectPath);
       const url = `/chat/${selectedAgentForStart.id}?${params.toString()}`;
-      window.open(url, '_blank');
+      openUrlInContext(url, navigate);
     }
     setShowProjectSelector(false);
     setSelectedAgentForStart(null);

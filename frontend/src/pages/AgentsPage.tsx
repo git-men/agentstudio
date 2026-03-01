@@ -15,14 +15,17 @@ import { UnifiedToolSelector } from '../components/UnifiedToolSelector';
 import type { AgentConfig, AgentTool } from '../types/index.js';
 import { useTranslation } from 'react-i18next';
 import { showError } from '../utils/toast';
+import { openUrlInContext } from '../utils/navigation';
 import { useMobileContext } from '../contexts/MobileContext';
 import { SystemPromptEditor } from '../components/SystemPromptEditor';
 import { ToolsList } from '../components/ToolsList';
 import { useConfirm } from '../hooks/useConfirm';
+import { useNavigate } from 'react-router-dom';
 
 
 export const AgentsPage: React.FC = () => {
   const { t } = useTranslation('pages');
+  const navigate = useNavigate();
   const { isMobile } = useMobileContext();
   const confirm = useConfirm();
   const { data: agentsData, isLoading } = useAgents();
@@ -63,7 +66,7 @@ export const AgentsPage: React.FC = () => {
       const params = new URLSearchParams();
       params.set('project', projectPath);
       const url = `/chat/${selectedAgentForStart.id}?${params.toString()}`;
-      window.open(url, '_blank');
+      openUrlInContext(url, navigate);
     }
     setShowProjectSelector(false);
     setSelectedAgentForStart(null);

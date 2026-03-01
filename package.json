@@ -12,6 +12,8 @@
     "dev:frontend": "pnpm --filter @agentstudio/frontend run dev",
     "dev:backend": "pnpm --filter agentstudio-backend run dev",
     "build": "pnpm --filter @agentstudio/frontend run build && pnpm --filter agentstudio-backend run build",
+    "build:extension": "VITE_BASE_PATH=./ pnpm --filter @agentstudio/frontend run build && rm -rf extension/sidepanel/app && mkdir -p extension/sidepanel/app && cp -R frontend/dist/* extension/sidepanel/app/ && pnpm --filter @agentstudio/frontend run build",
+    "build:extension-pure": "pnpm --filter @agentstudio/extension-pure run build",
     "build:frontend": "pnpm --filter @agentstudio/frontend run build",
     "build:backend": "pnpm --filter agentstudio-backend run build",
     "build:npm": "node scripts/build-npm.js",

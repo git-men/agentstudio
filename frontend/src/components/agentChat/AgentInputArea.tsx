@@ -270,9 +270,10 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
   if (isMobile) {
     return (
       <>
-        <div className="flex-shrink-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-3 space-y-3">
+        <div className="flex-shrink-0 space-y-0">
           {/* Command Warning */}
           {commandWarning && (
+            <div className="px-3 pt-2 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
             <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-2 flex items-start space-x-2">
               <div className="flex-shrink-0">
                 <svg className="w-4 h-4 text-red-600 dark:text-red-400 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
@@ -282,6 +283,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
               <div className="flex-1">
                 <p className="text-xs text-red-800 dark:text-red-300">{commandWarning}</p>
               </div>
+            </div>
             </div>
           )}
 

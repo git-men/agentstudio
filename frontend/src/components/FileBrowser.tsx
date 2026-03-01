@@ -5,6 +5,7 @@ import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
 import { CSVPreview } from './CSVPreview';
 import { JSONLPreview } from './JSONLPreview';
+import { useMobileContext } from '../contexts/MobileContext';
 import {
   Folder,
   File,
@@ -56,6 +57,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   onClose
 }) => {
   const { t } = useTranslation('components');
+  const { isMobile } = useMobileContext();
   const [data, setData] = useState<FileBrowserData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -197,61 +199,62 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg w-full max-w-4xl max-h-[80vh] mx-4 flex flex-col">
+      <div className={`bg-white dark:bg-gray-900 rounded-lg w-full ${isMobile ? 'max-w-sm max-h-[70vh] mx-2' : 'max-w-4xl max-h-[80vh] mx-4'} flex flex-col`}>
         {/* Header */}
-        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{title || t('fileBrowser.title')}</h3>
+        <div className={`flex items-center justify-between ${isMobile ? 'px-3 py-2' : 'p-4'} bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700`}>
+          <h3 className={`${isMobile ? 'text-sm' : 'text-lg'} font-semibold text-gray-900 dark:text-white truncate`}>{title || t('fileBrowser.title')}</h3>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 flex-shrink-0 ml-2"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Toolbar */}
-        <div className="flex items-center space-x-2 p-4 border-b border-gray-100 dark:border-gray-700">
-          <button
-            onClick={goToHome}
-            className={`p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors ${
-              restrictToProject ? 'opacity-50 cursor-not-allowed' : ''
-            }`}
-            title={restrictToProject ? t('fileBrowser.toolbar.restrictedToProject') : t('fileBrowser.toolbar.homeDirectory')}
-            disabled={restrictToProject}
-          >
-            <Home className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-          </button>
+        <div className={`flex items-center space-x-1 ${isMobile ? 'px-2 py-1.5' : 'p-4 space-x-2'} border-b border-gray-100 dark:border-gray-700`}>
+          {!restrictToProject && (
+            <button
+              onClick={goToHome}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={t('fileBrowser.toolbar.homeDirectory')}
+            >
+              <Home className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+            </button>
+          )}
 
           <button
             onClick={goToParent}
             disabled={!data?.parentPath || (restrictToProject && data?.currentPath === initialPath)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             title={t('fileBrowser.toolbar.parentDirectory')}
           >
             <ArrowUp className="w-4 h-4 text-gray-600 dark:text-gray-400" />
           </button>
 
-          <div className="flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 rounded text-sm text-gray-600 dark:text-gray-400 font-mono">
-            {data?.currentPath || t('fileBrowser.toolbar.loadingPath')}
+          <div className={`flex-1 px-2 py-1 bg-gray-50 dark:bg-gray-900 rounded ${isMobile ? 'text-xs' : 'text-sm'} text-gray-600 dark:text-gray-400 font-mono truncate`}>
+            {isMobile ? (data?.currentPath?.split('/').pop() || '...') : (data?.currentPath || t('fileBrowser.toolbar.loadingPath'))}
           </div>
 
-          {allowNewDirectory && (
+          {allowNewDirectory && !isMobile && (
             <button
               onClick={() => setShowNewFolderDialog(true)}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               title={t('fileBrowser.toolbar.newDirectory')}
             >
               <FolderPlus className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
           )}
 
-          <button
-            onClick={() => setShowHidden(!showHidden)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            title={showHidden ? t('fileBrowser.toolbar.hideHidden') : t('fileBrowser.toolbar.showHidden')}
-          >
-            {showHidden ? <EyeOff className="w-4 h-4 text-gray-600 dark:text-gray-400" /> : <Eye className="w-4 h-4 text-gray-600 dark:text-gray-400" />}
-          </button>
+          {!isMobile && (
+            <button
+              onClick={() => setShowHidden(!showHidden)}
+              className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              title={showHidden ? t('fileBrowser.toolbar.hideHidden') : t('fileBrowser.toolbar.showHidden')}
+            >
+              {showHidden ? <EyeOff className="w-4 h-4 text-gray-600 dark:text-gray-400" /> : <Eye className="w-4 h-4 text-gray-600 dark:text-gray-400" />}
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -268,106 +271,141 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
             <div
               className="flex-1 overflow-y-auto"
               onWheel={(e) => {
-                // 防止滚动事件穿透到底层页面
                 e.stopPropagation();
               }}
             >
-              <table className="w-full">
-                <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.name')}</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.size')}</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.modified')}</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {isMobile ? (
+                /* Compact list for small screens - filenames only */
+                <div className="divide-y divide-gray-100 dark:divide-gray-800">
                   {filteredItems.map((item, index) => (
-                    <tr
+                    <button
                       key={index}
-                      className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                      onClick={() => {
+                        if (!item.isDirectory && allowFiles) {
+                          handleItemSelect(item);
+                        } else if (item.isDirectory) {
+                          handleItemClick(item);
+                        }
+                      }}
+                      disabled={!item.isDirectory && !allowFiles}
+                      className={`w-full flex items-center space-x-2 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 ${
                         selectedPath === item.path ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                       }`}
                     >
-                      <td className="px-4 py-3 flex items-center space-x-2">
-                        <div className="flex items-center space-x-2 flex-1 min-w-0">
-                          {item.isDirectory ? (
-                            <Folder className="w-4 h-4 text-blue-600 flex-shrink-0" />
-                          ) : isCSVFile(item.name) ? (
-                            <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
-                          ) : isJSONLFile(item.name) ? (
-                            <FileJson className="w-4 h-4 text-amber-500 flex-shrink-0" />
-                          ) : (
-                            <File className="w-4 h-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
-                          )}
-                          <button
-                            onClick={() => {
-                              // For files when allowFiles is true, directly select the file
-                              if (!item.isDirectory && allowFiles) {
-                                handleItemSelect(item);
-                              } else {
-                                handleItemClick(item);
-                              }
-                            }}
-                            className={`text-left truncate hover:text-blue-600 dark:hover:text-blue-400 ${
-                              item.isHidden ? 'text-gray-400' : 'text-gray-900 dark:text-white'
-                            } ${
-                              !item.isDirectory && allowFiles ? 'cursor-pointer font-medium' : ''
-                            }`}
-                          >
-                            {item.name}
-                          </button>
-                          {item.isDirectory && (
-                            <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {formatSize(item.size)}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
-                        {new Date(item.modified).toLocaleDateString('zh-CN')}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end space-x-2">
-                          {!item.isDirectory && isCSVFile(item.name) && (
-                            <button
-                              onClick={() => handlePreviewCSV(item.path)}
-                              className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
-                              title={t('fileBrowser.actions.previewCSV')}
-                            >
-                              {t('fileBrowser.actions.preview')}
-                            </button>
-                          )}
-                          {!item.isDirectory && isJSONLFile(item.name) && (
-                            <button
-                              onClick={() => handlePreviewJSONL(item.path)}
-                              className="px-3 py-1 text-sm bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors"
-                              title={t('fileBrowser.actions.previewJSONL')}
-                            >
-                              {t('fileBrowser.actions.preview')}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => handleItemSelect(item)}
-                            disabled={
-                              (item.isDirectory && !allowDirectories) ||
-                              (!item.isDirectory && !allowFiles)
-                            }
-                            className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                          >
-                            {t('fileBrowser.actions.select')}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                      {item.isDirectory ? (
+                        <Folder className="w-4 h-4 text-blue-500 flex-shrink-0" />
+                      ) : (
+                        <File className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                      )}
+                      <span className={`text-sm truncate flex-1 ${
+                        item.isHidden ? 'text-gray-400' : 'text-gray-900 dark:text-gray-100'
+                      }`}>
+                        {item.name}
+                      </span>
+                      {item.isDirectory && (
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                      )}
+                    </button>
                   ))}
-                </tbody>
-              </table>
+                </div>
+              ) : (
+                /* Full table for desktop */
+                <table className="w-full">
+                  <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.name')}</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.size')}</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.modified')}</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.actions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                    {filteredItems.map((item, index) => (
+                      <tr
+                        key={index}
+                        className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                          selectedPath === item.path ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                        }`}
+                      >
+                        <td className="px-4 py-3 flex items-center space-x-2">
+                          <div className="flex items-center space-x-2 flex-1 min-w-0">
+                            {item.isDirectory ? (
+                              <Folder className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                            ) : isCSVFile(item.name) ? (
+                              <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                            ) : isJSONLFile(item.name) ? (
+                              <FileJson className="w-4 h-4 text-amber-500 flex-shrink-0" />
+                            ) : (
+                              <File className="w-4 h-4 text-gray-600 dark:text-gray-400 flex-shrink-0" />
+                            )}
+                            <button
+                              onClick={() => {
+                                if (!item.isDirectory && allowFiles) {
+                                  handleItemSelect(item);
+                                } else {
+                                  handleItemClick(item);
+                                }
+                              }}
+                              className={`text-left truncate hover:text-blue-600 dark:hover:text-blue-400 ${
+                                item.isHidden ? 'text-gray-400' : 'text-gray-900 dark:text-white'
+                              } ${
+                                !item.isDirectory && allowFiles ? 'cursor-pointer font-medium' : ''
+                              }`}
+                            >
+                              {item.name}
+                            </button>
+                            {item.isDirectory && (
+                              <ChevronRight className="w-3 h-3 text-gray-400 dark:text-gray-500 flex-shrink-0" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                          {formatSize(item.size)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500 dark:text-gray-400">
+                          {new Date(item.modified).toLocaleDateString('zh-CN')}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end space-x-2">
+                            {!item.isDirectory && isCSVFile(item.name) && (
+                              <button
+                                onClick={() => handlePreviewCSV(item.path)}
+                                className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                title={t('fileBrowser.actions.previewCSV')}
+                              >
+                                {t('fileBrowser.actions.preview')}
+                              </button>
+                            )}
+                            {!item.isDirectory && isJSONLFile(item.name) && (
+                              <button
+                                onClick={() => handlePreviewJSONL(item.path)}
+                                className="px-3 py-1 text-sm bg-amber-500 text-white rounded hover:bg-amber-600 transition-colors"
+                                title={t('fileBrowser.actions.previewJSONL')}
+                              >
+                                {t('fileBrowser.actions.preview')}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleItemSelect(item)}
+                              disabled={
+                                (item.isDirectory && !allowDirectories) ||
+                                (!item.isDirectory && !allowFiles)
+                              }
+                              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {t('fileBrowser.actions.select')}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
 
               {filteredItems.length === 0 && (
-                <div className="text-center py-12 text-gray-500 dark:text-gray-400">
-                  <Folder className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
+                <div className={`text-center ${isMobile ? 'py-8' : 'py-12'} text-gray-500 dark:text-gray-400`}>
+                  <Folder className={`${isMobile ? 'w-8 h-8' : 'w-12 h-12'} text-gray-300 dark:text-gray-600 mx-auto mb-3`} />
                   <p>{t('fileBrowser.emptyDirectory')}</p>
                 </div>
               )}
@@ -376,15 +414,15 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-          <div className="text-sm text-gray-500 dark:text-gray-400">
+        <div className={`${isMobile ? 'px-3 py-2' : 'p-4'} border-t border-gray-200 dark:border-gray-700 flex justify-between items-center`}>
+          <div className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-500 dark:text-gray-400`}>
             {filteredItems.length > 0 && (
               <span>{t('fileBrowser.footer.itemsCount', { count: filteredItems.length })}</span>
             )}
           </div>
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+            className={`${isMobile ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors`}
           >
             {t('fileBrowser.actions.cancel')}
           </button>

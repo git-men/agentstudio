@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
+import { openUrlInContext } from '../utils/navigation';
 import {
   Plus,
   Search,
@@ -250,6 +252,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
 export const ProjectsPage: React.FC = () => {
   const { t } = useTranslation('pages');
+  const navigate = useNavigate();
   const { data: agentsData } = useAgents();
   const confirm = useConfirm();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -337,7 +340,7 @@ export const ProjectsPage: React.FC = () => {
         const params = new URLSearchParams();
         params.set('project', result.project.path);
         const url = `/chat/${data.agentId}?${params.toString()}`;
-        window.open(url, '_blank');
+        openUrlInContext(url, navigate);
       } else {
         const error = await response.json();
         throw new Error(error.error || t('projects.errors.createFailed'));
@@ -364,7 +367,7 @@ export const ProjectsPage: React.FC = () => {
     params.set('project', project.path);
     const url = `/chat/${agentToUse}?${params.toString()}`;
     console.log('Generated URL:', url);
-    window.open(url, '_blank');
+    openUrlInContext(url, navigate);
 
     // Update last accessed time
     setProjects(prev => prev.map(p => 
@@ -468,7 +471,7 @@ export const ProjectsPage: React.FC = () => {
         const params = new URLSearchParams();
         params.set('project', data.project.path);
         const url = `/chat/${agentId}?${params.toString()}`;
-        window.open(url, '_blank');
+        openUrlInContext(url, navigate);
       } else {
         const error = await response.json();
         showError(t('errors:agent.setFailed'), error.error || t('errors:common.unknownError'));
@@ -537,7 +540,7 @@ export const ProjectsPage: React.FC = () => {
             const params = new URLSearchParams();
             params.set('project', result.project.path);
             const url = `/chat/${firstAgent.id}?${params.toString()}`;
-            window.open(url, '_blank');
+            openUrlInContext(url, navigate);
           }
         }
       } else {

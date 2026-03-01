@@ -1,7 +1,7 @@
 import React, { useEffect, lazy, Suspense } from 'react';
 import { startConsoleCapture } from './utils/consoleCapture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { PageGate } from './components/ProductGate';
@@ -10,6 +10,7 @@ import { MobileProvider } from './contexts/MobileContext';
 import { TelemetryProvider } from './components/TelemetryProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConfirmProvider } from './hooks/useConfirm';
+import { isExtensionEnvironment } from './utils/navigation';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -103,12 +104,16 @@ const AppContent: React.FC = () => {
     applyTheme();
   }, []);
 
+  const isExtension = isExtensionEnvironment();
+  const RouterComponent = isExtension ? HashRouter : BrowserRouter;
+  const routerProps = isExtension ? {} : { basename: import.meta.env.BASE_URL };
+
   return (
-    <Router basename={import.meta.env.BASE_URL}>
+    <RouterComponent {...routerProps}>
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={isExtension ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
 
           {/* Protected routes */}
@@ -228,7 +233,7 @@ const AppContent: React.FC = () => {
           } />
         </Routes>
       </Suspense>
-    </Router>
+    </RouterComponent>
   );
 };
 
