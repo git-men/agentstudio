@@ -1,3 +1,5 @@
+import './tracing';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -350,8 +352,8 @@ const app: express.Express = express();
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Project-Path', 'X-Call-Chain', 'X-Request-ID'],
-    exposedHeaders: ['Content-Range', 'X-Content-Range', 'X-Call-Chain', 'X-Request-ID']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'X-Requested-With', 'X-Project-Path', 'X-Call-Chain', 'X-Request-ID', 'traceparent', 'tracestate'],
+    exposedHeaders: ['Content-Range', 'X-Content-Range', 'X-Call-Chain', 'X-Request-ID', 'traceparent', 'tracestate']
   }));
 
   // X-Call-Chain: outermost first, append this service on every response (e.g. nginx->as-mate->as-mate-chat)
@@ -579,8 +581,8 @@ const app: express.Express = express();
 
   // Protected routes - Require authentication
   app.use('/api/files', authMiddleware, filesRouter);
-  // LAVS routes (under /api/agents) - must come before agentsRouter to handle lavs-specific paths
-  app.use('/api/agents', authMiddleware, lavsRouter);
+  // TEMPORARY: LAVS routes without auth for PoC testing (must come before agentsRouter)
+  app.use('/api/agents', lavsRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
   app.use('/api/mcp', authMiddleware, mcpRouter);
   app.use('/api/sessions', authMiddleware, sessionsRouter);

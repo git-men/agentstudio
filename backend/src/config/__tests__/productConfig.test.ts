@@ -27,9 +27,10 @@ describe('resolveModule', () => {
       ['/api/agents/chat', 'core.chat'],
       ['/api/agents/chat/some-extra', 'core.chat'],
       ['/api/agents/user-response', 'core.chat'],
-      ['/api/agui/chat', 'core.chat'],
-      ['/api/agui/sessions/abc/interrupt', 'core.chat'],
-      ['/api/agui/engines/cursor', 'core.chat'],
+      ['/api/agui/chat', 'core.agui'],
+      ['/api/agui/sessions/abc/interrupt', 'core.agui'],
+      ['/api/agui/engines/cursor', 'core.agui'],
+      ['/api/agents/frontend-tool-result', 'core.agui'],
       ['/api/sessions/agent-1', 'core.sessions'],
       ['/api/sessions/agent-1/session-1/messages', 'core.sessions'],
       ['/api/agents/sessions/sess-1/interrupt', 'core.sessions'],
@@ -99,12 +100,12 @@ describe('resolveModule', () => {
       expect(resolveModule('/api/projects/proj-123/versions/commit')).toBe('system.versions');
     });
 
-    it('matches /api/projects/*/a2a-config to system.a2a', () => {
-      expect(resolveModule('/api/projects/proj-1/a2a-config')).toBe('system.a2a');
+    it('matches /api/projects/*/a2a-config to manage.projects', () => {
+      expect(resolveModule('/api/projects/proj-1/a2a-config')).toBe('manage.projects');
     });
 
-    it('matches /api/projects/*/api-keys to system.a2a', () => {
-      expect(resolveModule('/api/projects/proj-1/api-keys')).toBe('system.a2a');
+    it('matches /api/projects/*/api-keys to manage.projects', () => {
+      expect(resolveModule('/api/projects/proj-1/api-keys')).toBe('manage.projects');
     });
   });
 
@@ -183,15 +184,14 @@ describe('edition presets', () => {
       expect(getModuleAccess('core.sessions')).toBe('full');
     });
 
+    it('enables core.agui (needed for frontend-tool-result and AGUI chat)', () => {
+      expect(getModuleAccess('core.agui')).toBe('full');
+      expect(isModuleEnabled('core.agui')).toBe(true);
+    });
+
     it('disables core.files', () => {
       expect(getModuleAccess('core.files')).toBe('disabled');
       expect(isModuleEnabled('core.files')).toBe(false);
-    });
-
-    it('sets manage.agents to readonly', () => {
-      expect(getModuleAccess('manage.agents')).toBe('readonly');
-      expect(isModuleEnabled('manage.agents')).toBe(true);
-      expect(isModuleWritable('manage.agents')).toBe(false);
     });
 
     it('sets manage.projects to readonly', () => {
@@ -208,10 +208,14 @@ describe('edition presets', () => {
       expect(getModuleAccess('extend.marketplace-skills')).toBe('full');
     });
 
-    it('sets system.a2a to readonly', () => {
-      expect(getModuleAccess('system.a2a')).toBe('readonly');
-      expect(isModuleEnabled('system.a2a')).toBe(true);
-      expect(isModuleWritable('system.a2a')).toBe(false);
+    it('disables manage.agents (not in proxy whitelist)', () => {
+      expect(getModuleAccess('manage.agents')).toBe('disabled');
+      expect(isModuleEnabled('manage.agents')).toBe(false);
+    });
+
+    it('disables system.a2a (not in proxy whitelist)', () => {
+      expect(getModuleAccess('system.a2a')).toBe('disabled');
+      expect(isModuleEnabled('system.a2a')).toBe(false);
     });
 
     it('disables all management UI modules', () => {
@@ -319,8 +323,8 @@ describe('helper functions', () => {
       expect(isFrontendPathEnabled('/unknown-page')).toBe(true);
     });
 
-    it('enables /agents in readonly (isModuleEnabled checks full|readonly)', () => {
-      expect(isFrontendPathEnabled('/agents')).toBe(true);
+    it('disables /agents (manage.agents is disabled in chat-only)', () => {
+      expect(isFrontendPathEnabled('/agents')).toBe(false);
     });
   });
 
@@ -360,70 +364,94 @@ describe('VAG frontend API validation under chat-only', () => {
   });
 
   /**
-   * Every API endpoint used by the VAG frontend, mapped to expected module
-   * and the HTTP method used. The test verifies that each endpoint resolves
-   * to the correct module AND that the module's access level permits the
-   * given HTTP method.
+   * Allowed endpoints — aligned with sandbox-proxy route-guard business whitelist.
+   * Each endpoint resolves to a module that is enabled (full or readonly)
+   * and the HTTP method is permitted by the access level.
    */
-  const vagEndpoints: Array<{
+  const allowedEndpoints: Array<{
     method: 'GET' | 'POST';
     path: string;
     expectedModule: string | null;
   }> = [
+    // core.chat (full) — /api/agents/chat, /api/agents/user-response
+    { method: 'POST', path: '/api/agents/chat',                                expectedModule: 'core.chat' },
+    { method: 'POST', path: '/api/agents/user-response',                       expectedModule: 'core.chat' },
+    // core.sessions (full) — /api/agents/sessions/*, /api/sessions/*
     { method: 'GET',  path: '/api/sessions/agent-1',                           expectedModule: 'core.sessions' },
     { method: 'GET',  path: '/api/sessions/agent-1/sess-1/messages',           expectedModule: 'core.sessions' },
     { method: 'POST', path: '/api/agents/sessions/sess-1/interrupt',           expectedModule: 'core.sessions' },
-    { method: 'POST', path: '/api/agui/sessions/sess-1/interrupt',             expectedModule: 'core.chat' },
-    { method: 'POST', path: '/api/agents/chat',                                expectedModule: 'core.chat' },
-    { method: 'POST', path: '/api/agui/chat',                                  expectedModule: 'core.chat' },
-    { method: 'POST', path: '/api/agents/user-response',                       expectedModule: 'core.chat' },
-    { method: 'GET',  path: '/api/engine',                                     expectedModule: null },
-    { method: 'GET',  path: '/api/agui/engines/cursor',                        expectedModule: 'core.chat' },
+    // manage.projects (readonly) — /api/projects/*
+    { method: 'GET',  path: '/api/projects/proj-1',                            expectedModule: 'manage.projects' },
+    { method: 'GET',  path: '/api/projects/proj-1/a2a-config',                 expectedModule: 'manage.projects' },
+    { method: 'GET',  path: '/api/projects/proj-1/api-keys',                   expectedModule: 'manage.projects' },
+    // system.versions (full) — /api/projects/*/versions
     { method: 'GET',  path: '/api/projects/proj-1/versions',                   expectedModule: 'system.versions' },
     { method: 'GET',  path: '/api/projects/proj-1/versions/status',            expectedModule: 'system.versions' },
     { method: 'GET',  path: '/api/projects/proj-1/versions/commit',            expectedModule: 'system.versions' },
     { method: 'POST', path: '/api/projects/proj-1/versions/tag',               expectedModule: 'system.versions' },
     { method: 'POST', path: '/api/projects/proj-1/versions/checkout',          expectedModule: 'system.versions' },
     { method: 'POST', path: '/api/projects/proj-1/versions/rollback',          expectedModule: 'system.versions' },
+    // core.agui (full) — AGUI protocol and frontend tool results
+    { method: 'POST', path: '/api/agui/chat',                                  expectedModule: 'core.agui' },
+    { method: 'POST', path: '/api/agui/sessions/sess-1/interrupt',             expectedModule: 'core.agui' },
+    { method: 'GET',  path: '/api/agui/engines/cursor',                        expectedModule: 'core.agui' },
+    { method: 'POST', path: '/api/agents/frontend-tool-result',                expectedModule: 'core.agui' },
+    // extend.marketplace-skills (full) — /api/marketplace-skills*
     { method: 'GET',  path: '/api/marketplace-skills',                         expectedModule: 'extend.marketplace-skills' },
     { method: 'POST', path: '/api/marketplace-skills/toggle',                  expectedModule: 'extend.marketplace-skills' },
     { method: 'POST', path: '/api/marketplace-skills/batch',                   expectedModule: 'extend.marketplace-skills' },
-    { method: 'GET',  path: '/api/a2a/history/some-project/sess-1',            expectedModule: 'system.a2a' },
+    // infrastructure (no module) — always passes through
+    { method: 'GET',  path: '/api/engine',                                     expectedModule: null },
   ];
 
-  it.each(vagEndpoints)(
-    '$method $path → module=$expectedModule should be accessible',
+  it.each(allowedEndpoints)(
+    'ALLOW $method $path → module=$expectedModule',
     ({ method, path, expectedModule }) => {
       const resolved = resolveModule(path);
       expect(resolved).toBe(expectedModule);
 
-      if (resolved === null) {
-        // Infrastructure route — always passes through
-        return;
-      }
+      if (resolved === null) return;
 
       const access = getModuleAccess(resolved);
-      if (access === 'full') {
-        // All methods allowed
-        return;
-      }
+      if (access === 'full') return;
 
       if (access === 'readonly') {
         expect(method).toBe('GET');
         return;
       }
 
-      // If we get here, the module is disabled — test should fail
       throw new Error(
         `${method} ${path} resolves to "${resolved}" which has access="${access}" in chat-only. This endpoint would be blocked.`,
       );
     },
   );
 
-  it('does NOT allow file operations', () => {
-    expect(getModuleAccess('core.files')).toBe('disabled');
-    expect(isModuleEnabled('core.files')).toBe(false);
-  });
+  /**
+   * Blocked endpoints — not in proxy whitelist, must be denied by productGate.
+   */
+  const blockedEndpoints: Array<{
+    method: 'GET' | 'POST';
+    path: string;
+    expectedModule: string;
+  }> = [
+    // manage.agents (disabled) — agent listing not in proxy whitelist
+    { method: 'GET',  path: '/api/agents',                                     expectedModule: 'manage.agents' },
+    { method: 'GET',  path: '/api/agents/agent-1',                             expectedModule: 'manage.agents' },
+    // system.a2a (disabled) — /api/a2a/* not in proxy whitelist
+    { method: 'GET',  path: '/api/a2a/history/some-project/sess-1',            expectedModule: 'system.a2a' },
+    // core.files (disabled) — explicitly denied in proxy
+    { method: 'GET',  path: '/api/files/read',                                 expectedModule: 'core.files' },
+    { method: 'POST', path: '/api/files/write',                                expectedModule: 'core.files' },
+  ];
+
+  it.each(blockedEndpoints)(
+    'BLOCK $method $path → module=$expectedModule (disabled)',
+    ({ method, path, expectedModule }) => {
+      const resolved = resolveModule(path);
+      expect(resolved).toBe(expectedModule);
+      expect(getModuleAccess(resolved!)).toBe('disabled');
+    },
+  );
 
   it('does NOT allow dashboard access', () => {
     expect(isFrontendPathEnabled('/dashboard')).toBe(false);
