@@ -410,32 +410,87 @@ export class CodexSdkAguiAdapter {
 
     switch (itemType) {
       case 'agent_message': {
-        if (this.currentMessageId === itemId) {
+        const text = (item.text as string) || '';
+        const wasTracked = this.currentMessageId === itemId;
+        if (!wasTracked) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
           events.push({
-            type: 'TEXT_MESSAGE_END' as AGUIEventType.TEXT_MESSAGE_END,
+            type: 'TEXT_MESSAGE_START' as AGUIEventType.TEXT_MESSAGE_START,
             messageId: itemId,
+            role: 'assistant',
             timestamp,
           } as AGUIEvent);
-          this.currentMessageId = null;
+          if (text) {
+            events.push({
+              type: 'TEXT_MESSAGE_CONTENT' as AGUIEventType.TEXT_MESSAGE_CONTENT,
+              messageId: itemId,
+              content: text,
+              timestamp,
+            } as AGUIEvent);
+          }
         }
+        events.push({
+          type: 'TEXT_MESSAGE_END' as AGUIEventType.TEXT_MESSAGE_END,
+          messageId: itemId,
+          timestamp,
+        } as AGUIEvent);
+        this.currentMessageId = null;
         break;
       }
 
       case 'reasoning': {
-        if (this.currentThinkingId === itemId) {
+        const text = (item.text as string) || '';
+        const wasTracked = this.currentThinkingId === itemId;
+        if (!wasTracked) {
+          this.closeMessageIfNeeded(events, timestamp);
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
           events.push({
-            type: 'THINKING_END' as AGUIEventType.THINKING_END,
+            type: 'THINKING_START' as AGUIEventType.THINKING_START,
             messageId: itemId,
             timestamp,
           } as AGUIEvent);
-          this.currentThinkingId = null;
+          if (text) {
+            events.push({
+              type: 'THINKING_CONTENT' as AGUIEventType.THINKING_CONTENT,
+              messageId: itemId,
+              content: text,
+              timestamp,
+            } as AGUIEvent);
+          }
         }
+        events.push({
+          type: 'THINKING_END' as AGUIEventType.THINKING_END,
+          messageId: itemId,
+          timestamp,
+        } as AGUIEvent);
+        this.currentThinkingId = null;
         break;
       }
 
       case 'command_execution': {
         const exitCode = typeof item.exit_code === 'number' ? item.exit_code : 0;
         const output = (item.aggregated_output as string) || state?.outputChunks.join('') || '';
+        if (!state) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
+          const command = (item.command as string) || '';
+          events.push({
+            type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
+            toolCallId: itemId,
+            toolName: 'shellToolCall',
+            timestamp,
+          } as AGUIEvent);
+          events.push({
+            type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
+            toolCallId: itemId,
+            args: JSON.stringify({ command }),
+            timestamp,
+          } as AGUIEvent);
+        }
         events.push({
           type: 'TOOL_CALL_END' as AGUIEventType.TOOL_CALL_END,
           toolCallId: itemId,
@@ -455,6 +510,23 @@ export class CodexSdkAguiAdapter {
         const changes = (item.changes as Array<{ path: string; kind: string }>) || [];
         const files = changes.map(c => ({ path: c.path, changeType: mapPatchKind(c.kind) }));
         const status = (item.status as string) || 'completed';
+        if (!state) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
+          events.push({
+            type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
+            toolCallId: itemId,
+            toolName: 'fileChangeToolCall',
+            timestamp,
+          } as AGUIEvent);
+          events.push({
+            type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
+            toolCallId: itemId,
+            args: JSON.stringify({ files }),
+            timestamp,
+          } as AGUIEvent);
+        }
         events.push({
           type: 'TOOL_CALL_END' as AGUIEventType.TOOL_CALL_END,
           toolCallId: itemId,
@@ -470,6 +542,24 @@ export class CodexSdkAguiAdapter {
       }
 
       case 'web_search': {
+        if (!state) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
+          const query = (item.query as string) || '';
+          events.push({
+            type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
+            toolCallId: itemId,
+            toolName: 'webSearchToolCall',
+            timestamp,
+          } as AGUIEvent);
+          events.push({
+            type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
+            toolCallId: itemId,
+            args: JSON.stringify({ query }),
+            timestamp,
+          } as AGUIEvent);
+        }
         events.push({
           type: 'TOOL_CALL_END' as AGUIEventType.TOOL_CALL_END,
           toolCallId: itemId,
@@ -486,6 +576,23 @@ export class CodexSdkAguiAdapter {
 
       case 'todo_list': {
         const items = (item.items as Array<{ text: string; completed: boolean }>) || [];
+        if (!state) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
+          events.push({
+            type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
+            toolCallId: itemId,
+            toolName: 'todoListToolCall',
+            timestamp,
+          } as AGUIEvent);
+          events.push({
+            type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
+            toolCallId: itemId,
+            args: JSON.stringify({ tasks: items }),
+            timestamp,
+          } as AGUIEvent);
+        }
         events.push({
           type: 'TOOL_CALL_END' as AGUIEventType.TOOL_CALL_END,
           toolCallId: itemId,
@@ -509,6 +616,27 @@ export class CodexSdkAguiAdapter {
         const error = item.error as Record<string, unknown> | undefined;
         const status = item.status as string | undefined;
         const isError = status === 'failed' || !!error;
+        if (!state) {
+          this.closeThinkingIfNeeded(events, timestamp);
+          this.closeMessageIfNeeded(events, timestamp);
+          this.ensureRunStarted(events);
+          const server = (item.server as string) || 'unknown';
+          const tool = (item.tool as string) || 'unknown';
+          const mcpToolName = `mcp__${server}__${tool}`;
+          const args = (item.arguments as Record<string, unknown>) || {};
+          events.push({
+            type: 'TOOL_CALL_START' as AGUIEventType.TOOL_CALL_START,
+            toolCallId: itemId,
+            toolName: mcpToolName,
+            timestamp,
+          } as AGUIEvent);
+          events.push({
+            type: 'TOOL_CALL_ARGS' as AGUIEventType.TOOL_CALL_ARGS,
+            toolCallId: itemId,
+            args: JSON.stringify(args),
+            timestamp,
+          } as AGUIEvent);
+        }
         events.push({
           type: 'TOOL_CALL_END' as AGUIEventType.TOOL_CALL_END,
           toolCallId: itemId,

@@ -90,9 +90,9 @@ export function useEngine() {
   const isCodebuddyEngine = config?.engine === 'codebuddy-sdk';
 
   /**
-   * Check if current engine is Codex CLI
+   * Check if current engine is Codex (CLI or SDK)
    */
-  const isCodexEngine = config?.engine === 'codex-cli';
+  const isCodexEngine = config?.engine === 'codex-cli' || config?.engine === 'codex-sdk';
 
   /**
    * Check if current engine uses AGUI protocol (Cursor, CodeBuddy, Codex)

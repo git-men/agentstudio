@@ -26,6 +26,9 @@ importers:
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
+      '@openai/codex':
+        specifier: ^0.104.0
+        version: 0.104.0
       '@openai/codex-sdk':
         specifier: ^0.104.0
         version: 0.104.0

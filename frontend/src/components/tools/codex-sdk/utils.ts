@@ -5,6 +5,7 @@
 import type { CodexSdkToolName } from './types';
 
 const CODEX_SDK_TOOLS: Set<string> = new Set([
+  'shellToolCall',
   'fileChangeToolCall',
   'webSearchToolCall',
   'todoListToolCall',
@@ -15,6 +16,7 @@ export function isCodexSdkTool(toolName: string): toolName is CodexSdkToolName {
 }
 
 const DISPLAY_NAMES: Record<CodexSdkToolName, string> = {
+  shellToolCall: 'Shell',
   fileChangeToolCall: 'File Changes',
   webSearchToolCall: 'Web Search',
   todoListToolCall: 'Todo List',

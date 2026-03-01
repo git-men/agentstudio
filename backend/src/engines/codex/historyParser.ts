@@ -109,6 +109,18 @@ function toSessionMessage(
   };
 }
 
+const SYSTEM_INJECTED_PREFIXES = [
+  '# AGENTS.md instructions for ',
+  '<environment_context>',
+  '<INSTRUCTIONS>',
+  '<permissions instructions>',
+];
+
+function isSystemInjectedMessage(parts: Array<{ type: 'text' | 'thinking'; text: string }>): boolean {
+  const merged = parts.map(p => p.text).join('').trimStart();
+  return SYSTEM_INJECTED_PREFIXES.some(prefix => merged.startsWith(prefix));
+}
+
 function parseCodexSessionFile(filePath: string): ParsedCodexSession | null {
   let raw = '';
   try {
@@ -156,6 +168,8 @@ function parseCodexSessionFile(filePath: string): ParsedCodexSession | null {
 
     const parts = extractTextParts(payload.content);
     if (parts.length === 0) continue;
+
+    if (role === 'user' && isSystemInjectedMessage(parts)) continue;
 
     const effectiveSessionId = sessionId || 'unknown';
     messages.push(

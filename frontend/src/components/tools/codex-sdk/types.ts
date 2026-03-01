@@ -3,9 +3,20 @@
  */
 
 export type CodexSdkToolName =
+  | 'shellToolCall'
   | 'fileChangeToolCall'
   | 'webSearchToolCall'
   | 'todoListToolCall';
+
+export interface ShellToolArgs {
+  command: string;
+  workingDirectory?: string;
+}
+
+export interface ShellToolResult {
+  output: string;
+  exit_code: number;
+}
 
 export interface FileChangeToolArgs {
   files: Array<{

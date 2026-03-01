@@ -2,7 +2,7 @@
  * A2A Protocol Routes
  *
  * Implements A2A (Agent-to-Agent) protocol HTTP endpoints for external agent communication.
- * Supports multiple engine types: Claude (default) and Cursor.
+ * Supports multiple engine types: Claude (default), Cursor, Codex, Codex-SDK, CodeBuddy.
  *
  * Endpoints:
  * - GET  /.well-known/agent-card.json - Retrieve Agent Card (discovery)
@@ -12,12 +12,14 @@
  * - DELETE /tasks/:taskId - Cancel task
  *
  * All endpoints require API key authentication via Authorization header.
- * 
+ *
  * Engine Selection (Priority Order):
- * 1. Service-level engine configuration (ENGINE=cursor-cli) - uses Cursor for ALL agents
- * 2. Agent type naming convention:
- *    - If agentType is 'cursor' or starts with 'cursor-' or ends with ':cursor' -> Cursor
- *    - Otherwise -> Claude (default)
+ * 1. Service-level engine configuration (ENGINE=codex-sdk, cursor-cli, etc.)
+ * 2. Agent type naming convention (agentType contains engine name)
+ * 3. Default: Claude
+ *
+ * Non-Claude engines (Cursor, Codex, Codex-SDK, CodeBuddy) all share the
+ * same AGUI A2A service path, which delegates to engineManager.sendMessage().
  */
 
 import express, { Router, Response } from 'express';
@@ -46,7 +48,7 @@ import { handleSessionManagement, isVisionModel, saveImageToHiddenDir } from '..
 import { buildQueryOptions } from '../utils/claudeUtils.js';
 import { executeA2AQuery, executeA2AQueryStreaming } from '../services/a2a/a2aQueryService.js';
 
-// Cursor A2A Service imports
+// Cursor A2A Service imports (kept for backward compatibility)
 import {
   executeCursorA2AQuery,
   executeCursorA2AStreaming,
@@ -55,7 +57,15 @@ import {
   type CursorA2AConfig,
 } from '../services/a2a/cursorA2aService.js';
 import { CursorA2AAdapter } from '../engines/cursor/a2aAdapter.js';
-import { isCursorEngine } from '../config/engineConfig.js';
+// Generic AGUI A2A Service — supports all AGUI engines
+import {
+  executeAguiA2AQuery,
+  executeAguiA2AStreaming,
+  generateAguiAgentCard,
+  type AguiA2AConfig,
+} from '../services/a2a/aguiA2aService.js';
+import { isCursorEngine, isCodexEngine, isCodexSdkEngine, isCodebuddyEngine } from '../config/engineConfig.js';
+import type { EngineType } from '../engines/types.js';
 import { platformEventBus } from '../services/hooks/platformEventBus.js';
 import { getHookManager } from '../services/hooks/index.js';
 import type { HookEvent } from '../types/platformHooks.js';
@@ -71,36 +81,44 @@ const projectMetadataStorage = new ProjectMetadataStorage();
 // ============================================================================
 
 /**
- * Determine if the agent should use Cursor engine based on agentType
- * 
- * Rules:
- * - If agentType is exactly 'cursor' -> use Cursor
- * - If agentType starts with 'cursor-' -> use Cursor  
- * - If agentType contains ':cursor' suffix -> use Cursor
- * - Otherwise -> use Claude (default)
+ * Match agentType string to a specific AGUI engine
  */
-function isCursorAgent(agentType: string): boolean {
-  const lowerType = agentType.toLowerCase();
-  return (
-    lowerType === 'cursor' ||
-    lowerType.startsWith('cursor-') ||
-    lowerType.endsWith(':cursor')
-  );
+function matchAgentTypeToEngine(agentType: string): EngineType | null {
+  const lower = agentType.toLowerCase();
+  const patterns: Array<{ engine: EngineType; match: (s: string) => boolean }> = [
+    { engine: 'cursor', match: s => s === 'cursor' || s.startsWith('cursor-') || s.endsWith(':cursor') },
+    { engine: 'codex-sdk', match: s => s === 'codex-sdk' || s.startsWith('codex-sdk-') || s.endsWith(':codex-sdk') },
+    { engine: 'codex', match: s => s === 'codex' || s.startsWith('codex-') || s.endsWith(':codex') },
+    { engine: 'codebuddy', match: s => s === 'codebuddy' || s.startsWith('codebuddy-') || s.endsWith(':codebuddy') },
+  ];
+  for (const { engine, match } of patterns) {
+    if (match(lower)) return engine;
+  }
+  return null;
+}
+
+/** AGUI engine types that bypass the Claude SDK path */
+const AGUI_ENGINE_TYPES = new Set<EngineType>(['cursor', 'codex', 'codex-sdk', 'codebuddy']);
+
+function isAguiEngine(type: EngineType): boolean {
+  return AGUI_ENGINE_TYPES.has(type);
 }
 
 /**
  * Get engine type for an agent
- * 
+ *
  * Priority:
- * 1. Service-level engine configuration (ENGINE=cursor-cli)
- * 2. Agent type naming convention (agentType contains 'cursor')
+ * 1. Service-level engine configuration (ENGINE=...)
+ * 2. Agent type naming convention
+ * 3. Default: 'claude'
  */
-function getEngineType(agentType: string): 'cursor' | 'claude' {
-  // Service-level engine configuration takes precedence
-  if (isCursorEngine()) {
-    return 'cursor';
-  }
-  return isCursorAgent(agentType) ? 'cursor' : 'claude';
+function getEngineType(agentType: string): EngineType {
+  if (isCursorEngine()) return 'cursor';
+  if (isCodexSdkEngine()) return 'codex-sdk';
+  if (isCodexEngine()) return 'codex';
+  if (isCodebuddyEngine()) return 'codebuddy';
+
+  return matchAgentTypeToEngine(agentType) || 'claude';
 }
 
 // ============================================================================
@@ -179,19 +197,23 @@ router.get('/.well-known/agent-card.json', async (req: A2ARequest, res: Response
     };
 
     let agentCard;
-    
-    if (engineType === 'cursor') {
-      // Generate Cursor Agent Card
-      agentCard = await generateCursorAgentCard(projectContext);
-      
-      console.info('[A2A] Cursor Agent Card generated:', {
+
+    if (isAguiEngine(engineType)) {
+      agentCard = await generateAguiAgentCard(engineType, {
+        a2aAgentId: a2aContext.a2aAgentId,
+        projectId: a2aContext.projectId,
+        projectName,
+        workingDirectory: a2aContext.workingDirectory,
+        baseUrl,
+      });
+
+      console.info(`[A2A] ${engineType} Agent Card generated:`, {
         a2aAgentId: a2aContext.a2aAgentId,
         agentType: a2aContext.agentType,
-        engineType: 'cursor',
+        engineType,
         skillCount: agentCard.skills.length,
       });
     } else {
-      // Load agent configuration for Claude
       const agentConfig = agentStorage.getAgent(a2aContext.agentType);
 
       if (!agentConfig) {
@@ -201,14 +223,10 @@ router.get('/.well-known/agent-card.json', async (req: A2ARequest, res: Response
         });
       }
 
-      // Try to get from cache first
       agentCard = agentCardCache.get(agentConfig, projectContext);
 
       if (!agentCard) {
-        // Generate Agent Card from agent configuration
         agentCard = generateAgentCard(agentConfig, projectContext);
-
-        // Cache the generated Agent Card
         agentCardCache.set(agentConfig, projectContext, agentCard);
 
         console.info('[A2A] Agent Card generated and cached:', {
@@ -346,32 +364,28 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
     // ── End Hook Interceptor ──────────────────────────────────────────────
 
     // ============================================================================
-    // Cursor Engine Handling
+    // AGUI Engine Handling (Cursor, Codex, Codex-SDK, CodeBuddy)
     // ============================================================================
-    if (engineType === 'cursor') {
-      console.log(`🖱️ [A2A] Using Cursor engine for agentType: ${a2aContext.agentType}`);
-      
-      // Create A2A message from user input
+    if (isAguiEngine(engineType)) {
+      console.log(`🔌 [A2A] Using AGUI engine "${engineType}" for agentType: ${a2aContext.agentType}`);
+
       const a2aMessage = createUserMessage(interceptedMessage, {
         contextId: sessionId,
       });
 
-      const cursorParams: CursorA2AMessageParams = {
-        message: a2aMessage,
-      };
-
-      const cursorConfig: CursorA2AConfig = {
+      const aguiConfig: AguiA2AConfig = {
+        engineType,
         workspace: a2aContext.workingDirectory,
-        model: req.body.model as string | undefined, // Don't default to 'auto', let CLI use its internal settings
+        model: req.body.model as string | undefined,
         sessionId,
         timeout: (req.body.timeout as number) || 600000,
         requestId: `a2a-${Date.now()}`,
         contextId: sessionId,
+        permissionMode: req.body.permissionMode as string | undefined,
       };
 
       const startTime = Date.now();
 
-      // Platform hook system: helper to emit A2A lifecycle events (fire-and-forget)
       const emitA2AHookEvent = (type: string, data: Record<string, unknown>) => {
         try {
           const hookEvent: HookEvent = {
@@ -390,7 +404,6 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
       };
 
       if (stream) {
-        // Streaming Mode for Cursor
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
@@ -407,12 +420,12 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
           }
         }, 15000);
 
-        emitA2AHookEvent('run.start', { engine: 'cursor' });
+        emitA2AHookEvent('run.start', { engine: engineType });
 
         try {
-          const result = await executeCursorA2AStreaming(
-            cursorParams,
-            cursorConfig,
+          const result = await executeAguiA2AStreaming(
+            { message: a2aMessage },
+            aguiConfig,
             (response) => {
               if (!isConnectionClosed) {
                 res.write(CursorA2AAdapter.formatAsSSE(response));
@@ -421,16 +434,15 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
           );
 
           emitA2AHookEvent('run.end', {
-            engine: 'cursor',
+            engine: engineType,
             durationMs: Date.now() - startTime,
           });
 
-          // Send completion event
           if (!isConnectionClosed) {
             res.write(`data: ${JSON.stringify({ type: 'done', sessionId: result.sessionId, taskId: result.taskId })}\n\n`);
           }
 
-          console.info('[A2A] Cursor streaming completed:', {
+          console.info(`[A2A] ${engineType} streaming completed:`, {
             a2aAgentId: a2aContext.a2aAgentId,
             taskId: result.taskId,
             sessionId: result.sessionId,
@@ -438,10 +450,10 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
           });
         } catch (error) {
           emitA2AHookEvent('run.error', {
-            engine: 'cursor',
+            engine: engineType,
             error: error instanceof Error ? error.message : String(error),
           });
-          console.error('[A2A] Cursor streaming error:', error);
+          console.error(`[A2A] ${engineType} streaming error:`, error);
           if (!isConnectionClosed) {
             res.write(`data: ${JSON.stringify({ type: 'error', error: error instanceof Error ? error.message : String(error) })}\n\n`);
           }
@@ -453,15 +465,14 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
         }
         return;
       } else {
-        // Synchronous Mode for Cursor
-        emitA2AHookEvent('run.start', { engine: 'cursor' });
+        emitA2AHookEvent('run.start', { engine: engineType });
         try {
-          const result = await executeCursorA2AQuery(cursorParams, cursorConfig);
+          const result = await executeAguiA2AQuery({ message: a2aMessage }, aguiConfig);
           const processingTimeMs = Date.now() - startTime;
 
-          emitA2AHookEvent('run.end', { engine: 'cursor', durationMs: processingTimeMs });
+          emitA2AHookEvent('run.end', { engine: engineType, durationMs: processingTimeMs });
 
-          console.info('[A2A] Cursor message processed:', {
+          console.info(`[A2A] ${engineType} message processed:`, {
             a2aAgentId: a2aContext.a2aAgentId,
             taskId: result.task.id,
             sessionId: result.sessionId,
@@ -476,15 +487,15 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
               processingTimeMs,
               taskId: result.task.id,
               contextId: result.task.contextId,
-              engineType: 'cursor',
+              engineType,
             },
           });
         } catch (error) {
           emitA2AHookEvent('run.error', {
-            engine: 'cursor',
+            engine: engineType,
             error: error instanceof Error ? error.message : String(error),
           });
-          console.error('[A2A] Cursor processing error:', error);
+          console.error(`[A2A] ${engineType} processing error:`, error);
           throw error;
         }
         return;

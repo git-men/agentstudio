@@ -92,6 +92,26 @@ class EngineManager {
   }
 
   /**
+   * Validate that a model is supported by the given engine.
+   * Returns the model if valid, or undefined (let the engine pick its default) if not.
+   */
+  async validateModel(engineType: EngineType, model: string | undefined): Promise<string | undefined> {
+    if (!model || model === 'auto') return undefined;
+    try {
+      const models = await this.getSupportedModels(engineType);
+      if (models.length === 0) return model; // engine doesn't advertise models, pass through
+      const isValid = models.some(m => m.id === model);
+      if (!isValid) {
+        console.warn(`⚠️ [EngineManager] Model "${model}" not supported by ${engineType} engine, falling back to engine default`);
+        return undefined;
+      }
+      return model;
+    } catch {
+      return model; // if we can't check, pass through
+    }
+  }
+
+  /**
    * Send a message using the specified engine
    */
   async sendMessage(
@@ -101,12 +121,15 @@ class EngineManager {
     onAguiEvent: (event: AGUIEvent) => void
   ): Promise<{ sessionId: string }> {
     const engine = this.getEngine(engineType);
+
+    const validatedModel = await this.validateModel(engineType, config.model);
+    const validatedConfig = { ...config, model: validatedModel };
     
     console.log(`📤 [EngineManager] Sending message via ${engineType} engine`);
     console.log(`   Workspace: ${config.workspace}`);
-    console.log(`   Model: ${config.model || 'default'}`);
+    console.log(`   Model: ${validatedModel || 'default'}${validatedModel !== config.model ? ` (requested: ${config.model})` : ''}`);
     
-    return engine.sendMessage(message, config, onAguiEvent);
+    return engine.sendMessage(message, validatedConfig, onAguiEvent);
   }
 
   /**

@@ -3,9 +3,11 @@
  *
  * Uses @openai/codex-sdk TypeScript library to interact with the Codex agent.
  * Implements IAgentEngine and converts SDK ThreadEvents into AGUI events.
+ *
+ * NOTE: @openai/codex-sdk is an ESM-only package. Since this backend uses CJS
+ * module resolution, we load it via dynamic import() instead of static import.
  */
 
-import { Codex, type ThreadOptions, type Input, type ThreadEvent, type UserInput } from '@openai/codex-sdk';
 import { existsSync, readFileSync } from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -24,6 +26,15 @@ import { CodexSdkAguiAdapter } from './codexSdkAguiAdapter.js';
 import { readCodexHistorySession, readCodexHistorySessions } from '../codex/historyParser.js';
 
 type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access';
+
+let _codexSdkModule: typeof import('@openai/codex-sdk') | null = null;
+
+async function loadCodexSdk(): Promise<typeof import('@openai/codex-sdk')> {
+  if (!_codexSdkModule) {
+    _codexSdkModule = await import('@openai/codex-sdk');
+  }
+  return _codexSdkModule;
+}
 
 const MODEL_CACHE_TTL = 5 * 60 * 1000;
 let cachedModels: ModelInfo[] | null = null;
@@ -66,11 +77,20 @@ export class CodexSdkEngine implements IAgentEngine {
     },
   };
 
-  private codex: Codex;
+  private codexInstance: any = null;
   private activeAbortControllers: Map<string, AbortController> = new Map();
 
-  constructor() {
-    this.codex = new Codex();
+  private async getCodex(envOverrides?: Record<string, string>): Promise<any> {
+    const { Codex } = await loadCodexSdk();
+    if (envOverrides && Object.keys(envOverrides).length > 0) {
+      return new Codex({
+        env: { ...process.env as Record<string, string>, ...envOverrides },
+      });
+    }
+    if (!this.codexInstance) {
+      this.codexInstance = new Codex();
+    }
+    return this.codexInstance;
   }
 
   async getSupportedModels(): Promise<ModelInfo[]> {
@@ -143,7 +163,7 @@ export class CodexSdkEngine implements IAgentEngine {
     const sandboxMode = this.mapSandboxMode(permissionMode);
     const input = this.buildInput(message, images, workspace);
 
-    const threadOptions: ThreadOptions = {
+    const threadOptions: Record<string, any> = {
       model: model && model !== 'auto' ? model : undefined,
       sandboxMode,
       workingDirectory: workspace,
@@ -168,16 +188,11 @@ export class CodexSdkEngine implements IAgentEngine {
     };
 
     try {
-      let codexInstance = this.codex;
-      if (envVars && Object.keys(envVars).length > 0) {
-        codexInstance = new Codex({
-          env: { ...process.env as Record<string, string>, ...envVars },
-        });
-      }
+      const codex = await this.getCodex(envVars);
 
       const thread = existingSessionId
-        ? codexInstance.resumeThread(existingSessionId, threadOptions)
-        : codexInstance.startThread(threadOptions);
+        ? codex.resumeThread(existingSessionId, threadOptions)
+        : codex.startThread(threadOptions);
 
       const streamedTurn = await thread.runStreamed(input, {
         signal: abortController.signal,
@@ -235,13 +250,13 @@ export class CodexSdkEngine implements IAgentEngine {
     message: string,
     images: EngineConfig['images'],
     workspace: string,
-  ): Input {
+  ): any {
     if (!images || images.length === 0) {
       return message;
     }
 
     const SUPPORTED_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
-    const inputItems: UserInput[] = [{ type: 'text', text: message }];
+    const inputItems: Array<{ type: string; text?: string; path?: string }> = [{ type: 'text', text: message }];
 
     for (let i = 0; i < images.length; i++) {
       const image = images[i];

@@ -434,4 +434,91 @@ describe('CodexSdkAguiAdapter', () => {
       expect(msgEndIdx).toBeLessThan(toolStartIdx);
     });
   });
+
+  describe('completed-only items (no prior started/updated)', () => {
+    it('synthesizes full lifecycle for agent_message completed without started', () => {
+      adapter.convertThreadEvent({ type: 'turn.started' });
+      const events = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: { id: 'msg-1', type: 'agent_message', text: 'Hello there!' },
+      });
+
+      const types = events.map(e => e.type);
+      expect(types).toContain('TEXT_MESSAGE_START');
+      expect(types).toContain('TEXT_MESSAGE_CONTENT');
+      expect(types).toContain('TEXT_MESSAGE_END');
+      const content = events.find(e => e.type === 'TEXT_MESSAGE_CONTENT') as any;
+      expect(content.content).toBe('Hello there!');
+    });
+
+    it('synthesizes full lifecycle for reasoning completed without started', () => {
+      adapter.convertThreadEvent({ type: 'turn.started' });
+      const events = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: { id: 'think-1', type: 'reasoning', text: 'Let me consider...' },
+      });
+
+      const types = events.map(e => e.type);
+      expect(types).toContain('THINKING_START');
+      expect(types).toContain('THINKING_CONTENT');
+      expect(types).toContain('THINKING_END');
+      const content = events.find(e => e.type === 'THINKING_CONTENT') as any;
+      expect(content.content).toBe('Let me consider...');
+    });
+
+    it('synthesizes full lifecycle for command_execution completed without started', () => {
+      adapter.convertThreadEvent({ type: 'turn.started' });
+      const events = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: { id: 'cmd-1', type: 'command_execution', command: 'ls -la', exit_code: 0, aggregated_output: 'file.txt' },
+      });
+
+      const types = events.map(e => e.type);
+      expect(types).toContain('TOOL_CALL_START');
+      expect(types).toContain('TOOL_CALL_ARGS');
+      expect(types).toContain('TOOL_CALL_END');
+      expect(types).toContain('TOOL_CALL_RESULT');
+      const start = events.find(e => e.type === 'TOOL_CALL_START') as any;
+      expect(start.toolName).toBe('shellToolCall');
+    });
+
+    it('synthesizes full lifecycle for file_change completed without started', () => {
+      adapter.convertThreadEvent({ type: 'turn.started' });
+      const events = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: {
+          id: 'fc-1',
+          type: 'file_change',
+          changes: [{ path: 'src/main.ts', kind: 'update' }],
+          status: 'completed',
+        },
+      });
+
+      const types = events.map(e => e.type);
+      expect(types).toContain('TOOL_CALL_START');
+      expect(types).toContain('TOOL_CALL_ARGS');
+      expect(types).toContain('TOOL_CALL_END');
+      expect(types).toContain('TOOL_CALL_RESULT');
+      const start = events.find(e => e.type === 'TOOL_CALL_START') as any;
+      expect(start.toolName).toBe('fileChangeToolCall');
+    });
+
+    it('handles mixed: reasoning completed-only then agent_message completed-only', () => {
+      adapter.convertThreadEvent({ type: 'turn.started' });
+
+      const r = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: { id: 'think-1', type: 'reasoning', text: 'Thinking...' },
+      });
+      expect(r.some(e => e.type === 'THINKING_START')).toBe(true);
+      expect(r.some(e => e.type === 'THINKING_END')).toBe(true);
+
+      const m = adapter.convertThreadEvent({
+        type: 'item.completed',
+        item: { id: 'msg-1', type: 'agent_message', text: 'Done!' },
+      });
+      expect(m.some(e => e.type === 'TEXT_MESSAGE_START')).toBe(true);
+      expect(m.some(e => e.type === 'TEXT_MESSAGE_END')).toBe(true);
+    });
+  });
 });

@@ -23,6 +23,7 @@ const SERVICE_TO_STORE_ENGINE: Record<string, EngineType> = {
   'claude-sdk': 'claude',
   'codebuddy-sdk': 'codebuddy',
   'codex-cli': 'codex',
+  'codex-sdk': 'codex',
 };
 
 /**

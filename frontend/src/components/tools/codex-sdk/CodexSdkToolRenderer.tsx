@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import type { BaseToolExecution } from '../sdk-types';
 import { BaseToolComponent } from '../BaseToolComponent';
+import { BashTool } from '../BashTool';
 import { CodexFileChangeTool } from './CodexFileChangeTool';
 import { CodexWebSearchTool } from './CodexWebSearchTool';
 import { CodexTodoListTool } from './CodexTodoListTool';
@@ -15,6 +16,9 @@ export const CodexSdkToolRenderer: React.FC<CodexSdkToolRendererProps> = ({ exec
   const { t } = useTranslation('components');
 
   switch (execution.toolName) {
+    case 'shellToolCall':
+      return <BashTool execution={execution} />;
+
     case 'fileChangeToolCall':
       return <CodexFileChangeTool execution={execution} />;
 

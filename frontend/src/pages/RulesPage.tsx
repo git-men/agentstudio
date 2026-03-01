@@ -163,7 +163,7 @@ export const RulesPage: React.FC = () => {
     ? 'Cursor'
     : engineType === 'codebuddy-sdk'
       ? 'CodeBuddy'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? 'Codex'
         : 'Claude';
   const rulesPath = paths?.rulesDir
@@ -171,7 +171,7 @@ export const RulesPage: React.FC = () => {
       ? '~/.cursor/rules'
       : engineType === 'codebuddy-sdk'
         ? '~/.codebuddy/rules'
-        : engineType === 'codex-cli'
+        : (engineType === 'codex-cli' || engineType === 'codex-sdk')
           ? '~/.codex/rules'
           : '~/.claude/rules');
   const ruleExt = engineType === 'cursor-cli' ? '.mdc' : '.md';

@@ -50,14 +50,14 @@ export const CommandsPage: React.FC = () => {
     ? 'Cursor'
     : engineType === 'codebuddy-sdk'
       ? 'CodeBuddy'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? 'Codex'
         : 'Claude';
   const commandsPath = engineType === 'cursor-cli'
     ? '~/.cursor/commands'
     : engineType === 'codebuddy-sdk'
       ? '~/.codebuddy/commands'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? '~/.codex/commands'
         : '~/.claude/commands';
 

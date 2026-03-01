@@ -148,7 +148,9 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
             {(hasMultipleModels || hasClaudeVersions) && (
               <div className="space-y-3">
                 <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  {t('agentChat.settings.modelAndVersion', 'Supplier & Model')}
+                  {hasClaudeVersions
+                    ? t('agentChat.settings.modelAndVersion', 'Supplier & Model')
+                    : t('agentChat.settings.model', 'Model')}
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">

@@ -31,7 +31,7 @@ export const SkillsPage: React.FC = () => {
     ? 'Cursor'
     : engineType === 'codebuddy-sdk'
       ? 'CodeBuddy'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? 'Codex'
         : 'Claude';
   const skillsConfigPath = paths?.skillsDir
@@ -39,7 +39,7 @@ export const SkillsPage: React.FC = () => {
       ? '~/.cursor/skills'
       : engineType === 'codebuddy-sdk'
         ? '~/.codebuddy/skills'
-        : engineType === 'codex-cli'
+        : (engineType === 'codex-cli' || engineType === 'codex-sdk')
           ? '~/.codex/skills'
           : '~/.claude/skills');
   

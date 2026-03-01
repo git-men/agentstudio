@@ -78,14 +78,14 @@ export const McpPage: React.FC = () => {
     ? 'Cursor'
     : engineType === 'codebuddy-sdk'
       ? 'CodeBuddy'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? 'Codex'
         : 'Claude';
   const mcpConfigPath = engineType === 'cursor-cli'
     ? '~/.cursor/mcp.json'
     : engineType === 'codebuddy-sdk'
       ? '~/.codebuddy/mcp.json'
-      : engineType === 'codex-cli'
+      : (engineType === 'codex-cli' || engineType === 'codex-sdk')
         ? '~/.codex/config.toml'
         : '~/.agentstudio/data/mcp-server.json';
 
