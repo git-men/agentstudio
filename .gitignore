@@ -75,3 +75,6 @@ backend/config.local.json
 extension/sidepanel/
 extension-pure/sidepanel/
 extension-pure/icons/
+
+# Runtime project data
+projects/

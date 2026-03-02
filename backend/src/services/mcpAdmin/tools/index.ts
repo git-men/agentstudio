@@ -15,6 +15,7 @@ export { ruleTools } from './ruleTools.js';
 export { commandTools } from './commandTools.js';
 export { hookTools } from './hookTools.js';
 export { marketplaceTools } from './marketplaceTools.js';
+export { a2aTools } from './a2aTools.js';
 
 import { projectTools } from './projectTools.js';
 import { agentTools } from './agentTools.js';
@@ -27,6 +28,7 @@ import { ruleTools } from './ruleTools.js';
 import { commandTools } from './commandTools.js';
 import { hookTools } from './hookTools.js';
 import { marketplaceTools } from './marketplaceTools.js';
+import { a2aTools } from './a2aTools.js';
 import type { ToolDefinition } from '../types.js';
 
 /**
@@ -44,4 +46,5 @@ export const allTools: ToolDefinition[] = [
   ...commandTools,
   ...hookTools,
   ...marketplaceTools,
+  ...a2aTools,
 ];

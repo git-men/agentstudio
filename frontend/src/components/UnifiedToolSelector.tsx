@@ -86,6 +86,11 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
     return presetTools.some(tool => tool.name === toolName && tool.enabled);
   };
 
+  // Check if an entire MCP server is preset (server-level entry like mcp__serverName)
+  const isPresetMcpServer = (serverName: string) => {
+    return presetTools.some(tool => tool.name === `mcp__${serverName}` && tool.enabled);
+  };
+
   // 检查MCP工具是否是Agent预设工具
   const isPresetMcpTool = (toolId: string) => {
     // 直接检查工具ID是否在预设工具中（mcp__serverName__toolName格式）
@@ -96,6 +101,11 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
     // MCP工具ID格式：mcp__serverName__toolName
     const parts = toolId.split('__');
     if (parts.length === 3 && parts[0] === 'mcp') {
+      // Server-level preset: mcp__serverName covers all tools from that server
+      if (isPresetMcpServer(parts[1])) {
+        return true;
+      }
+
       // 检查 serverName.toolName 格式
       const mcpToolName = `${parts[1]}.${parts[2]}`;
       if (presetTools.some(tool => tool.name === mcpToolName && tool.enabled)) {
@@ -107,6 +117,17 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
       if (presetTools.some(tool => tool.name === fullMcpName && tool.enabled)) {
         return true;
       }
+    }
+    return false;
+  };
+
+  // Check if a tool is selected (including server-level selection)
+  const isMcpToolSelected = (toolId: string) => {
+    if (selectedMcpTools.includes(toolId)) return true;
+    // Server-level entry in selectedMcpTools covers all its tools
+    const parts = toolId.split('__');
+    if (parts.length === 3 && parts[0] === 'mcp') {
+      return selectedMcpTools.includes(`mcp__${parts[1]}`);
     }
     return false;
   };
@@ -128,7 +149,7 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
   // Handle MCP tool toggle
   const handleMcpToolToggle = (toolId: string) => {
     // 如果是预设MCP工具，不允许取消选择
-    if (isPresetMcpTool(toolId) && selectedMcpTools.includes(toolId)) {
+    if (isPresetMcpTool(toolId) && isMcpToolSelected(toolId)) {
       return;
     }
     
@@ -152,6 +173,7 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
 
   // Check if server has preset tools
   const serverHasPresetTools = (serverName: string) => {
+    if (isPresetMcpServer(serverName)) return true;
     const server = servers.find(s => s.name === serverName);
     if (!server || !server.tools) return false;
     
@@ -163,6 +185,9 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
 
   // Handle server tool selection (all tools)
   const handleServerToolsToggle = (serverName: string, allSelected: boolean) => {
+    // Server-level preset: entire server is locked, no toggle allowed
+    if (isPresetMcpServer(serverName)) return;
+
     const server = servers.find(s => s.name === serverName);
     if (!server || !server.tools) return;
 
@@ -171,15 +196,12 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
 
     if (allSelected) {
       if (hasPresetTools) {
-        // 如果有预设工具，只移除非预设工具，保留预设工具
         const toolsToRemove = serverToolIds.filter(id => !isPresetMcpTool(id));
         onMcpToolsChange(selectedMcpTools.filter(id => !toolsToRemove.includes(id)));
       } else {
-        // 没有预设工具，可以移除所有工具
         onMcpToolsChange(selectedMcpTools.filter(id => !serverToolIds.includes(id)));
       }
     } else {
-      // Add all tools from this server
       const newSelected = [...selectedMcpTools];
       serverToolIds.forEach(id => {
         if (!newSelected.includes(id)) {
@@ -192,6 +214,8 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
 
   // Check if all tools from a server are selected
   const areAllServerToolsSelected = (serverName: string) => {
+    // Server-level entry means all tools are selected
+    if (selectedMcpTools.includes(`mcp__${serverName}`)) return true;
     const server = servers.find(s => s.name === serverName);
     if (!server || !server.tools) return false;
     
@@ -260,11 +284,26 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
           >
             <Plug2 className="w-4 h-4" />
             <span>{t('unifiedToolSelector.tabs.mcp')}</span>
-            {selectedMcpTools.length > 0 && (
-              <span className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
-                {selectedMcpTools.filter(t => t.startsWith('mcp__') && t.split('__').length === 3).length}
-              </span>
-            )}
+            {selectedMcpTools.length > 0 && (() => {
+              const mcpCount = selectedMcpTools.reduce((count, entry) => {
+                const parts = entry.split('__');
+                if (parts.length === 2 && parts[0] === 'mcp') {
+                  const server = servers.find(s => s.name === parts[1]);
+                  return count + (server?.tools?.length || 0);
+                }
+                if (parts.length === 3 && parts[0] === 'mcp') {
+                  const server = servers.find(s => s.name === parts[1]);
+                  if (!server) return count;
+                  return count + 1;
+                }
+                return count;
+              }, 0);
+              return mcpCount > 0 ? (
+                <span className="bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
+                  {mcpCount}
+                </span>
+              ) : null;
+            })()}
           </button>
         </div>
       </div>
@@ -384,9 +423,10 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
               const isExpanded = expandedServers.has(server.name);
               const isActive = server.status === 'active';
               const allSelected = areAllServerToolsSelected(server.name);
-              const hasSelectedTools = server.tools?.some(toolName => 
-                selectedMcpTools.includes(`mcp__${server.name}__${toolName}`)
-              );
+              const hasSelectedTools = selectedMcpTools.includes(`mcp__${server.name}`) ||
+                server.tools?.some(toolName => 
+                  selectedMcpTools.includes(`mcp__${server.name}__${toolName}`)
+                );
               const hasPresetTools = serverHasPresetTools(server.name);
               // const isPartiallySelected = isServerPartiallySelected(server.name);
 
@@ -416,35 +456,40 @@ export const UnifiedToolSelector: React.FC<UnifiedToolSelectorProps> = ({
                       </span>
                     </button>
                     
-                    {isActive && server.tools && server.tools.length > 0 && (
-                      <button type="button"
-                        onClick={() => handleServerToolsToggle(server.name, allSelected)}
-                        className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-colors ${
-                          allSelected
-                            ? hasPresetTools
-                              ? 'bg-orange-500 border-orange-500 text-white' // 有预设工具的全选状态
-                              : 'bg-green-600 border-green-600 text-white'   // 无预设工具的全选状态
-                            : hasSelectedTools
-                            ? hasPresetTools
-                              ? 'bg-orange-400 border-orange-400 text-white' // 有预设工具的部分选择状态
-                              : 'bg-blue-600 border-blue-600 text-white'     // 无预设工具的部分选择状态
-                            : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
-                        }`}
-                      >
-                        {allSelected ? (
-                          hasPresetTools ? <Lock className="w-3 h-3" /> : <Check className="w-3 h-3" />
-                        ) : hasSelectedTools ? (
-                          <Minus className="w-3 h-3" />
-                        ) : null}
-                      </button>
-                    )}
+                    {isActive && server.tools && server.tools.length > 0 && (() => {
+                      const isServerPreset = isPresetMcpServer(server.name);
+                      const isServerDisabled = readonly || isServerPreset;
+                      return (
+                        <button type="button"
+                          onClick={() => handleServerToolsToggle(server.name, allSelected)}
+                          disabled={isServerDisabled}
+                          className={`w-4 h-4 border-2 rounded flex items-center justify-center transition-colors ${
+                            allSelected
+                              ? hasPresetTools
+                                ? 'bg-orange-500 border-orange-500 text-white cursor-not-allowed'
+                                : 'bg-green-600 border-green-600 text-white'
+                              : hasSelectedTools
+                              ? hasPresetTools
+                                ? 'bg-orange-400 border-orange-400 text-white cursor-not-allowed'
+                                : 'bg-blue-600 border-blue-600 text-white'
+                              : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
+                          }`}
+                        >
+                          {allSelected ? (
+                            hasPresetTools ? <Lock className="w-3 h-3" /> : <Check className="w-3 h-3" />
+                          ) : hasSelectedTools ? (
+                            <Minus className="w-3 h-3" />
+                          ) : null}
+                        </button>
+                      );
+                    })()}
                   </div>
 
                   {isExpanded && isActive && server.tools && (
                     <div className="border-t border-gray-200 dark:border-gray-700 p-3 space-y-2">
                       {server.tools.map((toolName) => {
                         const toolId = `mcp__${server.name}__${toolName}`;
-                        const isSelected = selectedMcpTools.includes(toolId);
+                        const isSelected = isMcpToolSelected(toolId);
                         const isPreset = isPresetMcpTool(toolId);
                         const isDisabled = readonly || (isPreset && isSelected);
 

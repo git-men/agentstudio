@@ -14,6 +14,7 @@
 import express, { Router } from 'express';
 import { z } from 'zod';
 import path from 'path';
+import { resolvePath } from '../config/paths.js';
 import { randomUUID } from 'crypto';
 import {
   engineManager,
@@ -197,9 +198,9 @@ router.post('/chat', async (req, res) => {
     // Use server-configured engine type (ignoring any client-provided engineType)
     const engineType = engineManager.getDefaultEngineType();
 
-    // Resolve workspace: if it's a project name, get the actual path
-    let resolvedWorkspace = rawWorkspace;
-    if (!path.isAbsolute(rawWorkspace)) {
+    // Resolve workspace: expand ~ and resolve project names
+    let resolvedWorkspace = resolvePath(rawWorkspace);
+    if (!path.isAbsolute(resolvedWorkspace)) {
       // Try to resolve as project name
       const projects = projectStorage.getAllProjects();
       const matchedProject = projects.find(p =>

@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { API_BASE } from '../../lib/config';
+import { authFetch } from '../../lib/authFetch';
 import type { AgentTool } from '../../types/index.js';
 
 export interface UseToolSelectorProps {
@@ -19,6 +21,7 @@ export const useToolSelector = ({ agent }: UseToolSelectorProps) => {
   const [showVersionDropdown, setShowVersionDropdown] = useState(false);
   const [isVersionLocked, setIsVersionLocked] = useState(false);
   const [envVars, setEnvVars] = useState<Record<string, string>>({});
+  const expandedRef = useRef(false);
 
   // Initialize tool selector with agent's preset tools
   useEffect(() => {
@@ -47,6 +50,39 @@ export const useToolSelector = ({ agent }: UseToolSelectorProps) => {
       setSelectedRegularTools(regularTools);
       setSelectedMcpTools(mcpTools);
       setMcpToolsEnabled(mcpTools.length > 0);
+
+      // Expand server-level MCP entries eagerly so badge counts are accurate
+      const hasServerLevel = mcpTools.some(t => {
+        const parts = t.split('__');
+        return parts.length === 2 && parts[0] === 'mcp';
+      });
+      if (hasServerLevel && !expandedRef.current) {
+        expandedRef.current = true;
+        authFetch(`${API_BASE}/mcp`).then(res => res.json()).then(data => {
+          const servers: { name: string; tools?: string[] }[] = data.servers || [];
+          let expanded: string[] = [...mcpTools];
+          let changed = false;
+          for (const entry of mcpTools) {
+            const parts = entry.split('__');
+            if (parts.length === 2 && parts[0] === 'mcp') {
+              const server = servers.find(s => s.name === parts[1]);
+              if (server?.tools?.length) {
+                expanded = expanded.filter(id => id !== entry);
+                for (const toolName of server.tools) {
+                  const fullId = `mcp__${parts[1]}__${toolName}`;
+                  if (!expanded.includes(fullId)) {
+                    expanded.push(fullId);
+                  }
+                }
+                changed = true;
+              }
+            }
+          }
+          if (changed) {
+            setSelectedMcpTools(expanded);
+          }
+        }).catch(() => { /* MCP fetch failed, keep server-level entries */ });
+      }
     }
   }, [agent?.allowedTools]);
 

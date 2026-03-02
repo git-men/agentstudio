@@ -55,13 +55,16 @@ interface AGUIChatPanelProps {
  */
 export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     agent,
-    projectPath,
+    projectPath: rawProjectPath,
     onSessionChange,
     initialMessage,
     environmentContext
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
+
+    // Resolve effective project path: explicit prop > agent's workingDirectory
+    const projectPath = rawProjectPath || agent.workingDirectory || undefined;
 
     // Register custom frontend tools
     useRatingTool();

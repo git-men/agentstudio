@@ -9,7 +9,7 @@ import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { homedir } from 'os';
+
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
@@ -18,7 +18,7 @@ import { integrateFrontendTools, type SessionRef } from '../services/frontendToo
 import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
-import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME } from '../config/paths.js';
+import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME, resolvePath } from '../config/paths.js';
 import { getEnginePaths } from '../config/engineConfig.js';
 
 const execAsync = promisify(exec);
@@ -238,13 +238,9 @@ export async function buildQueryOptions(
   // Determine working directory
   let cwd = process.cwd();
   if (projectPath) {
-    cwd = projectPath;
+    cwd = resolvePath(projectPath);
   } else if (agent.workingDirectory) {
-    // Expand ~ to home directory
-    const resolvedDir = agent.workingDirectory.startsWith('~')
-      ? path.join(homedir(), agent.workingDirectory.slice(1))
-      : agent.workingDirectory;
-    cwd = path.resolve(process.cwd(), resolvedDir);
+    cwd = path.resolve(process.cwd(), resolvePath(agent.workingDirectory));
   }
 
   // Determine permission mode: request > agent config > default
@@ -263,6 +259,30 @@ export async function buildQueryOptions(
   // Add MCP tools if provided
   if (mcpTools && mcpTools.length > 0) {
     allowedTools.push(...mcpTools);
+  }
+
+  // Expand server-level MCP entries (mcp__serverName) into individual tool entries
+  // The SDK requires exact tool names (mcp__serverName__toolName) in allowedTools
+  {
+    const mcpConfigContent = readMcpConfig();
+    const toAdd: string[] = [];
+    for (const tool of allowedTools) {
+      const parts = tool.split('__');
+      if (parts.length === 2 && parts[0] === 'mcp') {
+        const serverConfig = mcpConfigContent.mcpServers?.[parts[1]];
+        if (serverConfig?.tools?.length) {
+          for (const toolName of serverConfig.tools) {
+            const fullId = `mcp__${parts[1]}__${toolName}`;
+            if (!allowedTools.includes(fullId) && !toAdd.includes(fullId)) {
+              toAdd.push(fullId);
+            }
+          }
+        }
+      }
+    }
+    if (toAdd.length > 0) {
+      allowedTools.push(...toAdd);
+    }
   }
 
   // Use unified config resolver for provider and model

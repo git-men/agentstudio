@@ -7,6 +7,9 @@ import { AGUIChatPanel } from './AGUIChatPanel';
 import { useMobileContext } from '../contexts/MobileContext';
 import type { AgentConfig } from '../types/index.js';
 
+const MIN_PANEL_WIDTH = 320;
+const DEFAULT_PANEL_WIDTH = 420;
+
 const META_AGENT_ID = 'meta-agent';
 const SESSION_STORAGE_KEY = 'agentstudio:meta-agent-session';
 const OPEN_STATE_KEY = 'agentstudio:meta-agent-open';
@@ -90,6 +93,38 @@ export const MetaAgentBubble: React.FC = () => {
   const [hasBeenOpened, setHasBeenOpened] = useState(false);
   const agentRef = useRef<AgentConfig | null>(null);
 
+  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const isResizingRef = useRef(false);
+  const resizeStartXRef = useRef(0);
+  const resizeStartWidthRef = useRef(DEFAULT_PANEL_WIDTH);
+
+  const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizingRef.current = true;
+    resizeStartXRef.current = e.clientX;
+    resizeStartWidthRef.current = panelWidth;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!isResizingRef.current) return;
+      const diff = resizeStartXRef.current - ev.clientX;
+      const newWidth = Math.max(MIN_PANEL_WIDTH, resizeStartWidthRef.current + diff);
+      setPanelWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      isResizingRef.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [panelWidth]);
+
   const agent = agentData?.agent;
 
   useEffect(() => {
@@ -151,18 +186,30 @@ export const MetaAgentBubble: React.FC = () => {
       {hasBeenOpened && (
         <div
           className={`
-            fixed z-50 transition-all duration-300 ease-in-out
-            ${isMobile
-              ? 'inset-0'
-              : 'top-0 right-0 bottom-0 w-[420px]'
-            }
+            fixed z-50 transition-[opacity,transform] duration-300 ease-in-out
+            ${isMobile ? 'inset-0' : 'top-0 right-0 bottom-0'}
             ${isOpen
               ? 'opacity-100 translate-x-0 pointer-events-auto'
               : 'opacity-0 translate-x-4 pointer-events-none'
             }
           `}
+          style={isMobile ? undefined : { width: panelWidth }}
         >
-          <div className="flex flex-col bg-white dark:bg-gray-800 shadow-xl overflow-hidden h-full border-l border-gray-200 dark:border-gray-700">
+          <div
+            className="flex flex-col bg-white dark:bg-gray-800 overflow-hidden h-full border-l border-gray-200 dark:border-gray-700 relative"
+            style={{ boxShadow: '-8px 0 32px -4px rgba(0,0,0,0.18), -2px 0 8px -2px rgba(0,0,0,0.1)' }}
+          >
+            {/* Resize handle — left edge, desktop only */}
+            {!isMobile && (
+              <div
+                onMouseDown={handleResizeMouseDown}
+                className="absolute left-0 top-0 bottom-0 w-2 cursor-col-resize z-10 group flex items-center justify-center"
+                title="拖动调整宽度"
+              >
+                <div className="w-0.5 h-10 rounded-full bg-gray-300 dark:bg-gray-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
+            )}
+
             {/* Header */}
             <div className="flex-shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
               <div className="flex items-center gap-2.5">

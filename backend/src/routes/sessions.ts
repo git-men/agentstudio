@@ -10,6 +10,7 @@ import { sessionManager } from '../services/sessionManager';
 import { getProjectsDir, getAllProjectsDirs } from '../config/sdkConfig.js';
 // Note: getEngineType is no longer needed here - engine routing is handled via engineManager
 import { engineManager } from '../engines/index.js';
+import { resolvePath } from '../config/paths.js';
 
 const router: express.Router = express.Router();
 
@@ -185,8 +186,8 @@ function readSubAgentMessageFlow(projectPath: string, agentId: string): SubAgent
 
 // Function to get AgentStorage instance for specific project directory
 const getAgentStorageForRequest = (req: express.Request): AgentStorage => {
-  const projectPath = req.query.projectPath as string || req.body?.projectPath as string;
-  const workingDir = projectPath || process.cwd();
+  const raw = req.query.projectPath as string || req.body?.projectPath as string;
+  const workingDir = raw ? resolvePath(raw) : process.cwd();
   return new AgentStorage(workingDir);
 };
 
@@ -851,7 +852,7 @@ router.get('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
     const { search } = req.query;
-    const projectPath = req.query.projectPath as string;
+    const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
     
     console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
     console.log(`🔍 [DEBUG] Search term: "${search}"`);
@@ -955,7 +956,7 @@ router.get('/:agentId', async (req, res) => {
 router.get('/:agentId/:sessionId/messages', async (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
-    const projectPath = req.query.projectPath as string;
+    const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
     
     let session: any = null;
     

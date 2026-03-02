@@ -153,7 +153,7 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
               {/* Tool count badge */}
               {(selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0)) && (
                 <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
-                  {selectedRegularTools.length + (mcpToolsEnabled ? selectedMcpTools.filter(t => t.startsWith('mcp__') && t.split('__').length === 3).length : 0)}
+                  {selectedRegularTools.length + (mcpToolsEnabled ? selectedMcpTools.length : 0)}
                 </span>
               )}
 

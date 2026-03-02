@@ -267,3 +267,15 @@ export const META_AGENT_WORKING_DIR = join(homedir(), '.as-jarvis');
 
 /** @deprecated Use AGENTSTUDIO_HOME instead */
 export const CLAUDE_AGENT_DIR = AGENTSTUDIO_HOME;
+
+/**
+ * Resolve a file path by expanding ~ to the user's home directory.
+ * Returns absolute path; relative paths are resolved against cwd.
+ */
+export function resolvePath(p: string): string {
+  if (!p) return p;
+  const expanded = p.startsWith('~')
+    ? join(homedir(), p.slice(1))
+    : p;
+  return join(expanded); // normalizes separators
+}
