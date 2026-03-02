@@ -145,7 +145,7 @@
     "dropImageHere": "Drop images here",
     "sendImage": "Sent an image",
     "addDescription": "Add description text... (optional)",
-    "inputPlaceholder": "Type your message... (Shift+Enter for new line, Enter to send, / for commands)",
+    "inputPlaceholder": "Shift+Enter for new line, Enter to send, / for commands",
     "inputPlaceholderMobile": "Type message...",
     "toolSelection": "Tool Selection",
     "imageSelection": "Image Selection",

@@ -1,6 +1,15 @@
 import React, { useMemo } from 'react';
+import { MapPin } from 'lucide-react';
 import { ChatMessageRenderer } from '../ChatMessageRenderer';
 import { useTranslation } from 'react-i18next';
+
+const ENVIRONMENT_CONTEXT_RE = /^<environment_context>\n([\s\S]*?)\n<\/environment_context>\n\n/;
+
+function parseEnvironmentContext(content: string): { envLabel: string | null; cleanContent: string } {
+  const match = content.match(ENVIRONMENT_CONTEXT_RE);
+  if (!match) return { envLabel: null, cleanContent: content };
+  return { envLabel: match[1], cleanContent: content.replace(ENVIRONMENT_CONTEXT_RE, '') };
+}
 
 export interface Message {
   id: string;
@@ -40,27 +49,64 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
 
   // Memoize rendered messages to prevent unnecessary re-renders
   const renderedMessages = useMemo(() => {
-    return messages.map((message) => (
-      <div
-        key={message.id}
-        className="px-4"
-      >
-        <div
-          className={`text-sm leading-relaxed break-words overflow-hidden ${
-            message.role === 'user'
-              ? 'text-white p-3 rounded-lg'
-              : 'text-gray-800 dark:text-gray-200'
-          }`}
-          style={message.role === 'user' ? { backgroundColor: 'hsl(var(--primary))', color: 'white' } : {}}
-        >
-          <ChatMessageRenderer 
-            message={message as any} 
-            onFrontendToolSubmit={onFrontendToolSubmit}
-            onFrontendToolCancel={onFrontendToolCancel}
-          />
+    return messages.map((message) => {
+      let displayMessage = message;
+      let envLabel: string | null = null;
+
+      if (message.role === 'user') {
+        // Check message.content (legacy / primary format)
+        if (message.content) {
+          const parsed = parseEnvironmentContext(message.content);
+          envLabel = parsed.envLabel;
+          if (envLabel) {
+            displayMessage = { ...message, content: parsed.cleanContent };
+          }
+        }
+        // Also check first text part in messageParts (structured format)
+        if (!envLabel && message.messageParts?.length) {
+          const firstText = message.messageParts.find((p: any) => p.type === 'text' && p.content);
+          if (firstText) {
+            const parsed = parseEnvironmentContext(firstText.content);
+            if (parsed.envLabel) {
+              envLabel = parsed.envLabel;
+              displayMessage = {
+                ...message,
+                messageParts: message.messageParts.map((p: any) =>
+                  p === firstText ? { ...p, content: parsed.cleanContent } : p
+                ),
+              };
+            }
+          }
+        }
+      }
+
+      return (
+        <div key={message.id} className="px-4">
+          {envLabel && (
+            <div className="flex items-center gap-1 mb-1 justify-end">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
+                <MapPin className="w-3 h-3" />
+                {envLabel}
+              </span>
+            </div>
+          )}
+          <div
+            className={`text-sm leading-relaxed break-words overflow-hidden ${
+              message.role === 'user'
+                ? 'text-white p-3 rounded-lg'
+                : 'text-gray-800 dark:text-gray-200'
+            }`}
+            style={message.role === 'user' ? { backgroundColor: 'hsl(var(--primary))', color: 'white' } : {}}
+          >
+            <ChatMessageRenderer 
+              message={displayMessage as any} 
+              onFrontendToolSubmit={onFrontendToolSubmit}
+              onFrontendToolCancel={onFrontendToolCancel}
+            />
+          </div>
         </div>
-      </div>
-    ));
+      );
+    });
   }, [messages, onFrontendToolSubmit, onFrontendToolCancel]);
 
   return (

@@ -80,6 +80,9 @@ export interface EngineConfig {
     mcpServerName?: string;
     resultFormat?: 'json' | 'text';
   }>;
+
+  /** Optional environment context injected into the system prompt */
+  environmentContext?: string;
 }
 
 /**

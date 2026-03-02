@@ -59,7 +59,7 @@ import { productGateMiddleware } from './middleware/productGate.js';
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { initializeEngines, getEngineStatus } from './engines/index.js';
 import gitVersionsRouter from './routes/gitVersions';
-import { syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
+import { initDefaultMarketplace, syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
 import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
 
 dotenv.config();
@@ -454,8 +454,29 @@ const app: express.Express = express();
     console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
   }
 
-  // 6. Builtin Marketplaces: Auto-register and install from local paths
-  if (process.env.BUILTIN_MARKETPLACES) {
+  // 6a. Default Marketplace: AgentStudio official marketplace (as-marketplace)
+  // Always runs unless DISABLE_DEFAULT_MARKETPLACE=true.
+  // Prefers local sibling directory, falls back to GitHub clone.
+  if (process.env.DISABLE_DEFAULT_MARKETPLACE !== 'true') {
+    console.info('[DefaultMarketplace] Initializing default marketplace...');
+    try {
+      const result = await initDefaultMarketplace();
+      if (result.success) {
+        console.info(`[DefaultMarketplace] Initialized in ${result.duration}ms`);
+      } else {
+        console.error(`[DefaultMarketplace] Failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('[DefaultMarketplace] Error:', error);
+    }
+  } else {
+    console.info('[DefaultMarketplace] Skipped (DISABLE_DEFAULT_MARKETPLACE=true)');
+  }
+
+  // 6b. Builtin Marketplaces: Business-side specified marketplaces via BUILTIN_MARKETPLACES env var.
+  // Supports multi-type format: local paths, github:owner/repo, git:url
+  // Set DISABLE_BUILTIN_MARKETPLACES=true to skip.
+  if (process.env.BUILTIN_MARKETPLACES && process.env.DISABLE_BUILTIN_MARKETPLACES !== 'true') {
     console.info('[BuiltinMarketplaces] Initializing builtin marketplaces...');
     try {
       const result = await syncBuiltinMarketplaces();

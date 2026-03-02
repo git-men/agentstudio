@@ -145,7 +145,7 @@
     "dropImageHere": "拖放图片到这里",
     "sendImage": "发送了图片",
     "addDescription": "添加描述文字... (可选)",
-    "inputPlaceholder": "输入你的消息... (Shift+Enter 换行，Enter 发送，/ 触发命令)",
+    "inputPlaceholder": "Shift+Enter 换行，Enter 发送，/ 触发命令",
     "inputPlaceholderMobile": "输入消息...",
     "toolSelection": "工具选择",
     "imageSelection": "选择图片",

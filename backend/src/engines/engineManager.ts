@@ -128,8 +128,14 @@ class EngineManager {
     console.log(`📤 [EngineManager] Sending message via ${engineType} engine`);
     console.log(`   Workspace: ${config.workspace}`);
     console.log(`   Model: ${validatedModel || 'default'}${validatedModel !== config.model ? ` (requested: ${config.model})` : ''}`);
+
+    let finalMessage = message;
+    if (config.environmentContext) {
+      finalMessage = `<environment_context>\n${config.environmentContext}\n</environment_context>\n\n${message}`;
+      console.log(`   EnvironmentContext: ${config.environmentContext}`);
+    }
     
-    return engine.sendMessage(message, validatedConfig, onAguiEvent);
+    return engine.sendMessage(finalMessage, validatedConfig, onAguiEvent);
   }
 
   /**

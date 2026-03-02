@@ -345,7 +345,8 @@ const ChatRequestSchema = z.object({
     // Generic context for other agent types
     currentItem: z.any().optional(),
     allItems: z.array(z.any()).optional(),
-    customContext: z.record(z.string(), z.any()).optional()
+    customContext: z.record(z.string(), z.any()).optional(),
+    environmentContext: z.string().optional(),
   }).optional(),
   envVars: z.record(z.string(), z.string()).optional(),
   frontendTools: z.array(z.object({
@@ -522,7 +523,8 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect, frontendTools } = validation.data;
+    let { message, images, agentId, sessionId: initialSessionId, projectPath, mcpTools, permissionMode, model, claudeVersion, channel, envVars, outputFormat, reconnect, frontendTools, context: requestContext } = validation.data;
+    const environmentContext = requestContext?.environmentContext;
     let sessionId = initialSessionId;
     
     console.log(`📡 Output format: ${outputFormat}`);
@@ -1007,10 +1009,15 @@ router.post('/chat', async (req, res) => {
         // 获取最终的模型名称(从queryOptions中获取,因为buildQueryOptions已经处理了优先级)
         const finalModel = queryOptions.model || 'sonnet';
 
-        // 构建用户消息(传递claudeVersion以便查询isVision配置)
-        const userMessage = await buildUserMessageContent(message, images, finalModel, projectPath, claudeVersion);
+        // Inject environment context as message prefix (dynamic per-message)
+        const messageForAgent = environmentContext
+          ? `<environment_context>\n${environmentContext}\n</environment_context>\n\n${message}`
+          : message;
 
-        // 设置会话标题（使用第一条消息的前50个字符）
+        // 构建用户消息(传递claudeVersion以便查询isVision配置)
+        const userMessage = await buildUserMessageContent(messageForAgent, images, finalModel, projectPath, claudeVersion);
+
+        // 设置会话标题（使用原始消息，不含 context 前缀）
         claudeSession.setSessionTitle(message);
 
         // 为这个特定请求创建一个独立的query调用，但复用session context

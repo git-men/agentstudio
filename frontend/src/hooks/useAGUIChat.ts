@@ -53,6 +53,8 @@ export interface AGUIChatParams {
   frontendTools?: import('../services/frontendToolRegistry.js').FrontendToolSchema[];
   // Cursor-specific
   timeout?: number;
+  // Cross-engine context
+  environmentContext?: string;
   // Callbacks
   onAguiEvent?: (event: AGUIEvent) => void;
   onError?: (error: Error) => void;
@@ -214,6 +216,7 @@ export const useAGUIChat = () => {
       envVars,
       frontendTools,
       timeout,
+      environmentContext,
       onAguiEvent,
       onError,
       abortController,
@@ -261,6 +264,9 @@ export const useAGUIChat = () => {
           requestBody.envVars = envVars;
           console.log(`🔑 [AGUI] envVars: ${Object.keys(envVars).length} var(s)`);
         }
+        if (environmentContext) {
+          requestBody.environmentContext = environmentContext;
+        }
       } else {
         // Claude Engine: Use /api/agents/chat with outputFormat=agui
         endpoint = `${API_BASE}/agents/chat`;
@@ -278,6 +284,7 @@ export const useAGUIChat = () => {
           channel,
           outputFormat: 'agui',
           frontendTools,
+          ...(environmentContext ? { context: { environmentContext } } : {}),
         };
       }
 

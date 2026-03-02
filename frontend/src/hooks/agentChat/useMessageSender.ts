@@ -52,6 +52,7 @@ export interface UseMessageSenderProps {
   isCommandDefined: (commandName: string) => boolean;
   getAllAvailableCommands: () => string;
   envVars: Record<string, string>;
+  environmentContext?: string;
 }
 
 export const useMessageSender = (props: UseMessageSenderProps) => {
@@ -93,7 +94,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     handleNewSession,
     isCommandDefined,
     getAllAvailableCommands,
-    envVars
+    envVars,
+    environmentContext
   } = props;
 
   const { t } = useTranslation('components');
@@ -103,6 +105,9 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
 
   // Track if this is a compact command for special handling in SSE stream
   const isCompactCommandRef = useRef(false);
+
+  // Only send environmentContext when it changes (avoids redundant injection)
+  const lastSentContextRef = useRef<string | undefined>(undefined);
 
   // Initialize AI stream handler
   const streamHandlerProps: UseAIStreamHandlerProps = {
@@ -264,8 +269,16 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
       });
     }
 
-    // Build context - now simplified since each agent manages its own state
-    const context = {};
+    // Only include environmentContext when it differs from the last sent value
+    const contextChanged = environmentContext !== lastSentContextRef.current;
+    const effectiveEnvironmentContext = contextChanged ? environmentContext : undefined;
+    if (contextChanged) {
+      lastSentContextRef.current = environmentContext;
+    }
+
+    const context = {
+      ...(effectiveEnvironmentContext ? { environmentContext: effectiveEnvironmentContext } : {}),
+    };
 
     setAiTyping(true);
 
@@ -537,6 +550,7 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           model: selectedModel,
           images: imageData.length > 0 ? imageData : undefined,
           envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
+          environmentContext: effectiveEnvironmentContext,
           frontendTools: frontendToolsPayload,
           abortController,
           onAguiEvent: handleAguiEvent,

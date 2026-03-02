@@ -47,6 +47,7 @@ interface AGUIChatPanelProps {
     projectPath?: string;
     onSessionChange?: (sessionId: string | null) => void;
     initialMessage?: string;
+    environmentContext?: string;
 }
 
 /**
@@ -56,7 +57,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     agent,
     projectPath,
     onSessionChange,
-    initialMessage
+    initialMessage,
+    environmentContext
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
@@ -435,6 +437,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         isCommandDefined,
         getAllAvailableCommands,
         envVars,
+        environmentContext,
     });
 
     // Auto-send initial message when conditions are met

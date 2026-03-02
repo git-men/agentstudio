@@ -139,9 +139,12 @@ class AgentImporter {
       
       let agentConfig: Partial<AgentConfig>;
 
+      // Resolve source path — manifests may use "source" or "path" interchangeably
+      const agentSource = agentDef.source || agentDef.path;
+
       // If source is provided, load from file
-      if (agentDef.source && !agentDef.config) {
-        const agentFilePath = path.resolve(marketplacePath, agentDef.source);
+      if (agentSource && !agentDef.config) {
+        const agentFilePath = path.resolve(marketplacePath, agentSource);
         
         if (!fs.existsSync(agentFilePath)) {
           return {
@@ -229,7 +232,7 @@ class AgentImporter {
         updatedAt: now,
         enabled: true,
         source: 'plugin',
-        installPath: path.resolve(marketplacePath, agentDef.source || ''),
+        installPath: path.resolve(marketplacePath, agentSource || ''),
       };
 
       // Save agent JSON to marketplace directory

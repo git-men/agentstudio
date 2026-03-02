@@ -86,6 +86,7 @@ export interface ChatMessage {
 }
 
 export interface ChatContext {
+  environmentContext?: string;
 }
 
 /**

@@ -85,6 +85,7 @@ const ChatRequestSchema = z.object({
   frontendTools: z.array(FrontendToolSchema).optional(),
   timeout: z.number().optional(),
   reconnect: z.boolean().optional(),
+  environmentContext: z.string().optional(),
 }).refine(data => {
   if (data.reconnect) return true;
   return data.message.trim().length > 0;
@@ -190,6 +191,7 @@ router.post('/chat', async (req, res) => {
       frontendTools,
       timeout,
       reconnect,
+      environmentContext,
     } = validation.data;
 
     // Use server-configured engine type (ignoring any client-provided engineType)
@@ -402,6 +404,7 @@ router.post('/chat', async (req, res) => {
             envVars,
             frontendTools,
             timeout,
+            environmentContext,
           },
           onAguiEvent
         );

@@ -129,6 +129,7 @@ export interface MarketplaceManifest {
 export interface MarketplaceAgent {
   name: string;
   source: string; // Relative path to agent.json or inline config
+  path?: string; // Alias for source (some manifests use "path" instead)
   description?: string;
   version?: string;
   // Inline agent configuration (if source is not provided)
