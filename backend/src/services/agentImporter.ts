@@ -42,15 +42,27 @@ function parseAgentMd(content: string): Partial<AgentConfig> | null {
   try {
     const parsed = matter(content);
     const frontmatter = parsed.data as Record<string, unknown>;
-    const systemPrompt = parsed.content.trim();
+    const markdownBody = parsed.content.trim();
 
     if (!frontmatter || Object.keys(frontmatter).length === 0) {
       return null;
     }
 
+    // Determine systemPrompt based on preset mode:
+    //   preset: claude_code   →  { type: 'preset', preset: 'claude_code', append: markdownBody }
+    //   (no preset)           →  markdownBody as full replacement string (legacy behavior)
+    let systemPrompt: any;
+    const preset = frontmatter.preset as string | undefined;
+    if (preset) {
+      systemPrompt = { type: 'preset', preset, ...(markdownBody ? { append: markdownBody } : {}) };
+    } else {
+      systemPrompt = markdownBody || (frontmatter.systemPrompt as string);
+    }
+
+    const { preset: _preset, ...restFrontmatter } = frontmatter;
     const agentConfig: Partial<AgentConfig> = {
-      ...frontmatter as Partial<AgentConfig>,
-      systemPrompt: systemPrompt || (frontmatter.systemPrompt as string),
+      ...restFrontmatter as Partial<AgentConfig>,
+      systemPrompt,
     };
 
     return agentConfig;

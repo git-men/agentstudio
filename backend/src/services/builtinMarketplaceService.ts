@@ -208,7 +208,20 @@ export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncRe
   };
 
   try {
-    const alreadyExists = pluginPaths.marketplaceExists(DEFAULT_MARKETPLACE_NAME);
+    let alreadyExists = pluginPaths.marketplaceExists(DEFAULT_MARKETPLACE_NAME);
+
+    if (alreadyExists) {
+      // Try to sync (git pull) to get latest content
+      console.info('[DefaultMarketplace] Already registered, syncing latest content...');
+      const syncResult = await pluginInstaller.syncMarketplace(DEFAULT_MARKETPLACE_NAME);
+      if (!syncResult.success) {
+        // Sync failed (e.g., no .git dir, no metadata) — delete and re-clone
+        console.warn(`[DefaultMarketplace] Sync failed (${syncResult.error}), re-cloning...`);
+        const marketplacePath = pluginPaths.getMarketplacePath(DEFAULT_MARKETPLACE_NAME);
+        fs.rmSync(marketplacePath, { recursive: true, force: true });
+        alreadyExists = false;
+      }
+    }
 
     if (!alreadyExists) {
       console.info(`[DefaultMarketplace] Cloning from GitHub: ${DEFAULT_MARKETPLACE_REPO}`);
@@ -222,8 +235,6 @@ export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncRe
       if (!result.success) {
         throw new Error(`Failed to clone marketplace: ${result.error}`);
       }
-    } else {
-      console.info('[DefaultMarketplace] Already registered, reinstalling plugins');
     }
 
     // Install all plugins + import agents (idempotent)
