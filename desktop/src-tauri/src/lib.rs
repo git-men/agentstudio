@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
+use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 
@@ -12,6 +14,16 @@ pub struct AppState {
     pub backend_port: Mutex<Option<u16>>,
     /// Handle to the running sidecar child process so we can kill it on exit.
     pub sidecar_child: Arc<Mutex<Option<CommandChild>>>,
+    /// Cached pending update (populated by background update check task).
+    pub pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+}
+
+// ── Update types ──────────────────────────────────────────────────────────────
+
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateInfo {
+    pub version: String,
+    pub notes: String,
 }
 
 // ── IPC Commands ──────────────────────────────────────────────────────────────
@@ -54,6 +66,68 @@ async fn quit_app(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(
     Ok(())
 }
 
+/// Manually check for updates. Returns info if an update is available.
+#[tauri::command]
+async fn check_update(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<Option<UpdateInfo>, String> {
+    let updater = app
+        .updater_builder()
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match updater.check().await.map_err(|e| e.to_string())? {
+        Some(update) => {
+            let info = UpdateInfo {
+                version: update.version.clone(),
+                notes: update.body.clone().unwrap_or_default(),
+            };
+            *state.pending_update.lock().unwrap() = Some(update);
+            Ok(Some(info))
+        }
+        None => Ok(None),
+    }
+}
+
+/// Download and install the cached pending update, then restart the app.
+#[tauri::command]
+async fn install_update(
+    app: AppHandle,
+    state: tauri::State<'_, AppState>,
+) -> Result<(), String> {
+    let update = state
+        .pending_update
+        .lock()
+        .unwrap()
+        .take()
+        .ok_or_else(|| "No pending update available".to_string())?;
+
+    update
+        .download_and_install(|_chunk_length, _content_length| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+
+    app.restart();
+}
+
+/// Send a native system notification.
+#[tauri::command]
+async fn send_notification(
+    app: AppHandle,
+    title: String,
+    body: String,
+) -> Result<(), String> {
+    use tauri_plugin_notification::NotificationExt;
+    app.notification()
+        .builder()
+        .title(&title)
+        .body(&body)
+        .show()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 // ── Sidecar helpers ───────────────────────────────────────────────────────────
 
 fn kill_sidecar(state: &AppState) {
@@ -68,9 +142,6 @@ fn kill_sidecar(state: &AppState) {
 
 /// Spawn the backend sidecar, parse BACKEND_PORT from its stdout, then
 /// close the splashscreen and show the main window.
-///
-/// On success: emits `backend-ready` event with the port number.
-/// On timeout (30 s): emits `backend-start-failed` event to the splashscreen.
 fn start_sidecar(app: AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -113,15 +184,12 @@ fn start_sidecar(app: AppHandle) {
                     log::debug!("[sidecar stdout] {line}");
                     if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
                         if let Ok(port) = port_str.parse::<u16>() {
-                            // Write port to AppState
                             let state = app_clone.state::<AppState>();
                             *state.backend_port.lock().unwrap() = Some(port);
                             port_found = true;
 
-                            // Rust is the sole owner of splashscreen close
                             close_splashscreen_internal(&app_clone);
 
-                            // Notify frontend
                             if let Err(e) = app_clone.emit("backend-ready", port) {
                                 log::warn!("Failed to emit backend-ready: {e}");
                             }
@@ -155,6 +223,46 @@ fn start_sidecar(app: AppHandle) {
     });
 }
 
+/// Background task: wait 5 seconds after startup, then check for updates.
+fn start_update_check(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(5)).await;
+
+        log::info!("Checking for updates...");
+
+        let updater = match app.updater_builder().build() {
+            Ok(u) => u,
+            Err(e) => {
+                log::warn!("Failed to build updater: {e}");
+                return;
+            }
+        };
+
+        match updater.check().await {
+            Ok(Some(update)) => {
+                let info = UpdateInfo {
+                    version: update.version.clone(),
+                    notes: update.body.clone().unwrap_or_default(),
+                };
+                log::info!("Update available: v{}", info.version);
+
+                let state = app.state::<AppState>();
+                *state.pending_update.lock().unwrap() = Some(update);
+
+                if let Err(e) = app.emit("update-available", &info) {
+                    log::warn!("Failed to emit update-available: {e}");
+                }
+            }
+            Ok(None) => {
+                log::info!("No updates available");
+            }
+            Err(e) => {
+                log::warn!("Update check failed: {e}");
+            }
+        }
+    });
+}
+
 /// Close splashscreen and reveal main window — called from Rust only (T022).
 fn close_splashscreen_internal(app: &AppHandle) {
     if let Some(splash) = app.get_webview_window("splashscreen") {
@@ -170,13 +278,58 @@ fn close_splashscreen_internal(app: &AppHandle) {
     }
 }
 
-/// Emit `backend-start-failed` to the splashscreen window so it can show an error.
+/// Emit `backend-start-failed` to the splashscreen window.
 fn notify_start_failed(app: &AppHandle, reason: &str) {
     if let Some(splash) = app.get_webview_window("splashscreen") {
         if let Err(e) = splash.emit("backend-start-failed", reason) {
             log::warn!("Failed to emit backend-start-failed: {e}");
         }
     }
+}
+
+/// Build and register the system tray icon with menu.
+fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let open_item = MenuItem::with_id(app, "open", "打开 AgentStudio", true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(app)?;
+    let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+
+    let menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
+
+    TrayIconBuilder::new()
+        .icon(app.default_window_icon().unwrap().clone())
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => {
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
+            "quit" => {
+                let state = app.state::<AppState>();
+                kill_sidecar(&state);
+                app.exit(0);
+            }
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            // Double-click on tray icon to show main window
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                let app = tray.app_handle();
+                if let Some(main) = app.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
+        })
+        .build(app)?;
+
+    Ok(())
 }
 
 // ── Entry Point ───────────────────────────────────────────────────────────────
@@ -203,10 +356,15 @@ pub fn run() {
                 let _ = main.set_focus();
             }
         }))
+        // Window state persistence: restore position/size on relaunch
+        .plugin(tauri_plugin_window_state::Builder::new().build())
+        // Native system notifications
+        .plugin(tauri_plugin_notification::init())
         // Register AppState
         .manage(AppState {
             backend_port: Mutex::new(None),
             sidecar_child: sidecar_child_arc,
+            pending_update: Mutex::new(None),
         })
         // Register IPC command handlers
         .invoke_handler(tauri::generate_handler![
@@ -214,18 +372,35 @@ pub fn run() {
             close_splashscreen,
             show_main_window,
             quit_app,
+            check_update,
+            install_update,
+            send_notification,
         ])
-        // Start the sidecar after Tauri is fully ready
+        // Start the sidecar, update check, and tray after Tauri is fully ready
         .setup(|app| {
             start_sidecar(app.handle().clone());
+            start_update_check(app.handle().clone());
+            if let Err(e) = setup_system_tray(app) {
+                log::warn!("Failed to setup system tray: {e}");
+            }
             Ok(())
         })
-        // Handle app exit: kill sidecar gracefully
+        // Handle app exit: kill sidecar gracefully; hide window to tray on close
         .build(tauri::generate_context!())
         .expect("error while building Tauri application")
-        .run(move |app_handle, event| {
-            if let RunEvent::ExitRequested { .. } = event {
-                // Kill sidecar on exit
+        .run(move |app_handle, event| match event {
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" => {
+                // Hide to tray instead of closing the window
+                api.prevent_close();
+                if let Some(main) = app_handle.get_webview_window("main") {
+                    let _ = main.hide();
+                }
+            }
+            RunEvent::ExitRequested { .. } => {
                 if let Ok(mut guard) = sidecar_child_for_exit.lock() {
                     if let Some(child) = guard.take() {
                         log::info!("Killing backend sidecar on exit");
@@ -234,8 +409,8 @@ pub fn run() {
                         }
                     }
                 }
-                // Allow exit to proceed
                 let _ = app_handle;
             }
+            _ => {}
         });
 }

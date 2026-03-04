@@ -15,7 +15,10 @@
     "shell:allow-open",
     "updater:allow-check",
     "updater:allow-download-and-install",
-    "log:allow-log"
+    "log:allow-log",
+    "window-state:allow-restore-state",
+    "window-state:allow-save-window-state",
+    "notification:allow-send-notification"
   ],
   "platforms": ["macOS", "windows", "linux"]
 }

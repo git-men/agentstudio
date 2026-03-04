@@ -13,6 +13,8 @@ import { ConfirmProvider } from './hooks/useConfirm';
 import { isExtensionEnvironment } from './utils/navigation';
 import { isTauri } from './lib/environment';
 import { useBackendReady } from './hooks/useBackendReady';
+import { useUpdateChecker } from './hooks/useUpdateChecker';
+import { UpdateDialog } from './components/desktop/UpdateDialog';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -303,6 +305,22 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
+  const { updatePayload, dismiss } = useUpdateChecker();
+  return (
+    <>
+      {children}
+      {updatePayload && (
+        <UpdateDialog
+          version={updatePayload.version}
+          notes={updatePayload.notes}
+          onDismiss={dismiss}
+        />
+      )}
+    </>
+  );
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -311,7 +329,9 @@ function App() {
           <TelemetryProvider>
             <ConfirmProvider>
               <TauriBackendGate>
-                <AppContent />
+                <DesktopUpdateLayer>
+                  <AppContent />
+                </DesktopUpdateLayer>
               </TauriBackendGate>
               <Toaster />
             </ConfirmProvider>

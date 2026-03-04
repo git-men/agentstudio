@@ -62,6 +62,9 @@ coverage/
 .cursor/
 .specify/
 specs/
+# Tauri signing keys (private key must never be committed)
+desktop/.tauri/
+
 # A2A local configurations
 .a2a/
 **/.a2a/

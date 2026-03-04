@@ -67,7 +67,7 @@
     "updater": {
       "active": true,
       "dialog": false,
-      "pubkey": "<TAURI_ED25519_PUBLIC_KEY_PLACEHOLDER>",
+      "pubkey": "RWTY8aHmKO/WXLyO4gOiYiDVX+si7dMgtoNKSvNkPhnBwBPuEQ8Wbjdn",
       "endpoints": [
         "https://github.com/okguitar/agentstudio/releases/latest/download/latest.json"
       ]
