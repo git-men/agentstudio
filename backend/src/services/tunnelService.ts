@@ -33,6 +33,8 @@ export interface TunnelConfig {
   websocketUrl?: string;
   /** Tunnel authentication token */
   token: string;
+  /** as-enterprise JWT token for creating/managing tunnels via API */
+  enterpriseToken?: string;
   /** Tunnel name (subdomain part, e.g., "my-dev" for my-dev.tunnel) */
   tunnelName?: string;
   /** Domain suffix (e.g., ".agentstudio.woa.com") */
@@ -459,8 +461,9 @@ class TunnelService {
       const headers: Record<string, string> = {
         'Content-Type': 'application/json',
       };
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`;
+      const token = accessToken || this.config.enterpriseToken;
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
       }
 
       const response = await fetch(`${apiBaseUrl}/api/tunnels`, {
