@@ -7,6 +7,11 @@ import { readFileSync } from 'fs'
 const apiPort = process.env.VITE_API_PORT || '4936';
 const target = `http://127.0.0.1:${apiPort}`;
 
+// In Tauri mode, the frontend connects directly to the backend sidecar via
+// dynamic port resolved through IPC. Dev proxy is not needed and would
+// interfere with the port-discovery flow.
+const isTauriMode = process.env.VITE_TAURI === 'true';
+
 // Get package version from root package.json (main version source)
 const getPackageVersion = () => {
   try {
@@ -58,19 +63,24 @@ export default defineConfig({
   },
   server: {
     port: Number(process.env.PORT) || 3000,
-    proxy: {
-      '/api': {
-        target: target,
-        changeOrigin: true,
-      },
-      '/slides': {
-        target: target,
-        changeOrigin: true,
-      },
-      '/media': {
-        target: target,
-        changeOrigin: true,
-      },
-    },
+    // In Tauri dev mode the frontend talks directly to the backend sidecar;
+    // disable proxy so requests are not hijacked by the Vite dev server.
+    // base remains '/' (constitution P1 — must not be changed).
+    proxy: isTauriMode
+      ? {}
+      : {
+          '/api': {
+            target: target,
+            changeOrigin: true,
+          },
+          '/slides': {
+            target: target,
+            changeOrigin: true,
+          },
+          '/media': {
+            target: target,
+            changeOrigin: true,
+          },
+        },
   },
 })

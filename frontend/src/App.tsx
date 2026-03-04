@@ -11,6 +11,8 @@ import { TelemetryProvider } from './components/TelemetryProvider';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { ConfirmProvider } from './hooks/useConfirm';
 import { isExtensionEnvironment } from './utils/navigation';
+import { isTauri } from './lib/environment';
+import { useBackendReady } from './hooks/useBackendReady';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -237,6 +239,70 @@ const AppContent: React.FC = () => {
   );
 };
 
+/**
+ * In Tauri mode, wait for the backend sidecar to report its port before
+ * rendering the main app. The splashscreen is already shown by Tauri (Rust
+ * owns its lifecycle); we only gate the React tree here as a safety net.
+ * In Web mode this wrapper is a no-op.
+ */
+function TauriBackendGate({ children }: { children: React.ReactNode }) {
+  const { isReady, error } = useBackendReady();
+
+  if (!isTauri()) return <>{children}</>;
+
+  if (error) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          gap: '16px',
+          fontFamily: 'system-ui, sans-serif',
+          background: '#0f172a',
+          color: '#e2e8f0',
+        }}
+      >
+        <p style={{ color: '#f87171', fontSize: '14px', textAlign: 'center', maxWidth: '400px' }}>
+          后端启动失败：{error}
+        </p>
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            padding: '8px 20px',
+            background: '#6366f1',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '13px',
+            cursor: 'pointer',
+          }}
+        >
+          重试
+        </button>
+      </div>
+    );
+  }
+
+  if (!isReady) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          background: '#0f172a',
+        }}
+      />
+    );
+  }
+
+  return <>{children}</>;
+}
+
 function App() {
   return (
     <ErrorBoundary>
@@ -244,7 +310,9 @@ function App() {
         <MobileProvider>
           <TelemetryProvider>
             <ConfirmProvider>
-              <AppContent />
+              <TauriBackendGate>
+                <AppContent />
+              </TauriBackendGate>
               <Toaster />
             </ConfirmProvider>
           </TelemetryProvider>

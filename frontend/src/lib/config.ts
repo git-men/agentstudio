@@ -1,5 +1,22 @@
 import { loadBackendServices, getCurrentService, saveBackendServices } from '../utils/backendServiceStorage';
 
+// ── Tauri Dynamic Port ────────────────────────────────────────────────────────
+// In Tauri desktop mode the backend port is discovered at runtime via IPC.
+// `useBackendReady` calls `setTauriBackendBaseUrl` once the port is known.
+// All synchronous callers (getApiBase, etc.) then transparently use it.
+
+let _tauriBackendBaseUrl: string | null = null;
+
+/**
+ * Called by `useBackendReady` once the Tauri sidecar port is known.
+ * After this call, `getApiBase()` / `getMediaBase()` use the dynamic port.
+ */
+export function setTauriBackendBaseUrl(baseUrl: string): void {
+  _tauriBackendBaseUrl = baseUrl.replace(/\/$/, ''); // strip trailing slash
+}
+
+// ── Embedded mode detection ───────────────────────────────────────────────────
+
 // Check if we're in embedded mode (npm package - frontend and backend on same server)
 // VITE_API_BASE=/api means relative API path, embedded mode
 const isEmbeddedMode = (): boolean => {
@@ -10,6 +27,11 @@ const isEmbeddedMode = (): boolean => {
 
 // 获取当前选中的后端服务URL
 const getCurrentBackendServiceUrl = (): string => {
+  // Tauri desktop mode: use dynamically resolved port from IPC
+  if (_tauriBackendBaseUrl !== null) {
+    return _tauriBackendBaseUrl;
+  }
+
   // In embedded mode, use window.location.origin as the base URL
   // This allows the frontend to work with any port/host it's served from
   if (isEmbeddedMode()) {
