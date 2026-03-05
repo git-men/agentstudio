@@ -448,6 +448,46 @@ export class ProjectMetadataStorage {
       }
     }
 
+    // Third pass: include agent workingDirectory paths as projects.
+    // Agents (e.g. meta-agent) may declare a dedicated workingDirectory like ~/.as-jarvis.
+    // In Claude Code the project directory IS the working directory, so these should be
+    // visible in the project list even before the user has opened them via Claude CLI.
+    try {
+      const allAgents = this.agentStorage.getAllAgents();
+      for (const agent of allAgents) {
+        if (!agent.workingDirectory) continue;
+
+        // Resolve ~ to home directory
+        const resolvedPath = agent.workingDirectory.startsWith('~')
+          ? path.join(os.homedir(), agent.workingDirectory.slice(1))
+          : agent.workingDirectory;
+
+        const realPath = this.resolveRealPath(resolvedPath);
+
+        if (processedRealPaths.has(realPath)) continue;
+
+        // Ensure the directory exists so it can be used as a project root
+        if (!fs.existsSync(resolvedPath)) {
+          try {
+            fs.mkdirSync(resolvedPath, { recursive: true });
+            console.log(`📁 Created agent workingDirectory: ${resolvedPath}`);
+          } catch (mkdirErr) {
+            console.warn(`[getAllProjects] Failed to create workingDirectory ${resolvedPath}:`, mkdirErr);
+            continue;
+          }
+        }
+
+        const metadata = this.getOrCreateMetadataForPath(resolvedPath);
+        const enriched = this.enrichProjectWithAgentInfo(metadata);
+        projects.push(enriched);
+        processedPaths.add(resolvedPath);
+        processedRealPaths.add(realPath);
+        console.log(`🤖 Added agent workingDirectory as project: ${resolvedPath} (agent: ${agent.id})`);
+      }
+    } catch (agentScanErr) {
+      console.warn('[getAllProjects] Failed to scan agent workingDirectories:', agentScanErr);
+    }
+
     return projects.sort((a, b) => new Date(b.lastAccessed).getTime() - new Date(a.lastAccessed).getTime());
   }
 
