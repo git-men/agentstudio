@@ -426,7 +426,7 @@ Please respond in Chinese unless the user specifically requests another language
                       className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded"
                       title={isReadonlyAgent(agent) ? '查看配置' : '编辑助手'}
                     >
-                      {isReadonlyAgent(agent) ? <Eye className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                      {isReadonlyAgent(agent) ? <Settings className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
                     </button>
                     <button
                       onClick={() => handleDelete(agent)}
@@ -551,7 +551,7 @@ Please respond in Chinese unless the user specifically requests another language
                             className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded transition-colors"
                             title={isReadonlyAgent(agent) ? '查看配置' : '编辑助手'}
                           >
-                            {isReadonlyAgent(agent) ? <Eye className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                            {isReadonlyAgent(agent) ? <Settings className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
                           </button>
                           <button
                             onClick={() => handleDelete(agent)}
