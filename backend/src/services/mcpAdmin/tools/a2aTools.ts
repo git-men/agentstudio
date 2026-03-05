@@ -101,6 +101,7 @@ export const getA2AEndpointTool: ToolDefinition = {
       };
     }
   },
+  requiredPermissions: ['system:read'],
 };
 
 /**
@@ -166,6 +167,7 @@ export const createA2AApiKeyTool: ToolDefinition = {
       };
     }
   },
+  requiredPermissions: ['system:write'],
 };
 
 /**
@@ -221,6 +223,7 @@ export const listA2AApiKeysTool: ToolDefinition = {
       };
     }
   },
+  requiredPermissions: ['system:read'],
 };
 
 /**

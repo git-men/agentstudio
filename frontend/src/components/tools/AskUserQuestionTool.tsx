@@ -7,6 +7,20 @@ import { useAgentStore, type PendingFrontendToolCall } from '../../stores/useAge
 
 const TYPE_SOMETHING_MARKER = '__TYPE_SOMETHING__';
 
+function resolveOptionLabel(option: unknown): string {
+  if (typeof option === 'string') return option;
+  if (!option || typeof option !== 'object') return '';
+  const o = option as Record<string, unknown>;
+  for (const key of ['label', 'text', 'name', 'value', 'title']) {
+    if (typeof o[key] === 'string' && o[key]) return o[key] as string;
+  }
+  return '';
+}
+
+function resolveQuestionText(question: Record<string, unknown>): string {
+  return (question.question || question.prompt || '') as string;
+}
+
 interface SubmitResult {
   success: boolean;
   error?: string;
@@ -47,7 +61,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
       if (
         pendingQs &&
         pendingQs.length === questions.length &&
-        pendingQs.every((q: any, i: number) => q.question === questions[i]?.question)
+        pendingQs.every((q: any, i: number) => resolveQuestionText(q) === resolveQuestionText(questions[i]))
       ) {
         return pending;
       }
@@ -164,11 +178,29 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
   }, [canSubmit, onSubmit, matchedPending, formatResponse, t]);
 
   if (!questions) {
+    if (execution.isExecuting) {
+      return (
+        <BaseToolComponent
+          execution={execution}
+          hideToolName={false}
+          overrideToolName={t('askUserQuestionTool.title')}
+          defaultExpanded={true}
+          customIcon={<MessageSquare className="w-4 h-4 text-blue-500" />}
+        >
+          <div className="flex items-center space-x-2 text-blue-600 py-2">
+            <MessageSquare className="w-4 h-4 animate-pulse" />
+            <span className="text-sm">{t('askUserQuestionTool.loading', 'Loading questions...')}</span>
+          </div>
+        </BaseToolComponent>
+      );
+    }
     return (
       <BaseToolComponent
         execution={execution}
         hideToolName={false}
         overrideToolName={t('askUserQuestionTool.title')}
+        defaultExpanded={true}
+        customIcon={<MessageSquare className="w-4 h-4 text-blue-500" />}
       >
         <div className="text-red-600 text-sm">
           {t('askUserQuestionTool.invalidInput', 'Invalid question input')}
@@ -179,7 +211,8 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
 
   const getSubtitle = () => {
     const first = questions[0];
-    const title = first.header || (first.question.length > 30 ? first.question.substring(0, 30) + '...' : first.question);
+    const qText = resolveQuestionText(first);
+    const title = first.header || (qText.length > 30 ? qText.substring(0, 30) + '...' : qText);
     return questions.length === 1 ? title : `${title} (+${questions.length - 1})`;
   };
 
@@ -245,18 +278,20 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
                 </div>
 
                 <div className="mb-3">
-                  <p className="text-sm text-gray-800 font-medium">{question.question}</p>
+                  <p className="text-sm text-gray-800 font-medium">{resolveQuestionText(question)}</p>
                 </div>
 
                 <div className="space-y-2">
                   {(question.options || []).map((option: any, optionIndex: number) => {
-                    const isSelected = displaySelected.includes(option.label);
-                    const isSubmittedOption = execution.toolResult && submittedOptions.includes(option.label);
+                    const label = resolveOptionLabel(option);
+                    if (!label && execution.isExecuting) return null;
+                    const isSelected = displaySelected.includes(label);
+                    const isSubmittedOption = execution.toolResult && submittedOptions.includes(label);
                     const canClick = isInteractive;
                     return (
                       <div
                         key={optionIndex}
-                        onClick={() => handleOptionClick(questionIndex, option.label, question.multiSelect || false)}
+                        onClick={() => handleOptionClick(questionIndex, label, question.multiSelect || false)}
                         className={`
                           flex items-start space-x-2 p-2 rounded border transition-all
                           ${canClick ? 'cursor-pointer' : 'cursor-default'}
@@ -272,7 +307,7 @@ export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execut
                           (isSelected || isSubmittedOption) ? <CheckCircle className={`w-4 h-4 mt-0.5 ${isSubmittedOption ? 'text-green-500' : 'text-blue-500'}`} /> : <Circle className="w-4 h-4 mt-0.5 text-gray-400" />
                         )}
                         <div className="flex-1">
-                          <div className={`text-sm font-medium ${isSubmittedOption ? 'text-green-700' : isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{option.label}</div>
+                          <div className={`text-sm font-medium ${isSubmittedOption ? 'text-green-700' : isSelected ? 'text-blue-700' : 'text-gray-700'}`}>{label}</div>
                           {option.description && <div className="text-xs text-gray-500 mt-1">{option.description}</div>}
                         </div>
                       </div>

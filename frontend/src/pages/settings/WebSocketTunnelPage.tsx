@@ -249,6 +249,7 @@ export const WebSocketTunnelPage: React.FC = () => {
           protocol,
           websocketUrl: serverInfo?.websocket?.url,
           domainSuffix: serverInfo?.domain?.suffix,
+          ...(accessToken.trim() && { accessToken: accessToken.trim() }),
         })
       });
 
@@ -428,6 +429,22 @@ export const WebSocketTunnelPage: React.FC = () => {
               </div>
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                 输入隧道服务的地址，点击"连接"获取服务信息
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Access Token <span className="font-normal text-gray-400">（可选）</span>
+              </label>
+              <input
+                type="password"
+                value={accessToken}
+                onChange={(e) => setAccessToken(e.target.value)}
+                placeholder="由 AgentStudio Enterprise 颁发，内网部署可留空"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                外网部署时隧道服务器启用了 JWT 鉴权，需提供此 Token；内网/未启用鉴权时可留空
               </p>
             </div>
           </div>
