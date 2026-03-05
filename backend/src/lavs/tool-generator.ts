@@ -128,13 +128,14 @@ export class LAVSToolGenerator {
     // Create shared instances for validation and permission checking
     const validator = new LAVSValidator();
     const permChecker = new PermissionChecker();
+    const manifestTypes = manifest.types;
 
     // Create executor function
     const execute: ToolExecutor = async (params: any) => {
       console.log(`[LAVS] Executing tool ${toolName} with params:`, params);
 
-      // 1. Validate input against schema
-      validator.assertValidInput(endpoint, params);
+      // 1. Validate input against schema (pass manifest types for $ref resolution)
+      validator.assertValidInput(endpoint, params, manifestTypes);
 
       // 2. Merge permissions
       const mergedPermissions = permChecker.mergePermissions(
@@ -187,8 +188,12 @@ export class LAVSToolGenerator {
           throw new Error(`Handler type '${endpoint.handler.type}' is not yet supported in tool generation`);
       }
 
-      // 5. Validate output against schema
-      validator.assertValidOutput(endpoint, result);
+      // 6. Validate output against schema (non-blocking: warn on mismatch, still return data)
+      try {
+        validator.assertValidOutput(endpoint, result, manifestTypes);
+      } catch (validationError: any) {
+        console.warn(`[LAVS] Output validation warning for ${toolName}: ${validationError.message}`);
+      }
 
       return result;
     };

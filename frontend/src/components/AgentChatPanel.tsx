@@ -613,10 +613,34 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     adjustTextareaHeight();
   }, [inputMessage]);
 
-  // Load session messages into the store when query data arrives.
-  // The query is disabled during streaming (paused=isAiTyping), so
-  // sessionMessagesData only changes from explicit user actions.
+  // Guard: when streaming starts, mark that the next sessionMessagesData
+  // change is likely stale cached data from query re-enabling, not a user action.
+  const skipSessionLoadRef = useRef(false);
+
   useEffect(() => {
+    if (isAiTyping) {
+      skipSessionLoadRef.current = true;
+    } else if (skipSessionLoadRef.current) {
+      // Clear guard after a short delay in case sessionMessagesData
+      // doesn't change (no query re-enable) to avoid blocking future loads
+      const timer = setTimeout(() => {
+        skipSessionLoadRef.current = false;
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAiTyping]);
+
+  // Load session messages into the store when query data arrives.
+  // The query is disabled during streaming (paused=isAiTyping).
+  // When streaming ends, the query re-enables and may return stale cached
+  // data that would overwrite live streaming content — the guard prevents this.
+  useEffect(() => {
+    if (skipSessionLoadRef.current) {
+      skipSessionLoadRef.current = false;
+      console.log('📋 [SESSION] Skipping session message load — streaming just ended, cached data is stale');
+      return;
+    }
+
     if (sessionMessagesData?.messages && currentSessionId) {
       loadSessionMessages(sessionMessagesData.messages);
 

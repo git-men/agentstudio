@@ -406,8 +406,12 @@ export const useAIStreamHandler = ({
           const state = useAgentStore.getState();
           aiMessageIdRef.current = state.messages[state.messages.length - 1].id;
           streamingStateRef.current.currentMessageId = aiMessageIdRef.current;
-          streamingStateRef.current.isStreaming = true;
         }
+
+        // Always mark streaming active when new content arrives
+        // (fixes multi-turn scenario where message_stop cleared isStreaming
+        // but a new turn's content_block_start needs it re-enabled)
+        streamingStateRef.current.isStreaming = true;
 
         // Initialize streaming block for this content block
         const blockId = `block-${aiMessageIdRef.current}-${blockIndex}`;
@@ -1351,6 +1355,11 @@ export const useAIStreamHandler = ({
               isError: block.is_error || false,
               isExecuting: false
             });
+
+            if (targetTool.toolData.toolName) {
+              useAgentStore.getState().notifyToolExecution(targetTool.toolData.toolName);
+              console.log('📢 Notified tool execution (assistant path):', targetTool.toolData.toolName);
+            }
           } else {
             console.warn('🔧 No target tool found for tool_use_id in assistant message:', block.tool_use_id);
           }
@@ -1368,24 +1377,55 @@ export const useAIStreamHandler = ({
       if (!isSideChain) {
         console.log('Main task result received, stopping AI typing...');
 
-        // T029: Mark all active streaming blocks as complete
-        if (streamingStateRef.current.isStreaming) {
-          console.log('🌊 [STREAMING] Finalizing all streaming blocks');
-          streamingStateRef.current.activeBlocks.forEach((block) => {
-            block.isComplete = true;
-            console.log(`🌊 [STREAMING] Marked block ${block.blockId} as complete`);
-          });
-          streamingStateRef.current.isStreaming = false;
-          streamingStateRef.current.currentMessageId = null;
+        // T029: Flush and finalize all active streaming blocks
+        {
+          const state = streamingStateRef.current;
+          const messageId = aiMessageIdRef.current;
 
-          // Cancel any pending RAF updates
-          if (streamingStateRef.current.rafId !== null) {
-            cancelAnimationFrame(streamingStateRef.current.rafId);
-            streamingStateRef.current.rafId = null;
+          if (state.isStreaming || state.activeBlocks.size > 0) {
+            console.log('🌊 [STREAMING] result: Flushing all streaming blocks, count:', state.activeBlocks.size);
+
+            // 1. Flush pending RAF update first
+            if (state.pendingUpdate && state.rafId !== null) {
+              cancelAnimationFrame(state.rafId);
+              state.rafId = null;
+
+              const pending = state.pendingUpdate;
+              const block = state.activeBlocks.get(pending.blockId);
+              if (block && block.partId && messageId) {
+                if (pending.type === 'text') {
+                  updateTextPartInMessage(messageId, block.partId, pending.content);
+                } else if (pending.type === 'thinking') {
+                  updateThinkingPartInMessage(messageId, block.partId, pending.content);
+                }
+                console.log(`🌊 [STREAMING] result: Flushed pending RAF ${pending.type}, length: ${pending.content.length}`);
+              }
+              state.pendingUpdate = null;
+            } else if (state.rafId !== null) {
+              cancelAnimationFrame(state.rafId);
+              state.rafId = null;
+            }
+
+            // 2. Flush all remaining active blocks' content to store
+            if (messageId) {
+              state.activeBlocks.forEach((block) => {
+                block.isComplete = true;
+                if ((block.type === 'text' || block.type === 'thinking') && block.partId) {
+                  if (block.type === 'text') {
+                    updateTextPartInMessage(messageId, block.partId, block.content);
+                  } else {
+                    updateThinkingPartInMessage(messageId, block.partId, block.content);
+                  }
+                  console.log(`🌊 [STREAMING] result: Flushed ${block.type} block ${block.blockId}, length: ${block.content.length}`);
+                }
+              });
+            }
+
+            state.isStreaming = false;
+            state.currentMessageId = null;
+            state.activeBlocks.clear();
+            console.log('🌊 [STREAMING] result: All blocks flushed and cleared');
           }
-
-          // Clear active blocks after finalization
-          streamingStateRef.current.activeBlocks.clear();
         }
 
         // Clear the abort controller and immediately stop typing
