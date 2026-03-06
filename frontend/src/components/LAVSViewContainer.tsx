@@ -10,7 +10,8 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { LAVSClient, LAVSManifest, LAVSViewComponent } from '../lavs';
+import { LAVSClient, LAVSViewComponent } from 'lavs-client';
+import type { LAVSManifest } from 'lavs-client';
 import type { AgentConfig } from '../types';
 import { useAgentStore } from '../stores/useAgentStore';
 import { eventBus, EVENTS } from '../utils/eventBus';

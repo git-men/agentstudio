@@ -7,21 +7,23 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { ManifestLoader } from '../lavs/loader.js';
-import { ScriptExecutor } from '../lavs/script-executor.js';
-import { FunctionExecutor } from '../lavs/function-executor.js';
-import { LAVSValidator } from '../lavs/validator.js';
-import { PermissionChecker } from '../lavs/permission-checker.js';
-import { LAVSRateLimiter } from '../lavs/rate-limiter.js';
-import { subscriptionManager } from '../lavs/subscription-manager.js';
 import {
-  LAVSManifest,
+  ManifestLoader,
+  ScriptExecutor,
+  FunctionExecutor,
+  LAVSValidator,
+  PermissionChecker,
+  LAVSRateLimiter,
+  subscriptionManager,
   LAVSError,
   LAVSErrorCode,
+} from 'lavs-runtime';
+import type {
+  LAVSManifest,
   ExecutionContext,
   ScriptHandler,
   FunctionHandler,
-} from '../lavs/types.js';
+} from 'lavs-runtime';
 import { AGENTS_DIR } from '../config/paths.js';
 
 const router: express.Router = express.Router();
