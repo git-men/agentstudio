@@ -62,15 +62,16 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
             displayMessage = { ...message, content: parsed.cleanContent };
           }
         }
-        // Also check first text part in messageParts (structured format)
-        if (!envLabel && message.messageParts?.length) {
+        // Always check messageParts as well — ChatMessageRenderer prioritises
+        // messageParts over content, so raw tags must be stripped here too.
+        if (message.messageParts?.length) {
           const firstText = message.messageParts.find((p: any) => p.type === 'text' && p.content);
           if (firstText) {
             const parsed = parseEnvironmentContext(firstText.content);
             if (parsed.envLabel) {
-              envLabel = parsed.envLabel;
+              if (!envLabel) envLabel = parsed.envLabel;
               displayMessage = {
-                ...message,
+                ...(displayMessage || message),
                 messageParts: message.messageParts.map((p: any) =>
                   p === firstText ? { ...p, content: parsed.cleanContent } : p
                 ),
