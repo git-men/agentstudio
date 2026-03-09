@@ -19,17 +19,22 @@ const globalAgentStorage = new AgentStorage();
 
 // Helper functions for reading Agent SDK history from projects directory
 function convertProjectPathToClaudeFormat(projectPath: string): string {
-  // First, resolve symlinks to get the real path
-  // This is important because Claude CLI stores sessions using the real path
+  // Expand ~ to home directory before any filesystem operations
   let resolvedPath = projectPath;
+  if (resolvedPath.startsWith('~')) {
+    resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
+  }
+
+  // Resolve symlinks to get the real path
+  // This is important because Claude CLI stores sessions using the real path
   try {
-    resolvedPath = fs.realpathSync(projectPath);
-    if (resolvedPath !== projectPath) {
-      console.log(`🔗 [DEBUG] Resolved symlink: ${projectPath} -> ${resolvedPath}`);
+    const realPath = fs.realpathSync(resolvedPath);
+    if (realPath !== resolvedPath) {
+      console.log(`🔗 [DEBUG] Resolved symlink: ${resolvedPath} -> ${realPath}`);
     }
+    resolvedPath = realPath;
   } catch (error) {
-    // If the path doesn't exist or can't be resolved, use the original path
-    console.log(`⚠️ [DEBUG] Could not resolve path: ${projectPath}, using original`);
+    console.log(`⚠️ [DEBUG] Could not resolve path: ${resolvedPath}, using as-is`);
   }
   
   // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
