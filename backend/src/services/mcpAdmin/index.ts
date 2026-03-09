@@ -16,4 +16,5 @@ export {
   hasPermission,
 } from './adminApiKeyService.js';
 export { allTools, projectTools, agentTools, mcpServerTools, systemTools } from './tools/index.js';
+export { autoBootstrapMcpAdmin, getSystemMcpServers } from './autoBootstrap.js';
 export * from './types.js';

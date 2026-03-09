@@ -28,6 +28,7 @@ import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
+import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
@@ -427,6 +428,15 @@ const app: express.Express = express();
     console.info('[Tunnel] Tunnel service initialized');
   } catch (error) {
     console.error('[Tunnel] Error initializing tunnel service:', error);
+  }
+
+  // 4b. MCP Admin Auto-Bootstrap: Ensure agentstudio-admin MCP is available out-of-the-box
+  console.info('[MCP Admin Bootstrap] Ensuring agentstudio-admin MCP is configured...');
+  try {
+    await autoBootstrapMcpAdmin(PORT);
+    console.info('[MCP Admin Bootstrap] agentstudio-admin MCP ready');
+  } catch (error) {
+    console.error('[MCP Admin Bootstrap] Error:', error);
   }
 
   // 5. Platform Hook System

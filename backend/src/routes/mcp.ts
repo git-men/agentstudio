@@ -7,6 +7,7 @@ import { parse as parseToml } from '@iarna/toml';
 import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
 import { getSdkConfigPath } from '../config/sdkConfig.js';
 import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEngineType } from '../config/engineConfig.js';
+import { getSystemMcpServers } from '../services/mcpAdmin/autoBootstrap.js';
 
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
@@ -159,26 +160,38 @@ const ensureConfigDirectory = (configPath: string): void => {
 export const readMcpConfig = (): McpConfigFile => {
   const configPath = getMcpConfigPath();
   
-  if (!fs.existsSync(configPath)) {
-    return { mcpServers: {} };
-  }
-  
-  try {
-    const content = fs.readFileSync(configPath, 'utf-8');
+  let config: McpConfigFile = { mcpServers: {} };
 
-    if (isCodexEngine()) {
-      return parseCodexTomlMcpConfig(content);
-    }
+  if (fs.existsSync(configPath)) {
+    try {
+      const content = fs.readFileSync(configPath, 'utf-8');
 
-    const parsed = JSON.parse(content);
-    if (!parsed || typeof parsed !== 'object' || typeof (parsed as any).mcpServers !== 'object') {
-      return { mcpServers: {} };
+      if (isCodexEngine()) {
+        config = parseCodexTomlMcpConfig(content);
+      } else {
+        const parsed = JSON.parse(content);
+        if (parsed && typeof parsed === 'object' && typeof (parsed as any).mcpServers === 'object') {
+          config = parsed as McpConfigFile;
+        }
+      }
+    } catch (error) {
+      console.error('Failed to read MCP config:', error);
     }
-    return parsed as McpConfigFile;
-  } catch (error) {
-    console.error('Failed to read MCP config:', error);
-    return { mcpServers: {} };
   }
+
+  // For read-only engines (Cursor, Codebuddy, Codex), merge system MCP servers
+  // from the native config so that built-in servers like agentstudio-admin
+  // are always available regardless of the engine's own config.
+  if (isMcpReadOnlyEngine()) {
+    const systemServers = getSystemMcpServers();
+    for (const [name, serverConfig] of Object.entries(systemServers)) {
+      if (!config.mcpServers[name]) {
+        config.mcpServers[name] = serverConfig;
+      }
+    }
+  }
+
+  return config;
 };
 
 // Helper function to write MCP config (exported for use by other modules)
