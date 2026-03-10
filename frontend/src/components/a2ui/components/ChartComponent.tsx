@@ -94,8 +94,21 @@ function buildAxisChart(
   // 1. { categories: string[], series: [{name, data}] }
   // 2. { xAxis: string[], yAxis: number[] } (simple)
   if (data.categories && data.series) {
+    const hasLegend = data.series.length > 1;
     return {
       ...base,
+      ...(hasLegend ? {
+        grid: {
+          ...((base as any).grid || {}),
+          bottom: '15%',
+          containLabel: true,
+        },
+        legend: {
+          bottom: 0,
+          left: 'center',
+          type: 'scroll',
+        },
+      } : {}),
       xAxis: { type: 'category', data: data.categories },
       yAxis: { type: 'value' },
       series: data.series.map((s: any) => ({
@@ -103,7 +116,6 @@ function buildAxisChart(
         type,
         smooth: type === 'line',
       })),
-      legend: data.series.length > 1 ? { top: 'bottom' } : undefined,
       ...custom,
     };
   }
@@ -191,6 +203,10 @@ function buildRadarChart(
   };
 }
 
+function isPercentageWidth(w: string): boolean {
+  return /^\d+(\.\d+)?%$/.test(w);
+}
+
 const CHART_COLORS = [
   '#6366f1', '#8b5cf6', '#a855f7', '#d946ef',
   '#ec4899', '#f43f5e', '#f97316', '#eab308',
@@ -210,8 +226,16 @@ export const A2UIChart: React.FC<ChartComponentProps> = (props) => {
   const width = props.width || '100%';
   const height = props.height || '320px';
 
+  // When a percentage width is used inside a flex container with gap,
+  // raw percentages overflow (e.g. two 50% children + 12px gap > 100%).
+  // Use calc() to subtract half the gap (parent uses gap-3 = 12px) so
+  // columns fit on one row.  For 50% this becomes calc(50% - 6px).
+  const style: React.CSSProperties = isPercentageWidth(width)
+    ? { width: `calc(${width} - 6px)`, minWidth: 0, boxSizing: 'border-box' }
+    : { width };
+
   return (
-    <div className="a2ui-chart rounded-lg overflow-hidden" style={{ width }}>
+    <div className="a2ui-chart rounded-lg overflow-hidden" style={style}>
       <ReactECharts
         option={option}
         style={{ height, width: '100%' }}
