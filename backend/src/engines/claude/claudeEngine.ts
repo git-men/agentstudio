@@ -411,6 +411,15 @@ export class ClaudeEngine implements IAgentEngine {
               finalSessionId = sdkMessage.session_id;
               adapter.setThreadId(sdkMessage.session_id);
               console.log(`[ClaudeEngine] Session ID updated: ${sdkMessage.session_id}`);
+
+              // Confirm session in SessionManager so it moves from tempSessions
+              // to the main sessions index. Without this, getSession() cannot
+              // find the session later when loading history messages.
+              if (!claudeSession.getClaudeSessionId() || claudeSession.getClaudeSessionId() !== sdkMessage.session_id) {
+                claudeSession.setClaudeSessionId(sdkMessage.session_id);
+                sessionManager.confirmSessionId(claudeSession, sdkMessage.session_id, configSnapshot);
+                console.log(`[ClaudeEngine] Confirmed session ${sdkMessage.session_id} in SessionManager`);
+              }
             }
 
             // Convert SDK message to AGUI events

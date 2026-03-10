@@ -1,5 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
+import * as path from 'path';
+import * as fs from 'fs';
+
 import type {
   SDKMessage,
   SDKSystemMessage,
@@ -8,6 +11,8 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import { AgentStorage } from '../services/agentStorage';
 import { AgentConfig } from '../types/agents';
+import { getAllProjectsDirs } from '../config/sdkConfig.js';
+import { resolvePath } from '../config/paths.js';
 import { sessionManager } from '../services/sessionManager';
 import { buildQueryOptions } from '../utils/claudeUtils.js';
 import { handleSessionManagement, buildUserMessageContent } from '../utils/sessionUtils.js';
@@ -46,6 +51,55 @@ const router: express.Router = express.Router();
 
 // Storage instances
 const globalAgentStorage = new AgentStorage();
+
+/**
+ * SessionHistoryWriter - Writes SDK messages to .jsonl files
+ * in the Claude history format so that readClaudeHistorySessions() can read them.
+ *
+ * The Claude SDK query() API in Streaming Input Mode does not always persist
+ * session history to disk. This writer ensures every message is saved so
+ * historical session browsing works correctly.
+ */
+class SessionHistoryWriter {
+  private filePath: string | null = null;
+  private sessionId: string | null = null;
+
+  constructor(projectPath: string | undefined) {
+    if (!projectPath) return;
+    const resolved = resolvePath(projectPath);
+    // Convert project path to Claude format (same logic as sessions.ts)
+    let resolvedForConversion = resolved;
+    try { resolvedForConversion = fs.realpathSync(resolved); } catch { /* use as-is */ }
+    const claudeProjectPath = resolvedForConversion.replace(/[\/\\\.:\ ]/g, '-');
+    // Use the first getAllProjectsDirs directory (AgentStudio-managed, highest priority)
+    const projectsDir = getAllProjectsDirs()[0];
+    this.filePath = path.join(projectsDir, claudeProjectPath);
+  }
+
+  /**
+   * Set the session ID once it's known (from SDK init message).
+   * Creates the history directory if needed.
+   */
+  setSessionId(sid: string): void {
+    this.sessionId = sid;
+    if (this.filePath) {
+      try { fs.mkdirSync(this.filePath, { recursive: true }); } catch { /* ignore */ }
+    }
+  }
+
+  /**
+   * Append a message object as a single JSON line to the session's .jsonl file.
+   */
+  append(message: any): void {
+    if (!this.filePath || !this.sessionId) return;
+    const file = path.join(this.filePath, `${this.sessionId}.jsonl`);
+    try {
+      fs.appendFileSync(file, JSON.stringify(message) + '\n');
+    } catch (err) {
+      console.error(`[HistoryWriter] Failed to write to ${file}:`, err);
+    }
+  }
+}
 
 
 
@@ -1023,7 +1077,7 @@ router.post('/chat', async (req, res) => {
         // 为这个特定请求创建一个独立的query调用，但复用session context
         const currentSessionId = claudeSession.getClaudeSessionId();
 
-        // 使用会话的 sendMessage 方法发送消息
+        // 使用会话の sendMessage 方法发送消息
         let compactMessageBuffer: any[] = []; // 缓存 compact 相关消息
 
         // Initialize AGUI adapter if using AGUI output format
@@ -1034,6 +1088,19 @@ router.post('/chat', async (req, res) => {
           aguiAdapter = new ClaudeAguiAdapter(actualSessionId || currentSessionId || undefined);
         }
 
+        // History writer: persist SDK messages to .jsonl so session history works
+        const historyWriter = new SessionHistoryWriter(projectPath);
+        if (currentSessionId) {
+          historyWriter.setSessionId(currentSessionId);
+          // Write the user message first
+          historyWriter.append({
+            type: 'user',
+            message: userMessage.message,
+            uuid: `user_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            sessionId: currentSessionId,
+          });
+        }
         const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
           if (isSDKSystemMessage(sdkMessage) && sdkMessage.subtype === "init") {
             // 📊 打印完整的 system.init 消息体，用于调试模型使用情况
@@ -1266,6 +1333,16 @@ router.post('/chat', async (req, res) => {
               sessionManager.confirmSessionId(claudeSession, responseSessionId, configSnapshot);
               console.log(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
 
+              // Initialize history writer with the confirmed session ID and write user message
+              historyWriter.setSessionId(responseSessionId);
+              historyWriter.append({
+                type: 'user',
+                message: userMessage.message,
+                uuid: `user_${Date.now()}`,
+                timestamp: new Date().toISOString(),
+                sessionId: responseSessionId,
+              });
+
               if (tempSessionId !== responseSessionId) {
                 notificationChannelManager.updateChannelSession(sseChannelId, responseSessionId);
                 frontendToolBridge.updateSessionId(tempSessionId, responseSessionId);
@@ -1340,6 +1417,12 @@ router.post('/chat', async (req, res) => {
           // 确保返回的 session_id 字段与 sessionId 一致
           if (actualSessionId || currentSessionId) {
             eventData.session_id = actualSessionId || currentSessionId;
+          }
+
+          // Persist SDK message to .jsonl history file
+          // Only write user/assistant messages (these are what readClaudeHistorySessions parses)
+          if (sdkMessage.type === 'assistant' || sdkMessage.type === 'user' || sdkMessage.type === 'result') {
+            historyWriter.append(sdkMessage);
           }
 
           // Frontend tool calls are handled via FrontendToolBridge:

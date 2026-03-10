@@ -1018,8 +1018,47 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
       session = agentStorage.getSession(agentId, sessionId);
     }
     
+    // If session not found in history/storage, check if it exists as a live
+    // session in SessionManager. Use the live session's actual projectPath to
+    // read Claude history from the correct directory.
     if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+      const liveClaudeSession = sessionManager.getSession(sessionId);
+      if (liveClaudeSession) {
+        const liveProjectPath = liveClaudeSession.getProjectPath();
+        const liveClaudeSessionId = liveClaudeSession.getClaudeSessionId();
+        const lookupSessionId = liveClaudeSessionId || sessionId;
+        
+        console.log(`📋 [LIVE] Session ${sessionId} found in SessionManager, projectPath=${liveProjectPath}, claudeSessionId=${liveClaudeSessionId}`);
+        
+        // Try to read messages from Claude history using the live session's projectPath
+        if (liveProjectPath) {
+          const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+          if (defaultEngine.readSession) {
+            session = await defaultEngine.readSession(liveProjectPath, lookupSessionId);
+          }
+          if (!session) {
+            const claudeSessions = readClaudeHistorySessions(liveProjectPath);
+            session = claudeSessions.find(s => s.id === lookupSessionId);
+          }
+          if (session) {
+            console.log(`� [LIVE] Found session history with ${session.messages?.length || 0} messages`);
+            session = { ...session, agentId };
+          }
+        }
+        
+        // If still no history on disk, return session metadata with empty messages
+        if (!session) {
+          console.log(`📋 [LIVE] No history file yet for session ${sessionId}, returning empty messages`);
+          return res.json({
+            sessionId,
+            agentId,
+            title: liveClaudeSession.getSessionTitle() || `Session ${sessionId.slice(0, 8)}`,
+            messages: []
+          });
+        }
+      } else {
+        return res.status(404).json({ error: 'Session not found' });
+      }
     }
     
     res.json({ 
