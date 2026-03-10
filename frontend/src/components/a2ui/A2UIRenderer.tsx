@@ -168,6 +168,7 @@ const ComponentRenderer: React.FC<{
           style={{
             alignItems: mapAlignment(props.alignment),
             justifyContent: mapDistribution(props.distribution),
+            width: props.width || '100%'
           }}
         >
           {renderChildren(props.children)}
@@ -341,8 +342,8 @@ const ComponentRenderer: React.FC<{
     case 'DataCard':
       return (
         <A2UIDataCard
-          title={resolve(props.title) || ''}
-          value={resolve(props.value) || 0}
+          title={resolve(props.title) ?? ''}
+          value={resolve(props.value) ?? '-'}
           unit={resolve(props.unit)}
           trend={resolve(props.trend)}
           trendValue={resolve(props.trendValue)}

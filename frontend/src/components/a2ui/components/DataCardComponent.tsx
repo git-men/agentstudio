@@ -15,6 +15,25 @@ interface DataCardComponentProps {
   icon?: string;
 }
 
+/**
+ * Format the display value for DataCard.
+ * Handles number, string, and edge cases (null, undefined, 0, empty string).
+ */
+function formatDisplayValue(value: string | number): string {
+  // Handle number type: format with locale
+  if (typeof value === 'number') {
+    return value.toLocaleString();
+  }
+
+  // Handle string type: return as-is (already formatted like "6,536.8")
+  if (typeof value === 'string' && value.length > 0) {
+    return value;
+  }
+
+  // Fallback for empty/null/undefined
+  return '-';
+}
+
 export const A2UIDataCard: React.FC<DataCardComponentProps> = ({
   title,
   value,
@@ -31,6 +50,8 @@ export const A2UIDataCard: React.FC<DataCardComponentProps> = ({
 
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Minus;
 
+  const displayValue = formatDisplayValue(value);
+
   return (
     <div className="a2ui-datacard rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-4 min-w-[160px]">
       <div className="flex items-start justify-between mb-2">
@@ -43,7 +64,7 @@ export const A2UIDataCard: React.FC<DataCardComponentProps> = ({
       </div>
       <div className="flex items-baseline gap-1 mb-1">
         <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-          {typeof value === 'number' ? value.toLocaleString() : value}
+          {displayValue}
         </span>
         {unit && (
           <span className="text-sm text-gray-500 dark:text-gray-400">{unit}</span>
