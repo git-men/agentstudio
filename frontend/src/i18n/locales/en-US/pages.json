@@ -436,6 +436,13 @@
     "welcome": {
       "title": "Let's Get Started",
       "subtitle": "Select a project to start working with AI"
+    },
+    "providerCheck": {
+      "title": "Model Provider Not Configured",
+      "description": "The built-in Claude model provider is not available. Please configure an API key to get started.",
+      "configure": "Configure Now",
+      "later": "Later",
+      "checking": "Checking model provider availability..."
     }
   },
   "settings": {

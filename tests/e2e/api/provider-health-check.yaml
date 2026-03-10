@@ -1,0 +1,85 @@
+name: 模型供应商可用性检查
+sequential: true
+
+cases:
+  - name: "获取 Claude 版本列表，确认系统版本存在"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        versions:
+          length: { gt: 0 }
+          some:
+            isSystem: true
+
+  - name: "系统版本无 API Key 时返回 no_api_key"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions/claude/test"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+    expect:
+      status: 200
+      body:
+        available: false
+        error: "no_api_key"
+        message: { exists: true }
+
+  - name: "不存在的版本 ID 返回 404"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions/non-existent-id/test"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+    expect:
+      status: 404
+
+  - name: "创建带 API Key 的测试版本（指向 Mock）"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-provider"
+        alias: "e2e-test-{{timestamp}}"
+        description: "E2E 测试用供应商"
+        environmentVariables:
+          ANTHROPIC_API_KEY: "test-key-for-e2e"
+          ANTHROPIC_BASE_URL: "http://host.docker.internal:9091"
+    expect:
+      status: 200
+      body:
+        id: { exists: true }
+        name: "e2e-test-provider"
+        isSystem: false
+    save:
+      test_version_id: "id"
+
+  - name: "带有效 API Key 的版本检查返回可用"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}/test"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+    expect:
+      status: 200
+      body:
+        available: true
+
+teardown:
+  - name: "清理测试版本"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

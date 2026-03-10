@@ -395,6 +395,13 @@
       "scheduledTasks": "定时任务",
       "customAgents": "自定义 Agent"
     },
+    "providerCheck": {
+      "title": "模型供应商尚未配置",
+      "description": "系统检测到内置 Claude 模型供应商不可用，请配置 API 密钥后使用。",
+      "configure": "前往配置",
+      "later": "稍后配置",
+      "checking": "正在检查模型供应商可用性..."
+    },
     "sessions": {
       "title": "活跃会话",
       "clearAll": "清除全部",

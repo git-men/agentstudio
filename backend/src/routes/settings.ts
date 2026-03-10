@@ -549,4 +549,107 @@ router.get('/claude-versions/:id/command', async (req, res) => {
 });
 
 
+// POST /api/settings/claude-versions/:id/test - 测试 Claude 版本的 API 可用性
+router.post('/claude-versions/:id/test', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const version = await getVersionByIdInternal(id);
+
+    if (!version) {
+      return res.status(404).json({
+        error: 'Version not found',
+        message: `Claude version with ID '${id}' not found`
+      });
+    }
+
+    const envVars = version.environmentVariables || {};
+    const apiKey = envVars.ANTHROPIC_API_KEY;
+    const authToken = envVars.ANTHROPIC_AUTH_TOKEN;
+
+    if (!apiKey && !authToken) {
+      return res.json({
+        available: false,
+        error: 'no_api_key',
+        message: '未配置 API 密钥，请在模型供应商设置中配置 ANTHROPIC_API_KEY 或 ANTHROPIC_AUTH_TOKEN'
+      });
+    }
+
+    const baseUrl = (envVars.ANTHROPIC_BASE_URL || 'https://api.anthropic.com').replace(/\/+$/, '');
+
+    const headers: Record<string, string> = {
+      'content-type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    };
+    if (apiKey) {
+      headers['x-api-key'] = apiKey;
+    } else if (authToken) {
+      headers['authorization'] = `Bearer ${authToken}`;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const response = await fetch(`${baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'hi' }],
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (response.ok) {
+        return res.json({ available: true });
+      }
+
+      const errorBody = await response.text().catch(() => '');
+      let errorMessage = `API 返回状态码 ${response.status}`;
+
+      if (response.status === 401) {
+        errorMessage = 'API 密钥无效或已过期';
+      } else if (response.status === 403) {
+        errorMessage = 'API 密钥权限不足';
+      } else if (response.status === 429) {
+        // Rate limited but key is valid
+        return res.json({ available: true });
+      }
+
+      return res.json({
+        available: false,
+        error: 'api_error',
+        message: errorMessage,
+        statusCode: response.status,
+      });
+    } catch (fetchError: any) {
+      clearTimeout(timeout);
+
+      if (fetchError.name === 'AbortError') {
+        return res.json({
+          available: false,
+          error: 'timeout',
+          message: 'API 请求超时，请检查网络连接或 ANTHROPIC_BASE_URL 配置'
+        });
+      }
+
+      return res.json({
+        available: false,
+        error: 'network_error',
+        message: `无法连接到 API 服务: ${fetchError.message}`
+      });
+    }
+  } catch (error) {
+    console.error('Error testing Claude version:', error);
+    res.status(500).json({
+      error: 'Failed to test Claude version',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 export default router;
