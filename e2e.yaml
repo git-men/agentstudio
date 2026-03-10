@@ -1,0 +1,103 @@
+version: "1"
+
+project:
+  name: agentstudio
+  description: "AgentStudio 完整功能性端到端测试套件"
+
+service:
+  build:
+    dockerfile: Dockerfile
+    context: .
+    image: agentstudio:e2e
+
+  container:
+    name: agentstudio-e2e
+    ports:
+      - "14936:4936"
+    environment:
+      NODE_ENV: production
+      PORT: "4936"
+      JWT_SECRET: e2e-test-secret
+      JWT_EXPIRES_IN: 365d
+
+  vars:
+    base_url: http://localhost:14936
+    auth_header: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdXRoZW50aWNhdGVkIjp0cnVlLCJpc3N1ZWRBdCI6MTc3Mjk4MjY3MiwiZXhwaXJlc0F0IjoxODA0NTE4NjcyLCJpYXQiOjE3NzI5ODI2NzIsImV4cCI6MTgwNDUxODY3Mn0.Zh2tYt0hUNXFqvMScxHREj6g2nedh3_sTaSfw106pZs"
+
+tests:
+  suites:
+    # ━━━ API 测试套件（YAML Runner） ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "健康检查与认证"
+      id: health-auth
+      file: tests/e2e/api/health-auth.yaml
+
+    - name: "Agent 管理 CRUD"
+      id: agents-crud
+      file: tests/e2e/api/agents-crud.yaml
+
+    - name: "项目管理 CRUD"
+      id: projects-crud
+      file: tests/e2e/api/projects-crud.yaml
+
+    - name: "MCP 服务器管理"
+      id: mcp-crud
+      file: tests/e2e/api/mcp-crud.yaml
+
+    - name: "MCP Admin 自动初始化"
+      id: mcp-admin-bootstrap
+      file: tests/e2e/api/mcp-admin-bootstrap.yaml
+
+    - name: "斜杠命令管理"
+      id: commands-crud
+      file: tests/e2e/api/commands-crud.yaml
+
+    - name: "规则管理"
+      id: rules-crud
+      file: tests/e2e/api/rules-crud.yaml
+
+    - name: "Skills 管理"
+      id: skills-crud
+      file: tests/e2e/api/skills-crud.yaml
+
+    - name: "系统设置与配置"
+      id: settings-config
+      file: tests/e2e/api/settings-config.yaml
+
+    - name: "定时任务管理"
+      id: scheduler-crud
+      file: tests/e2e/api/scheduler-crud.yaml
+
+    - name: "插件与市场"
+      id: plugins-marketplace
+      file: tests/e2e/api/plugins-marketplace.yaml
+
+    - name: "隧道管理"
+      id: tunnel-crud
+      file: tests/e2e/api/tunnel-crud.yaml
+
+    - name: "隧道连接与批量操作"
+      id: tunnel-ops
+      file: tests/e2e/api/tunnel-ops.yaml
+
+    # ━━━ 浏览器测试套件（YAML Browser DSL） ━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    - name: "登录与认证流程"
+      id: ui-login
+      file: tests/e2e/browser-yaml/login.yaml
+
+    - name: "仪表盘与导航"
+      id: ui-navigation
+      file: tests/e2e/browser-yaml/navigation.yaml
+
+    - name: "Agent 管理界面"
+      id: ui-agents
+      file: tests/e2e/browser-yaml/agents.yaml
+
+    - name: "项目管理界面"
+      id: ui-projects
+      file: tests/e2e/browser-yaml/projects.yaml
+
+    - name: "设置页面"
+      id: ui-settings
+      file: tests/e2e/browser-yaml/settings.yaml

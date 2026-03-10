@@ -14,6 +14,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateAdminApiKey, listAdminApiKeys } from './adminApiKeyService.js';
 import { MCP_SERVER_CONFIG_FILE } from '../../config/paths.js';
+import { getMcpAdminServer } from './mcpAdminServer.js';
 
 const SYSTEM_KEY_DESCRIPTION = 'System Auto-Bootstrap (agentstudio-admin)';
 const SERVER_NAME = 'agentstudio-admin';
@@ -98,10 +99,13 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
 
     const urlMatches = existing?.url === expectedUrl;
     const hasAuth = !!existing?.headers?.Authorization;
+    const isValidated = existing?.status === 'active' && Array.isArray(existing?.tools) && existing.tools.length > 0;
 
-    if (urlMatches && hasAuth) {
+    if (urlMatches && hasAuth && isValidated) {
       return;
     }
+
+    const toolNames = getAdminToolNames();
 
     config.mcpServers[SERVER_NAME] = {
       type: 'http',
@@ -110,12 +114,29 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
         Authorization: `Bearer ${adminKey}`,
       },
       source: 'local',
+      status: 'active',
+      tools: toolNames,
+      lastValidated: new Date().toISOString(),
     };
 
     writeNativeConfig(config);
-    console.info(`[MCP Admin Bootstrap] Configured ${SERVER_NAME} → ${expectedUrl}`);
+    console.info(`[MCP Admin Bootstrap] Configured ${SERVER_NAME} → ${expectedUrl} (${toolNames.length} tools)`);
   } catch (error) {
     console.error('[MCP Admin Bootstrap] Failed:', error);
+  }
+}
+
+/**
+ * Get tool names from the MCP Admin Server singleton.
+ * Falls back to empty array if server isn't ready yet.
+ */
+function getAdminToolNames(): string[] {
+  try {
+    const server = getMcpAdminServer();
+    const result = server.getTools(['admin:*']);
+    return (result.tools || []).map((t: { name: string }) => t.name);
+  } catch {
+    return [];
   }
 }
 
