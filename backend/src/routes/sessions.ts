@@ -929,6 +929,24 @@ router.get('/:agentId', async (req, res) => {
       });
     }
     
+    // Merge in active sessions from SessionManager for this agent.
+    // This ensures sessions that exist only in memory (e.g. meta-agent sessions
+    // where no history file has been written yet) still appear in the list.
+    const liveSessionsInfo = sessionManager.getSessionsInfo();
+    const existingSessionIds = new Set(sessions.map(s => s.id));
+    for (const live of liveSessionsInfo) {
+      if (live.agentId === agentId && !existingSessionIds.has(live.sessionId)) {
+        sessions.push({
+          id: live.sessionId,
+          agentId,
+          title: live.sessionTitle || `Session ${live.sessionId.slice(0, 8)}`,
+          createdAt: live.lastActivity,
+          lastUpdated: live.lastActivity,
+          messageCount: 0,
+        });
+      }
+    }
+
     // Apply search filter if provided
     if (search && typeof search === 'string' && search.trim()) {
       const searchTerm = search.trim().toLowerCase();
@@ -938,7 +956,6 @@ router.get('/:agentId', async (req, res) => {
     }
 
     // Enrich sessions with live status from SessionManager
-    const liveSessionsInfo = sessionManager.getSessionsInfo();
     const liveSessionMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
 
     sessions = sessions.map(session => {
