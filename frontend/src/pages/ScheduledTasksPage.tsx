@@ -35,7 +35,6 @@ import {
   useDisableScheduler,
   useStopExecution,
   useRunningExecutions,
-  useTaskExecutorStats,
   useTaskExecutorConfig,
   useUpdateTaskExecutorConfig,
   scheduledTasksKeys,
@@ -69,7 +68,6 @@ export const ScheduledTasksPage: React.FC = () => {
   const [configMaxConcurrent, setConfigMaxConcurrent] = useState(2);
   
   // Task executor monitoring
-  const { data: executorStats } = useTaskExecutorStats();
   const { data: executorConfig } = useTaskExecutorConfig();
   const updateConfig = useUpdateTaskExecutorConfig();
 
@@ -302,21 +300,18 @@ export const ScheduledTasksPage: React.FC = () => {
               </button>
 
               {/* Executor Stats - inline display */}
-              {executorStats && (
+              {tasks && (
                 <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
                   <span className="text-gray-300 dark:text-gray-600">|</span>
-                  <span className={`flex items-center gap-1 ${executorStats.runningTasks > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
-                    <Activity className={`w-4 h-4 ${executorStats.runningTasks > 0 ? 'animate-pulse' : ''}`} />
-                    运行: {executorStats.runningTasks}
-                  </span>
-                  <span className="text-yellow-600 dark:text-yellow-400">
-                    队列: {executorStats.queuedTasks}
+                  <span className={`flex items-center gap-1 ${tasks.filter(t => t.lastRunStatus === 'running').length > 0 ? 'text-blue-600 dark:text-blue-400' : ''}`}>
+                    <Activity className={`w-4 h-4 ${tasks.filter(t => t.lastRunStatus === 'running').length > 0 ? 'animate-pulse' : ''}`} />
+                    运行: {tasks.filter(t => t.lastRunStatus === 'running').length}
                   </span>
                   <span className="text-green-600 dark:text-green-400">
-                    完成: {executorStats.completedTasks}
+                    完成: {tasks.filter(t => t.lastRunStatus === 'success').length}
                   </span>
                   <span className="text-red-600 dark:text-red-400">
-                    失败: {executorStats.failedTasks}
+                    失败: {tasks.filter(t => t.lastRunStatus === 'error').length}
                   </span>
                   <button
                     onClick={() => {
