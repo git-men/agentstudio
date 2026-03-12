@@ -110,7 +110,7 @@ export class SkillStorage {
 
       // Create SKILL.md file
       const skillManifestPath = path.join(skillDir, 'SKILL.md');
-      const skillContent = this.createSkillManifestContent(
+      const skillContent = skillData.content || this.createSkillManifestContent(
         skillData.name,
         skillData.description,
         skillData.allowedTools
@@ -165,22 +165,32 @@ export class SkillStorage {
       if (updates.content || updates.name || updates.description || updates.allowedTools) {
         const skillManifestPath = path.join(skillDir, 'SKILL.md');
         
-        // Read existing manifest to get current values
-        const existingContent = await fs.readFile(skillManifestPath, 'utf8');
-        const existingManifest = await this.parseSkillManifest(existingContent);
+        let updatedContent: string;
         
-        // If content is provided, parse it to get new values
-        let manifestValues = existingManifest;
         if (updates.content) {
-          manifestValues = await this.parseSkillManifest(updates.content);
+          // Full content provided — use it directly, then apply any frontmatter overrides
+          if (updates.name || updates.description || updates.allowedTools) {
+            const parsed = await this.parseSkillManifest(updates.content);
+            updatedContent = this.replaceManifestFrontmatter(
+              updates.content,
+              updates.name ?? parsed.name,
+              updates.description ?? parsed.description,
+              updates.allowedTools ?? parsed.allowedTools
+            );
+          } else {
+            updatedContent = updates.content;
+          }
+        } else {
+          // Only metadata fields changed — read existing content and update frontmatter
+          const existingContent = await fs.readFile(skillManifestPath, 'utf8');
+          const existingManifest = await this.parseSkillManifest(existingContent);
+          updatedContent = this.replaceManifestFrontmatter(
+            existingContent,
+            updates.name ?? existingManifest.name,
+            updates.description ?? existingManifest.description,
+            updates.allowedTools ?? existingManifest.allowedTools
+          );
         }
-        
-        // Create updated content with merged values
-        const updatedContent = this.createSkillManifestContent(
-          updates.name ?? manifestValues.name,
-          updates.description ?? manifestValues.description,
-          updates.allowedTools ?? manifestValues.allowedTools
-        );
         
         await fs.writeFile(skillManifestPath, updatedContent, 'utf8');
         updatedFiles.push('SKILL.md');
@@ -412,6 +422,29 @@ export class SkillStorage {
     } catch (error) {
       throw new Error('Invalid skill manifest: failed to parse YAML');
     }
+  }
+
+  private replaceManifestFrontmatter(
+    fullContent: string,
+    name: string,
+    description: string,
+    allowedTools?: string[]
+  ): string {
+    const lines = fullContent.split('\n');
+    const frontmatterEnd = lines.findIndex((line, index) =>
+      index > 0 && line.trim() === '---'
+    );
+
+    if (frontmatterEnd === -1) {
+      return fullContent;
+    }
+
+    const body = lines.slice(frontmatterEnd + 1).join('\n');
+    const allowedToolsYaml = allowedTools && allowedTools.length > 0
+      ? `\nallowed-tools: [${allowedTools.map(tool => `"${tool}"`).join(', ')}]`
+      : '';
+
+    return `---\nname: ${name}\ndescription: ${description}${allowedToolsYaml}\n---${body}`;
   }
 
   private createSkillManifestContent(
