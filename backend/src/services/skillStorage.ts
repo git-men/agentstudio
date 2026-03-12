@@ -8,20 +8,20 @@ import type {
   SkillValidationOptions,
   SkillStorageOptions
 } from '../types/skills';
-import { getSkillsDir, getSdkDirName } from '../config/engineConfig.js';
+import { getSkillsDir } from '../config/engineConfig.js';
 
 export class SkillStorage {
   private userSkillsDir: string;
-  private projectSkillsDir: string;
+  private projectSkillsDir: string | null;
   private options: SkillStorageOptions;
 
   constructor(
     userSkillsDir: string = getSkillsDir(),
-    projectSkillsDir: string = path.join(process.cwd(), '..', getSdkDirName(), 'skills'),
+    projectSkillsDir?: string,
     options: SkillStorageOptions = {}
   ) {
     this.userSkillsDir = userSkillsDir;
-    this.projectSkillsDir = projectSkillsDir;
+    this.projectSkillsDir = projectSkillsDir ?? null;
     this.options = {
       validateManifest: true,
       autoBackup: false,
@@ -32,7 +32,9 @@ export class SkillStorage {
   // Initialize directories
   async initialize(): Promise<void> {
     await this.ensureDirectory(this.userSkillsDir);
-    await this.ensureDirectory(this.projectSkillsDir);
+    if (this.projectSkillsDir) {
+      await this.ensureDirectory(this.projectSkillsDir);
+    }
   }
 
   // Get all skills
@@ -50,18 +52,20 @@ export class SkillStorage {
 
   // Get project skills
   async getProjectSkills(includeDisabled = false): Promise<SkillConfig[]> {
+    if (!this.projectSkillsDir) return [];
     return this.getSkillsFromDirectory(this.projectSkillsDir, 'project', includeDisabled);
   }
 
   // Get specific skill
   async getSkill(skillId: string, scope?: 'user' | 'project'): Promise<SkillConfig | null> {
-    // Try both directories if scope is not specified
-    const directories = scope 
-      ? [{ dir: scope === 'user' ? this.userSkillsDir : this.projectSkillsDir, scope }]
-      : [
-          { dir: this.userSkillsDir, scope: 'user' as const },
-          { dir: this.projectSkillsDir, scope: 'project' as const }
-        ];
+    // Build list of directories to search
+    const directories: Array<{ dir: string; scope: 'user' | 'project' }> = [];
+    if (!scope || scope === 'user') {
+      directories.push({ dir: this.userSkillsDir, scope: 'user' });
+    }
+    if ((!scope || scope === 'project') && this.projectSkillsDir) {
+      directories.push({ dir: this.projectSkillsDir, scope: 'project' });
+    }
 
     for (const { dir, scope: dirScope } of directories) {
       const skillPath = path.join(dir, skillId);
@@ -95,6 +99,9 @@ export class SkillStorage {
     try {
       const skillId = this.generateSkillId(skillData.name);
       const baseDir = skillData.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+      if (!baseDir) {
+        return { success: false, skillId: '', errors: ['Project skills directory not configured. Provide a projectPath when creating project-level skills.'] };
+      }
       const skillDir = path.join(baseDir, skillId);
 
       // Check if skill already exists
@@ -158,6 +165,9 @@ export class SkillStorage {
       }
 
       const baseDir = scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+      if (!baseDir) {
+        return { success: false, updatedFiles: [], errors: ['Project skills directory not configured'] };
+      }
       const skillDir = path.join(baseDir, skillId);
       const updatedFiles: string[] = [];
 
@@ -221,6 +231,7 @@ export class SkillStorage {
     }
 
     const baseDir = skill.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+    if (!baseDir) return false;
     const skillDir = path.join(baseDir, skillId);
 
     try {
@@ -240,6 +251,7 @@ export class SkillStorage {
     }
 
     const baseDir = skill.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+    if (!baseDir) return null;
     const skillDir = path.join(baseDir, skillId);
 
     try {

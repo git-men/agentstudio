@@ -448,16 +448,16 @@ Please respond in Chinese unless the user specifically requests another language
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                       {t('agents.table.agent')}
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-44">
                       {t('agents.table.config')}
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-96">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-auto min-w-[200px]">
                       工具
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
                       {t('agents.table.actions')}
                     </TableHead>
                   </TableRow>
@@ -466,9 +466,9 @@ Please respond in Chinese unless the user specifically requests another language
                   {filteredAgents.map((agent) => (
                     <TableRow key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       {/* Agent */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap w-48">
+                      <TableCell className="px-6 py-4 min-w-[200px]">
                         <div className="flex items-center">
-                          <div className={`text-2xl mr-4 ${!agent.enabled ? 'opacity-50' : ''}`}>
+                          <div className={`text-2xl mr-4 flex-shrink-0 ${!agent.enabled ? 'opacity-50' : ''}`}>
                             {agent.ui.icon}
                           </div>
                           <div className="min-w-0">
@@ -479,7 +479,7 @@ Please respond in Chinese unless the user specifically requests another language
                             </div>
                             <div className={`text-sm ${
                               agent.enabled ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'
-                            } truncate`}>
+                            } truncate max-w-xs`}>
                               {agent.description}
                             </div>
                           </div>
@@ -487,7 +487,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Configuration */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white w-48">
+                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white w-44">
                         <div className="space-y-1">
                           <div className="flex items-center">
                             <Settings className="w-3 h-3 mr-1 text-gray-400" />
@@ -506,7 +506,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Tools */}
-                      <TableCell className="px-6 py-4 w-96">
+                      <TableCell className="px-6 py-4 w-auto min-w-[200px]">
                         <ToolsList
                           tools={(agent.allowedTools?.filter((tool: AgentTool) => tool.enabled).map((tool: AgentTool) => tool.name) || [])}
                           id={agent.id}
@@ -518,7 +518,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Actions */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-48">
+                      <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-36">
                         <div className="flex items-center space-x-2">
                           {/* Start Using Button - Only show for enabled agents */}
                           {agent.enabled && (

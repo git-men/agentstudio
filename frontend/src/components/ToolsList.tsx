@@ -52,7 +52,7 @@ export const ToolsList: React.FC<ToolsListProps> = ({
           {tools.map((tool, idx) => (
             <code
               key={idx}
-              className="inline-block bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded text-xs font-mono border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
+              className="inline-block whitespace-nowrap bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded text-xs font-mono border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/50 transition-colors"
               title={getToolDisplayName(tool)}
             >
               {getToolDisplayName(tool)}
@@ -67,7 +67,7 @@ export const ToolsList: React.FC<ToolsListProps> = ({
           {tools.slice(0, displayLimit).map((tool, idx) => (
             <code
               key={idx}
-              className="inline-block bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded text-xs font-mono"
+              className="inline-block whitespace-nowrap bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-0.5 rounded text-xs font-mono"
               title={getToolDisplayName(tool)}
             >
               {getToolDisplayName(tool)}
