@@ -62,6 +62,7 @@ coverage/
 .cursor/
 .specify/
 specs/
+.codebuddy/
 # A2A local configurations
 .a2a/
 **/.a2a/

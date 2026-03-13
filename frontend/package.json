@@ -22,6 +22,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.42",
     "@monaco-editor/react": "^4.7.0",
     "@radix-ui/react-toast": "^1.2.15",
+    "@storybook/addon-actions": "^9.0.8",
     "@tanstack/react-query": "^5.85.5",
     "@tdesign-react/chat": "^1.0.1",
     "@types/prismjs": "^1.26.5",
