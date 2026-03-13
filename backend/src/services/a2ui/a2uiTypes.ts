@@ -44,7 +44,7 @@ Call the \`render_ui\` tool with A2UI messages as the \`messages\` parameter. Ea
 
 **Layout**: Row, Column
 **Display**: Text (usageHint: h1-h5, caption, body), Image, Icon, Divider
-**Interactive**: Button, TextField, CheckBox
+**Interactive**: Button, TextField, CheckBox, Slider, DateTimeInput
 **Container**: Card, Tabs, List
 
 **Custom (AgentStudio) — Data Display**:
@@ -57,17 +57,10 @@ Call the \`render_ui\` tool with A2UI messages as the \`messages\` parameter. Ea
 - **CodeBlock**: Code display with syntax highlighting. Props: code, language (sql/javascript/python/go/java and more), title, showLineNumbers (bool), maxHeight (e.g. "400px"), highlightLines (number[] of line numbers to highlight)
 - **Markdown**: Rich text. Props: content
 - **Timeline**: Chronological event list. Props: items ({title, description?, time?, status?: completed|active|pending|error}[]), title, direction (vertical|horizontal). Use dataModelUpdate to provide items via path binding.
-- **StatPanel**: Key metrics grid. Props: stats ({label, value, unit?, change?, changeLabel?, sparkline?: number[]}[]), title, columns (number). Use for displaying multiple KPI metrics at once.
 - **Badge**: Inline status label/tag. Props: text, variant (success|warning|error|info|neutral), color (custom hex override), icon. Render multiple Badges in a Row for status lists.
 - **JsonViewer**: Collapsible JSON tree viewer. Props: data (JSON object/array via path), title, defaultExpandDepth (default 2), theme (light|dark). Use for displaying API responses or complex data structures.
-- **DiffView**: Text diff comparison. Props: oldContent, newContent, language (for syntax highlight), mode (unified|sideBySide), oldLabel, newLabel. Use for showing config/code changes.
-
-**Custom (AgentStudio) — Planning & Inquiry** (interactive, trigger A2UIAction):
-- **StepGuide**: Step-by-step plan. Props: steps ({title, description?, status?: completed|active|upcoming|skipped, action?: A2UIAction}[]), title, currentStep (index), interactive (bool), layout (horizontal|vertical). When interactive=true, active step shows an execute button.
-- **OptionSelector**: Structured option inquiry. Props: question, options ({label, value, description?, icon?, recommended?: bool}[]), selectionMode (single|multiple), action (A2UIAction for submission), layout (list|grid). User selection triggers the action with selected value(s).
-- **ConfirmPanel**: Confirmation dialog. Props: title, message, details ({key, value}[]), severity (info|warning|danger), confirmLabel, cancelLabel, confirmAction (A2UIAction), cancelAction (A2UIAction). Use before destructive operations.
-- **Rating**: Feedback collection. Props: question, ratingType (star|thumbs|scale), maxRating (default 5 for star, 10 for scale), action (A2UIAction), feedbackPlaceholder (optional text input). Rating value submitted via action context.
-- **PlanComparison**: Multi-plan comparison. Props: title, plans ({name, description, pros?[], cons?[], metrics?: Record<string,any>, recommended?: bool, action?: A2UIAction}[]), dimensions ({key, label, type: number|text|boolean}[]), selectable (bool), layout (cards|table). Use for comparing technologies, solutions, or strategies.
+- **Slider**: Numeric range input with draggable thumb. Props: value (current number), minValue (default 0), maxValue (default 100). Triggers action on change. Use for adjustable numeric settings like thresholds, percentages, or volume controls.
+- **DateTimeInput**: Date and/or time picker. Props: value (ISO format string, e.g. "2024-06-15" or "14:30" or "2024-06-15T14:30"), enableDate (bool, default true), enableTime (bool, default false). Modes: date-only (enableDate:true), time-only (enableTime:true), combined datetime (both true). Triggers action on change.
 
 ### Component Structure
 Components use an adjacency list (flat list with ID references):
