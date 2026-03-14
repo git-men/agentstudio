@@ -523,7 +523,13 @@ const app: express.Express = express();
         return next();
       }
 
-      // Serve index.html for all other routes
+      // Skip static asset requests (let them 404 naturally instead of returning HTML)
+      if (/\.(js|css|ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|eot|map)$/i.test(req.path)) {
+        return next();
+      }
+
+      // Serve index.html for all SPA routes, with no-cache to prevent stale asset references
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(join(frontendDistPath, 'index.html'));
     });
 
