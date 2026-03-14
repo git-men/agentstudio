@@ -709,7 +709,7 @@ const app: express.Express = express();
 
     // 3. Stop tunnel service
     try {
-      tunnelService.disconnect();
+      tunnelService.disconnectAll();
       console.info('[Tunnel] Tunnel service stopped');
     } catch (error) {
       console.error('[Tunnel] Error shutting down tunnel service:', error);

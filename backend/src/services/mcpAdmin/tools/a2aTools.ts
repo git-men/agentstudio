@@ -46,8 +46,10 @@ export const getA2AEndpointTool: ToolDefinition = {
 
       const port = parseInt(process.env.PORT || '4936', 10);
 
-      const tunnelStatus = tunnelService.getStatus();
-      const tunnelConfig = tunnelService.getConfig();
+      const allStatuses = tunnelService.getAllStatuses();
+      const allConfigs = tunnelService.getAllConfigs();
+      const tunnelStatus = allStatuses[0] ?? { connected: false, domain: null };
+      const tunnelConfig = allConfigs[0] ?? { protocol: 'https', domainSuffix: '', serverUrl: '', tunnelName: '' };
 
       let baseUrl: string;
       let accessMode: string;

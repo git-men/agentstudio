@@ -31,19 +31,51 @@ interface NativeMcpConfig {
   mcpServers: Record<string, McpServerEntry>;
 }
 
-function readNativeConfig(): NativeMcpConfig {
+function readNativeConfig(): { config: NativeMcpConfig; fileExisted: boolean } {
+  if (!fs.existsSync(MCP_SERVER_CONFIG_FILE)) {
+    return { config: { mcpServers: {} }, fileExisted: false };
+  }
+
+  let content: string;
+  try {
+    content = fs.readFileSync(MCP_SERVER_CONFIG_FILE, 'utf-8');
+  } catch (error) {
+    console.error(`[MCP Admin Bootstrap] Failed to read ${MCP_SERVER_CONFIG_FILE}:`, error);
+    return { config: { mcpServers: {} }, fileExisted: true };
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      parsed.mcpServers !== null &&
+      typeof parsed.mcpServers === 'object' &&
+      !Array.isArray(parsed.mcpServers)
+    ) {
+      return { config: parsed as NativeMcpConfig, fileExisted: true };
+    }
+    console.warn(
+      `[MCP Admin Bootstrap] Config file has unexpected structure (mcpServers type: ${
+        parsed?.mcpServers === null ? 'null' : typeof parsed?.mcpServers
+      }), treating as empty`
+    );
+    return { config: { mcpServers: {} }, fileExisted: true };
+  } catch (error) {
+    console.error(`[MCP Admin Bootstrap] Failed to parse ${MCP_SERVER_CONFIG_FILE}:`, error);
+    return { config: { mcpServers: {} }, fileExisted: true };
+  }
+}
+
+function backupNativeConfig(): void {
   try {
     if (fs.existsSync(MCP_SERVER_CONFIG_FILE)) {
-      const content = fs.readFileSync(MCP_SERVER_CONFIG_FILE, 'utf-8');
-      const parsed = JSON.parse(content);
-      if (parsed && typeof parsed === 'object' && typeof parsed.mcpServers === 'object') {
-        return parsed as NativeMcpConfig;
-      }
+      const backupPath = MCP_SERVER_CONFIG_FILE + '.bak';
+      fs.copyFileSync(MCP_SERVER_CONFIG_FILE, backupPath);
     }
-  } catch {
-    // Corrupted or missing file — start fresh
+  } catch (error) {
+    console.warn('[MCP Admin Bootstrap] Failed to create backup:', error);
   }
-  return { mcpServers: {} };
 }
 
 function writeNativeConfig(config: NativeMcpConfig): void {
@@ -94,7 +126,7 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
     }
 
     const expectedUrl = `http://localhost:${port}/api/mcp-admin`;
-    const config = readNativeConfig();
+    const { config, fileExisted } = readNativeConfig();
     const existing = config.mcpServers[SERVER_NAME];
 
     const urlMatches = existing?.url === expectedUrl;
@@ -106,6 +138,16 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
     }
 
     const toolNames = getAdminToolNames();
+
+    // Safety check: if file existed but config is empty (parse failed or bad structure),
+    // only write if we can confirm this won't destroy existing data
+    const existingServerCount = Object.keys(config.mcpServers).length;
+    if (fileExisted && existingServerCount === 0) {
+      console.warn(
+        '[MCP Admin Bootstrap] Config file existed but parsed as empty — backing up before write to prevent data loss'
+      );
+      backupNativeConfig();
+    }
 
     config.mcpServers[SERVER_NAME] = {
       type: 'http',
@@ -120,7 +162,7 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
     };
 
     writeNativeConfig(config);
-    console.info(`[MCP Admin Bootstrap] Configured ${SERVER_NAME} → ${expectedUrl} (${toolNames.length} tools)`);
+    console.info(`[MCP Admin Bootstrap] Configured ${SERVER_NAME} → ${expectedUrl} (${toolNames.length} tools, preserved ${existingServerCount} existing)`);
   } catch (error) {
     console.error('[MCP Admin Bootstrap] Failed:', error);
   }
@@ -145,7 +187,7 @@ function getAdminToolNames(): string[] {
  * Used by readMcpConfig() to merge system servers for read-only engines.
  */
 export function getSystemMcpServers(): Record<string, McpServerEntry> {
-  const config = readNativeConfig();
+  const { config } = readNativeConfig();
   const result: Record<string, McpServerEntry> = {};
 
   if (config.mcpServers[SERVER_NAME]) {

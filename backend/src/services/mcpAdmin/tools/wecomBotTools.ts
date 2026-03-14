@@ -17,15 +17,16 @@ import { tunnelService } from '../../tunnelService.js';
  * Build base URL and auth headers from stored tunnel config.
  */
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
-  const config = tunnelService.getConfig();
-  if (!config.serverUrl) return null;
+  const configs = tunnelService.getAllConfigs();
+  const config = configs[0];
+  if (!config?.serverUrl) return null;
 
   const baseUrl = config.serverUrl.replace(/\/+$/, '');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  // enterpriseToken is stored masked in getConfig(), so we need raw access
+  // enterpriseToken is stored masked in getAllConfigs(), so we need raw access
   // tunnelService exposes it via the saved config — read from disk lazily via service
-  const raw = (tunnelService as any).config as { enterpriseToken?: string };
+  const raw = (tunnelService as any).configs?.values()?.next()?.value as { enterpriseToken?: string } | undefined;
   if (raw?.enterpriseToken) {
     headers['Authorization'] = `Bearer ${raw.enterpriseToken}`;
   }
@@ -44,12 +45,20 @@ async function dispatchFetch(
   }
 
   const { baseUrl, headers } = client;
-  const response = await fetch(`${baseUrl}${path}`, {
+  const url = `${baseUrl}${path}`;
+  const fetchOptions: any = {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  };
 
+  // Internal/corporate HTTPS endpoints may use certs whose SAN doesn't match
+  // the hostname. Skip TLS verification for the dispatch server only.
+  if (url.startsWith('https://')) {
+    fetchOptions.tls = { rejectUnauthorized: false };
+  }
+
+  const response = await fetch(url, fetchOptions);
   const data = await response.json().catch(() => ({}));
   return { ok: response.ok, data };
 }
