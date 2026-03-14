@@ -1,20 +1,22 @@
 /**
  * Tunnel Management Tools
  *
- * Built-in MCP tools for managing WebSocket tunnels via as-dispatch.
+ * Built-in MCP tools for managing WebSocket tunnels.
  * These tools wrap tunnelService so agents don't need to configure
- * a separate as-dispatch MCP server.
+ * a separate tunnel MCP server.
  *
- * Prerequisites: tunnel server URL and enterprise token must be configured
- * once via `configure_tunnel` (or the AgentStudio UI tunnel settings page).
+ * All tools operate on the first tunnel by default, with an optional
+ * tunnel_id parameter for multi-tunnel scenarios.
  */
 
 import type { ToolDefinition, McpToolCallResult } from '../types.js';
 import { tunnelService } from '../../tunnelService.js';
 
-/**
- * Configure tunnel server connection (one-time setup)
- */
+function firstTunnelId(): string | null {
+  const statuses = tunnelService.getAllStatuses();
+  return statuses.length > 0 ? statuses[0].id : null;
+}
+
 export const configureTunnelTool: ToolDefinition = {
   tool: {
     name: 'configure_tunnel',
@@ -33,6 +35,10 @@ export const configureTunnelTool: ToolDefinition = {
           type: 'string',
           description: 'as-enterprise JWT access token for API authentication',
         },
+        tunnel_id: {
+          type: 'string',
+          description: 'Optional: ID of existing tunnel to update. If omitted, creates a placeholder config.',
+        },
       },
       required: ['server_url', 'enterprise_token'],
     },
@@ -41,8 +47,19 @@ export const configureTunnelTool: ToolDefinition = {
     try {
       const serverUrl = params.server_url as string;
       const enterpriseToken = params.enterprise_token as string;
+      const tunnelId = (params.tunnel_id as string) || firstTunnelId();
 
-      await tunnelService.saveConfig({ serverUrl, enterpriseToken });
+      if (tunnelId) {
+        await tunnelService.saveConfig(tunnelId, { serverUrl, enterpriseToken });
+      } else {
+        await tunnelService.addTunnel({
+          label: '默认隧道',
+          serverUrl,
+          enterpriseToken,
+          enabled: false,
+          token: '',
+        });
+      }
 
       return {
         content: [
@@ -59,10 +76,7 @@ export const configureTunnelTool: ToolDefinition = {
     } catch (error) {
       return {
         content: [
-          {
-            type: 'text',
-            text: `Error configuring tunnel: ${error instanceof Error ? error.message : String(error)}`,
-          },
+          { type: 'text', text: `Error configuring tunnel: ${error instanceof Error ? error.message : String(error)}` },
         ],
         isError: true,
       };
@@ -71,29 +85,26 @@ export const configureTunnelTool: ToolDefinition = {
   requiredPermissions: ['system:write'],
 };
 
-/**
- * Create a new tunnel
- */
 export const createTunnelTool: ToolDefinition = {
   tool: {
     name: 'create_tunnel',
     description:
-      'Create a new WebSocket tunnel via as-dispatch. ' +
-      'Returns the tunnel domain and connection token. ' +
-      'Requires enterprise token to be configured (via configure_tunnel or UI settings). ' +
-      'The returned tunnel_token is used by the tunely client to establish the WebSocket connection.',
+      'Create a new WebSocket tunnel. Returns the tunnel domain and connection token. ' +
+      'Requires enterprise token to be configured (via configure_tunnel or UI settings).',
     inputSchema: {
       type: 'object',
       properties: {
         name: {
           type: 'string',
-          description:
-            'Tunnel subdomain name, e.g. "my-agent". Must be unique across the server. ' +
-            'The full domain will be <name>.<domain_suffix>.',
+          description: 'Tunnel subdomain name, e.g. "my-agent". Must be unique across the server.',
+        },
+        server_url: {
+          type: 'string',
+          description: 'Tunnel server URL. If omitted, uses the first configured tunnel\'s server URL.',
         },
         auto_connect: {
           type: 'boolean',
-          description: 'Whether to auto-connect this tunnel on AgentStudio startup. Default: false.',
+          description: 'Whether to auto-connect this tunnel on startup. Default: false.',
         },
       },
       required: ['name'],
@@ -104,29 +115,26 @@ export const createTunnelTool: ToolDefinition = {
       const name = params.name as string;
       const autoConnect = (params.auto_connect as boolean) ?? false;
 
-      const config = tunnelService.getConfig();
-      if (!config.serverUrl) {
+      let serverUrl = params.server_url as string | undefined;
+      if (!serverUrl) {
+        const configs = tunnelService.getAllConfigs();
+        serverUrl = configs[0]?.serverUrl;
+      }
+      if (!serverUrl) {
         return {
           content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                success: false,
-                error: '未配置隧道服务器地址，请先调用 configure_tunnel 完成初始化配置',
-              }),
-            },
+            { type: 'text', text: JSON.stringify({ success: false, error: '未配置隧道服务器地址，请先调用 configure_tunnel 完成初始化配置' }) },
           ],
           isError: true,
         };
       }
 
-      const result = await tunnelService.createAndSave(
+      const result = await tunnelService.createAndSave({
         name,
+        serverUrl,
         autoConnect,
-        config.protocol ?? 'https',
-        config.websocketUrl,
-        config.domainSuffix,
-      );
+        protocol: 'https',
+      });
 
       if (result.success) {
         return {
@@ -135,34 +143,25 @@ export const createTunnelTool: ToolDefinition = {
               type: 'text',
               text: JSON.stringify({
                 success: true,
+                tunnel_id: result.tunnelId,
                 tunnel_token: result.token,
                 domain: result.domain,
                 message: `隧道 ${result.domain} 创建成功`,
-                next_step:
-                  '使用以下命令在本地启动隧道客户端：\n' +
-                  `tunely connect --server wss://<server>/ws/tunnel --token ${result.token} --target http://localhost:<port>`,
               }),
             },
           ],
         };
-      } else {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({ success: false, error: result.error }),
-            },
-          ],
-          isError: true,
-        };
       }
+      return {
+        content: [
+          { type: 'text', text: JSON.stringify({ success: false, error: result.error }) },
+        ],
+        isError: true,
+      };
     } catch (error) {
       return {
         content: [
-          {
-            type: 'text',
-            text: `Error creating tunnel: ${error instanceof Error ? error.message : String(error)}`,
-          },
+          { type: 'text', text: `Error creating tunnel: ${error instanceof Error ? error.message : String(error)}` },
         ],
         isError: true,
       };
@@ -171,50 +170,81 @@ export const createTunnelTool: ToolDefinition = {
   requiredPermissions: ['system:write'],
 };
 
-/**
- * Get current tunnel status
- */
 export const getTunnelStatusTool: ToolDefinition = {
   tool: {
     name: 'get_tunnel_status',
     description:
-      'Get the current WebSocket tunnel connection status, including whether it is connected, ' +
-      'the assigned domain, and any errors.',
+      'Get the current WebSocket tunnel connection status. ' +
+      'Returns all tunnels when no tunnel_id is provided.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        tunnel_id: {
+          type: 'string',
+          description: 'Optional: specific tunnel ID. If omitted, returns all tunnels.',
+        },
+      },
     },
   },
-  handler: async (): Promise<McpToolCallResult> => {
+  handler: async (params): Promise<McpToolCallResult> => {
     try {
-      const status = tunnelService.getStatus();
-      const config = tunnelService.getConfig();
+      const tunnelId = params.tunnel_id as string | undefined;
+
+      if (tunnelId) {
+        const status = tunnelService.getStatus(tunnelId);
+        const config = tunnelService.getConfig(tunnelId);
+        if (!status) {
+          return {
+            content: [{ type: 'text', text: JSON.stringify({ error: `隧道 ${tunnelId} 不存在` }) }],
+            isError: true,
+          };
+        }
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                id: status.id,
+                label: status.label,
+                connected: status.connected,
+                enabled: status.enabled,
+                domain: status.domain,
+                tunnel_name: config?.tunnelName,
+                server_url: status.serverUrl,
+                last_error: status.lastError,
+                connected_at: status.connectedAt,
+              }),
+            },
+          ],
+        };
+      }
+
+      const allStatuses = tunnelService.getAllStatuses();
+      const allConfigs = tunnelService.getAllConfigs();
+
+      const tunnels = allStatuses.map((st) => {
+        const cfg = allConfigs.find((c) => c.id === st.id);
+        return {
+          id: st.id,
+          label: st.label,
+          connected: st.connected,
+          enabled: st.enabled,
+          domain: st.domain,
+          tunnel_name: cfg?.tunnelName,
+          server_url: st.serverUrl,
+          last_error: st.lastError,
+        };
+      });
 
       return {
         content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              connected: status.connected,
-              enabled: status.enabled,
-              domain: status.domain,
-              tunnel_name: config.tunnelName,
-              server_url: config.serverUrl,
-              last_error: status.lastError,
-              connected_at: status.connectedAt,
-              reconnect_count: status.reconnectCount,
-              enterprise_token_configured: !!config.token,
-            }),
-          },
+          { type: 'text', text: JSON.stringify({ tunnel_count: tunnels.length, tunnels }) },
         ],
       };
     } catch (error) {
       return {
         content: [
-          {
-            type: 'text',
-            text: `Error getting tunnel status: ${error instanceof Error ? error.message : String(error)}`,
-          },
+          { type: 'text', text: `Error getting tunnel status: ${error instanceof Error ? error.message : String(error)}` },
         ],
         isError: true,
       };
@@ -223,31 +253,39 @@ export const getTunnelStatusTool: ToolDefinition = {
   requiredPermissions: ['system:read'],
 };
 
-/**
- * Connect to the configured tunnel
- */
 export const connectTunnelTool: ToolDefinition = {
   tool: {
     name: 'connect_tunnel',
     description:
-      'Establish (or re-establish) the WebSocket tunnel connection using the saved configuration. ' +
-      'Requires a tunnel token to have been saved previously (via create_tunnel or UI settings).',
+      'Establish (or re-establish) a WebSocket tunnel connection. ' +
+      'If no tunnel_id is given, connects the first tunnel.',
     inputSchema: {
       type: 'object',
       properties: {
+        tunnel_id: {
+          type: 'string',
+          description: 'Optional: specific tunnel ID to connect.',
+        },
         force: {
           type: 'boolean',
-          description:
-            'Force takeover an existing connection from another client. Default: false.',
+          description: 'Force takeover an existing connection. Default: false.',
         },
       },
     },
   },
   handler: async (params): Promise<McpToolCallResult> => {
     try {
+      const tunnelId = (params.tunnel_id as string) || firstTunnelId();
+      if (!tunnelId) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: '无隧道配置' }) }],
+          isError: true,
+        };
+      }
+
       const force = (params.force as boolean) ?? false;
-      await tunnelService.connect(force);
-      const status = tunnelService.getStatus();
+      await tunnelService.connect(tunnelId, force);
+      const status = tunnelService.getStatus(tunnelId);
 
       return {
         content: [
@@ -255,9 +293,9 @@ export const connectTunnelTool: ToolDefinition = {
             type: 'text',
             text: JSON.stringify({
               success: true,
-              connected: status.connected,
-              domain: status.domain,
-              message: status.connected
+              connected: status?.connected,
+              domain: status?.domain,
+              message: status?.connected
                 ? `隧道已连接：${status.domain}`
                 : '连接已发起，等待建立中（可再次调用 get_tunnel_status 确认）',
             }),
@@ -267,10 +305,7 @@ export const connectTunnelTool: ToolDefinition = {
     } catch (error) {
       return {
         content: [
-          {
-            type: 'text',
-            text: `Error connecting tunnel: ${error instanceof Error ? error.message : String(error)}`,
-          },
+          { type: 'text', text: `Error connecting tunnel: ${error instanceof Error ? error.message : String(error)}` },
         ],
         isError: true,
       };
@@ -279,37 +314,42 @@ export const connectTunnelTool: ToolDefinition = {
   requiredPermissions: ['system:write'],
 };
 
-/**
- * Disconnect the current tunnel
- */
 export const disconnectTunnelTool: ToolDefinition = {
   tool: {
     name: 'disconnect_tunnel',
-    description: 'Disconnect the current WebSocket tunnel connection.',
+    description:
+      'Disconnect a WebSocket tunnel. If no tunnel_id is given, disconnects the first tunnel.',
     inputSchema: {
       type: 'object',
-      properties: {},
+      properties: {
+        tunnel_id: {
+          type: 'string',
+          description: 'Optional: specific tunnel ID to disconnect.',
+        },
+      },
     },
   },
-  handler: async (): Promise<McpToolCallResult> => {
+  handler: async (params): Promise<McpToolCallResult> => {
     try {
-      tunnelService.disconnect();
+      const tunnelId = (params.tunnel_id as string) || firstTunnelId();
+      if (!tunnelId) {
+        return {
+          content: [{ type: 'text', text: JSON.stringify({ success: false, error: '无隧道配置' }) }],
+          isError: true,
+        };
+      }
+
+      tunnelService.disconnect(tunnelId);
 
       return {
         content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ success: true, message: '隧道已断开连接' }),
-          },
+          { type: 'text', text: JSON.stringify({ success: true, message: '隧道已断开连接' }) },
         ],
       };
     } catch (error) {
       return {
         content: [
-          {
-            type: 'text',
-            text: `Error disconnecting tunnel: ${error instanceof Error ? error.message : String(error)}`,
-          },
+          { type: 'text', text: `Error disconnecting tunnel: ${error instanceof Error ? error.message : String(error)}` },
         ],
         isError: true,
       };
