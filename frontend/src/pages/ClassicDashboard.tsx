@@ -258,7 +258,7 @@ export const ClassicDashboard: React.FC = () => {
                   {t('dashboard.providerCheck.title', { defaultValue: '模型供应商尚未配置' })}
                 </div>
                 <div className="text-sm text-amber-700 dark:text-amber-300 mt-1">
-                  {providerHealth.message || t('dashboard.providerCheck.description', { defaultValue: '系统检测到内置 Claude 模型供应商不可用，请配置 API 密钥后使用。' })}
+                  {providerHealth.message || t('dashboard.providerCheck.description', { defaultValue: '当前默认模型供应商不可用，请在供应商设置中配置 API 密钥。' })}
                 </div>
                 <div className="flex items-center gap-3 mt-3">
                   <button
@@ -297,7 +297,7 @@ export const ClassicDashboard: React.FC = () => {
           </div>
         )}
 
-        {agents.find(a => a.id === 'meta-agent' && a.enabled) && (
+        {agents.find(a => a.id === 'meta-agent' && a.enabled) && providerHealth.checked && providerHealth.available && (
           <div className="w-full max-w-2xl mb-6">
             <button
               onClick={() => openMetaAgentChat()}

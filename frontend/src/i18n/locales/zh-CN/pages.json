@@ -397,7 +397,7 @@
     },
     "providerCheck": {
       "title": "模型供应商尚未配置",
-      "description": "系统检测到内置 Claude 模型供应商不可用，请配置 API 密钥后使用。",
+      "description": "当前默认模型供应商不可用，请在供应商设置中配置 API 密钥。",
       "configure": "前往配置",
       "later": "稍后配置",
       "checking": "正在检查模型供应商可用性..."

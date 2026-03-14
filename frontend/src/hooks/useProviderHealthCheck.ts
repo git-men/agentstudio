@@ -48,12 +48,13 @@ export function useProviderHealthCheck() {
 
   const recheck = useCallback(async () => {
     if (!versionsData) return;
-    const systemVersion = versionsData.versions.find(v => v.isSystem);
-    if (!systemVersion) return;
+    const defaultVersion = versionsData.versions.find(v => v.id === versionsData.defaultVersionId)
+      ?? versionsData.versions.find(v => v.isSystem);
+    if (!defaultVersion) return;
 
     setStatus(prev => ({ ...prev, loading: true }));
     try {
-      const result = await testProvider(systemVersion.id);
+      const result = await testProvider(defaultVersion.id);
       const newStatus: ProviderHealthStatus = {
         checked: true,
         available: result.available,
@@ -105,13 +106,14 @@ export function useProviderHealthCheck() {
     }
 
     if (!versionsData) return;
-    const systemVersion = versionsData.versions.find(v => v.isSystem);
-    if (!systemVersion) return;
+    const defaultVersion = versionsData.versions.find(v => v.id === versionsData.defaultVersionId)
+      ?? versionsData.versions.find(v => v.isSystem);
+    if (!defaultVersion) return;
 
     let cancelled = false;
 
     setStatus(prev => ({ ...prev, loading: true }));
-    testProvider(systemVersion.id)
+    testProvider(defaultVersion.id)
       .then(result => {
         if (cancelled) return;
         setStatus({
