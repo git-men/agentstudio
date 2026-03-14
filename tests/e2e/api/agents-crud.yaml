@@ -1,0 +1,113 @@
+name: Agent CRUD 生命周期
+sequential: true
+
+cases:
+  - name: "获取 Agent 列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建测试 Agent"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        id: "e2e-test-agent"
+        name: "E2E Test Agent"
+        description: "Test agent for E2E"
+        systemPrompt: "You are a test agent"
+        enabled: true
+        allowedTools: []
+        ui:
+          headerTitle: "E2E Test"
+          headerDescription: "Test agent"
+        author: "e2e-test"
+    expect:
+      status: [200, 201]
+      body:
+        agent:
+          id: { exists: true }
+    save:
+      agent_id: "agent.id"
+
+  - name: "获取已创建的 Agent"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        agent:
+          id: "{{runtime.agent_id}}"
+          name: "E2E Test Agent"
+
+  - name: "更新 Agent 名称"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        id: "{{runtime.agent_id}}"
+        name: "E2E Updated Agent"
+        description: "Test agent for E2E"
+        systemPrompt: "You are a test agent"
+        enabled: true
+        allowedTools: []
+        ui:
+          headerTitle: "E2E Test"
+          headerDescription: "Test agent"
+        author: "e2e-test"
+    expect:
+      status: 200
+
+  - name: "验证 Agent 已更新"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        agent:
+          name: "E2E Updated Agent"
+
+  - name: "删除 Agent"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "验证 Agent 已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+teardown:
+  - name: "清理测试 Agent"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

@@ -1,0 +1,89 @@
+name: 技能 CRUD 生命周期
+sequential: true
+
+cases:
+  - name: "获取技能列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/skills"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建测试技能"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/skills"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-skill"
+        description: "Test skill for E2E"
+        scope: "user"
+        content: "---\nname: e2e-test-skill\ndescription: Test skill for E2E\n---\n# Test Skill\nThis is a test."
+    expect:
+      status: [200, 201]
+      body:
+        skill:
+          id: { exists: true }
+    save:
+      skill_id: "skill.id"
+
+  - name: "获取已创建的技能"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/skills/{{runtime.skill_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        skill:
+          name: "e2e-test-skill"
+          description: "Test skill for E2E"
+
+  - name: "更新技能描述"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/skills/{{runtime.skill_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-skill"
+        description: "Updated test skill for E2E"
+        scope: "user"
+        content: "---\nname: e2e-test-skill\ndescription: Updated test skill for E2E\n---\n# Test Skill\nThis is a test."
+    expect:
+      status: 200
+
+  - name: "删除技能"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/skills/{{runtime.skill_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "验证技能已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/skills/{{runtime.skill_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+teardown:
+  - name: "清理测试技能"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/skills/{{runtime.skill_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

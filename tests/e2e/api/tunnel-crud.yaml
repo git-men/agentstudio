@@ -1,0 +1,234 @@
+name: 隧道列表与 CRUD 生命周期
+sequential: true
+
+setup:
+  - waitForPort:
+      host: localhost
+      port: 14936
+      timeout: "120s"
+
+cases:
+  # --- 列表与基础 API ---
+
+  - name: "隧道列表 API 返回 200"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/list"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        tunnels: { exists: true, type: array }
+
+  - name: "未认证请求返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/list"
+    expect:
+      status: 401
+
+  - name: "Server info 代理 - 缺少参数返回 400"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/server-info"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body: {}
+    expect:
+      status: 400
+      body:
+        success: false
+
+  - name: "Check name - 缺少参数返回 400"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/check-name"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 400
+
+  # --- CRUD 生命周期 ---
+
+  - name: "添加隧道 - 缺少 token 返回 400"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/add"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        serverUrl: "https://example.com"
+    expect:
+      status: 400
+      body:
+        success: false
+
+  - name: "添加隧道 - 缺少 serverUrl 返回 400"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/add"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        token: "tun_test_token"
+    expect:
+      status: 400
+      body:
+        success: false
+
+  - name: "添加隧道成功"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/add"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        label: "E2E 测试隧道"
+        serverUrl: "https://test.example.com"
+        token: "tun_e2e_test_token_12345"
+        tunnelName: "e2e-test"
+        protocol: "https"
+        domainSuffix: ".test.example.com"
+        enabled: false
+    expect:
+      status: 200
+      body:
+        success: true
+        config:
+          id: { exists: true, type: string }
+          label: "E2E 测试隧道"
+          serverUrl: "https://test.example.com"
+          tunnelName: "e2e-test"
+          protocol: "https"
+    save:
+      tunnel_id: "config.id"
+
+  - name: "列表中包含新隧道"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/list"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        tunnels:
+          length: { gte: 1 }
+
+  - name: "获取单个隧道配置"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/config"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        id: "{{runtime.tunnel_id}}"
+        label: "E2E 测试隧道"
+
+  - name: "获取单个隧道状态"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        id: "{{runtime.tunnel_id}}"
+        connected: false
+
+  - name: "更新隧道配置"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/config"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        label: "E2E 测试隧道 (已更新)"
+        protocol: "http"
+    expect:
+      status: 200
+      body:
+        success: true
+        config:
+          label: "E2E 测试隧道 (已更新)"
+          protocol: "http"
+
+  - name: "获取不存在的隧道返回 404"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/non-existent-id/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+  - name: "删除隧道成功"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "删除后隧道不存在"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+  - name: "删除不存在的隧道返回 404"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/tunnel/non-existent-id"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+  # --- 向下兼容 ---
+
+  - name: "向下兼容: 旧 status 端点仍可用"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        localPort: { exists: true }
+
+  - name: "向下兼容: 旧 config 端点仍可用"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/config"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        serverUrl: { exists: true }
+
+teardown:
+  - name: "清理测试隧道"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

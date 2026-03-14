@@ -1,0 +1,57 @@
+name: 设置与配置信息
+sequential: true
+
+cases:
+  - name: "获取配置信息"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/config"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取全局记忆设置"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/global-memory"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取版本设置"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/versions"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取版本号"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/version"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取版本详情"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/version/info"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取网络信息"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/network-info"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200

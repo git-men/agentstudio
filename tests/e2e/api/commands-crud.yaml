@@ -1,0 +1,85 @@
+name: 斜杠命令 CRUD 生命周期
+sequential: true
+
+cases:
+  - name: "获取命令列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/commands"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建测试命令"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/commands"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test"
+        content: "This is a test prompt"
+        scope: "user"
+        description: "Test command"
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      command_id: "id"
+
+  - name: "获取已创建的命令"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/commands/{{runtime.command_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        name: "e2e-test"
+        content: "This is a test prompt"
+
+  - name: "更新命令内容"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/commands/{{runtime.command_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test"
+        content: "Updated test prompt"
+        scope: "user"
+        description: "Test command"
+    expect:
+      status: 200
+
+  - name: "删除命令"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/commands/{{runtime.command_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: [200, 204]
+
+  - name: "验证命令已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/commands/{{runtime.command_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+teardown:
+  - name: "清理测试命令"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/commands/{{runtime.command_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

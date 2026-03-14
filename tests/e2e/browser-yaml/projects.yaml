@@ -1,0 +1,92 @@
+name: "项目管理界面"
+description: "测试项目列表页面加载、创建按钮和模态框"
+
+setup:
+  - name: "注入认证令牌"
+    browser:
+      action: setLocalStorage
+      storage:
+        auth-storage: '{"state":{"token":"{{config.auth_header}}","authenticated":true},"version":0}'
+  - name: "进入仪表盘"
+    browser:
+      action: goto
+      url: "/dashboard"
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+cases:
+  - name: "项目页面加载"
+    browser:
+      action: goto
+      url: "/projects"
+
+  - name: "等待页面加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证项目管理标题"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('Project Management'), h1:has-text('项目管理')"
+      timeout: "10s"
+
+  - name: "验证搜索框存在"
+    browser:
+      action: waitForSelector
+      selector: "input[placeholder*='Search'], input[placeholder*='搜索']"
+    expect:
+      page:
+        visible:
+          - "button:has-text('Create'), button:has-text('创建')"
+
+  - name: "打开创建项目模态框"
+    browser:
+      action: click
+      selector: "button:has-text('Create New Project'), button:has-text('创建')"
+
+  - name: "等待模态框出现"
+    browser:
+      action: waitForSelector
+      selector: ".fixed.inset-0, [role='dialog']"
+      timeout: "5s"
+    expect:
+      page:
+        visible:
+          - ".fixed.inset-0 input, [role='dialog'] input"
+
+  - name: "关闭模态框"
+    browser:
+      action: press
+      key: "Escape"
+
+  - name: "等待模态框关闭"
+    delay: "1s"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+
+  - name: "项目列表 API 正常响应"
+    request:
+      method: GET
+      path: "/api/projects"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "项目表格或空状态可渲染"
+    browser:
+      action: goto
+      url: "/projects"
+
+  - name: "等待页面加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "h1:has-text('Project'), h1:has-text('项目')"

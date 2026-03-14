@@ -1,0 +1,48 @@
+name: 插件与市场
+sequential: true
+
+cases:
+  - name: "获取市场列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/plugins/marketplaces"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取可用插件"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/plugins/available"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取已安装插件"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/plugins/installed"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "检查所有市场更新"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/plugins/marketplaces/check-all-updates"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取市场技能列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/marketplace-skills"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200

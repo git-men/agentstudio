@@ -1,0 +1,133 @@
+name: "设置页面"
+description: "测试常规设置、隧道设置和系统信息页面"
+
+setup:
+  - name: "注入认证令牌"
+    browser:
+      action: setLocalStorage
+      storage:
+        auth-storage: '{"state":{"token":"{{config.auth_header}}","authenticated":true},"version":0}'
+  - name: "进入仪表盘"
+    browser:
+      action: goto
+      url: "/dashboard"
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+cases:
+  - name: "常规设置页面加载"
+    browser:
+      action: goto
+      url: "/settings/general"
+
+  - name: "等待页面加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证主题和语言选项可见"
+    browser:
+      action: waitForSelector
+      selector: "label:has-text('Theme')"
+      timeout: "10s"
+    expect:
+      page:
+        visible:
+          - "text=Language"
+
+  - name: "验证三种主题模式选项"
+    browser:
+      action: waitForSelector
+      selector: "text=Follow System"
+    expect:
+      page:
+        visible:
+          - "text=Light Mode"
+          - "text=Dark Mode"
+
+  - name: "隧道设置页面加载"
+    browser:
+      action: goto
+      url: "/settings/tunnel"
+
+  - name: "等待隧道页加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证隧道页面标题"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('隧道')"
+      timeout: "10s"
+
+  - name: "验证添加隧道按钮"
+    browser:
+      action: waitForSelector
+      selector: "button:has-text('添加'), button:has-text('Add')"
+      timeout: "5s"
+
+  - name: "系统信息页面加载"
+    browser:
+      action: goto
+      url: "/settings/system-info"
+
+  - name: "等待系统信息页加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证系统信息标题和检查按钮"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('System Info'), h1:has-text('系统信息')"
+      timeout: "10s"
+    expect:
+      page:
+        visible:
+          - "button:has-text('Check'), button:has-text('检查')"
+          - "text=/Version|版本/i"
+
+  - name: "设置页间导航 - 到常规"
+    browser:
+      action: goto
+      url: "/settings/general"
+
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "label:has-text('Theme')"
+
+  - name: "设置页间导航 - 到系统信息"
+    browser:
+      action: goto
+      url: "/settings/system-info"
+
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "text=/System Info|系统信息/i"
+
+  - name: "设置页间导航 - 到隧道"
+    browser:
+      action: goto
+      url: "/settings/tunnel"
+
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "h1:has-text('隧道')"
