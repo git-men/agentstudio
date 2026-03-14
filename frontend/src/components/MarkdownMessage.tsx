@@ -107,7 +107,11 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, isUse
         a: ({ children, href }) => (
           <a 
             href={href} 
-            className="text-blue-600 hover:text-blue-800 underline" 
+            className={`underline ${
+              isUserMessage
+                ? 'text-blue-200 hover:text-blue-100'
+                : 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300'
+            }`}
             target="_blank" 
             rel="noopener noreferrer"
           >
