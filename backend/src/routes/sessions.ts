@@ -666,6 +666,101 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
   }
 }
 
+/** Strip <think>...</think> tags from text, returning only the non-thinking content. */
+function stripThinkTags(text: string): string {
+  let result = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  // Handle orphaned </think> (SDK may strip opening <think>)
+  const closeIdx = result.indexOf('</think>');
+  if (closeIdx !== -1) {
+    result = result.slice(closeIdx + '</think>'.length);
+  }
+  return result.trim();
+}
+
+/**
+ * Split a text block containing <think>...</think> or orphaned </think> into
+ * separate thinking and text message parts. Returns empty array if no think
+ * tags are found (caller should fall back to a plain text part).
+ */
+function splitThinkTagsInText(text: string, blockIndex: number, uuid: string): any[] {
+  if (!text) return [];
+
+  const parts: any[] = [];
+  let orderOffset = 0;
+
+  // Case 1: Proper <think>...</think> tags
+  const fullTagRegex = /<think>([\s\S]*?)<\/think>/g;
+  let lastIndex = 0;
+  let match;
+  let found = false;
+
+  while ((match = fullTagRegex.exec(text)) !== null) {
+    found = true;
+    if (match.index > lastIndex) {
+      const before = text.slice(lastIndex, match.index).trim();
+      if (before) {
+        parts.push({
+          id: `part_${blockIndex}_t${orderOffset}_${uuid}`,
+          type: 'text',
+          content: before,
+          order: blockIndex * 100 + orderOffset++,
+        });
+      }
+    }
+    const inner = match[1].trim();
+    if (inner) {
+      parts.push({
+        id: `part_${blockIndex}_k${orderOffset}_${uuid}`,
+        type: 'thinking',
+        content: inner,
+        order: blockIndex * 100 + orderOffset++,
+      });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (found) {
+    const tail = text.slice(lastIndex).trim();
+    if (tail) {
+      parts.push({
+        id: `part_${blockIndex}_t${orderOffset}_${uuid}`,
+        type: 'text',
+        content: tail,
+        order: blockIndex * 100 + orderOffset,
+      });
+    }
+    return parts;
+  }
+
+  // Case 2: Orphaned </think> without opening <think>
+  // The SDK sometimes strips the opening <think> tag, leaving content like:
+  //   "lThe user is asking...\n</think>\n\n1+1 = 2"
+  const closeIdx = text.indexOf('</think>');
+  if (closeIdx !== -1) {
+    const thinkingContent = text.slice(0, closeIdx).trim();
+    const afterClose = text.slice(closeIdx + '</think>'.length).trim();
+    if (thinkingContent) {
+      parts.push({
+        id: `part_${blockIndex}_k0_${uuid}`,
+        type: 'thinking',
+        content: thinkingContent,
+        order: blockIndex * 100,
+      });
+    }
+    if (afterClose) {
+      parts.push({
+        id: `part_${blockIndex}_t1_${uuid}`,
+        type: 'text',
+        content: afterClose,
+        order: blockIndex * 100 + 1,
+      });
+    }
+    return parts;
+  }
+
+  return [];
+}
+
 function extractContentFromClaudeMessage(msg: ClaudeHistoryMessage, allMessages: ClaudeHistoryMessage[] = []): string {
   if (!msg.message?.content) return '';
   
@@ -692,13 +787,13 @@ function extractContentFromClaudeMessage(msg: ClaudeHistoryMessage, allMessages:
         return args ? `${commandMatch[1]} ${args}` : commandMatch[1];
       }
     }
-    return msg.message.content;
+    return stripThinkTags(msg.message.content);
   }
   
   if (Array.isArray(msg.message.content)) {
     return msg.message.content
       .filter((block: any) => block.type === 'text' || block.type === 'thinking')
-      .map((block: any) => block.text || block.thinking || '')
+      .map((block: any) => stripThinkTags(block.text || block.thinking || ''))
       .join('');
   }
   
@@ -767,6 +862,11 @@ function convertClaudeMessageToMessageParts(msg: ClaudeHistoryMessage, allMessag
       }
     }
     
+    // Also handle <think> tags in string content (SDK may embed them here too)
+    const stringParts = splitThinkTagsInText(msg.message.content, 0, msg.uuid);
+    if (stringParts.length > 0) {
+      return stringParts;
+    }
     return [{
       id: `part_0_${msg.uuid}`,
       type: 'text',
@@ -777,8 +877,16 @@ function convertClaudeMessageToMessageParts(msg: ClaudeHistoryMessage, allMessag
   
   // Handle array content
   if (Array.isArray(msg.message.content)) {
-    return msg.message.content.map((block: any, index: number) => {
+    return msg.message.content.flatMap((block: any, index: number) => {
       if (block.type === 'text') {
+        // Split text blocks containing <think>...</think> or orphaned </think> into
+        // separate thinking + text parts. The Claude Agent SDK sometimes embeds
+        // thinking content as <think> tags inside text blocks when using third-party
+        // models (e.g. MiniMax M2.5), instead of structured thinking content blocks.
+        const parts = splitThinkTagsInText(block.text, index, msg.uuid);
+        if (parts.length > 0) {
+          return parts;
+        }
         return {
           id: `part_${index}_${msg.uuid}`,
           type: 'text',

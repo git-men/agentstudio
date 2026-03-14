@@ -46,8 +46,10 @@ export const useSessionManager = ({
 
   /**
    * Imperatively fetch messages for a session and load them into the store.
-   * This is the ONLY path that calls loadSessionMessages, ensuring no
-   * react-query background refetch can overwrite live-streamed data.
+   *
+   * After the async fetch completes, re-check `isAiTyping` from the store:
+   * if streaming started while the request was in flight, discard the
+   * response to avoid overwriting live-streamed data.
    */
   const loadMessagesForSession = useCallback(async (sessionId: string) => {
     try {
@@ -61,6 +63,19 @@ export const useSessionManager = ({
         return;
       }
       const data = await response.json();
+
+      // Stale-check: if streaming started while the fetch was in flight,
+      // discard the result — the store already has live-streamed data.
+      const { isAiTyping, currentSessionId: storeSessionId } = useAgentStore.getState();
+      if (isAiTyping) {
+        console.log(`[SessionManager] Discarding fetched messages — streaming is active`);
+        return;
+      }
+      if (storeSessionId !== sessionId) {
+        console.log(`[SessionManager] Discarding fetched messages — session changed (wanted ${sessionId}, current ${storeSessionId})`);
+        return;
+      }
+
       const converted = (data.messages || []).map((msg: any) => ({
         ...msg,
         timestamp: new Date(msg.timestamp),
@@ -72,6 +87,13 @@ export const useSessionManager = ({
   }, [agentId, projectPath, loadSessionMessages]);
 
   const handleSwitchSession = useCallback(async (sessionId: string) => {
+    // Refuse to switch while streaming — it would corrupt both sessions
+    const { isAiTyping } = useAgentStore.getState();
+    if (isAiTyping) {
+      console.warn(`[SessionManager] Ignoring session switch to ${sessionId} — AI is still streaming`);
+      return;
+    }
+
     console.log(`[SessionManager] Switching to session ${sessionId}`);
     setCurrentSessionId(sessionId);
     setIsLoadingMessages(true);
@@ -98,6 +120,12 @@ export const useSessionManager = ({
   }, [onSessionChange, setCurrentSessionId, clearMessages, textareaRef]);
 
   const handleRefreshMessages = useCallback(async () => {
+    // Guard: don't refresh while streaming
+    const { isAiTyping } = useAgentStore.getState();
+    if (isAiTyping) {
+      console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
+      return;
+    }
     if (currentSessionId) {
       setIsLoadingMessages(true);
       await loadMessagesForSession(currentSessionId);
