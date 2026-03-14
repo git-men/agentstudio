@@ -1,56 +1,38 @@
-# Dependencies
+# Dependencies (rebuilt inside container)
 node_modules
-**/node_modules
-npm-debug.log
-pnpm-debug.log
-yarn-error.log
+frontend/node_modules
+backend/node_modules
 
-# Build outputs
-*.tsbuildinfo
-**/*.tsbuildinfo
+# Build outputs (rebuilt inside container)
+frontend/dist
+backend/dist
 
-# Development files
+# Worktrees (git feature branches, 15GB+)
+.worktrees
+
+# Git
 .git
-.gitignore
-.env.local
-.env.development
-.env.test
 
-# IDE
-.vscode
+# IDE / Editor
 .cursor
-.idea
+.vscode
 *.swp
 *.swo
-*~
+
+# Tests & docs (not needed in image)
+tests
+docs
+*.test.ts
+*.spec.ts
+e2e.yaml
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Test files
-**/__tests__
-**/*.test.ts
-**/*.test.js
-**/*.spec.ts
-**/*.spec.js
-coverage
+# Env files
+.env
+.env.*
 
-# Docker (avoid copying Docker files into build context)
-.dockerignore
-docker-compose.yml
-
-# Documentation (keep CLAUDE.md for reference)
-*.md
-!CLAUDE.md
-
-# CI/CD
-.github
-.gitlab-ci.yml
-
-# Misc
-*.log
-.cache
-tmp
-temp
+# Data / runtime
 data
