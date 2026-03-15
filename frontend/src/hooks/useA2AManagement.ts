@@ -13,12 +13,17 @@ export interface ApiKey {
   usageCount?: number;
 }
 
+export type A2AProtocolType = 'custom' | 'a2a-jsonrpc';
+
 export interface ExternalAgent {
   name: string;
   url: string;
   apiKey: string;
   description?: string;
   enabled: boolean;
+  protocolType?: A2AProtocolType;
+  customHeaders?: Record<string, string>;
+  agentCardUrl?: string;
 }
 
 export interface A2AConfig {

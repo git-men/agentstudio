@@ -186,17 +186,15 @@ async function handleMessageSend(
     return res.json(jsonRpcError(requestId, -32602, 'Invalid params: message text is required'));
   }
 
-  const taskId = params?.message?.taskId || uuidv4();
-  const contextId = params?.message?.contextId || uuidv4();
+  const normalizedParams = ensureMessageFields(params);
 
   const executor = new A2AStandardAgentExecutor(ctx.agentType, ctx.workingDirectory);
   const taskStore = new A2ATaskStoreAdapter(ctx.workingDirectory);
 
-  // Build a minimal agent card for DefaultRequestHandler
   const agentCard = buildMinimalAgentCard(ctx);
   const handler = new DefaultRequestHandler(agentCard as any, taskStore, executor);
 
-  const result = await handler.sendMessage(params);
+  const result = await handler.sendMessage(normalizedParams);
 
   return res.json({
     jsonrpc: '2.0',
@@ -216,6 +214,8 @@ async function handleMessageStream(
   if (!messageText) {
     return res.json(jsonRpcError(requestId, -32602, 'Invalid params: message text is required'));
   }
+
+  const normalizedParams = ensureMessageFields(params);
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -240,7 +240,7 @@ async function handleMessageStream(
     const agentCard = buildMinimalAgentCard(ctx);
     const handler = new DefaultRequestHandler(agentCard as any, taskStore, executor);
 
-    const stream = handler.sendMessageStream(params);
+    const stream = handler.sendMessageStream(normalizedParams);
 
     for await (const event of stream) {
       if (isConnectionClosed) break;
@@ -321,6 +321,18 @@ async function handleTasksCancel(
 // ============================================================================
 // Helpers
 // ============================================================================
+
+/**
+ * Ensure required A2A Message fields (messageId, contextId) are present.
+ * Callers may omit these optional-in-practice fields; the SDK requires them.
+ */
+function ensureMessageFields(params: any): any {
+  if (!params?.message) return params;
+  const msg = { ...params.message };
+  if (!msg.messageId) msg.messageId = uuidv4();
+  if (!msg.contextId) msg.contextId = msg.contextId || uuidv4();
+  return { ...params, message: msg };
+}
 
 function extractMessageText(params: any): string {
   const message = params?.message;

@@ -1,0 +1,151 @@
+name: A2A 认证错误处理
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+  - name: "获取 A2A Agent 映射"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/mapping/{{config.project_path_encoded}}"
+    save:
+      a2a_agent_id: "a2aAgentId"
+
+cases:
+  # =========================================================================
+  # 缺少 Authorization Header
+  # =========================================================================
+
+  - name: "无 Authorization Header 返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+    expect:
+      status: 401
+      body:
+        code: "MISSING_AUTH_HEADER"
+        error: { contains: "Missing Authorization" }
+
+  - name: "REST 端点无 Auth 返回 401"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/messages"
+      headers:
+        Content-Type: application/json
+      body:
+        message: "should fail"
+    expect:
+      status: 401
+      body:
+        code: "MISSING_AUTH_HEADER"
+
+  - name: "JSON-RPC 端点无 Auth 返回 401"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "auth-test-1"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            parts:
+              - type: "text"
+                text: "should fail"
+    expect:
+      status: 401
+      body:
+        code: "MISSING_AUTH_HEADER"
+
+  # =========================================================================
+  # 错误的 Authorization 格式
+  # =========================================================================
+
+  - name: "非 Bearer 格式返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+      headers:
+        Authorization: "Basic dXNlcjpwYXNz"
+    expect:
+      status: 401
+      body:
+        code: "INVALID_AUTH_FORMAT"
+
+  - name: "空 Bearer Token 返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+      headers:
+        Authorization: "Bearer "
+    expect:
+      status: 401
+      body:
+        code: { in: ["EMPTY_API_KEY", "INVALID_AUTH_FORMAT"] }
+
+  # =========================================================================
+  # 无效的 API Key
+  # =========================================================================
+
+  - name: "无效 API Key 返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+      headers:
+        Authorization: "Bearer agt_proj_fake1234_ffffffffffffffffffffffffffffffff"
+    expect:
+      status: 401
+      body:
+        code: "INVALID_API_KEY"
+
+  - name: "随机字符串作为 API Key 返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+      headers:
+        Authorization: "Bearer not-a-real-api-key"
+    expect:
+      status: 401
+      body:
+        code: "INVALID_API_KEY"
+
+  # =========================================================================
+  # 不存在的 Agent ID
+  # =========================================================================
+
+  - name: "不存在的 a2aAgentId 返回 404"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/00000000-0000-0000-0000-000000000000/.well-known/agent.json"
+      headers:
+        Authorization: "Bearer fake-key"
+    expect:
+      status: 404
+      body:
+        code: "AGENT_NOT_FOUND"
+
+  - name: "不存在的 a2aAgentId JSON-RPC 返回 404"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/00000000-0000-0000-0000-000000000000"
+      headers:
+        Authorization: "Bearer fake-key"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "auth-test-2"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            parts:
+              - type: "text"
+                text: "should fail"
+    expect:
+      status: 404
+      body:
+        code: "AGENT_NOT_FOUND"

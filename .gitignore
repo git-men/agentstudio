@@ -78,3 +78,4 @@ extension-pure/icons/
 
 # Runtime project data
 projects/
+backend/e2e-tests/.argusai/

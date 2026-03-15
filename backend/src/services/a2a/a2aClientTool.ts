@@ -34,6 +34,25 @@ import type { MessageSendParams } from '@a2a-js/sdk';
 declare const process: any;
 
 /**
+ * Upgrade http:// to https:// for non-local URLs.
+ * HTTP→HTTPS redirects strip the Authorization header (RFC 7235),
+ * so we must use HTTPS directly to preserve auth credentials.
+ */
+function ensureHttps(url: string): string {
+  if (!url.startsWith('http://')) return url;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) {
+      return url;
+    }
+    return url.replace(/^http:\/\//, 'https://');
+  } catch {
+    return url;
+  }
+}
+
+/**
  * MCP Tool Definition for call_external_agent
  */
 export const CALL_EXTERNAL_AGENT_TOOL = {
@@ -828,11 +847,12 @@ async function callJsonRpcSync(
   contextId?: string,
   taskId?: string,
 ): Promise<CallExternalAgentOutput> {
+  const safeUrl = ensureHttps(agentUrl);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
-    const response = await fetch(agentUrl, {
+    const response = await fetch(safeUrl, {
       method: 'POST',
       headers: buildJsonRpcHeaders(apiKey, customHeaders),
       body: buildJsonRpcBody('message/send', message, requestId, contextId, taskId, customHeaders),
@@ -895,20 +915,21 @@ async function callJsonRpcStream(
   contextId?: string,
   taskId?: string,
 ): Promise<CallExternalAgentOutput> {
+  const safeUrl = ensureHttps(agentUrl);
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   a2aStreamEventEmitter.emitStreamStart({
     sessionId,
     projectId: workingDirectory,
-    agentUrl,
+    agentUrl: safeUrl,
     message,
     contextId,
     taskId,
   });
 
   try {
-    const response = await fetch(agentUrl, {
+    const response = await fetch(safeUrl, {
       method: 'POST',
       headers: buildJsonRpcHeaders(apiKey, customHeaders, true),
       body: buildJsonRpcBody('message/stream', message, requestId, contextId, taskId, customHeaders),
@@ -921,6 +942,28 @@ async function callJsonRpcStream(
       const errMsg = `HTTP ${response.status}: ${errorText}`;
       a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
       return { success: false, error: errMsg };
+    }
+
+    // Server may return JSON error (not SSE) even with 200 status
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const jsonResp = await response.json() as any;
+      if (jsonResp.error) {
+        const errMsg = `JSON-RPC error ${jsonResp.error.code}: ${jsonResp.error.message}`;
+        a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+        return { success: false, error: errMsg };
+      }
+      const result = jsonResp.result;
+      if (result) {
+        const responseText = extractTextFromA2AResult(result);
+        return {
+          success: true,
+          data: responseText || 'Message processed (non-streaming response)',
+          sessionId,
+          contextId: result.contextId,
+          taskId: result.taskId || result.id,
+        };
+      }
     }
 
     if (!response.body) {

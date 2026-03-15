@@ -1,0 +1,298 @@
+name: A2A JSON-RPC 错误场景
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+  - name: "获取 A2A Agent 映射"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/mapping/{{config.project_path_encoded}}"
+    save:
+      a2a_agent_id: "a2aAgentId"
+
+  - name: "创建测试用 API Key"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}"
+      headers:
+        Content-Type: application/json
+      body:
+        description: "E2E JSON-RPC 错误测试密钥 - {{timestamp}}"
+    save:
+      api_key: "key"
+      api_key_id: "id"
+
+cases:
+  # =========================================================================
+  # 缺少 jsonrpc 字段
+  # =========================================================================
+
+  - name: "缺少 jsonrpc 字段返回 -32600"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        id: "err-1"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            parts:
+              - type: "text"
+                text: "test"
+    expect:
+      status: 400
+      body:
+        jsonrpc: "2.0"
+        error:
+          code: -32600
+          message: { contains: "Invalid Request" }
+
+  - name: "jsonrpc 字段非 2.0 返回 -32600"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "1.0"
+        id: "err-2"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            parts:
+              - type: "text"
+                text: "test"
+    expect:
+      status: 400
+      body:
+        jsonrpc: "2.0"
+        error:
+          code: -32600
+
+  # =========================================================================
+  # 不存在的方法
+  # =========================================================================
+
+  - name: "不存在的 method 返回 -32601"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-3"
+        method: "nonexistent/method"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-3"
+        error:
+          code: -32601
+          message: { contains: "Method not found" }
+
+  - name: "空 method 返回 -32601"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-4"
+        method: ""
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        error:
+          code: -32601
+
+  # =========================================================================
+  # 无效参数
+  # =========================================================================
+
+  - name: "message/send 缺少 message 参数返回 -32602"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-5"
+        method: "message/send"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-5"
+        error:
+          code: -32602
+          message: { contains: "Invalid params" }
+
+  - name: "message/send 空 message parts 返回 -32602"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-6"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            parts: []
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-6"
+        error:
+          code: -32602
+
+  - name: "message/stream 缺少 message 参数返回 -32602"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-7"
+        method: "message/stream"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-7"
+        error:
+          code: -32602
+
+  - name: "tasks/get 缺少 taskId 返回 -32602"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-8"
+        method: "tasks/get"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-8"
+        error:
+          code: -32602
+          message: { contains: "taskId is required" }
+
+  - name: "tasks/cancel 缺少 taskId 返回 -32602"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "err-9"
+        method: "tasks/cancel"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "err-9"
+        error:
+          code: -32602
+          message: { contains: "taskId is required" }
+
+  # =========================================================================
+  # JSON-RPC ID 回传验证
+  # =========================================================================
+
+  - name: "请求 ID 为数字时正确回传"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: 42
+        method: "nonexistent/method"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: 42
+        error:
+          code: -32601
+
+  - name: "请求无 ID（notification）时仍正常响应"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        method: "nonexistent/method"
+        params: {}
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+
+  # =========================================================================
+  # 空 body / 非 JSON-RPC 请求
+  # =========================================================================
+
+  - name: "空 JSON 对象请求返回 -32600"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body: {}
+    expect:
+      status: 400
+      body:
+        jsonrpc: "2.0"
+        error:
+          code: -32600
+
+teardown:
+  - name: "清理测试 API Key"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}/{{runtime.api_key_id}}"
+    ignoreError: true

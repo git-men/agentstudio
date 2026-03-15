@@ -135,14 +135,62 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
     url: '',
     apiKey: '',
     description: '',
-    enabled: true
+    enabled: true,
+    protocolType: 'a2a-jsonrpc' as 'custom' | 'a2a-jsonrpc',
   });
+  const [newCustomHeaders, setNewCustomHeaders] = useState<{ key: string; value: string }[]>([]);
+  const [jsonRpcUrlMode, setJsonRpcUrlMode] = useState<'endpoint' | 'agentcard'>('endpoint');
+  const [agentCardInput, setAgentCardInput] = useState('');
+  const [discoveringCard, setDiscoveringCard] = useState(false);
+  const [cardDiscoverError, setCardDiscoverError] = useState('');
 
   const [agentFormErrors, setAgentFormErrors] = useState({
     name: '',
     url: '',
     apiKey: ''
   });
+
+  const handleDiscoverAgentCard = async () => {
+    if (!agentCardInput.trim()) return;
+    setDiscoveringCard(true);
+    setCardDiscoverError('');
+    try {
+      const resp = await authFetch(`${API_BASE}/a2a/discover-agent-card`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: agentCardInput.trim() }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const card = await resp.json();
+      if (card.url) {
+        let discoveredUrl: string = card.url;
+        if (discoveredUrl.startsWith('http://')) {
+          try {
+            const parsed = new URL(discoveredUrl);
+            const h = parsed.hostname;
+            if (h !== 'localhost' && h !== '127.0.0.1' && h !== '::1') {
+              discoveredUrl = discoveredUrl.replace(/^http:\/\//, 'https://');
+            }
+          } catch { /* keep original */ }
+        }
+        setNewAgent(prev => ({
+          ...prev,
+          url: discoveredUrl,
+          name: prev.name || card.name || '',
+          description: prev.description || card.description || '',
+        }));
+      } else {
+        setCardDiscoverError('Agent Card 中未找到 url 字段');
+      }
+    } catch (err: any) {
+      setCardDiscoverError(err.message || '无法获取 Agent Card');
+    } finally {
+      setDiscoveringCard(false);
+    }
+  };
 
   // Validate key description
   const validateKeyDescription = (description: string) => {
@@ -187,7 +235,7 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
       }
     }
 
-    if (!newAgent.apiKey.trim()) {
+    if (newAgent.protocolType !== 'a2a-jsonrpc' && !newAgent.apiKey.trim()) {
       errors.apiKey = t('a2aManagement.validation.apiKeyRequired');
       isValid = false;
     }
@@ -224,18 +272,27 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
     await deleteApiKey(keyId);
   };
 
-  // Handle add/update external agent
   const handleSaveExternalAgent = async () => {
     if (!validateAgentForm()) return;
 
+    const headers: Record<string, string> = {};
+    for (const h of newCustomHeaders) {
+      if (h.key.trim()) headers[h.key.trim()] = h.value;
+    }
+
+    const agentData = {
+      ...newAgent,
+      ...(Object.keys(headers).length > 0 && { customHeaders: headers }),
+    };
+
     if (editingAgentIndex !== null && config) {
-      const success = await updateExternalAgent(editingAgentIndex, newAgent);
+      const success = await updateExternalAgent(editingAgentIndex, agentData);
       if (success) {
         setShowAddAgentModal(false);
         resetAgentForm();
       }
     } else {
-      const success = await addExternalAgent(newAgent);
+      const success = await addExternalAgent(agentData);
       if (success) {
         setShowAddAgentModal(false);
         resetAgentForm();
@@ -256,31 +313,37 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
     await removeExternalAgent(index);
   };
 
-  // Handle edit external agent
   const handleEditExternalAgent = (index: number) => {
     if (!config) return;
 
-    const agent = config.allowedAgents[index];
+    const agent = config.allowedAgents[index] as any;
     setNewAgent({
       name: agent.name,
       url: agent.url,
       apiKey: agent.apiKey,
       description: agent.description || '',
-      enabled: agent.enabled
+      enabled: agent.enabled,
+      protocolType: agent.protocolType || 'custom',
     });
+    const ch = agent.customHeaders || {};
+    setNewCustomHeaders(Object.entries(ch).map(([key, value]) => ({ key, value: value as string })));
     setEditingAgentIndex(index);
     setShowAddAgentModal(true);
   };
 
-  // Reset agent form
   const resetAgentForm = () => {
     setNewAgent({
       name: '',
       url: '',
       apiKey: '',
       description: '',
-      enabled: true
+      enabled: true,
+      protocolType: 'a2a-jsonrpc',
     });
+    setNewCustomHeaders([]);
+    setJsonRpcUrlMode('endpoint');
+    setAgentCardInput('');
+    setCardDiscoverError('');
     setEditingAgentIndex(null);
     setAgentFormErrors({ name: '', url: '', apiKey: '' });
   };
@@ -845,6 +908,13 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
                     <h4 className="text-medium font-medium text-gray-900 dark:text-white">
                       {agent.name}
                     </h4>
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                      (agent as any).protocolType === 'a2a-jsonrpc'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300'
+                    }`}>
+                      {(agent as any).protocolType === 'a2a-jsonrpc' ? 'JSON-RPC' : 'REST'}
+                    </span>
                     <span className={`px-2 py-1 text-xs rounded-full ${
                       agent.enabled
                         ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
@@ -872,6 +942,15 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
                       </a>
                     </div>
                   </div>
+                  {(agent as any).customHeaders && Object.keys((agent as any).customHeaders).length > 0 && (
+                    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                      {Object.entries((agent as any).customHeaders).map(([key, value]) => (
+                        <span key={key} className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-xs font-mono text-gray-600 dark:text-gray-300">
+                          {key}: {value as string}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center space-x-2">
@@ -909,107 +988,336 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
 
       {/* Add/Edit Agent Modal */}
       {showAddAgentModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md mx-4">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                {editingAgentIndex !== null ? t('a2aManagement.external.modal.editTitle') : t('a2aManagement.external.modal.addTitle')}
-              </h3>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-2xl mx-4 shadow-2xl">
+            {/* Header */}
+            <div className="flex items-center justify-between px-8 py-5 border-b border-gray-200 dark:border-gray-700">
+              <div>
+                <h3 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {editingAgentIndex !== null ? t('a2aManagement.external.modal.editTitle') : t('a2aManagement.external.modal.addTitle')}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                  {t('a2aManagement.external.modal.subtitle', '配置外部 A2A Agent 的连接信息和认证方式')}
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setShowAddAgentModal(false);
                   resetAgentForm();
                 }}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
-              {/* Agent Name */}
+            {/* Body */}
+            <div className="px-8 py-6 space-y-6 max-h-[65vh] overflow-y-auto">
+              {/* Protocol Type */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('a2aManagement.external.form.name')} *
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
+                  {t('a2aManagement.external.form.protocol', '协议类型')}
                 </label>
-                <input
-                  type="text"
-                  value={newAgent.name}
-                  onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
-                  placeholder={t('a2aManagement.external.form.namePlaceholder')}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    agentFormErrors.name
-                      ? 'border-red-300 dark:border-red-600'
-                      : 'border-gray-300 dark:border-gray-600'
-                  }`}
-                  maxLength={50}
-                />
-                {agentFormErrors.name && (
-                  <p className="text-red-600 dark:text-red-400 text-sm mt-1">{agentFormErrors.name}</p>
-                )}
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setNewAgent({ ...newAgent, protocolType: 'a2a-jsonrpc' })}
+                    className={`relative flex flex-col items-center gap-1.5 px-4 py-4 rounded-xl border-2 transition-all ${
+                      newAgent.protocolType === 'a2a-jsonrpc'
+                        ? 'bg-blue-50 dark:bg-blue-950/60 border-blue-500 dark:border-blue-400 shadow-sm'
+                        : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    <span className={`text-sm font-semibold ${
+                      newAgent.protocolType === 'a2a-jsonrpc'
+                        ? 'text-blue-700 dark:text-blue-300'
+                        : 'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      A2A Standard
+                    </span>
+                    <span className={`text-xs ${
+                      newAgent.protocolType === 'a2a-jsonrpc'
+                        ? 'text-blue-500 dark:text-blue-400'
+                        : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      JSON-RPC 2.0
+                    </span>
+                    {newAgent.protocolType === 'a2a-jsonrpc' && (
+                      <div className="absolute top-2.5 right-2.5 w-2 h-2 bg-blue-500 rounded-full" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewAgent({ ...newAgent, protocolType: 'custom' })}
+                    className={`relative flex flex-col items-center gap-1.5 px-4 py-4 rounded-xl border-2 transition-all ${
+                      newAgent.protocolType === 'custom'
+                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 dark:border-amber-400 shadow-sm'
+                        : 'bg-gray-50 dark:bg-gray-700/50 border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                    }`}
+                  >
+                    <span className={`text-sm font-semibold ${
+                      newAgent.protocolType === 'custom'
+                        ? 'text-amber-700 dark:text-amber-300'
+                        : 'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      Custom REST
+                    </span>
+                    <span className={`text-xs ${
+                      newAgent.protocolType === 'custom'
+                        ? 'text-amber-500 dark:text-amber-400'
+                        : 'text-gray-400 dark:text-gray-500'
+                    }`}>
+                      AgentStudio 专有协议
+                    </span>
+                    {newAgent.protocolType === 'custom' && (
+                      <div className="absolute top-2.5 right-2.5 w-2 h-2 bg-amber-500 rounded-full" />
+                    )}
+                  </button>
+                </div>
               </div>
 
-              {/* Agent URL */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('a2aManagement.external.form.url')} *
-                </label>
-                <input
-                  type="url"
-                  value={newAgent.url}
-                  onChange={(e) => setNewAgent({ ...newAgent, url: e.target.value })}
-                  placeholder={t('a2aManagement.external.form.urlPlaceholder')}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    agentFormErrors.url
-                      ? 'border-red-300 dark:border-red-600'
-                      : 'border-gray-300 dark:border-gray-600'
-                  }`}
-                />
-                {agentFormErrors.url && (
-                  <p className="text-red-600 dark:text-red-400 text-sm mt-1">{agentFormErrors.url}</p>
-                )}
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  {t('a2aManagement.external.form.urlHelp')}
-                </p>
+              <div className="border-t border-gray-100 dark:border-gray-700" />
+
+              {/* Name + Token — two columns */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    {t('a2aManagement.external.form.name')} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newAgent.name}
+                    onChange={(e) => setNewAgent({ ...newAgent, name: e.target.value })}
+                    placeholder={t('a2aManagement.external.form.namePlaceholder')}
+                    className={`w-full px-3.5 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm ${
+                      agentFormErrors.name
+                        ? 'border-red-300 dark:border-red-600'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                    maxLength={50}
+                  />
+                  {agentFormErrors.name && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{agentFormErrors.name}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    {newAgent.protocolType === 'a2a-jsonrpc'
+                      ? 'Bearer Token'
+                      : t('a2aManagement.external.form.apiKey')}
+                    {newAgent.protocolType !== 'a2a-jsonrpc' && <span className="text-red-500"> *</span>}
+                  </label>
+                  <input
+                    type="password"
+                    value={newAgent.apiKey}
+                    onChange={(e) => setNewAgent({ ...newAgent, apiKey: e.target.value })}
+                    placeholder={
+                      newAgent.protocolType === 'a2a-jsonrpc'
+                        ? 'Bearer Token（可选）'
+                        : t('a2aManagement.external.form.apiKeyPlaceholder')
+                    }
+                    className={`w-full px-3.5 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm ${
+                      agentFormErrors.apiKey
+                        ? 'border-red-300 dark:border-red-600'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  />
+                  {agentFormErrors.apiKey && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{agentFormErrors.apiKey}</p>
+                  )}
+                </div>
               </div>
 
-              {/* API Key */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  {t('a2aManagement.external.form.apiKey')} *
-                </label>
-                <input
-                  type="password"
-                  value={newAgent.apiKey}
-                  onChange={(e) => setNewAgent({ ...newAgent, apiKey: e.target.value })}
-                  placeholder={t('a2aManagement.external.form.apiKeyPlaceholder')}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white ${
-                    agentFormErrors.apiKey
-                      ? 'border-red-300 dark:border-red-600'
-                      : 'border-gray-300 dark:border-gray-600'
-                  }`}
-                />
-                {agentFormErrors.apiKey && (
-                  <p className="text-red-600 dark:text-red-400 text-sm mt-1">{agentFormErrors.apiKey}</p>
-                )}
-              </div>
+              {/* URL section — different by protocol */}
+              {newAgent.protocolType === 'a2a-jsonrpc' ? (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Endpoint <span className="text-red-500">*</span>
+                    </label>
+                    <div className="flex gap-1 bg-gray-100 dark:bg-gray-700 rounded-md p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setJsonRpcUrlMode('endpoint')}
+                        className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                          jsonRpcUrlMode === 'endpoint'
+                            ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm font-medium'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+                        }`}
+                      >
+                        直接填写
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setJsonRpcUrlMode('agentcard')}
+                        className={`px-2.5 py-1 text-xs rounded transition-colors ${
+                          jsonRpcUrlMode === 'agentcard'
+                            ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm font-medium'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700'
+                        }`}
+                      >
+                        从 Agent Card 发现
+                      </button>
+                    </div>
+                  </div>
+
+                  {jsonRpcUrlMode === 'agentcard' && (
+                    <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <label className="block text-xs font-medium text-blue-700 dark:text-blue-300 mb-1.5">
+                        Agent Card 地址
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="url"
+                          value={agentCardInput}
+                          onChange={(e) => { setAgentCardInput(e.target.value); setCardDiscoverError(''); }}
+                          placeholder="https://host/.well-known/agent.json"
+                          className="flex-1 px-3 py-2 border border-blue-200 dark:border-blue-700 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleDiscoverAgentCard}
+                          disabled={discoveringCard || !agentCardInput.trim()}
+                          className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                        >
+                          {discoveringCard ? <Loader className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+                          发现
+                        </button>
+                      </div>
+                      {cardDiscoverError && (
+                        <p className="text-red-600 dark:text-red-400 text-xs mt-1.5">{cardDiscoverError}</p>
+                      )}
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1.5">
+                        将自动从 Agent Card 中读取 name、url、description
+                      </p>
+                    </div>
+                  )}
+
+                  <input
+                    type="url"
+                    value={newAgent.url}
+                    onChange={(e) => setNewAgent({ ...newAgent, url: e.target.value })}
+                    placeholder="https://host/agent/a2a/agent-id"
+                    className={`w-full px-3.5 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm font-mono ${
+                      agentFormErrors.url
+                        ? 'border-red-300 dark:border-red-600'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  />
+                  {agentFormErrors.url && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{agentFormErrors.url}</p>
+                  )}
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                    JSON-RPC 请求将直接 POST 到此地址。系统不会追加任何路径。
+                  </p>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Agent Base URL <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={newAgent.url}
+                    onChange={(e) => setNewAgent({ ...newAgent, url: e.target.value })}
+                    placeholder="https://localhost:4936/a2a/xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                    className={`w-full px-3.5 py-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm font-mono ${
+                      agentFormErrors.url
+                        ? 'border-red-300 dark:border-red-600'
+                        : 'border-gray-300 dark:border-gray-600'
+                    }`}
+                  />
+                  {agentFormErrors.url && (
+                    <p className="text-red-600 dark:text-red-400 text-xs mt-1">{agentFormErrors.url}</p>
+                  )}
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                    填写 Agent 的基础地址，<span className="font-semibold">不要</span>包含 <code className="text-gray-500 dark:text-gray-400">/messages</code> 或 <code className="text-gray-500 dark:text-gray-400">/tasks</code>，系统会自动拼接。
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">
                   {t('a2aManagement.external.form.description')}
                 </label>
-                <textarea
+                <input
+                  type="text"
                   value={newAgent.description}
                   onChange={(e) => setNewAgent({ ...newAgent, description: e.target.value })}
                   placeholder={t('a2aManagement.external.form.descriptionPlaceholder')}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  className="w-full px-3.5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white text-sm"
                   maxLength={200}
                 />
               </div>
 
-              {/* Enabled */}
+              {/* Custom Headers */}
+              <div className="bg-gray-50 dark:bg-gray-900/40 rounded-xl p-4 border border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      {t('a2aManagement.external.form.customHeaders', '自定义 Headers')}
+                    </label>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+                      {t('a2aManagement.external.form.headersHint', '例如 X-User-Id（用于 AgentHub 用户身份识别）')}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setNewCustomHeaders([...newCustomHeaders, { key: '', value: '' }])}
+                    className="flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-lg transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    {t('a2aManagement.external.form.addHeader', '添加')}
+                  </button>
+                </div>
+                {newCustomHeaders.length === 0 ? (
+                  <div className="text-center py-3 text-xs text-gray-400 dark:text-gray-500">
+                    暂无自定义 Headers
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {newCustomHeaders.map((header, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <input
+                          type="text"
+                          placeholder="Header Name"
+                          value={header.key}
+                          onChange={(e) => {
+                            const updated = [...newCustomHeaders];
+                            updated[idx] = { ...updated[idx], key: e.target.value };
+                            setNewCustomHeaders(updated);
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <span className="text-gray-400 text-sm">:</span>
+                        <input
+                          type="text"
+                          placeholder="Value"
+                          value={header.value}
+                          onChange={(e) => {
+                            const updated = [...newCustomHeaders];
+                            updated[idx] = { ...updated[idx], value: e.target.value };
+                            setNewCustomHeaders(updated);
+                          }}
+                          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm font-mono focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setNewCustomHeaders(newCustomHeaders.filter((_, i) => i !== idx))}
+                          className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between px-8 py-5 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 rounded-b-2xl">
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -1022,21 +1330,20 @@ export const ProjectA2AModal: React.FC<ProjectA2AModalProps> = ({ project, onClo
                   {t('a2aManagement.external.form.enableThisAgent')}
                 </label>
               </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex space-x-3">
                 <button
                   onClick={() => {
                     setShowAddAgentModal(false);
                     resetAgentForm();
                   }}
-                  className="px-4 py-2 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                  className="px-5 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   {t('a2aManagement.actions.cancel')}
                 </button>
                 <button
                   onClick={handleSaveExternalAgent}
                   disabled={loading.config}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-5 py-2.5 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {editingAgentIndex !== null ? t('a2aManagement.external.modal.saveChanges') : t('a2aManagement.external.modal.addAgent')}
                 </button>

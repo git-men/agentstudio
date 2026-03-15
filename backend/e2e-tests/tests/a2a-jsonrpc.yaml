@@ -1,0 +1,198 @@
+name: A2A 标准 JSON-RPC 2.0 协议
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+  - name: "获取 A2A Agent 映射"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/mapping/{{config.project_path_encoded}}"
+    save:
+      a2a_agent_id: "a2aAgentId"
+
+  - name: "创建测试用 API Key"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}"
+      headers:
+        Content-Type: application/json
+      body:
+        description: "E2E JSON-RPC 测试密钥 - {{timestamp}}"
+    save:
+      api_key: "key"
+      api_key_id: "id"
+
+cases:
+  # =========================================================================
+  # Agent Card 发现 (/.well-known/agent.json)
+  # =========================================================================
+
+  - name: "标准路径获取 Agent Card"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent.json"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+    expect:
+      status: 200
+      body:
+        name: { exists: true, type: string }
+        description: { exists: true, type: string }
+        url: { exists: true, type: string, contains: "/a2a/" }
+        protocolVersion: "0.2.0"
+        preferredTransport: "JSONRPC"
+        capabilities:
+          streaming: true
+          pushNotifications: false
+        defaultInputModes: { length: { gt: 0 } }
+        defaultOutputModes: { length: { gt: 0 } }
+      responseTime: { lt: 3000 }
+
+  # =========================================================================
+  # message/send — 同步消息 (JSON-RPC)
+  # =========================================================================
+
+  - name: "JSON-RPC message/send 正常请求"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "test-send-1"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            messageId: "e2e-msg-{{timestamp}}"
+            parts:
+              - type: "text"
+                text: "Hello, this is an E2E test. Please respond with exactly: E2E_OK"
+      timeout: 120s
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "test-send-1"
+        result: { exists: true }
+
+  - name: "JSON-RPC message/send 返回符合 A2A 规范的 Task 结构"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "test-send-2"
+        method: "message/send"
+        params:
+          message:
+            role: "user"
+            messageId: "e2e-msg2-{{timestamp}}"
+            parts:
+              - type: "text"
+                text: "Respond with OK"
+      timeout: 120s
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "test-send-2"
+        result:
+          kind: "message"
+          role: "agent"
+          parts: { length: { gt: 0 } }
+
+  # =========================================================================
+  # message/stream — SSE 流式消息 (JSON-RPC)
+  # =========================================================================
+
+  - name: "JSON-RPC message/stream 返回 SSE 流"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+        Accept: text/event-stream
+      body:
+        jsonrpc: "2.0"
+        id: "test-stream-1"
+        method: "message/stream"
+        params:
+          message:
+            role: "user"
+            messageId: "e2e-stream-{{timestamp}}"
+            parts:
+              - type: "text"
+                text: "Hello stream test. Reply with OK."
+      timeout: 120s
+    expect:
+      status: 200
+      headers:
+        content-type: { contains: "text/event-stream" }
+
+  # =========================================================================
+  # tasks/get — 查询任务状态 (JSON-RPC)
+  # =========================================================================
+
+  - name: "JSON-RPC tasks/get 查询不存在的任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "test-get-1"
+        method: "tasks/get"
+        params:
+          taskId: "non-existent-task-id-12345"
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "test-get-1"
+        error:
+          code: -32001
+          message: { contains: "not found" }
+
+  # =========================================================================
+  # tasks/cancel — 取消任务 (JSON-RPC)
+  # =========================================================================
+
+  - name: "JSON-RPC tasks/cancel 取消不存在的任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        jsonrpc: "2.0"
+        id: "test-cancel-1"
+        method: "tasks/cancel"
+        params:
+          taskId: "non-existent-task-id-12345"
+    expect:
+      status: 200
+      body:
+        jsonrpc: "2.0"
+        id: "test-cancel-1"
+        error:
+          code: -32001
+          message: { contains: "not found" }
+
+teardown:
+  - name: "清理测试 API Key"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}/{{runtime.api_key_id}}"
+    ignoreError: true

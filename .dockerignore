@@ -1,38 +1,12 @@
-# Dependencies (rebuilt inside container)
 node_modules
-frontend/node_modules
-backend/node_modules
-
-# Build outputs (rebuilt inside container)
-frontend/dist
-backend/dist
-
-# Worktrees (git feature branches, 15GB+)
-.worktrees
-
-# Git
 .git
-
-# IDE / Editor
-.cursor
-.vscode
-*.swp
-*.swo
-
-# Tests & docs (not needed in image)
-tests
-docs
-*.test.ts
-*.spec.ts
-e2e.yaml
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Env files
+.worktrees
+frontend/node_modules
+frontend/dist
+backend/node_modules
+backend/dist
+extension-pure/node_modules
+*.log
 .env
 .env.*
-
-# Data / runtime
-data
+!.env.example
