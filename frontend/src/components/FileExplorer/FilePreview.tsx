@@ -1,8 +1,8 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FaFile } from 'react-icons/fa';
 import { VscCode } from 'react-icons/vsc';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Code2, MonitorPlay } from 'lucide-react';
 
 // 动态导入Monaco Editor
 const Editor = React.lazy(() => import('@monaco-editor/react'));
@@ -10,6 +10,11 @@ const Editor = React.lazy(() => import('@monaco-editor/react'));
 import { ImagePreview } from './ImagePreview';
 import { FileTab } from './fileTypes';
 import { getLanguageForFile, getFileType } from './fileTypes';
+
+const isHtmlFile = (fileName: string): boolean => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  return ext === 'html' || ext === 'htm';
+};
 
 interface FilePreviewProps {
   activeTab: FileTab | null;
@@ -31,6 +36,7 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
   apiUrl
 }) => {
   const { t } = useTranslation('components');
+  const [htmlPreviewMode, setHtmlPreviewMode] = useState<'source' | 'preview'>('preview');
 
   if (!activeTab) {
     return (
@@ -74,20 +80,18 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
 
   switch (fileType) {
     case 'image': {
-      // 创建一个专门用于二进制文件的URL
       const imageParams = new URLSearchParams();
       imageParams.append('path', activeTab.path);
       if (projectPath) {
         imageParams.append('projectPath', projectPath);
       }
-      // 添加binary标记，告诉后端这是二进制文件
       imageParams.append('binary', 'true');
       const imageUrl = `${apiUrl}/files/read?${imageParams.toString()}`;
       
       return <ImagePreview imageUrl={imageUrl} fileName={activeTab.name} />;
     }
 
-    case 'text':
+    case 'text': {
       if (!fileContentData) {
         return (
           <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
@@ -95,27 +99,72 @@ export const FilePreview: React.FC<FilePreviewProps> = ({
           </div>
         );
       }
+
+      const isHtml = isHtmlFile(activeTab.name);
+
       return (
-        <Suspense fallback={
-          <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+        <div className="flex flex-col h-full">
+          {isHtml && (
+            <div className="flex items-center px-3 py-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+              <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md p-0.5">
+                <button
+                  onClick={() => setHtmlPreviewMode('source')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    htmlPreviewMode === 'source'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <Code2 className="w-3.5 h-3.5" />
+                  {t('fileExplorer.sourceCode', 'Source')}
+                </button>
+                <button
+                  onClick={() => setHtmlPreviewMode('preview')}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                    htmlPreviewMode === 'preview'
+                      ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  <MonitorPlay className="w-3.5 h-3.5" />
+                  {t('fileExplorer.preview', 'Preview')}
+                </button>
+              </div>
+            </div>
+          )}
+          <div className="flex-1 min-h-0">
+            {isHtml && htmlPreviewMode === 'preview' ? (
+              <iframe
+                srcDoc={fileContentData.content}
+                sandbox="allow-scripts"
+                className="w-full h-full border-0 bg-white"
+                title={`${activeTab.name} preview`}
+              />
+            ) : (
+              <Suspense fallback={
+                <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                </div>
+              }>
+                <Editor
+                  height="100%"
+                  theme={isDarkMode ? 'vs-dark' : 'vs-light'}
+                  language={getLanguageForFile(activeTab.name)}
+                  value={fileContentData.content}
+                  options={{
+                    readOnly: true,
+                    minimap: { enabled: false },
+                    fontSize: 14,
+                    wordWrap: 'on',
+                    scrollBeyondLastLine: false,
+                  }}
+                />
+              </Suspense>
+            )}
           </div>
-        }>
-          <Editor
-            height="100%"
-            theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-            language={getLanguageForFile(activeTab.name)}
-            value={fileContentData.content}
-            options={{
-              readOnly: true,
-              minimap: { enabled: false },
-              fontSize: 14,
-              wordWrap: 'on',
-              scrollBeyondLastLine: false,
-            }}
-          />
-        </Suspense>
+        </div>
       );
+    }
 
     default:
       return (
