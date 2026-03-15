@@ -153,6 +153,22 @@ export interface CheckBoxComponent {
   };
 }
 
+export interface SliderComponent {
+  Slider: {
+    value: A2UIBoundValue;
+    minValue?: number;
+    maxValue?: number;
+  };
+}
+
+export interface DateTimeInputComponent {
+  DateTimeInput: {
+    value: A2UIBoundValue;
+    enableDate?: boolean;
+    enableTime?: boolean;
+  };
+}
+
 export interface RowComponent {
   Row: {
     children: A2UIChildren;
@@ -222,7 +238,7 @@ export interface TableComponent {
   };
 }
 
-/** Data card - metric display with trend */
+/** Data card - metric display with trend, optional sparkline */
 export interface DataCardComponent {
   DataCard: {
     title: A2UIBoundValue;
@@ -231,6 +247,8 @@ export interface DataCardComponent {
     trend?: A2UIBoundValue; // 'up' | 'down' | 'flat'
     trendValue?: A2UIBoundValue;
     icon?: A2UIBoundValue;
+    changeLabel?: A2UIBoundValue;
+    sparkline?: A2UIBoundValue;
   };
 }
 
@@ -250,6 +268,9 @@ export interface CodeBlockComponent {
     code: A2UIBoundValue;
     language?: A2UIBoundValue;
     title?: A2UIBoundValue;
+    showLineNumbers?: A2UIBoundValue;
+    maxHeight?: A2UIBoundValue;
+    highlightLines?: A2UIBoundValue;
   };
 }
 
@@ -259,6 +280,38 @@ export interface MarkdownComponent {
     content: A2UIBoundValue;
   };
 }
+
+/** Timeline component - displays events in chronological order */
+export interface TimelineComponent {
+  Timeline: {
+    items: A2UIBoundValue;
+    title?: A2UIBoundValue;
+    direction?: A2UIBoundValue; // 'vertical' | 'horizontal'
+  };
+}
+
+/** Badge component
+/** Badge component - inline label/tag with status colors */
+export interface BadgeComponent {
+  Badge: {
+    text: A2UIBoundValue;
+    variant?: A2UIBoundValue; // 'success' | 'warning' | 'error' | 'info' | 'neutral'
+    color?: A2UIBoundValue;
+    icon?: A2UIBoundValue;
+  };
+}
+
+/** JsonViewer component - collapsible tree view for JSON data */
+export interface JsonViewerComponent {
+  JsonViewer: {
+    data: A2UIBoundValue;
+    title?: A2UIBoundValue;
+    defaultExpandDepth?: A2UIBoundValue;
+    theme?: A2UIBoundValue; // 'light' | 'dark'
+  };
+}
+
+
 
 // ==================== Surface State Management ====================
 
@@ -289,12 +342,13 @@ export const AGENTSTUDIO_CATALOG_ID = 'https://agentstudio.ai/a2ui/v1/catalog';
 
 export const STANDARD_CATALOG_COMPONENTS = [
   'Text', 'Image', 'Icon', 'Divider',
-  'Button', 'TextField', 'CheckBox',
+  'Button', 'TextField', 'CheckBox', 'Slider', 'DateTimeInput',
   'Row', 'Column', 'Card', 'Modal', 'Tabs', 'List'
 ] as const;
 
 export const CUSTOM_CATALOG_COMPONENTS = [
-  'Chart', 'Table', 'DataCard', 'Progress', 'CodeBlock', 'Markdown'
+  'Chart', 'Table', 'DataCard', 'Progress', 'CodeBlock', 'Markdown',
+  'Timeline', 'Badge', 'JsonViewer'
 ] as const;
 
 export const ALL_CATALOG_COMPONENTS = [

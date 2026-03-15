@@ -24,6 +24,11 @@ import { A2UIDataCard } from './components/DataCardComponent';
 import { A2UIProgress } from './components/ProgressComponent';
 import { A2UICodeBlock } from './components/CodeBlockComponent';
 import { A2UIMarkdown } from './components/MarkdownComponent';
+import { A2UITimeline } from './components/TimelineComponent';
+import { A2UIBadge } from './components/BadgeComponent';
+import { A2UIJsonViewer } from './components/JsonViewerComponent';
+import { A2UISlider } from './components/SliderComponent';
+import { A2UIDateTimeInput } from './components/DateTimeInputComponent';
 
 interface A2UIRendererProps {
   /** A2UI server messages to render */
@@ -267,6 +272,38 @@ const ComponentRenderer: React.FC<{
       );
     }
 
+    case 'Slider': {
+      const sliderValue = resolve(props.value) || 0;
+      return (
+        <A2UISlider
+          value={sliderValue}
+          minValue={props.minValue}
+          maxValue={props.maxValue}
+          onChange={(newValue) => {
+            if (onAction) {
+              onAction('sliderChange', { value: newValue }, surface.surfaceId, component.id);
+            }
+          }}
+        />
+      );
+    }
+
+    case 'DateTimeInput': {
+      const dtValue = resolve(props.value) || '';
+      return (
+        <A2UIDateTimeInput
+          value={dtValue}
+          enableDate={props.enableDate}
+          enableTime={props.enableTime}
+          onChange={(newValue) => {
+            if (onAction) {
+              onAction('dateTimeChange', { value: newValue }, surface.surfaceId, component.id);
+            }
+          }}
+        />
+      );
+    }
+
     // ==================== Container Components ====================
     case 'Card':
       return (
@@ -348,6 +385,8 @@ const ComponentRenderer: React.FC<{
           trend={resolve(props.trend)}
           trendValue={resolve(props.trendValue)}
           icon={resolve(props.icon)}
+          changeLabel={resolve(props.changeLabel)}
+          sparkline={resolve(props.sparkline)}
         />
       );
 
@@ -367,6 +406,9 @@ const ComponentRenderer: React.FC<{
           code={resolve(props.code) || ''}
           language={resolve(props.language)}
           title={resolve(props.title)}
+          showLineNumbers={resolve(props.showLineNumbers)}
+          maxHeight={resolve(props.maxHeight)}
+          highlightLines={resolve(props.highlightLines)}
         />
       );
 
@@ -374,6 +416,38 @@ const ComponentRenderer: React.FC<{
       return (
         <A2UIMarkdown content={resolve(props.content) || ''} />
       );
+
+    // ==================== New Data Display Components ====================
+    case 'Timeline':
+      return (
+        <A2UITimeline
+          items={resolve(props.items) || []}
+          title={resolve(props.title)}
+          direction={resolve(props.direction)}
+        />
+      );
+
+    case 'Badge':
+      return (
+        <A2UIBadge
+          text={resolve(props.text) || ''}
+          variant={resolve(props.variant)}
+          color={resolve(props.color)}
+          icon={resolve(props.icon)}
+        />
+      );
+
+    case 'JsonViewer':
+      return (
+        <A2UIJsonViewer
+          data={resolve(props.data)}
+          title={resolve(props.title)}
+          defaultExpandDepth={resolve(props.defaultExpandDepth)}
+          theme={resolve(props.theme)}
+        />
+      );
+
+
 
     // ==================== Unknown Component ====================
     default:

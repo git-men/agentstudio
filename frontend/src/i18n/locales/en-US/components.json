@@ -104,7 +104,9 @@
     "noProject": "No Project Selected",
     "selectProjectFirst": "Please select a project first to browse files",
     "collapsePanel": "Collapse directory panel",
-    "expandPanel": "Expand directory panel"
+    "expandPanel": "Expand directory panel",
+    "sourceCode": "Source",
+    "preview": "Preview"
   },
   "sessionDropdown": {
     "title": "Session Management",

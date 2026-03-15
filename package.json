@@ -24,6 +24,8 @@
     "test:e2e": "node tests/e2e/run.mjs",
     "test:e2e:hooks": "node tests/e2e/run.mjs --spec hooks",
     "test:e2e:safety": "node tests/e2e/run.mjs --spec safety-check",
+    "storybook": "pnpm --filter @agentstudio/frontend run storybook",
+    "build-storybook": "pnpm --filter @agentstudio/frontend run build-storybook",
     "lint": "pnpm --recursive run lint",
     "type-check": "pnpm --recursive run type-check",
     "clean": "pnpm --recursive run clean --if-present",
