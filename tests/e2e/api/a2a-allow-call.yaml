@@ -1,0 +1,150 @@
+name: A2A 允许调用管理
+sequential: true
+
+setup:
+  - waitForPort:
+      host: localhost
+      port: 14936
+      timeout: "120s"
+
+cases:
+  # --- 前置：获取认证 Token ---
+
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
+  # --- 前置：注册两个项目（调用方 + 被调用方）---
+
+  - name: "注册调用方项目"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/projects"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        path: "/tmp/e2e-a2a-caller"
+        name: "e2e-a2a-caller"
+    expect:
+      status:
+        oneOf: [200, 201]
+    save:
+      caller_path: "path"
+
+  - name: "注册被调用方项目"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/projects"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        path: "/tmp/e2e-a2a-target"
+        name: "e2e-a2a-target"
+    expect:
+      status:
+        oneOf: [200, 201]
+    save:
+      target_path: "path"
+
+  # --- 核心：通过 A2A 管理 API 导入项目 ---
+
+  - name: "A2A 配置初始为空列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/config/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        allowedAgents: { length: 0 }
+
+  - name: "导入目标项目为允许的 Agent"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/import-projects/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        projectPaths:
+          - "/tmp/e2e-a2a-target"
+    expect:
+      status: 200
+      body:
+        successfulImports: { length: 1 }
+
+  - name: "导入后 allowedAgents 包含目标项目"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/config/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        allowedAgents:
+          length: 1
+          some:
+            name: "e2e-a2a-target"
+            enabled: true
+            apiKey: { exists: true, type: string }
+            url: { exists: true, type: string }
+
+  - name: "重复导入同一目标返回失败"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/import-projects/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        projectPaths:
+          - "/tmp/e2e-a2a-target"
+    expect:
+      status: 200
+      body:
+        failedImports: { length: 1 }
+        successfulImports: { length: 0 }
+
+  # --- 清理：移除允许列表条目 ---
+
+  - name: "更新配置清空 allowedAgents"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/a2a/config/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        allowedAgents: []
+        taskTimeout: 300000
+        maxConcurrentTasks: 5
+    expect:
+      status: 200
+      body:
+        allowedAgents: { length: 0 }
+
+  - name: "确认清空后列表为空"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/config/%2Ftmp%2Fe2e-a2a-caller"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        allowedAgents: { length: 0 }

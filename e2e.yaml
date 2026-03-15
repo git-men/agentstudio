@@ -102,6 +102,10 @@ tests:
       id: plugins-marketplace
       file: tests/e2e/api/plugins-marketplace.yaml
 
+    - name: "A2A 允许调用管理"
+      id: a2a-allow-call
+      file: tests/e2e/api/a2a-allow-call.yaml
+
     - name: "隧道管理"
       id: tunnel-crud
       file: tests/e2e/api/tunnel-crud.yaml
