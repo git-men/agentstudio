@@ -24,6 +24,7 @@ import skillsRouter from './routes/skills';
 import pluginsRouter from './routes/plugins';
 import marketplaceSkillsRouter from './routes/marketplaceSkills';
 import a2aRouter from './routes/a2a';
+import a2aJsonRpcRouter from './routes/a2aJsonRpc';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
 import mcpAdminRouter from './routes/mcpAdmin';
@@ -556,6 +557,9 @@ const app: express.Express = express();
   );
 
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
+  // JSON-RPC router handles standard A2A protocol; mounted first for priority
+  app.use('/a2a/:a2aAgentId', httpsOnly, a2aJsonRpcRouter);
+  // REST router handles legacy custom protocol
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aRouter);
 
   // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)

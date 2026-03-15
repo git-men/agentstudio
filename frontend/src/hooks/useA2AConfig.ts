@@ -12,6 +12,8 @@ export interface A2AConfig {
   maxConcurrentTasks: number;
 }
 
+export type A2AProtocolType = 'custom' | 'a2a-jsonrpc';
+
 /**
  * Allowed External Agent Interface
  */
@@ -21,6 +23,9 @@ export interface AllowedAgent {
   apiKey: string;
   description?: string;
   enabled: boolean;
+  protocolType?: A2AProtocolType;
+  customHeaders?: Record<string, string>;
+  agentCardUrl?: string;
 }
 
 /**

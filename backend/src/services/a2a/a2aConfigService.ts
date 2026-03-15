@@ -140,8 +140,24 @@ export function validateA2AConfig(config: A2AConfig): {
         }
       }
 
-      if (agent.apiKey === undefined || typeof agent.apiKey !== 'string') {
-        errors.push(`allowedAgents[${index}].apiKey is required and must be a string`);
+      const proto = agent.protocolType || 'custom';
+      if (proto !== 'custom' && proto !== 'a2a-jsonrpc') {
+        errors.push(`allowedAgents[${index}].protocolType must be 'custom' or 'a2a-jsonrpc'`);
+      }
+
+      // apiKey is required for custom protocol; optional for a2a-jsonrpc
+      if (proto === 'custom') {
+        if (agent.apiKey === undefined || typeof agent.apiKey !== 'string') {
+          errors.push(`allowedAgents[${index}].apiKey is required and must be a string`);
+        }
+      } else if (agent.apiKey !== undefined && typeof agent.apiKey !== 'string') {
+        errors.push(`allowedAgents[${index}].apiKey must be a string when provided`);
+      }
+
+      if (agent.customHeaders !== undefined) {
+        if (typeof agent.customHeaders !== 'object' || Array.isArray(agent.customHeaders)) {
+          errors.push(`allowedAgents[${index}].customHeaders must be an object`);
+        }
       }
 
       if (typeof agent.enabled !== 'boolean') {

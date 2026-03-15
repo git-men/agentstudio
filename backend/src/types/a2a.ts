@@ -174,6 +174,13 @@ export interface A2ATask {
 // ============================================================================
 
 /**
+ * Protocol type for communicating with an external A2A agent.
+ * - 'custom': AgentStudio's proprietary REST protocol (POST {url}/messages)
+ * - 'a2a-jsonrpc': Google A2A standard JSON-RPC 2.0 protocol (POST {url} with jsonrpc body)
+ */
+export type A2AProtocolType = 'custom' | 'a2a-jsonrpc';
+
+/**
  * Allowed external agent configuration
  */
 export interface AllowedAgent {
@@ -182,6 +189,12 @@ export interface AllowedAgent {
     apiKey: string; // Outbound API key (for calling this agent)
     description?: string;
     enabled: boolean;
+    /** Protocol type: 'custom' (default, legacy REST) or 'a2a-jsonrpc' (standard A2A) */
+    protocolType?: A2AProtocolType;
+    /** Additional HTTP headers to send with requests (e.g., { "X-User-Id": "kongjie" }) */
+    customHeaders?: Record<string, string>;
+    /** Pre-configured Agent Card URL; if omitted, derived from url + /.well-known/agent.json */
+    agentCardUrl?: string;
 }
 
 /**
