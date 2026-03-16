@@ -42,6 +42,8 @@ interface FileExplorerProps {
   onFileSelect?: (filePath: string) => void;
   className?: string;
   height?: string;
+  /** 'horizontal' = side-by-side (default), 'vertical' = stacked (for narrow panels) */
+  layout?: 'horizontal' | 'vertical';
 }
 
 // 图标映射表
@@ -331,7 +333,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   projectPath,
   onFileSelect,
   className = '',
-  height = '100vh'
+  height = '100vh',
+  layout = 'horizontal'
 }) => {
   const { t } = useTranslation('components');
   const [tabs, setTabs] = useState<FileTab[]>([]);
@@ -360,6 +363,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // HTML 预览模式：source 显示源码，preview 显示渲染效果
   const [htmlPreviewMode, setHtmlPreviewMode] = useState<'source' | 'preview'>('preview');
+
+  // Vertical layout state
+  const [containerWidth, setContainerWidth] = useState<number>(320);
+  const [treeHeight, setTreeHeight] = useState<number>(300);
+  const [isDraggingVertical, setIsDraggingVertical] = useState(false);
+  const mainContainerRef = useRef<HTMLDivElement>(null);
 
   // 获取项目ID用于媒体文件访问（暂时注释掉，未使用）
   // const { data: projectData } = useProjectId(projectPath);
@@ -585,9 +594,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     if (treeContainerRef.current) {
       resizeObserver = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          const { height } = entry.contentRect;
+          const { height, width } = entry.contentRect;
           if (height > 0) {
             setContainerHeight(height);
+          }
+          if (width > 0) {
+            setContainerWidth(width);
           }
         }
       });
@@ -606,6 +618,37 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       }
     };
   }, [fileTreeData]); // 当数据变化时重新计算
+
+  // Vertical resize handler for stacked layout
+  const handleVerticalMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingVertical(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isDraggingVertical) return;
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!mainContainerRef.current) return;
+      const rect = mainContainerRef.current.getBoundingClientRect();
+      const newH = e.clientY - rect.top;
+      setTreeHeight(Math.max(100, Math.min(rect.height - 150, newH)));
+    };
+
+    const onMouseUp = () => setIsDraggingVertical(false);
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [isDraggingVertical]);
 
   // 处理点击外部关闭下拉菜单
   useEffect(() => {
@@ -984,11 +1027,19 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     );
   }
 
+  const isVertical = layout === 'vertical';
+
   return (
-    <div className={`flex h-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden ${className}`}>
+    <div
+      ref={mainContainerRef}
+      className={`${isVertical ? 'flex flex-col' : 'flex'} h-full bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden ${className}`}
+    >
         {/* 文件树侧边栏 */}
       {!isTreePanelCollapsed && (
-        <div className="w-80 border-r border-gray-200 dark:border-gray-700 flex flex-col h-full">
+        <div
+          className={`${isVertical ? 'border-b' : 'w-80 border-r'} border-gray-200 dark:border-gray-700 flex flex-col ${isVertical ? 'flex-shrink-0 overflow-hidden' : 'h-full'}`}
+          style={isVertical ? { height: treeHeight } : undefined}
+        >
           {/* 工具栏 - 统一高度 */}
           <div className="h-12 px-3 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center flex-shrink-0">
             <div className="flex items-center justify-between w-full">
@@ -1042,7 +1093,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
           ) : (
             <Tree
               data={treeData}
-              width={320}
+              width={isVertical ? containerWidth : 320}
               height={containerHeight}
               indent={20}
               rowHeight={36}
@@ -1063,8 +1114,18 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
       )}
 
+      {/* Vertical resize handle (stacked layout only) */}
+      {isVertical && !isTreePanelCollapsed && (
+        <div
+          className={`flex-shrink-0 h-1 cursor-row-resize group relative ${isDraggingVertical ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500'} transition-colors`}
+          onMouseDown={handleVerticalMouseDown}
+        >
+          <div className="absolute inset-x-0 -top-1 -bottom-1" />
+        </div>
+      )}
+
       {/* 文件预览区域 */}
-      <div className="flex-1 flex flex-col h-full">
+      <div className={`flex-1 flex flex-col ${isVertical ? 'min-h-0' : 'h-full'}`}>
         {/* 标签栏 - 统一高度 */}
         <div className="h-12 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center flex-shrink-0">
           {/* 展开按钮（当目录面板折叠时显示） */}

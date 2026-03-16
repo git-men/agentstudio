@@ -9,13 +9,15 @@ interface WorkspaceLayoutProps {
   rightPanelVisible?: boolean;
   onToggleRightPanel?: () => void;
   footer?: React.ReactNode;
+  /** Initial width for the right panel (default 360px) */
+  defaultRightWidth?: number;
 }
 
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 600;
 const RIGHT_MIN = 250;
-const RIGHT_MAX = 700;
 const RIGHT_DEFAULT = 360;
+const CENTER_MIN = 300;
 
 /**
  * Resizable multi-panel layout for the workspace view.
@@ -31,6 +33,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   rightPanelVisible = false,
   onToggleRightPanel,
   footer,
+  defaultRightWidth = RIGHT_DEFAULT,
 }) => {
   const sidebarWidth = useSharedStore((s) => s.workspaceSidebarWidth);
   const setSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
@@ -39,7 +42,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
-  const [rightWidth, setRightWidth] = useState(RIGHT_DEFAULT);
+  const [rightWidth, setRightWidth] = useState(defaultRightWidth);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const handleLeftMouseDown = useCallback((e: React.MouseEvent) => {
@@ -63,7 +66,9 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
       }
       if (isDraggingRight) {
         const newWidth = rect.right - e.clientX;
-        setRightWidth(Math.max(RIGHT_MIN, Math.min(RIGHT_MAX, newWidth)));
+        const currentLeft = sidebarCollapsed ? 0 : sidebarWidth;
+        const rightMax = rect.width - currentLeft - CENTER_MIN;
+        setRightWidth(Math.max(RIGHT_MIN, Math.min(rightMax, newWidth)));
       }
     },
     [isDraggingLeft, isDraggingRight, setSidebarWidth],

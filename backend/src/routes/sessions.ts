@@ -349,7 +349,14 @@ function processCompactContextMessages(messages: ClaudeHistoryMessage[]): Claude
 }
 
 
-function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] {
+interface ReadSessionsOptions {
+  /** Filter out automated task sessions whose title starts with [TASK_...] */
+  excludeAutomatedTasks?: boolean;
+  /** Max sessions to return (newest first based on file mtime) */
+  limit?: number;
+}
+
+function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOptions): ClaudeHistorySession[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
     const allDirs = getAllProjectsDirs();
@@ -375,9 +382,24 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
         .filter(file => !file.startsWith('.'))
         .filter(file => !file.startsWith('agent-')); // 过滤掉 agent-xxx.jsonl 文件
 
+      // Sort files by modification time (newest first) for better perf with limit
+      const sortedFiles = jsonlFiles.map(file => {
+        try {
+          const stat = fs.statSync(path.join(historyDir, file));
+          return { file, mtime: stat.mtimeMs };
+        } catch {
+          return { file, mtime: 0 };
+        }
+      }).sort((a, b) => b.mtime - a.mtime);
+
+      // Apply limit: process at most N files per directory
+      const filesToProcess = options?.limit
+        ? sortedFiles.slice(0, options.limit)
+        : sortedFiles;
+
       const sessions: ClaudeHistorySession[] = [];
 
-    for (const filename of jsonlFiles) {
+    for (const { file: filename } of filesToProcess) {
       const sessionId = filename.replace('.jsonl', '');
       const filePath = path.join(historyDir, filename);
       
@@ -434,6 +456,11 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
         // Final fallback
         if (!title) {
           title = `会话 ${sessionId.slice(0, 8)}`;
+        }
+
+        // Skip automated task sessions early (before expensive message processing)
+        if (options?.excludeAutomatedTasks && /^\[TASK_\w+\]/.test(title)) {
+          continue;
         }
 
         // Process compact context messages before filtering
@@ -965,6 +992,7 @@ router.get('/by-project', async (req, res) => {
   try {
     const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
     const { search } = req.query;
+    const showAutomated = req.query.showAutomated === 'true';
 
     if (!projectPath) {
       return res.status(400).json({ error: 'projectPath query parameter is required' });
@@ -972,6 +1000,10 @@ router.get('/by-project', async (req, res) => {
 
     let sessions: any[] = [];
     const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+    const sessionOpts: ReadSessionsOptions = {
+      excludeAutomatedTasks: !showAutomated,
+      limit: 200,
+    };
 
     if (defaultEngine.readSessions) {
       const engineSessions = await defaultEngine.readSessions(projectPath);
@@ -982,8 +1014,12 @@ router.get('/by-project', async (req, res) => {
         lastUpdated: session.lastUpdated,
         messageCount: session.messages.length,
       }));
+      // Filter automated tasks from engine results too
+      if (!showAutomated) {
+        sessions = sessions.filter(s => !/^\[TASK_\w+\]/.test(s.title || ''));
+      }
     } else {
-      const claudeSessions = readClaudeHistorySessions(projectPath);
+      const claudeSessions = readClaudeHistorySessions(projectPath, sessionOpts);
       sessions = claudeSessions.map((session) => ({
         id: session.id,
         title: session.title,

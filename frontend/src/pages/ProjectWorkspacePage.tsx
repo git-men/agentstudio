@@ -228,6 +228,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
+        defaultRightWidth={600}
         sidebar={
           <ProjectSessionListPanel
             projectPath={projectPath}
