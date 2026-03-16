@@ -6,9 +6,13 @@
  * and tool call display.
  */
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
 import { Clock, Plus, RefreshCw, ChevronDown } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
+import { useSharedStore } from '../stores/useSharedStore';
+import { SessionStoreContext, useSessionStoreOptional, useIsWorkspaceMode } from '../stores/SessionStoreContext';
+import { sessionStoreManager } from '../services/SessionStoreManager';
+import { SessionStreamManager } from '../services/SessionStreamManager';
 import { useAgentSessions, useInterruptSession } from '../hooks/useAgents';
 import { useSessions } from '../hooks/useSessions';
 import { useSessionHeartbeatOnSuccess } from '../hooks/useSessionHeartbeatOnSuccess';
@@ -87,21 +91,50 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     const [projectDefaultProvider, setProjectDefaultProvider] = useState<string | undefined>(undefined);
     const [projectDefaultModel, setProjectDefaultModel] = useState<string | undefined>(undefined);
 
-    // Agent store state
-    const {
-        messages,
-        isAiTyping,
-        currentSessionId,
-        mcpStatus,
-        pendingFrontendTools,
-        selectedEngine,
-        engineUICapabilities,
-        engineModels,
-        addMessage,
-        interruptAllExecutingTools,
-        setAiTyping,
-        removePendingFrontendTool,
-    } = useAgentStore();
+    // ---- Dual-mode state: workspace (Context) vs legacy (facade) ----
+    const isWorkspaceMode = useIsWorkspaceMode();
+
+    // Session-scoped state — from SessionStoreContext when in workspace
+    // mode, from useAgentStore facade when in legacy ChatPage mode.
+    // Both hooks are always called (hook-rule safe); we pick values below.
+    const ctxMessages = useSessionStoreOptional((s) => s.messages);
+    const ctxIsAiTyping = useSessionStoreOptional((s) => s.isAiTyping);
+    const ctxMcpStatus = useSessionStoreOptional((s) => s.mcpStatus);
+    const ctxPendingFrontendTools = useSessionStoreOptional((s) => s.pendingFrontendTools);
+    const ctxAddMessage = useSessionStoreOptional((s) => s.addMessage);
+    const ctxInterruptAllExecutingTools = useSessionStoreOptional((s) => s.interruptAllExecutingTools);
+    const ctxSetAiTyping = useSessionStoreOptional((s) => s.setAiTyping);
+    const ctxRemovePendingFrontendTool = useSessionStoreOptional((s) => s.removePendingFrontendTool);
+    const ctxSessionId = useSessionStoreOptional((s) => s.sessionId);
+
+    // Shared state — always from the shared singleton
+    const selectedEngine = useSharedStore((s) => s.selectedEngine);
+    const engineUICapabilities = useSharedStore((s) => s.engineUICapabilities);
+    const engineModels = useSharedStore((s) => s.engineModels);
+
+    // Legacy facade state (always called to satisfy hook rules)
+    const facadeState = useAgentStore();
+
+    // Pick session-scoped values based on mode
+    const messages = isWorkspaceMode ? ctxMessages : facadeState.messages;
+    const isAiTyping = isWorkspaceMode ? ctxIsAiTyping : facadeState.isAiTyping;
+    const currentSessionId = isWorkspaceMode ? ctxSessionId : facadeState.currentSessionId;
+    const mcpStatus = isWorkspaceMode ? ctxMcpStatus : facadeState.mcpStatus;
+    const pendingFrontendTools = isWorkspaceMode ? ctxPendingFrontendTools : facadeState.pendingFrontendTools;
+    const addMessage = isWorkspaceMode ? ctxAddMessage : facadeState.addMessage;
+    const interruptAllExecutingTools = isWorkspaceMode ? ctxInterruptAllExecutingTools : facadeState.interruptAllExecutingTools;
+    const ctxSetStatus = useSessionStoreOptional((s) => s.setStatus);
+    const rawSetAiTyping = isWorkspaceMode ? ctxSetAiTyping : facadeState.setAiTyping;
+    const setAiTyping = useCallback(
+        (typing: boolean) => {
+            rawSetAiTyping(typing);
+            if (isWorkspaceMode) {
+                ctxSetStatus(typing ? 'running' : 'completed');
+            }
+        },
+        [rawSetAiTyping, isWorkspaceMode, ctxSetStatus],
+    );
+    const removePendingFrontendTool = isWorkspaceMode ? ctxRemovePendingFrontendTool : facadeState.removePendingFrontendTool;
 
     // Auto-send ref for initial message
     const shouldAutoSendRef = useRef(false);
@@ -114,6 +147,29 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             shouldAutoSendRef.current = true;
         }
     }, [initialMessage, hasProcessedInitialMessage]);
+
+    // T021: Auto-derive session title from first user message (workspace mode)
+    const ctxTitle = useSessionStoreOptional((s) => s.title);
+    const ctxSetTitle = useSessionStoreOptional((s) => s.setTitle);
+    const titleDerivedRef = useRef(false);
+    useEffect(() => {
+        if (!isWorkspaceMode || titleDerivedRef.current || ctxTitle) return;
+        const firstUserMsg = messages.find((m) => m.role === 'user');
+        if (!firstUserMsg) return;
+        const text = (firstUserMsg.content || '').trim();
+        if (!text) return;
+        const derived =
+            text.length <= 50
+                ? text
+                : text.slice(0, 50).replace(/\s+\S*$/, '') + '…';
+        ctxSetTitle(derived);
+        titleDerivedRef.current = true;
+    }, [isWorkspaceMode, messages, ctxTitle, ctxSetTitle]);
+
+    // Reset title derivation flag when session changes
+    useEffect(() => {
+        titleDerivedRef.current = false;
+    }, [currentSessionId]);
 
     // UI state management
     const uiState = useUIState();
@@ -400,6 +456,28 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // Check if commands failed to load
     const hasCommandsLoadError = !!(userCommandsError || projectCommandsError);
 
+    // Workspace mode: get the raw StoreApi and a SessionStreamManager for the
+    // active session so that SSE events write directly to the session store.
+    const sessionStoreApi = useContext(SessionStoreContext);
+    const workspaceStreamManagerRef = useRef<SessionStreamManager | null>(null);
+
+    const workspaceStreamManager = useMemo(() => {
+        if (!isWorkspaceMode || !sessionStoreApi) return undefined;
+        if (
+            workspaceStreamManagerRef.current &&
+            (workspaceStreamManagerRef.current as any)._store === sessionStoreApi
+        ) {
+            return workspaceStreamManagerRef.current;
+        }
+        const mgr = new SessionStreamManager(sessionStoreApi);
+        (mgr as any)._store = sessionStoreApi;
+        workspaceStreamManagerRef.current = mgr;
+
+        const sid = sessionStoreApi.getState().sessionId;
+        sessionStoreManager.attachStream(sid, mgr);
+        return mgr;
+    }, [isWorkspaceMode, sessionStoreApi]);
+
     // Message sender hook
     const { isSendDisabled, handleSendMessage } = useMessageSender({
         agent,
@@ -441,6 +519,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         getAllAvailableCommands,
         envVars,
         environmentContext,
+        sessionStore: isWorkspaceMode ? sessionStoreApi ?? undefined : undefined,
+        externalStreamManager: workspaceStreamManager,
     });
 
     // Auto-send initial message when conditions are met

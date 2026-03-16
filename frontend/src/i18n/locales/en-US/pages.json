@@ -375,6 +375,11 @@
       "error": "❌ Error"
     }
   },
+  "workspace": {
+    "emptyTitle": "Welcome to Workspace",
+    "emptyDescription": "Create a new session to start chatting with your agent.",
+    "newSession": "New Session"
+  },
   "dashboard": {
     "title": "Dashboard",
     "welcome": "Welcome back to Claude Code workspace",

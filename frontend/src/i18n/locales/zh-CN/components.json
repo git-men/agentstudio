@@ -1325,5 +1325,24 @@
     "permissionDenied": "请允许使用麦克风",
     "noDevice": "未找到麦克风设备",
     "tooShort": "录音时间太短"
+  },
+  "workspace": {
+    "newSession": "新建会话",
+    "searchSessions": "搜索会话…",
+    "noSessions": "暂无会话",
+    "noMatchingSessions": "没有匹配的会话",
+    "createFirst": "点击「新建会话」开始",
+    "removeSession": "移除会话",
+    "removeConfirm": "再次点击确认",
+    "sessionRemoved": "会话已移除",
+    "status": {
+      "idle": "空闲",
+      "running": "运行中",
+      "completed": "已完成",
+      "error": "错误"
+    },
+    "defaultTitle": "新建会话",
+    "sidebarToggle": "切换侧边栏",
+    "loadingMessages": "加载消息中…"
   }
 }

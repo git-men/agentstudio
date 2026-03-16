@@ -43,6 +43,7 @@ const SkillsPage = lazy(() => import('./pages/SkillsPage').then(module => ({ def
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(module => ({ default: module.PluginsPage })));
 const ScheduledTasksPage = lazy(() => import('./pages/ScheduledTasksPage').then(module => ({ default: module.ScheduledTasksPage })));
 const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })));
+const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(module => ({ default: module.default })));
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.default })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
@@ -120,6 +121,12 @@ const AppContent: React.FC = () => {
           <Route path="/chat/:agentId" element={
             <ProtectedRoute>
               <ChatPage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/workspace/:agentId" element={
+            <ProtectedRoute>
+              <WorkspacePage />
             </ProtectedRoute>
           } />
 
