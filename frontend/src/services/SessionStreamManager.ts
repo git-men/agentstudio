@@ -44,6 +44,11 @@ export class SessionStreamManager {
     return this.store;
   }
 
+  /** Re-bind this manager to a different session store (used when temp → real ID migration). */
+  rebindStore(newStore: StoreApi<SessionState & SessionActions>): void {
+    this.store = newStore;
+  }
+
   setTranslateFn(fn: TranslateFn): void {
     this.translateFn = fn;
   }

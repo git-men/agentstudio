@@ -525,11 +525,14 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
           }
         };
 
+        const isTempAguiId = currentSessionId?.startsWith('session_') || currentSessionId?.startsWith('__pending_');
+        const effectiveAguiSessionId = (sessionStore && isTempAguiId) ? undefined : (currentSessionId || undefined);
+
         await aguiChat.sendMessage({
           message: userMessage,
           engineType: selectedEngine as 'cursor' | 'codebuddy',
           workspace: projectPath || '.',
-          sessionId: currentSessionId || undefined,
+          sessionId: effectiveAguiSessionId,
           model: selectedModel,
           images: imageData.length > 0 ? imageData : undefined,
           envVars: Object.keys(envVars).length > 0 ? envVars : undefined,
@@ -553,12 +556,15 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
       } else {
         console.log('🚀 [MessageSender] Using Claude Engine');
 
+        const isTempId = currentSessionId?.startsWith('session_') || currentSessionId?.startsWith('__pending_');
+        const effectiveSessionId = (sessionStore && isTempId) ? undefined : currentSessionId;
+
         await agentChatMutation.mutateAsync({
           agentId: agent.id,
           message: userMessage,
           images: imageData.length > 0 ? imageData : undefined,
           context,
-          sessionId: currentSessionId,
+          sessionId: effectiveSessionId,
           projectPath,
           mcpTools: allSelectedTools.length > 0 ? allSelectedTools : undefined,
           permissionMode,

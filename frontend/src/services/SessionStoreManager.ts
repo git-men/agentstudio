@@ -111,6 +111,36 @@ class SessionStoreManagerImpl {
   }
 
   /**
+   * Migrates a session from oldId to newId in-place: re-keys the same store
+   * and stream references so that existing React subscribers (e.g. SessionStoreProvider)
+   * keep the same object identity — preventing unnecessary unmount/remount.
+   *
+   * Also updates the store's internal `sessionId` field.
+   */
+  migrateSession(oldId: string, newId: string): StoreApi<SessionState & SessionActions> | undefined {
+    if (oldId === newId) return this.stores.get(oldId);
+
+    const store = this.stores.get(oldId);
+    if (!store) return undefined;
+
+    // Re-key the store
+    this.stores.delete(oldId);
+    this.stores.set(newId, store);
+
+    // Update the store's internal sessionId
+    store.setState({ sessionId: newId } as Partial<SessionState>);
+
+    // Re-key the stream manager
+    const stream = this.streams.get(oldId);
+    if (stream) {
+      this.streams.delete(oldId);
+      this.streams.set(newId, stream);
+    }
+
+    return store;
+  }
+
+  /**
    * Returns the IDs of all sessions that currently have active stores.
    */
   getActiveSessionIds(): string[] {

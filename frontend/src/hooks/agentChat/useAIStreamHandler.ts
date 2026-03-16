@@ -148,19 +148,34 @@ export const useAIStreamHandler = ({
 
         setIsInitializingSession(false);
 
-        if (!currentSessionId && newSessionId) {
+        const isTempSessionId = (id: string) =>
+          id.startsWith('session_') || id.startsWith('__pending_');
+
+        const needsRealIdReplacement =
+          (!currentSessionId && newSessionId) ||
+          (currentSessionId && isTempSessionId(currentSessionId) && newSessionId && newSessionId !== currentSessionId);
+
+        if (needsRealIdReplacement) {
+          const oldTempId = currentSessionId && isTempSessionId(currentSessionId) ? currentSessionId : null;
+
           setCurrentSessionId(newSessionId!);
           setIsNewSession(true);
           onSessionChange?.(newSessionId!);
           queryClient.invalidateQueries({ queryKey: ['agent-sessions', agentId] });
 
-          // Rebind internal manager to the real session store
+          // Migrate temp store → real store (workspace mode with externalStreamManager)
+          // Uses in-place re-keying to preserve the same store reference, preventing
+          // React component unmount/remount that would abort the active SSE stream.
+          if (oldTempId && externalStreamManager) {
+            sessionStoreManager.migrateSession(oldTempId, newSessionId!);
+          }
+
+          // Rebind internal manager to the real session store (legacy mode)
           if (internalManagerRef.current) {
             const pendingId = pendingStoreIdRef.current;
             const pendingStore = pendingId ? sessionStoreManager.getStore(pendingId) : undefined;
             const realStore = sessionStoreManager.getOrCreate(newSessionId!, agentId);
 
-            // Transfer any messages from pending store
             if (pendingStore && pendingStore !== realStore) {
               const pendingMessages = pendingStore.getState().messages;
               if (pendingMessages.length > 0 && realStore.getState().messages.length === 0) {
@@ -173,7 +188,6 @@ export const useAIStreamHandler = ({
             }
             pendingStoreIdRef.current = null;
 
-            // Create new manager bound to the real store
             const mgr = new SessionStreamManager(realStore);
             mgr.setTranslateFn(t);
             internalManagerRef.current = mgr;
@@ -264,6 +278,7 @@ export const useAIStreamHandler = ({
       t,
       queryClient,
       getOrCreateManager,
+      externalStreamManager,
     ],
   );
 
