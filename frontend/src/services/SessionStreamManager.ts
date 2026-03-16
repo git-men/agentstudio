@@ -777,6 +777,7 @@ export class SessionStreamManager {
   // -------------------------------------------------------------------
 
   private handleMcpStatus(eventData: any): void {
+    const t = this.translateFn;
     if (eventData.subtype === 'connection_failed') {
       const failedServers = eventData.failedServers || [];
       this.actions.updateMcpStatus({
@@ -796,6 +797,7 @@ export class SessionStreamManager {
   }
 
   private handleMcpError(eventData: any): void {
+    const t = this.translateFn;
     if (eventData.subtype === 'execution_failed') {
       const toolName = eventData.tool || t('mcpStatus.unknownTool');
       const errorMessage = eventData.error || t('mcpStatus.executionFailed');
