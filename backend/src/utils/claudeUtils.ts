@@ -15,6 +15,7 @@ import { promisify } from 'util';
 import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
+import { integrateA2UIMcpServer } from '../services/a2ui/a2uiIntegration.js';
 import { resolveConfig } from './configResolver.js';
 
 export type { SessionRef };
@@ -501,9 +502,16 @@ export async function buildQueryOptions(
   // Integrate LAVS SDK MCP server
   // Pass projectPath for project-level data isolation
   if (agent.id) {
-    const { integrateLAVSMcpServer } = await import('../lavs/lavs-integration.js');
+    // Use require() instead of dynamic import() for compatibility with Worker threads
+    // running under tsx/cjs loader. Dynamic import() bypasses the CJS tsx loader and
+    // uses ESM resolution which cannot resolve .js -> .ts file mappings.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { integrateLAVSMcpServer } = require('../lavs/lavs-integration') as typeof import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }
+
+  // Integrate A2UI MCP server for rich UI rendering
+  await integrateA2UIMcpServer(queryOptions);
 
   // Integrate frontend tool MCP servers (includes ask_user_question + client-provided tools)
   let frontendToolSessionRef: SessionRef | null = null;

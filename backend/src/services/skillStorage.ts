@@ -8,20 +8,20 @@ import type {
   SkillValidationOptions,
   SkillStorageOptions
 } from '../types/skills';
-import { getSkillsDir, getSdkDirName } from '../config/engineConfig.js';
+import { getSkillsDir } from '../config/engineConfig.js';
 
 export class SkillStorage {
   private userSkillsDir: string;
-  private projectSkillsDir: string;
+  private projectSkillsDir: string | null;
   private options: SkillStorageOptions;
 
   constructor(
     userSkillsDir: string = getSkillsDir(),
-    projectSkillsDir: string = path.join(process.cwd(), '..', getSdkDirName(), 'skills'),
+    projectSkillsDir?: string,
     options: SkillStorageOptions = {}
   ) {
     this.userSkillsDir = userSkillsDir;
-    this.projectSkillsDir = projectSkillsDir;
+    this.projectSkillsDir = projectSkillsDir ?? null;
     this.options = {
       validateManifest: true,
       autoBackup: false,
@@ -32,7 +32,9 @@ export class SkillStorage {
   // Initialize directories
   async initialize(): Promise<void> {
     await this.ensureDirectory(this.userSkillsDir);
-    await this.ensureDirectory(this.projectSkillsDir);
+    if (this.projectSkillsDir) {
+      await this.ensureDirectory(this.projectSkillsDir);
+    }
   }
 
   // Get all skills
@@ -50,18 +52,20 @@ export class SkillStorage {
 
   // Get project skills
   async getProjectSkills(includeDisabled = false): Promise<SkillConfig[]> {
+    if (!this.projectSkillsDir) return [];
     return this.getSkillsFromDirectory(this.projectSkillsDir, 'project', includeDisabled);
   }
 
   // Get specific skill
   async getSkill(skillId: string, scope?: 'user' | 'project'): Promise<SkillConfig | null> {
-    // Try both directories if scope is not specified
-    const directories = scope 
-      ? [{ dir: scope === 'user' ? this.userSkillsDir : this.projectSkillsDir, scope }]
-      : [
-          { dir: this.userSkillsDir, scope: 'user' as const },
-          { dir: this.projectSkillsDir, scope: 'project' as const }
-        ];
+    // Build list of directories to search
+    const directories: Array<{ dir: string; scope: 'user' | 'project' }> = [];
+    if (!scope || scope === 'user') {
+      directories.push({ dir: this.userSkillsDir, scope: 'user' });
+    }
+    if ((!scope || scope === 'project') && this.projectSkillsDir) {
+      directories.push({ dir: this.projectSkillsDir, scope: 'project' });
+    }
 
     for (const { dir, scope: dirScope } of directories) {
       const skillPath = path.join(dir, skillId);
@@ -95,6 +99,9 @@ export class SkillStorage {
     try {
       const skillId = this.generateSkillId(skillData.name);
       const baseDir = skillData.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+      if (!baseDir) {
+        return { success: false, skillId: '', errors: ['Project skills directory not configured. Provide a projectPath when creating project-level skills.'] };
+      }
       const skillDir = path.join(baseDir, skillId);
 
       // Check if skill already exists
@@ -110,7 +117,7 @@ export class SkillStorage {
 
       // Create SKILL.md file
       const skillManifestPath = path.join(skillDir, 'SKILL.md');
-      const skillContent = this.createSkillManifestContent(
+      const skillContent = skillData.content || this.createSkillManifestContent(
         skillData.name,
         skillData.description,
         skillData.allowedTools
@@ -158,6 +165,9 @@ export class SkillStorage {
       }
 
       const baseDir = scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+      if (!baseDir) {
+        return { success: false, updatedFiles: [], errors: ['Project skills directory not configured'] };
+      }
       const skillDir = path.join(baseDir, skillId);
       const updatedFiles: string[] = [];
 
@@ -165,22 +175,32 @@ export class SkillStorage {
       if (updates.content || updates.name || updates.description || updates.allowedTools) {
         const skillManifestPath = path.join(skillDir, 'SKILL.md');
         
-        // Read existing manifest to get current values
-        const existingContent = await fs.readFile(skillManifestPath, 'utf8');
-        const existingManifest = await this.parseSkillManifest(existingContent);
+        let updatedContent: string;
         
-        // If content is provided, parse it to get new values
-        let manifestValues = existingManifest;
         if (updates.content) {
-          manifestValues = await this.parseSkillManifest(updates.content);
+          // Full content provided — use it directly, then apply any frontmatter overrides
+          if (updates.name || updates.description || updates.allowedTools) {
+            const parsed = await this.parseSkillManifest(updates.content);
+            updatedContent = this.replaceManifestFrontmatter(
+              updates.content,
+              updates.name ?? parsed.name,
+              updates.description ?? parsed.description,
+              updates.allowedTools ?? parsed.allowedTools
+            );
+          } else {
+            updatedContent = updates.content;
+          }
+        } else {
+          // Only metadata fields changed — read existing content and update frontmatter
+          const existingContent = await fs.readFile(skillManifestPath, 'utf8');
+          const existingManifest = await this.parseSkillManifest(existingContent);
+          updatedContent = this.replaceManifestFrontmatter(
+            existingContent,
+            updates.name ?? existingManifest.name,
+            updates.description ?? existingManifest.description,
+            updates.allowedTools ?? existingManifest.allowedTools
+          );
         }
-        
-        // Create updated content with merged values
-        const updatedContent = this.createSkillManifestContent(
-          updates.name ?? manifestValues.name,
-          updates.description ?? manifestValues.description,
-          updates.allowedTools ?? manifestValues.allowedTools
-        );
         
         await fs.writeFile(skillManifestPath, updatedContent, 'utf8');
         updatedFiles.push('SKILL.md');
@@ -211,6 +231,7 @@ export class SkillStorage {
     }
 
     const baseDir = skill.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+    if (!baseDir) return false;
     const skillDir = path.join(baseDir, skillId);
 
     try {
@@ -230,6 +251,7 @@ export class SkillStorage {
     }
 
     const baseDir = skill.scope === 'user' ? this.userSkillsDir : this.projectSkillsDir;
+    if (!baseDir) return null;
     const skillDir = path.join(baseDir, skillId);
 
     try {
@@ -412,6 +434,29 @@ export class SkillStorage {
     } catch (error) {
       throw new Error('Invalid skill manifest: failed to parse YAML');
     }
+  }
+
+  private replaceManifestFrontmatter(
+    fullContent: string,
+    name: string,
+    description: string,
+    allowedTools?: string[]
+  ): string {
+    const lines = fullContent.split('\n');
+    const frontmatterEnd = lines.findIndex((line, index) =>
+      index > 0 && line.trim() === '---'
+    );
+
+    if (frontmatterEnd === -1) {
+      return fullContent;
+    }
+
+    const body = lines.slice(frontmatterEnd + 1).join('\n');
+    const allowedToolsYaml = allowedTools && allowedTools.length > 0
+      ? `\nallowed-tools: [${allowedTools.map(tool => `"${tool}"`).join(', ')}]`
+      : '';
+
+    return `---\nname: ${name}\ndescription: ${description}${allowedToolsYaml}\n---${body}`;
   }
 
   private createSkillManifestContent(

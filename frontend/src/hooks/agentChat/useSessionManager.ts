@@ -64,7 +64,6 @@ export const useSessionManager = ({
       if (sessionStore) {
         sessionStore.getState().loadSessionMessages(messages);
       } else if (targetSessionId) {
-        // Workspace-aware: load into the session store if it exists
         const store = sessionStoreManager.getStore(targetSessionId);
         if (store) {
           store.getState().loadSessionMessages(messages);
@@ -80,23 +79,22 @@ export const useSessionManager = ({
 
   const setCurrentSessionId = useCallback(
     (id: string | null) => {
-      // In workspace mode, session switching is handled by the workspace page.
-      // In legacy mode, delegate to the facade.
       if (!sessionStore) {
         facadeSetSessionId(id);
       }
-      // For workspace mode: the session store is managed externally, so we
-      // don't set sessionId on the facade (it would cause unnecessary rebinding).
     },
     [sessionStore, facadeSetSessionId],
   );
 
   /**
    * Imperatively fetch messages for a session and load them into the appropriate store.
+   *
+   * After the async fetch completes, re-check `isAiTyping` from the store:
+   * if streaming started while the request was in flight, discard the
+   * response to avoid overwriting live-streamed data.
    */
   const loadMessagesForSession = useCallback(
     async (sessionId: string) => {
-      // Ensure the session store exists in the manager (workspace mode)
       sessionStoreManager.getOrCreate(sessionId, agentId);
 
       try {
@@ -110,6 +108,15 @@ export const useSessionManager = ({
           return;
         }
         const data = await response.json();
+
+        // Stale-check: if streaming started while the fetch was in flight,
+        // discard the result — the store already has live-streamed data.
+        const { isAiTyping } = useAgentStore.getState();
+        if (isAiTyping) {
+          console.log(`[SessionManager] Discarding fetched messages — streaming is active`);
+          return;
+        }
+
         const converted = (data.messages || []).map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp),
@@ -124,6 +131,13 @@ export const useSessionManager = ({
 
   const handleSwitchSession = useCallback(
     async (sessionId: string) => {
+      // Refuse to switch while streaming — it would corrupt both sessions
+      const { isAiTyping } = useAgentStore.getState();
+      if (isAiTyping) {
+        console.warn(`[SessionManager] Ignoring session switch to ${sessionId} — AI is still streaming`);
+        return;
+      }
+
       console.log(`[SessionManager] Switching to session ${sessionId}`);
       setCurrentSessionId(sessionId);
       setIsLoadingMessages(true);
@@ -152,6 +166,12 @@ export const useSessionManager = ({
   }, [onSessionChange, setCurrentSessionId, sessionStore, facadeClearMessages, textareaRef]);
 
   const handleRefreshMessages = useCallback(async () => {
+    // Guard: don't refresh while streaming
+    const { isAiTyping } = useAgentStore.getState();
+    if (isAiTyping) {
+      console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
+      return;
+    }
     if (currentSessionId) {
       setIsLoadingMessages(true);
       await loadMessagesForSession(currentSessionId);

@@ -1,56 +1,12 @@
-# Dependencies
 node_modules
-**/node_modules
-npm-debug.log
-pnpm-debug.log
-yarn-error.log
-
-# Build outputs
-*.tsbuildinfo
-**/*.tsbuildinfo
-
-# Development files
 .git
-.gitignore
-.env.local
-.env.development
-.env.test
-
-# IDE
-.vscode
-.cursor
-.idea
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Test files
-**/__tests__
-**/*.test.ts
-**/*.test.js
-**/*.spec.ts
-**/*.spec.js
-coverage
-
-# Docker (avoid copying Docker files into build context)
-.dockerignore
-docker-compose.yml
-
-# Documentation (keep CLAUDE.md for reference)
-*.md
-!CLAUDE.md
-
-# CI/CD
-.github
-.gitlab-ci.yml
-
-# Misc
+.worktrees
+frontend/node_modules
+frontend/dist
+backend/node_modules
+backend/dist
+extension-pure/node_modules
 *.log
-.cache
-tmp
-temp
-data
+.env
+.env.*
+!.env.example

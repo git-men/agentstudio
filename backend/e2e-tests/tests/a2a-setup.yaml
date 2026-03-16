@@ -1,0 +1,56 @@
+name: A2A 测试环境初始化
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+cases:
+  - name: "获取或创建 A2A Agent 映射"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/mapping/{{config.project_path_encoded}}"
+    expect:
+      status: 200
+      body:
+        a2aAgentId: { exists: true, type: string }
+        projectId: { exists: true, type: string }
+        agentType: { exists: true }
+        workingDirectory: { exists: true }
+    save:
+      a2a_agent_id: "a2aAgentId"
+      project_id: "projectId"
+      agent_type: "agentType"
+
+  - name: "为测试项目创建 API Key"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}"
+      headers:
+        Content-Type: application/json
+      body:
+        description: "E2E 测试临时密钥 - {{timestamp}}"
+    expect:
+      status: 201
+      body:
+        key: { exists: true, type: string, startsWith: "agt_proj_" }
+        id: { exists: true }
+    save:
+      api_key: "key"
+      api_key_id: "id"
+
+  - name: "验证 API Key 已列入清单"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}"
+    expect:
+      status: 200
+      body:
+        apiKeys: { length: { gt: 0 } }
+
+teardown:
+  - name: "清理测试 API Key"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}/{{runtime.api_key_id}}"
+    ignoreError: true

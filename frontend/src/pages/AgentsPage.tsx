@@ -51,6 +51,8 @@ export const AgentsPage: React.FC = () => {
   // Built-in system agents that cannot be edited or deleted
   const BUILTIN_AGENT_IDS = ['claude-code', 'meta-agent'];
   const isBuiltinAgent = (agent: AgentConfig) => BUILTIN_AGENT_IDS.includes(agent.id);
+  // Readonly agents: builtin system agents OR installed from marketplace plugins
+  const isReadonlyAgent = (agent: AgentConfig) => isBuiltinAgent(agent) || agent.source === 'plugin';
 
   // 🎯 显示所有已启用的 Agent，用户可以管理所有 Agent
   const userAgents = agents;
@@ -419,15 +421,13 @@ Please respond in Chinese unless the user specifically requests another language
                         <span>使用</span>
                       </button>
                     )}
-                    {!isBuiltinAgent(agent) && (
-                      <button
-                        onClick={() => handleEdit(agent)}
-                        className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded"
-                        title="编辑助手"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleEdit(agent)}
+                      className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded"
+                      title={isReadonlyAgent(agent) ? '查看配置' : '编辑助手'}
+                    >
+                      {isReadonlyAgent(agent) ? <Settings className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                    </button>
                     <button
                       onClick={() => handleDelete(agent)}
                       className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded"
@@ -448,16 +448,16 @@ Please respond in Chinese unless the user specifically requests another language
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[200px]">
                       {t('agents.table.agent')}
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-44">
                       {t('agents.table.config')}
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-96">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-auto min-w-[200px]">
                       工具
                     </TableHead>
-                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                    <TableHead className="px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
                       {t('agents.table.actions')}
                     </TableHead>
                   </TableRow>
@@ -466,9 +466,9 @@ Please respond in Chinese unless the user specifically requests another language
                   {filteredAgents.map((agent) => (
                     <TableRow key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors">
                       {/* Agent */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap w-48">
+                      <TableCell className="px-6 py-4 min-w-[200px]">
                         <div className="flex items-center">
-                          <div className={`text-2xl mr-4 ${!agent.enabled ? 'opacity-50' : ''}`}>
+                          <div className={`text-2xl mr-4 flex-shrink-0 ${!agent.enabled ? 'opacity-50' : ''}`}>
                             {agent.ui.icon}
                           </div>
                           <div className="min-w-0">
@@ -479,7 +479,7 @@ Please respond in Chinese unless the user specifically requests another language
                             </div>
                             <div className={`text-sm ${
                               agent.enabled ? 'text-gray-500 dark:text-gray-400' : 'text-gray-400 dark:text-gray-500'
-                            } truncate`}>
+                            } truncate max-w-xs`}>
                               {agent.description}
                             </div>
                           </div>
@@ -487,7 +487,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Configuration */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white w-48">
+                      <TableCell className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-white w-44">
                         <div className="space-y-1">
                           <div className="flex items-center">
                             <Settings className="w-3 h-3 mr-1 text-gray-400" />
@@ -506,7 +506,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Tools */}
-                      <TableCell className="px-6 py-4 w-96">
+                      <TableCell className="px-6 py-4 w-auto min-w-[200px]">
                         <ToolsList
                           tools={(agent.allowedTools?.filter((tool: AgentTool) => tool.enabled).map((tool: AgentTool) => tool.name) || [])}
                           id={agent.id}
@@ -518,7 +518,7 @@ Please respond in Chinese unless the user specifically requests another language
                       </TableCell>
 
                       {/* Actions */}
-                      <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-48">
+                      <TableCell className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium w-36">
                         <div className="flex items-center space-x-2">
                           {/* Start Using Button - Only show for enabled agents */}
                           {agent.enabled && (
@@ -546,15 +546,13 @@ Please respond in Chinese unless the user specifically requests another language
                           >
                             {agent.enabled ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
                           </button>
-                          {!isBuiltinAgent(agent) && (
-                            <button
-                              onClick={() => handleEdit(agent)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded transition-colors"
-                              title="编辑助手"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                          )}
+                          <button
+                            onClick={() => handleEdit(agent)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded transition-colors"
+                            title={isReadonlyAgent(agent) ? '查看配置' : '编辑助手'}
+                          >
+                            {isReadonlyAgent(agent) ? <Settings className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                          </button>
                           <button
                             onClick={() => handleDelete(agent)}
                             className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded transition-colors"
@@ -580,18 +578,27 @@ Please respond in Chinese unless the user specifically requests another language
           <div className="bg-white dark:bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-              <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
-                {isCreating ? '创建助手' : `编辑助手：${editingAgent?.name}`}
-              </h1>
+              <div className="flex items-center space-x-3">
+                <h1 className="text-xl font-semibold text-gray-900 dark:text-white">
+                  {isCreating ? '创建助手' : (editingAgent && isReadonlyAgent(editingAgent)) ? `查看助手：${editingAgent?.name}` : `编辑助手：${editingAgent?.name}`}
+                </h1>
+                {editingAgent && isReadonlyAgent(editingAgent) && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                    只读
+                  </span>
+                )}
+              </div>
               <div className="flex items-center space-x-2">
-                <button
-                  onClick={handleSave}
-                  disabled={updateAgent.isPending || createAgent.isPending}
-                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>保存</span>
-                </button>
+                {!(editingAgent && isReadonlyAgent(editingAgent)) && (
+                  <button
+                    onClick={handleSave}
+                    disabled={updateAgent.isPending || createAgent.isPending}
+                    className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>保存</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setEditingAgent(null);
@@ -602,7 +609,7 @@ Please respond in Chinese unless the user specifically requests another language
                   className="flex items-center space-x-2 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
                 >
                   <X className="w-4 h-4" />
-                  <span>取消</span>
+                  <span>{editingAgent && isReadonlyAgent(editingAgent) ? '关闭' : '取消'}</span>
                 </button>
               </div>
             </div>

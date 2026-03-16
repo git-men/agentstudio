@@ -13,7 +13,7 @@ import { VscJson, VscCode } from 'react-icons/vsc';
 import { SiTypescript } from 'react-icons/si';
 import { useFileTree, useFileContent, type FileSystemItem } from '../hooks/useFileSystem';
 import { API_BASE } from '../lib/config';
-import { Loader2, ChevronRight, RefreshCw, X, ChevronDown, MoreHorizontal, Eye, EyeOff, PanelLeftClose, PanelLeft } from 'lucide-react';
+import { Loader2, ChevronRight, RefreshCw, X, ChevronDown, MoreHorizontal, Eye, EyeOff, PanelLeftClose, PanelLeft, Code2, MonitorPlay } from 'lucide-react';
 import { eventBus, EVENTS } from '../utils/eventBus';
 
 // 将 FileSystemItem 转换为 react-arborist 需要的格式
@@ -246,6 +246,11 @@ const getFileType = (fileName: string): 'text' | 'image' | 'binary' => {
   return 'binary';
 };
 
+const isHtmlFile = (fileName: string): boolean => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  return ext === 'html' || ext === 'htm';
+};
+
 // 自定义节点渲染组件
 const Node: React.FC<{ 
   node: NodeApi<FileTreeItem>; 
@@ -352,6 +357,9 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   
   // 控制左侧目录面板的显示/隐藏
   const [isTreePanelCollapsed, setIsTreePanelCollapsed] = useState<boolean>(false);
+  
+  // HTML 预览模式：source 显示源码，preview 显示渲染效果
+  const [htmlPreviewMode, setHtmlPreviewMode] = useState<'source' | 'preview'>('preview');
 
   // 获取项目ID用于媒体文件访问（暂时注释掉，未使用）
   // const { data: projectData } = useProjectId(projectPath);
@@ -868,7 +876,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         return <SimpleImagePreview imageUrl={imageUrl} fileName={activeTab.name} />;
       }
 
-      case 'text':
+      case 'text': {
         if (!fileContentData) {
           return (
             <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
@@ -876,27 +884,72 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             </div>
           );
         }
+
+        const isHtml = isHtmlFile(activeTab.name);
+
         return (
-          <React.Suspense fallback={
-            <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+          <div className="flex flex-col h-full">
+            {isHtml && (
+              <div className="flex items-center px-3 py-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md p-0.5">
+                  <button
+                    onClick={() => setHtmlPreviewMode('source')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                      htmlPreviewMode === 'source'
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <Code2 className="w-3.5 h-3.5" />
+                    {t('fileExplorer.sourceCode', 'Source')}
+                  </button>
+                  <button
+                    onClick={() => setHtmlPreviewMode('preview')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                      htmlPreviewMode === 'preview'
+                        ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                    }`}
+                  >
+                    <MonitorPlay className="w-3.5 h-3.5" />
+                    {t('fileExplorer.preview', 'Preview')}
+                  </button>
+                </div>
+              </div>
+            )}
+            <div className="flex-1 min-h-0">
+              {isHtml && htmlPreviewMode === 'preview' ? (
+                <iframe
+                  srcDoc={fileContentData.content}
+                  sandbox="allow-scripts"
+                  className="w-full h-full border-0 bg-white"
+                  title={`${activeTab.name} preview`}
+                />
+              ) : (
+                <React.Suspense fallback={
+                  <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-900"></div>
+                  </div>
+                }>
+                  <Editor
+                    height="100%"
+                    theme={isDarkMode ? 'vs-dark' : 'vs-light'}
+                    language={getLanguageForFile(activeTab.name)}
+                    value={fileContentData.content}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      fontSize: 14,
+                      wordWrap: 'on',
+                      scrollBeyondLastLine: false,
+                    }}
+                  />
+                </React.Suspense>
+              )}
             </div>
-          }>
-            <Editor
-              height="100%"
-              theme={isDarkMode ? 'vs-dark' : 'vs-light'}
-              language={getLanguageForFile(activeTab.name)}
-              value={fileContentData.content}
-              options={{
-                readOnly: true,
-                minimap: { enabled: false },
-                fontSize: 14,
-                wordWrap: 'on',
-                scrollBeyondLastLine: false,
-              }}
-            />
-          </React.Suspense>
+          </div>
         );
+      }
 
       default:
         return (

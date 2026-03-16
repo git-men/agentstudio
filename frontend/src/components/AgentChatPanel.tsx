@@ -613,10 +613,34 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     adjustTextareaHeight();
   }, [inputMessage]);
 
-  // Load session messages into the store when query data arrives.
-  // The query is disabled during streaming (paused=isAiTyping), so
-  // sessionMessagesData only changes from explicit user actions.
+  // Guard: when streaming starts, mark that subsequent sessionMessagesData
+  // changes are likely stale cached data from query re-enabling, not user actions.
+  // The flag is ONLY cleared by the timer in Effect 1 — never consumed by Effect 2.
+  // This prevents a race condition where currentSessionId changing during streaming
+  // (from system init) would prematurely consume the guard.
+  const skipSessionLoadRef = useRef(false);
+
   useEffect(() => {
+    if (isAiTyping) {
+      skipSessionLoadRef.current = true;
+    } else if (skipSessionLoadRef.current) {
+      const timer = setTimeout(() => {
+        skipSessionLoadRef.current = false;
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAiTyping]);
+
+  // Load session messages into the store when query data arrives.
+  // The query is disabled during streaming (paused=isAiTyping).
+  // When streaming ends, the query re-enables and may return stale cached
+  // data that would overwrite live streaming content — the guard prevents this.
+  useEffect(() => {
+    if (skipSessionLoadRef.current) {
+      console.log('📋 [SESSION] Skipping session message load — streaming guard active');
+      return;
+    }
+
     if (sessionMessagesData?.messages && currentSessionId) {
       loadSessionMessages(sessionMessagesData.messages);
 

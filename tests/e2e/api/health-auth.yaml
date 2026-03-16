@@ -1,0 +1,72 @@
+name: 健康检查与认证
+sequential: true
+
+setup:
+  - waitForPort:
+      host: localhost
+      port: 14936
+      timeout: "120s"
+
+cases:
+  - name: "健康检查端点返回 200（无需认证）"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/health"
+    expect:
+      status: 200
+
+  - name: "检查是否需要密码"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/auth/check-password-required"
+    expect:
+      status: 200
+
+  - name: "无密码模式登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
+  - name: "验证 token 有效"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/verify"
+      headers:
+        Content-Type: application/json
+      body:
+        token: "{{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        valid: true
+
+  - name: "未认证访问受保护端点返回 401"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents"
+    expect:
+      status: 401
+
+  - name: "引擎信息端点返回 200（公共端点）"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/engine"
+    expect:
+      status: 200
+
+  - name: "引擎能力端点返回 200"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/engine/capabilities"
+    expect:
+      status: 200

@@ -1,0 +1,104 @@
+name: "仪表盘与侧边栏导航"
+description: "测试主界面导航、侧边栏链接和页面跳转"
+
+setup:
+  - name: "注入认证令牌"
+    browser:
+      action: setLocalStorage
+      storage:
+        auth-storage: '{"state":{"token":"{{config.auth_header}}","authenticated":true},"version":0}'
+  - name: "进入仪表盘"
+    browser:
+      action: goto
+      url: "/dashboard"
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+cases:
+  - name: "仪表盘页面加载"
+    browser:
+      action: goto
+      url: "/dashboard"
+
+  - name: "等待仪表盘渲染"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "nav"
+
+  - name: "侧边栏导航到 Agents 页"
+    browser:
+      action: click
+      selector: "nav a[href='/agents']"
+
+  - name: "等待导航到 agents"
+    browser:
+      action: waitForURL
+      url: "**/agents"
+
+  - name: "验证 Agent 管理页"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('Agent Management'), h1:has-text('Agent 管理')"
+      timeout: "10s"
+
+  - name: "返回仪表盘后导航到项目页"
+    browser:
+      action: goto
+      url: "/dashboard"
+
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "点击 Projects 链接"
+    browser:
+      action: click
+      selector: "nav a[href='/projects']"
+
+  - name: "等待导航到 projects"
+    browser:
+      action: waitForURL
+      url: "**/projects"
+
+  - name: "验证项目页标题"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('Project'), h1:has-text('项目')"
+      timeout: "10s"
+
+  - name: "导航到设置页"
+    browser:
+      action: goto
+      url: "/settings/general"
+
+  - name: "等待设置页加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证设置页内容"
+    browser:
+      action: waitForSelector
+      selector: "label:has-text('Theme')"
+      timeout: "10s"
+
+  - name: "验证 agents 链接高亮"
+    browser:
+      action: goto
+      url: "/agents"
+
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "nav a[href='/agents']"

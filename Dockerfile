@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # =============================================================================
 # AgentStudio Docker Image - Multi-Runtime Support
 # =============================================================================
@@ -19,7 +20,6 @@
 #   docker run -d -p 4936:4936 -v ./data/home:/home/agentstudio agentstudio
 #
 # =============================================================================
-
 # -----------------------------------------------------------------------------
 # Stage 1: Build (shared, Node.js for Vite/TypeScript compatibility)
 # -----------------------------------------------------------------------------
@@ -41,7 +41,8 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
 COPY frontend/package.json ./frontend/
 COPY backend/package.json ./backend/
 
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN --mount=type=cache,id=pnpm-store,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile || pnpm install
 
 COPY frontend ./frontend
 COPY backend ./backend
@@ -59,6 +60,7 @@ FROM node:20-slim AS node
 
 RUN apt-get update && apt-get install -y \
     curl \
+    wget \
     git \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -80,11 +82,13 @@ WORKDIR /app
 COPY --from=builder /build/package.json /build/pnpm-workspace.yaml /build/pnpm-lock.yaml* ./
 COPY --from=builder /build/frontend/package.json ./frontend/
 COPY --from=builder /build/backend/package.json ./backend/
-COPY --from=builder /build/frontend/dist ./frontend/dist
-COPY --from=builder /build/backend/dist ./backend/dist
 
 WORKDIR /app/backend
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+RUN --mount=type=cache,id=pnpm-prod-store,target=/root/.local/share/pnpm/store \
+    pnpm install --prod --frozen-lockfile || pnpm install --prod
+
+COPY --from=builder /build/frontend/dist /app/frontend/dist
+COPY --from=builder /build/backend/dist /app/backend/dist
 
 RUN mkdir -p /app/backend/public && \
     cp -r /app/frontend/dist/* /app/backend/public/
@@ -132,11 +136,13 @@ WORKDIR /app
 COPY --from=builder /build/package.json /build/pnpm-lock.yaml* ./
 COPY --from=builder /build/frontend/package.json ./frontend/
 COPY --from=builder /build/backend/package.json ./backend/
-COPY --from=builder /build/frontend/dist ./frontend/dist
-COPY --from=builder /build/backend/dist ./backend/dist
 
 WORKDIR /app/backend
-RUN bun install --production
+RUN --mount=type=cache,id=bun-cache,target=/home/bun/.bun/install/cache \
+    bun install --production
+
+COPY --from=builder /build/frontend/dist /app/frontend/dist
+COPY --from=builder /build/backend/dist /app/backend/dist
 
 RUN mkdir -p /app/backend/public && \
     cp -r /app/frontend/dist/* /app/backend/public/

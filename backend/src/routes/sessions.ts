@@ -19,17 +19,22 @@ const globalAgentStorage = new AgentStorage();
 
 // Helper functions for reading Agent SDK history from projects directory
 function convertProjectPathToClaudeFormat(projectPath: string): string {
-  // First, resolve symlinks to get the real path
-  // This is important because Claude CLI stores sessions using the real path
+  // Expand ~ to home directory before any filesystem operations
   let resolvedPath = projectPath;
+  if (resolvedPath.startsWith('~')) {
+    resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
+  }
+
+  // Resolve symlinks to get the real path
+  // This is important because Claude CLI stores sessions using the real path
   try {
-    resolvedPath = fs.realpathSync(projectPath);
-    if (resolvedPath !== projectPath) {
-      console.log(`🔗 [DEBUG] Resolved symlink: ${projectPath} -> ${resolvedPath}`);
+    const realPath = fs.realpathSync(resolvedPath);
+    if (realPath !== resolvedPath) {
+      console.log(`🔗 [DEBUG] Resolved symlink: ${resolvedPath} -> ${realPath}`);
     }
+    resolvedPath = realPath;
   } catch (error) {
-    // If the path doesn't exist or can't be resolved, use the original path
-    console.log(`⚠️ [DEBUG] Could not resolve path: ${projectPath}, using original`);
+    console.log(`⚠️ [DEBUG] Could not resolve path: ${resolvedPath}, using as-is`);
   }
   
   // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
@@ -661,6 +666,101 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
   }
 }
 
+/** Strip <think>...</think> tags from text, returning only the non-thinking content. */
+function stripThinkTags(text: string): string {
+  let result = text.replace(/<think>[\s\S]*?<\/think>/g, '');
+  // Handle orphaned </think> (SDK may strip opening <think>)
+  const closeIdx = result.indexOf('</think>');
+  if (closeIdx !== -1) {
+    result = result.slice(closeIdx + '</think>'.length);
+  }
+  return result.trim();
+}
+
+/**
+ * Split a text block containing <think>...</think> or orphaned </think> into
+ * separate thinking and text message parts. Returns empty array if no think
+ * tags are found (caller should fall back to a plain text part).
+ */
+function splitThinkTagsInText(text: string, blockIndex: number, uuid: string): any[] {
+  if (!text) return [];
+
+  const parts: any[] = [];
+  let orderOffset = 0;
+
+  // Case 1: Proper <think>...</think> tags
+  const fullTagRegex = /<think>([\s\S]*?)<\/think>/g;
+  let lastIndex = 0;
+  let match;
+  let found = false;
+
+  while ((match = fullTagRegex.exec(text)) !== null) {
+    found = true;
+    if (match.index > lastIndex) {
+      const before = text.slice(lastIndex, match.index).trim();
+      if (before) {
+        parts.push({
+          id: `part_${blockIndex}_t${orderOffset}_${uuid}`,
+          type: 'text',
+          content: before,
+          order: blockIndex * 100 + orderOffset++,
+        });
+      }
+    }
+    const inner = match[1].trim();
+    if (inner) {
+      parts.push({
+        id: `part_${blockIndex}_k${orderOffset}_${uuid}`,
+        type: 'thinking',
+        content: inner,
+        order: blockIndex * 100 + orderOffset++,
+      });
+    }
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (found) {
+    const tail = text.slice(lastIndex).trim();
+    if (tail) {
+      parts.push({
+        id: `part_${blockIndex}_t${orderOffset}_${uuid}`,
+        type: 'text',
+        content: tail,
+        order: blockIndex * 100 + orderOffset,
+      });
+    }
+    return parts;
+  }
+
+  // Case 2: Orphaned </think> without opening <think>
+  // The SDK sometimes strips the opening <think> tag, leaving content like:
+  //   "lThe user is asking...\n</think>\n\n1+1 = 2"
+  const closeIdx = text.indexOf('</think>');
+  if (closeIdx !== -1) {
+    const thinkingContent = text.slice(0, closeIdx).trim();
+    const afterClose = text.slice(closeIdx + '</think>'.length).trim();
+    if (thinkingContent) {
+      parts.push({
+        id: `part_${blockIndex}_k0_${uuid}`,
+        type: 'thinking',
+        content: thinkingContent,
+        order: blockIndex * 100,
+      });
+    }
+    if (afterClose) {
+      parts.push({
+        id: `part_${blockIndex}_t1_${uuid}`,
+        type: 'text',
+        content: afterClose,
+        order: blockIndex * 100 + 1,
+      });
+    }
+    return parts;
+  }
+
+  return [];
+}
+
 function extractContentFromClaudeMessage(msg: ClaudeHistoryMessage, allMessages: ClaudeHistoryMessage[] = []): string {
   if (!msg.message?.content) return '';
   
@@ -687,13 +787,13 @@ function extractContentFromClaudeMessage(msg: ClaudeHistoryMessage, allMessages:
         return args ? `${commandMatch[1]} ${args}` : commandMatch[1];
       }
     }
-    return msg.message.content;
+    return stripThinkTags(msg.message.content);
   }
   
   if (Array.isArray(msg.message.content)) {
     return msg.message.content
       .filter((block: any) => block.type === 'text' || block.type === 'thinking')
-      .map((block: any) => block.text || block.thinking || '')
+      .map((block: any) => stripThinkTags(block.text || block.thinking || ''))
       .join('');
   }
   
@@ -762,6 +862,11 @@ function convertClaudeMessageToMessageParts(msg: ClaudeHistoryMessage, allMessag
       }
     }
     
+    // Also handle <think> tags in string content (SDK may embed them here too)
+    const stringParts = splitThinkTagsInText(msg.message.content, 0, msg.uuid);
+    if (stringParts.length > 0) {
+      return stringParts;
+    }
     return [{
       id: `part_0_${msg.uuid}`,
       type: 'text',
@@ -772,8 +877,16 @@ function convertClaudeMessageToMessageParts(msg: ClaudeHistoryMessage, allMessag
   
   // Handle array content
   if (Array.isArray(msg.message.content)) {
-    return msg.message.content.map((block: any, index: number) => {
+    return msg.message.content.flatMap((block: any, index: number) => {
       if (block.type === 'text') {
+        // Split text blocks containing <think>...</think> or orphaned </think> into
+        // separate thinking + text parts. The Claude Agent SDK sometimes embeds
+        // thinking content as <think> tags inside text blocks when using third-party
+        // models (e.g. MiniMax M2.5), instead of structured thinking content blocks.
+        const parts = splitThinkTagsInText(block.text, index, msg.uuid);
+        if (parts.length > 0) {
+          return parts;
+        }
         return {
           id: `part_${index}_${msg.uuid}`,
           type: 'text',
@@ -924,6 +1037,24 @@ router.get('/:agentId', async (req, res) => {
       });
     }
     
+    // Merge in active sessions from SessionManager for this agent.
+    // This ensures sessions that exist only in memory (e.g. meta-agent sessions
+    // where no history file has been written yet) still appear in the list.
+    const liveSessionsInfo = sessionManager.getSessionsInfo();
+    const existingSessionIds = new Set(sessions.map(s => s.id));
+    for (const live of liveSessionsInfo) {
+      if (live.agentId === agentId && !existingSessionIds.has(live.sessionId)) {
+        sessions.push({
+          id: live.sessionId,
+          agentId,
+          title: live.sessionTitle || `Session ${live.sessionId.slice(0, 8)}`,
+          createdAt: live.lastActivity,
+          lastUpdated: live.lastActivity,
+          messageCount: 0,
+        });
+      }
+    }
+
     // Apply search filter if provided
     if (search && typeof search === 'string' && search.trim()) {
       const searchTerm = search.trim().toLowerCase();
@@ -933,7 +1064,6 @@ router.get('/:agentId', async (req, res) => {
     }
 
     // Enrich sessions with live status from SessionManager
-    const liveSessionsInfo = sessionManager.getSessionsInfo();
     const liveSessionMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
 
     sessions = sessions.map(session => {
@@ -996,8 +1126,47 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
       session = agentStorage.getSession(agentId, sessionId);
     }
     
+    // If session not found in history/storage, check if it exists as a live
+    // session in SessionManager. Use the live session's actual projectPath to
+    // read Claude history from the correct directory.
     if (!session) {
-      return res.status(404).json({ error: 'Session not found' });
+      const liveClaudeSession = sessionManager.getSession(sessionId);
+      if (liveClaudeSession) {
+        const liveProjectPath = liveClaudeSession.getProjectPath();
+        const liveClaudeSessionId = liveClaudeSession.getClaudeSessionId();
+        const lookupSessionId = liveClaudeSessionId || sessionId;
+        
+        console.log(`📋 [LIVE] Session ${sessionId} found in SessionManager, projectPath=${liveProjectPath}, claudeSessionId=${liveClaudeSessionId}`);
+        
+        // Try to read messages from Claude history using the live session's projectPath
+        if (liveProjectPath) {
+          const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+          if (defaultEngine.readSession) {
+            session = await defaultEngine.readSession(liveProjectPath, lookupSessionId);
+          }
+          if (!session) {
+            const claudeSessions = readClaudeHistorySessions(liveProjectPath);
+            session = claudeSessions.find(s => s.id === lookupSessionId);
+          }
+          if (session) {
+            console.log(`� [LIVE] Found session history with ${session.messages?.length || 0} messages`);
+            session = { ...session, agentId };
+          }
+        }
+        
+        // If still no history on disk, return session metadata with empty messages
+        if (!session) {
+          console.log(`📋 [LIVE] No history file yet for session ${sessionId}, returning empty messages`);
+          return res.json({
+            sessionId,
+            agentId,
+            title: liveClaudeSession.getSessionTitle() || `Session ${sessionId.slice(0, 8)}`,
+            messages: []
+          });
+        }
+      } else {
+        return res.status(404).json({ error: 'Session not found' });
+      }
     }
     
     res.json({ 

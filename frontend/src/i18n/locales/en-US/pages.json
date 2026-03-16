@@ -441,6 +441,13 @@
     "welcome": {
       "title": "Let's Get Started",
       "subtitle": "Select a project to start working with AI"
+    },
+    "providerCheck": {
+      "title": "Model Provider Not Configured",
+      "description": "The built-in Claude model provider is not available. Please configure an API key to get started.",
+      "configure": "Configure Now",
+      "later": "Later",
+      "checking": "Checking model provider availability..."
     }
   },
   "settings": {
@@ -928,7 +935,23 @@
       "saveFailed": "Failed to save configuration",
       "copyFailed": "Failed to copy"
     },
-    "commandCopied": "Command copied to clipboard"
+    "commandCopied": "Command copied to clipboard",
+    "tabs": {
+      "myServers": "My MCP Servers",
+      "marketplace": "Recommended MCPs"
+    },
+    "presets": {
+      "loading": "Loading recommended MCPs...",
+      "searchPlaceholder": "Search MCP servers...",
+      "noResults": "No matching MCP servers found",
+      "install": "Install",
+      "installed": "Installed",
+      "installSuccess": "{{name}} installed successfully",
+      "installFailed": "Installation failed",
+      "missingEnvVars": "Please fill in all required fields",
+      "configureTitle": "Configure {{name}}",
+      "configureDescription": "Please fill in the required configuration to install this MCP server."
+    }
   },
   "commands": {
     "title": "Custom Commands",

@@ -3,7 +3,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { LAVSClient, LAVSManifest } from '../lavs';
+import { LAVSClient } from 'lavs-client';
+import type { LAVSManifest } from 'lavs-client';
 
 export function useAgentLAVS(agentId: string) {
   const [hasLAVS, setHasLAVS] = useState(false);

@@ -288,39 +288,40 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
   private async startTask(task: TaskDefinition): Promise<void> {
     console.info(`[TaskExecutor] Starting task: ${task.id} (type=${task.type})`);
 
-    // Worker Threads require compiled JavaScript files
-    // The worker file path resolution strategy:
-    // 1. Check current directory (works when running from dist/)
-    // 2. Check dist directory (works when running from src/ during tests)
-    //
-    // Note: We cannot use .ts files directly in Workers because:
-    // - Workers run in isolated threads without access to the parent's TypeScript loader
-    // - Even with tsx/ts-node, configuring loaders for Workers is unreliable
-    // - Best practice: Run `pnpm run build` before testing
-
+    // Worker file resolution strategy:
+    // 1. Check for compiled .js in current directory (production / dist)
+    // 2. Check for compiled .js in dist directory (running from src)
+    // 3. Use taskWorkerLoader.js bootstrap script (tsx dev mode)
+    //    Worker threads cannot directly load .ts files ("Unknown file extension .ts"),
+    //    so the loader.js first registers tsx, then requires the actual .ts worker.
     let workerPath = path.join(_dirname, 'taskWorker.js');
 
     if (!existsSync(workerPath)) {
-      // If not found in current directory, try the dist directory
-      // This handles the case when tests run from src/ but need dist/ workers
       const distPath = _dirname.replace('/src/', '/dist/');
       workerPath = path.join(distPath, 'taskWorker.js');
 
       if (!existsSync(workerPath)) {
-        throw new Error(
-          `Worker file not found at ${workerPath}. ` +
-          `Please run 'pnpm run build' to compile TypeScript files.`
-        );
+        // Fallback: use bootstrap loader for tsx dev mode
+        const loaderPath = path.join(_dirname, 'taskWorkerLoader.js');
+        if (existsSync(loaderPath)) {
+          workerPath = loaderPath;
+        } else {
+          throw new Error(
+            `Worker file not found at ${workerPath}. ` +
+            `Please run 'pnpm run build' to compile TypeScript files.`
+          );
+        }
       }
     }
 
-    // Create worker with the compiled JavaScript file
-    const worker = new Worker(workerPath, {
+    const workerOptions: import('worker_threads').WorkerOptions = {
       workerData: task,
       resourceLimits: {
         maxOldGenerationSizeMb: this.config.maxMemoryMb,
       },
-    });
+    };
+
+    const worker = new Worker(workerPath, workerOptions);
 
     const startTime = Date.now();
 

@@ -17,9 +17,11 @@ const router: RouterType = Router();
  */
 router.get('/', async (_req: Request, res: Response): Promise<any> => {
   try {
-    // Get tunnel status and config
-    const tunnelStatus = tunnelService.getStatus();
-    const tunnelConfig = tunnelService.getConfig();
+    // Get first tunnel's status and config (backward compat)
+    const allStatuses = tunnelService.getAllStatuses();
+    const allConfigs = tunnelService.getAllConfigs();
+    const tunnelStatus = allStatuses[0] ?? { enabled: false, connected: false, domain: null };
+    const tunnelConfig = allConfigs[0] ?? { serverUrl: '', protocol: 'https', domainSuffix: '', tunnelName: '' };
     
     // Get local network info
     const networkInfo = getNetworkInfo();

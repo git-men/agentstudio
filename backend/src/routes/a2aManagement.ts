@@ -543,3 +543,36 @@ router.get('/history/:projectPath/:sessionId', async (req: Request, res: Respons
     }
   }
 });
+
+// POST /api/a2a/discover-agent-card - Fetch an external Agent Card via backend proxy
+router.post('/discover-agent-card', async (req: Request, res: Response) => {
+  const { url } = req.body;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ error: 'url is required' });
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return res.status(502).json({
+        error: `Agent Card 请求失败: HTTP ${response.status}`,
+      });
+    }
+
+    const card = await response.json();
+    res.json(card);
+  } catch (error: any) {
+    console.error('[A2A] Agent Card discovery failed:', error.message);
+    res.status(502).json({
+      error: `无法获取 Agent Card: ${error.message}`,
+    });
+  }
+});

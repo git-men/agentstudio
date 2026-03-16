@@ -401,10 +401,28 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // Load messages once on mount when a session is already selected (e.g. page
     // refreshed with ?session=xxx in the URL). Subsequent session switches go
     // through handleSwitchSession which loads messages imperatively.
-    const initialLoadDoneRef = useRef(false);
+    //
+    // State machine ref to prevent the load effect from overwriting live-streamed
+    // data after streaming ends (the most common cause of "last text disappears"):
+    //   'idle'      → no load attempted yet, waiting for conditions
+    //   'streaming' → session was created during streaming; skip backend load
+    //   'done'      → initial load completed or intentionally skipped
+    const initialLoadStateRef = useRef<'idle' | 'streaming' | 'done'>('idle');
+
     useEffect(() => {
-        if (currentSessionId && !initialLoadDoneRef.current && !isAiTyping) {
-            initialLoadDoneRef.current = true;
+        if (initialLoadStateRef.current === 'done') return;
+
+        if (isAiTyping && currentSessionId) {
+            initialLoadStateRef.current = 'streaming';
+            return;
+        }
+
+        if (!isAiTyping && currentSessionId) {
+            if (initialLoadStateRef.current === 'streaming') {
+                initialLoadStateRef.current = 'done';
+                return;
+            }
+            initialLoadStateRef.current = 'done';
             setIsLoadingMessages(true);
             loadMessagesForSession(currentSessionId).then(() => {
                 setIsLoadingMessages(false);
@@ -793,7 +811,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             </div>
                             <button
                                 onClick={handleRefreshMessages}
-                                disabled={!currentSessionId || isLoadingMessages}
+                                disabled={!currentSessionId || isLoadingMessages || isAiTyping}
                                 className="p-1.5 hover:bg-white/50 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50"
                                 title={t('agentChat.refreshMessages')}
                             >

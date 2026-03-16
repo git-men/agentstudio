@@ -38,11 +38,13 @@ async function generateToolDescription(projectId: string): Promise<string> {
     if (enabledAgents.length > 0) {
         description += '\n\nAvailable external agents:\n';
         for (const agent of enabledAgents) {
+            const proto = agent.protocolType || 'custom';
             description += `\n• ${agent.name}`;
             if (agent.description) {
                 description += `: ${agent.description}`;
             }
             description += `\n  URL: ${agent.url}`;
+            description += `\n  Protocol: ${proto === 'a2a-jsonrpc' ? 'A2A Standard (JSON-RPC)' : 'Custom REST'}`;
         }
         description += '\n\nUse the agentUrl parameter to specify which agent to call. Please also include the agentName parameter for better UI display.';
     } else {

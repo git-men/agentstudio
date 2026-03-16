@@ -54,8 +54,12 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
     url: '',
     apiKey: '',
     description: '',
-    enabled: true
+    enabled: true,
+    protocolType: 'custom',
+    customHeaders: {},
   });
+  const [newHeaderKey, setNewHeaderKey] = useState('');
+  const [newHeaderValue, setNewHeaderValue] = useState('');
   const [showApiKeys, setShowApiKeys] = useState<Record<string, boolean>>({});
 
   // Update local state when config loads
@@ -84,26 +88,51 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
     }
   };
 
-  // Handle add agent
+  const handleAddCustomHeader = () => {
+    if (!newHeaderKey.trim()) return;
+    setNewAgent({
+      ...newAgent,
+      customHeaders: { ...(newAgent.customHeaders || {}), [newHeaderKey.trim()]: newHeaderValue },
+    });
+    setNewHeaderKey('');
+    setNewHeaderValue('');
+  };
+
+  const handleRemoveCustomHeader = (key: string) => {
+    const headers = { ...(newAgent.customHeaders || {}) };
+    delete headers[key];
+    setNewAgent({ ...newAgent, customHeaders: headers });
+  };
+
   const handleAddAgent = async () => {
-    if (!newAgent.name || !newAgent.url || !newAgent.apiKey) {
+    const isJsonRpc = newAgent.protocolType === 'a2a-jsonrpc';
+    if (!newAgent.name || !newAgent.url || (!isJsonRpc && !newAgent.apiKey)) {
       return;
     }
 
     try {
-      await addAgent.mutateAsync({
-        projectId,
-        agent: newAgent as AllowedAgent
-      });
+      const agentToAdd: AllowedAgent = {
+        ...(newAgent as AllowedAgent),
+        apiKey: newAgent.apiKey || '',
+      };
+      // Only include customHeaders if not empty
+      if (agentToAdd.customHeaders && Object.keys(agentToAdd.customHeaders).length === 0) {
+        delete agentToAdd.customHeaders;
+      }
 
-      // Reset form
+      await addAgent.mutateAsync({ projectId, agent: agentToAdd });
+
       setNewAgent({
         name: '',
         url: '',
         apiKey: '',
         description: '',
-        enabled: true
+        enabled: true,
+        protocolType: 'custom',
+        customHeaders: {},
       });
+      setNewHeaderKey('');
+      setNewHeaderValue('');
       setShowAddAgentForm(false);
     } catch (err) {
       console.error('Failed to add agent:', err);
@@ -308,9 +337,31 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
               />
 
+              {/* Protocol Type Selector */}
+              <div>
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                  {t('a2aConfig.protocolType', 'Protocol Type')}
+                </label>
+                <select
+                  value={newAgent.protocolType || 'custom'}
+                  onChange={(e) => setNewAgent({ ...newAgent, protocolType: e.target.value as 'custom' | 'a2a-jsonrpc' })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
+                >
+                  <option value="custom">Custom REST (Legacy)</option>
+                  <option value="a2a-jsonrpc">A2A Standard (JSON-RPC 2.0)</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {newAgent.protocolType === 'a2a-jsonrpc'
+                    ? t('a2aConfig.jsonrpcHelp', 'Standard A2A protocol for interoperating with external agents')
+                    : t('a2aConfig.customHelp', 'AgentStudio proprietary REST protocol for internal agents')}
+                </p>
+              </div>
+
               <input
                 type="password"
-                placeholder={t('a2aConfig.apiKey', 'API Key')}
+                placeholder={newAgent.protocolType === 'a2a-jsonrpc'
+                  ? t('a2aConfig.apiKeyOptional', 'API Key / Bearer Token (optional)')
+                  : t('a2aConfig.apiKey', 'API Key')}
                 value={newAgent.apiKey}
                 onChange={(e) => setNewAgent({ ...newAgent, apiKey: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
@@ -324,6 +375,51 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-sm"
               />
 
+              {/* Custom Headers — shown for a2a-jsonrpc protocol */}
+              {newAgent.protocolType === 'a2a-jsonrpc' && (
+                <div className="p-3 bg-gray-100 dark:bg-gray-900/50 rounded-lg">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-2">
+                    {t('a2aConfig.customHeaders', 'Custom HTTP Headers')}
+                  </label>
+                  {Object.entries(newAgent.customHeaders || {}).map(([key, value]) => (
+                    <div key={key} className="flex items-center gap-2 mb-1">
+                      <code className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 truncate">
+                        {key}: {value}
+                      </code>
+                      <button
+                        onClick={() => handleRemoveCustomHeader(key)}
+                        className="p-1 hover:bg-red-100 dark:hover:bg-red-900/30 rounded"
+                      >
+                        <Trash2 className="w-3 h-3 text-red-500" />
+                      </button>
+                    </div>
+                  ))}
+                  <div className="flex items-center gap-2 mt-2">
+                    <input
+                      type="text"
+                      placeholder="Header name"
+                      value={newHeaderKey}
+                      onChange={(e) => setNewHeaderKey(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Value"
+                      value={newHeaderValue}
+                      onChange={(e) => setNewHeaderValue(e.target.value)}
+                      className="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs"
+                    />
+                    <button
+                      onClick={handleAddCustomHeader}
+                      disabled={!newHeaderKey.trim()}
+                      className="px-2 py-1 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded text-xs hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50"
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-end gap-2">
                 <button
                   onClick={() => {
@@ -333,8 +429,12 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
                       url: '',
                       apiKey: '',
                       description: '',
-                      enabled: true
+                      enabled: true,
+                      protocolType: 'custom',
+                      customHeaders: {},
                     });
+                    setNewHeaderKey('');
+                    setNewHeaderValue('');
                   }}
                   className="px-3 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
                 >
@@ -343,7 +443,7 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
 
                 <button
                   onClick={handleAddAgent}
-                  disabled={!newAgent.name || !newAgent.url || !newAgent.apiKey || addAgent.isPending}
+                  disabled={!newAgent.name || !newAgent.url || (newAgent.protocolType !== 'a2a-jsonrpc' && !newAgent.apiKey) || addAgent.isPending}
                   className="inline-flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                 >
                   {addAgent.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -375,7 +475,7 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <h4 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                         {agent.name}
                       </h4>
@@ -390,6 +490,13 @@ export const A2AConfigTab: React.FC<A2AConfigTabProps> = ({ projectId }) => {
                           {t('a2aConfig.disabled', 'Disabled')}
                         </span>
                       )}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        agent.protocolType === 'a2a-jsonrpc'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300'
+                          : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                      }`}>
+                        {agent.protocolType === 'a2a-jsonrpc' ? 'JSON-RPC' : 'REST'}
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 mb-2">

@@ -24,10 +24,12 @@ import skillsRouter from './routes/skills';
 import pluginsRouter from './routes/plugins';
 import marketplaceSkillsRouter from './routes/marketplaceSkills';
 import a2aRouter from './routes/a2a';
+import a2aJsonRpcRouter from './routes/a2aJsonRpc';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
+import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
@@ -429,6 +431,15 @@ const app: express.Express = express();
     console.error('[Tunnel] Error initializing tunnel service:', error);
   }
 
+  // 4b. MCP Admin Auto-Bootstrap: Ensure agentstudio-admin MCP is available out-of-the-box
+  console.info('[MCP Admin Bootstrap] Ensuring agentstudio-admin MCP is configured...');
+  try {
+    await autoBootstrapMcpAdmin(PORT);
+    console.info('[MCP Admin Bootstrap] agentstudio-admin MCP ready');
+  } catch (error) {
+    console.error('[MCP Admin Bootstrap] Error:', error);
+  }
+
   // 5. Platform Hook System
   console.info('[HookSystem] Initializing platform hook system...');
   try {
@@ -513,7 +524,13 @@ const app: express.Express = express();
         return next();
       }
 
-      // Serve index.html for all other routes
+      // Skip static asset requests (let them 404 naturally instead of returning HTML)
+      if (/\.(js|css|ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|eot|map)$/i.test(req.path)) {
+        return next();
+      }
+
+      // Serve index.html for all SPA routes, with no-cache to prevent stale asset references
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(join(frontendDistPath, 'index.html'));
     });
 
@@ -540,6 +557,9 @@ const app: express.Express = express();
   );
 
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
+  // JSON-RPC router handles standard A2A protocol; mounted first for priority
+  app.use('/a2a/:a2aAgentId', httpsOnly, a2aJsonRpcRouter);
+  // REST router handles legacy custom protocol
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aRouter);
 
   // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
@@ -699,7 +719,7 @@ const app: express.Express = express();
 
     // 3. Stop tunnel service
     try {
-      tunnelService.disconnect();
+      tunnelService.disconnectAll();
       console.info('[Tunnel] Tunnel service stopped');
     } catch (error) {
       console.error('[Tunnel] Error shutting down tunnel service:', error);

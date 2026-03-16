@@ -104,7 +104,9 @@
     "noProject": "未选择项目",
     "selectProjectFirst": "请先选择一个项目以浏览文件",
     "collapsePanel": "收起目录面板",
-    "expandPanel": "展开目录面板"
+    "expandPanel": "展开目录面板",
+    "sourceCode": "源码",
+    "preview": "预览"
   },
   "sessionDropdown": {
     "title": "会话管理",

@@ -20,7 +20,9 @@ import {
   Trash2,
   AlertCircle,
   ArrowUp,
-  MessageCircle
+  MessageCircle,
+  AlertTriangle,
+  ExternalLink,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useProjects, Project } from '../hooks/useProjects';
@@ -29,6 +31,7 @@ import { useSessions, closeSession, clearAllSessions } from '../hooks/useSession
 import { useQueryClient } from '@tanstack/react-query';
 import { showSuccess, showError } from '../utils/toast';
 import { openMetaAgentChat } from '../components/MetaAgentBubble';
+import { useProviderHealthCheck } from '../hooks/useProviderHealthCheck';
 
 export const ClassicDashboard: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -46,6 +49,7 @@ export const ClassicDashboard: React.FC = () => {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isClearingAll, setIsClearingAll] = useState(false);
   const [closingSessionId, setClosingSessionId] = useState<string | null>(null);
+  const providerHealth = useProviderHealthCheck();
 
   const projects = projectsData?.projects || [];
   const agents = agentsData?.agents || [];
@@ -243,7 +247,57 @@ export const ClassicDashboard: React.FC = () => {
           </h1>
         </div>
 
-        {agents.find(a => a.id === 'meta-agent' && a.enabled) && (
+        {providerHealth.shouldShowBanner && (
+          <div className="w-full max-w-2xl mb-6">
+            <div className="flex items-start gap-4 px-5 py-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-2xl">
+              <div className="flex-shrink-0 p-2 bg-amber-100 dark:bg-amber-800/50 rounded-xl mt-0.5">
+                <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
+                  {t('dashboard.providerCheck.title', { defaultValue: '模型供应商尚未配置' })}
+                </div>
+                <div className="text-sm text-amber-700 dark:text-amber-300 mt-1">
+                  {providerHealth.message || t('dashboard.providerCheck.description', { defaultValue: '当前默认模型供应商不可用，请在供应商设置中配置 API 密钥。' })}
+                </div>
+                <div className="flex items-center gap-3 mt-3">
+                  <button
+                    onClick={() => navigate('/settings/suppliers')}
+                    className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    {t('dashboard.providerCheck.configure', { defaultValue: '前往配置' })}
+                  </button>
+                  <button
+                    onClick={providerHealth.dismiss}
+                    className="px-4 py-1.5 text-sm text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-800/50 rounded-lg transition-colors"
+                  >
+                    {t('dashboard.providerCheck.later', { defaultValue: '稍后配置' })}
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={providerHealth.dismiss}
+                className="flex-shrink-0 p-1 text-amber-400 hover:text-amber-600 dark:hover:text-amber-200 rounded transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {providerHealth.loading && !providerHealth.checked && (
+          <div className="w-full max-w-2xl mb-6">
+            <div className="flex items-center gap-3 px-5 py-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-2xl">
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {t('dashboard.providerCheck.checking', { defaultValue: '正在检查模型供应商可用性...' })}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {agents.find(a => a.id === 'meta-agent' && a.enabled) && providerHealth.checked && providerHealth.available && (
           <div className="w-full max-w-2xl mb-6">
             <button
               onClick={() => openMetaAgentChat()}

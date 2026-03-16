@@ -1,0 +1,138 @@
+name: MCP Admin 自动初始化
+sequential: true
+
+setup:
+  - waitForPort:
+      host: localhost
+      port: 14936
+      timeout: "120s"
+
+cases:
+  - name: "服务启动后健康检查正常"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/health"
+    expect:
+      status: 200
+
+  - name: "MCP 列表中包含 agentstudio-admin"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+
+  - name: "agentstudio-admin 的 status 为 active"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            status: "active"
+
+  - name: "agentstudio-admin 的 type 为 http"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            type: "http"
+
+  - name: "agentstudio-admin 有注册的 tools"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            tools: { length: { gt: 0 } }
+
+  - name: "agentstudio-admin 有 lastValidated 时间戳"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            lastValidated: { exists: true, type: string }
+
+  - name: "agentstudio-admin 的 url 指向 mcp-admin 端点"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            url: { contains: "/api/mcp-admin" }
+
+  - name: "agentstudio-admin 有 Authorization header"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        servers:
+          some:
+            name: "agentstudio-admin"
+            headers:
+              Authorization: { contains: "Bearer " }
+
+  - name: "验证 agentstudio-admin MCP 服务可达（validate 端点）"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/mcp/agentstudio-admin/validate"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+        tools: { length: { gt: 0 } }
+
+  - name: "验证后 tools 数量大于 0"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/mcp/agentstudio-admin/validate"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+        message: { contains: "tools" }

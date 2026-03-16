@@ -1,0 +1,96 @@
+name: 规则管理 CRUD 生命周期
+sequential: true
+
+setup:
+  - name: "清理可能残留的测试规则"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/rules/global:e2e-test-rule"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
+
+cases:
+  - name: "获取规则列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/rules"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建测试规则"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/rules"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-rule"
+        content: "Always respond in English"
+        scope: "global"
+    expect:
+      status: [200, 201]
+      body:
+        rule:
+          id: { exists: true }
+    save:
+      rule_id: "rule.id"
+
+  - name: "获取已创建的规则"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        rule:
+          name: "e2e-test-rule"
+          content: "Always respond in English"
+
+  - name: "更新规则内容"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-rule"
+        content: "Always respond in Chinese"
+        scope: "global"
+    expect:
+      status: 200
+
+  - name: "删除规则"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        message: "Rule deleted successfully"
+
+  - name: "验证规则已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+teardown:
+  - name: "清理测试规则"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/rules/global:e2e-test-rule"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

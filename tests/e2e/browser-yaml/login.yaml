@@ -1,0 +1,89 @@
+name: "登录与认证流程"
+description: "测试无密码模式下的自动登录、页面重定向和仪表盘加载"
+
+cases:
+  - name: "根路径展示落地页或登录页"
+    browser:
+      action: goto
+      url: "/"
+    expect:
+      page:
+        url:
+          matches: "/(login|dashboard)?$"
+
+  - name: "等待页面加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "无密码模式进入登录页"
+    browser:
+      action: goto
+      url: "/login"
+
+  - name: "等待登录页加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "登录页应有品牌标识或自动跳转"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+    expect:
+      page:
+        visible:
+          - "h1"
+
+  - name: "无密码登录后不再停留在 /login"
+    browser:
+      action: goto
+      url: "/login"
+
+  - name: "等待登录流程完成"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "尝试点击进入系统按钮"
+    browser:
+      action: click
+      selector: "button:has-text('Enter System'), button:has-text('进入系统'), a:has-text('Enter Workspace'), a:has-text('进入工作台')"
+      timeout: "3s"
+    ignoreError: true
+
+  - name: "等待跳转"
+    delay: "2s"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+      timeout: "15s"
+
+  - name: "验证已离开登录页"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        url:
+          notContains: "/login"
+
+  - name: "仪表盘正常加载"
+    browser:
+      action: goto
+      url: "/dashboard"
+
+  - name: "等待仪表盘加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证仪表盘内容"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        visible:
+          - "nav"
+          - "h1, h2, h3"

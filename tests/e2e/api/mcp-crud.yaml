@@ -1,0 +1,80 @@
+name: MCP 服务管理 CRUD
+sequential: true
+
+cases:
+  - name: "获取 MCP 配置列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "添加 MCP 服务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-mcp"
+        type: "stdio"
+        command: "echo"
+        args:
+          - "hello"
+    expect:
+      status: [200, 201]
+
+  - name: "列表中包含新 MCP 服务"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "更新 MCP 服务配置"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-test-mcp"
+        type: "stdio"
+        command: "echo"
+        args:
+          - "updated"
+    expect:
+      status: 200
+
+  - name: "删除 MCP 服务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "验证 MCP 服务已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+teardown:
+  - name: "清理测试 MCP 服务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

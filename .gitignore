@@ -62,6 +62,7 @@ coverage/
 .cursor/
 .specify/
 specs/
+.codebuddy/
 # A2A local configurations
 .a2a/
 **/.a2a/
@@ -78,3 +79,4 @@ extension-pure/icons/
 
 # Runtime project data
 projects/
+backend/e2e-tests/.argusai/

@@ -1,30 +1,34 @@
 /**
- * Tunnel Service
+ * Tunnel Service — Multi-Tunnel Manager
  *
- * Manages WebSocket tunnel connection to allow external access to local Agent Studio.
- * Uses tunely library for tunnel client functionality.
+ * Manages multiple WebSocket tunnel connections to allow external access
+ * to local Agent Studio via different tunnel servers.
  *
  * Features:
- * - Auto-connect on startup if configured
+ * - Multiple simultaneous tunnel connections
+ * - Per-tunnel configuration with unique IDs
+ * - Auto-connect enabled tunnels on startup
  * - Automatic reconnection on disconnect
- * - Connection status tracking
- * - Configuration persistence
+ * - Backward-compatible migration from single-tunnel config
  */
 
 import { TunnelClient, TunnelClientConfig } from 'tunely';
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import { TUNNEL_CONFIG_FILE, getTunnelConfigFile } from '../config/paths.js';
 
-// Configuration file paths
-// Port-specific config takes priority, then falls back to default config
 const getPortConfigFile = (port: number) => getTunnelConfigFile(port);
 const DEFAULT_CONFIG_FILE = TUNNEL_CONFIG_FILE;
 
 /**
- * Tunnel configuration stored on disk
+ * Per-tunnel configuration stored on disk
  */
 export interface TunnelConfig {
+  /** Unique tunnel identifier */
+  id: string;
+  /** Human-readable label (e.g., "生产隧道", "测试隧道") */
+  label: string;
   /** Whether tunnel should auto-connect on startup */
   enabled: boolean;
   /** Tunnel server base URL (e.g., https://agentstudio.woa.com) */
@@ -33,6 +37,8 @@ export interface TunnelConfig {
   websocketUrl?: string;
   /** Tunnel authentication token */
   token: string;
+  /** as-enterprise JWT token for creating/managing tunnels via API */
+  enterpriseToken?: string;
   /** Tunnel name (subdomain part, e.g., "my-dev" for my-dev.tunnel) */
   tunnelName?: string;
   /** Domain suffix (e.g., ".agentstudio.woa.com") */
@@ -47,28 +53,27 @@ export interface TunnelConfig {
   requestTimeout?: number;
 }
 
-/**
- * Result of checking tunnel name availability
- */
 export interface TunnelCheckResult {
   available: boolean;
   reason?: string;
 }
 
-/**
- * Result of creating a tunnel token
- */
 export interface TunnelCreateResult {
   success: boolean;
+  tunnelId?: string;
   token?: string;
   domain?: string;
   error?: string;
 }
 
 /**
- * Tunnel connection status
+ * Per-tunnel connection status
  */
 export interface TunnelStatus {
+  /** Tunnel ID */
+  id: string;
+  /** Display label */
+  label: string;
   /** Whether tunnel is enabled in config */
   enabled: boolean;
   /** Whether currently connected */
@@ -81,29 +86,43 @@ export interface TunnelStatus {
   connectedAt: string | null;
   /** Number of reconnect attempts */
   reconnectCount: number;
-  /** Config source: 'port-specific' or 'default' */
-  configSource: 'port-specific' | 'default' | 'none';
+  /** Tunnel server URL */
+  serverUrl: string;
   /** Local port this tunnel forwards to */
   localPort: number;
 }
 
 /**
- * Default tunnel configuration
+ * Legacy single-tunnel config (for migration)
  */
-const DEFAULT_CONFIG: TunnelConfig = {
+interface LegacyTunnelConfig {
+  enabled: boolean;
+  serverUrl: string;
+  websocketUrl?: string;
+  token: string;
+  enterpriseToken?: string;
+  tunnelName?: string;
+  domainSuffix?: string;
+  protocol?: 'https' | 'http';
+  reconnectInterval?: number;
+  maxReconnectAttempts?: number;
+  requestTimeout?: number;
+}
+
+const DEFAULT_TUNNEL_VALUES: Omit<TunnelConfig, 'id' | 'label'> = {
   enabled: false,
   serverUrl: 'https://agentstudio.woa.com',
   token: '',
   tunnelName: '',
   protocol: 'https',
   reconnectInterval: 5000,
-  maxReconnectAttempts: 0, // Infinite
+  maxReconnectAttempts: 0,
 };
 
-/**
- * Get WebSocket URL from base URL
- * e.g., https://agentstudio.woa.com -> wss://agentstudio.woa.com/ws/tunnel
- */
+function generateTunnelId(): string {
+  return crypto.randomUUID().slice(0, 8);
+}
+
 function getWebSocketUrl(serverUrl: string): string {
   const apiBaseUrl = getApiBaseUrl(serverUrl);
   const url = new URL(apiBaseUrl);
@@ -111,322 +130,381 @@ function getWebSocketUrl(serverUrl: string): string {
   return `${wsProtocol}//${url.host}/ws/tunnel`;
 }
 
-/**
- * Get API base URL for tunnel management
- * User configures the base URL (e.g., https://agentstudio.woa.com)
- * API endpoints are under /api/tunnels/
- */
 function getApiBaseUrl(serverUrl: string): string {
-  // If it's a WebSocket URL, convert to HTTP
   if (serverUrl.startsWith('wss://') || serverUrl.startsWith('ws://')) {
     const url = new URL(serverUrl);
     const protocol = url.protocol === 'wss:' ? 'https:' : 'http:';
     return `${protocol}//${url.host}`;
   }
-  // Otherwise use as-is
-  return serverUrl.replace(/\/+$/, ''); // Remove trailing slashes
+  return serverUrl.replace(/\/+$/, '');
 }
 
 /**
- * Tunnel Service singleton
+ * Check if a raw config object is legacy (single-tunnel) format
+ */
+function isLegacyConfig(data: unknown): data is LegacyTunnelConfig {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    !Array.isArray(data) &&
+    'serverUrl' in data
+  );
+}
+
+/**
+ * Migrate a legacy single-tunnel config to multi-tunnel array
+ */
+function migrateLegacyConfig(legacy: LegacyTunnelConfig): TunnelConfig[] {
+  const config: TunnelConfig = {
+    id: generateTunnelId(),
+    label: legacy.tunnelName || '默认隧道',
+    ...DEFAULT_TUNNEL_VALUES,
+    ...legacy,
+  };
+  return [config];
+}
+
+/**
+ * Multi-Tunnel Service
  */
 class TunnelService {
-  private client: TunnelClient | null = null;
-  private config: TunnelConfig = { ...DEFAULT_CONFIG };
-  private status: TunnelStatus = {
-    enabled: false,
-    connected: false,
-    domain: null,
-    lastError: null,
-    connectedAt: null,
-    reconnectCount: 0,
-    configSource: 'none',
-    localPort: 4936,
-  };
-  private localPort: number = 4936; // Default Agent Studio port
+  private clients = new Map<string, TunnelClient>();
+  private configs = new Map<string, TunnelConfig>();
+  private statuses = new Map<string, TunnelStatus>();
+  private localPort: number = 4936;
   private initialized = false;
   private configSource: 'port-specific' | 'default' | 'none' = 'none';
-  private healthCheckInterval: NodeJS.Timeout | null = null;
-  private reconnecting = false;
 
-  /**
-   * Initialize the tunnel service
-   * Loads config and auto-connects if enabled
-   */
   async initialize(localPort?: number): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
+    if (this.initialized) return;
 
-    if (localPort) {
-      this.localPort = localPort;
-    }
+    if (localPort) this.localPort = localPort;
 
-    // Load saved configuration
-    await this.loadConfig();
+    await this.loadConfigs();
     this.initialized = true;
 
-    // Auto-connect if enabled
-    if (this.config.enabled && this.config.token) {
-      console.log('[Tunnel] Auto-connecting (enabled in config)...');
-      await this.connect();
+    // Auto-connect all enabled tunnels
+    const enabledTunnels = Array.from(this.configs.values()).filter(
+      (c) => c.enabled && c.token,
+    );
+
+    if (enabledTunnels.length > 0) {
+      console.log(`[Tunnel] Auto-connecting ${enabledTunnels.length} tunnel(s)...`);
+      await Promise.allSettled(
+        enabledTunnels.map((c) => this.connect(c.id)),
+      );
     } else {
-      console.log('[Tunnel] Not auto-connecting (disabled or no token)');
+      console.log('[Tunnel] No tunnels to auto-connect');
     }
-    
-    // Note: We don't start periodic health check here because:
-    // 1. Tunely client has its own heartbeat mechanism
-    // 2. Health check from local to public domain doesn't work reliably
-    // 3. We rely on tunely's onConnect/onDisconnect events instead
   }
 
-  /**
-   * Load tunnel configuration from disk
-   * Priority: port-specific config > default config
-   */
-  async loadConfig(): Promise<TunnelConfig> {
+  // ---------------------------------------------------------------------------
+  // Config persistence
+  // ---------------------------------------------------------------------------
+
+  async loadConfigs(): Promise<TunnelConfig[]> {
     const portConfigFile = getPortConfigFile(this.localPort);
+
+    let rawData: unknown = null;
+    let source: 'port-specific' | 'default' | 'none' = 'none';
 
     // Try port-specific config first
     try {
-      const data = await fs.readFile(portConfigFile, 'utf-8');
-      const savedConfig = JSON.parse(data) as Partial<TunnelConfig>;
-      this.config = { ...DEFAULT_CONFIG, ...savedConfig };
-      this.configSource = 'port-specific';
-      console.log(`[Tunnel] Loaded port-specific config from: ${portConfigFile}`);
+      const text = await fs.readFile(portConfigFile, 'utf-8');
+      rawData = JSON.parse(text);
+      source = 'port-specific';
+      console.log(`[Tunnel] Loaded config from: ${portConfigFile}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        // Port-specific config not found, try default config
         try {
-          const data = await fs.readFile(DEFAULT_CONFIG_FILE, 'utf-8');
-          const savedConfig = JSON.parse(data) as Partial<TunnelConfig>;
-          this.config = { ...DEFAULT_CONFIG, ...savedConfig };
-          this.configSource = 'default';
+          const text = await fs.readFile(DEFAULT_CONFIG_FILE, 'utf-8');
+          rawData = JSON.parse(text);
+          source = 'default';
           console.log(`[Tunnel] Loaded default config from: ${DEFAULT_CONFIG_FILE}`);
         } catch (defaultError) {
           if ((defaultError as NodeJS.ErrnoException).code !== 'ENOENT') {
             console.error('[Tunnel] Error loading default config:', defaultError);
           }
-          this.configSource = 'none';
         }
       } else {
         console.error('[Tunnel] Error loading port-specific config:', error);
-        this.configSource = 'none';
       }
     }
 
-    this.status.enabled = this.config.enabled;
-    this.status.configSource = this.configSource;
-    this.status.localPort = this.localPort;
-    return this.config;
+    this.configSource = source;
+    this.configs.clear();
+    this.statuses.clear();
+
+    let tunnelConfigs: TunnelConfig[] = [];
+
+    if (rawData !== null) {
+      if (isLegacyConfig(rawData)) {
+        console.log('[Tunnel] Migrating legacy single-tunnel config to multi-tunnel format');
+        tunnelConfigs = migrateLegacyConfig(rawData);
+        // Persist migrated config
+        await this.persistConfigs(tunnelConfigs);
+      } else if (Array.isArray(rawData)) {
+        tunnelConfigs = rawData as TunnelConfig[];
+      }
+    }
+
+    for (const cfg of tunnelConfigs) {
+      this.configs.set(cfg.id, { ...DEFAULT_TUNNEL_VALUES, ...cfg });
+      this.statuses.set(cfg.id, this.createDefaultStatus(cfg));
+    }
+
+    return tunnelConfigs;
   }
 
-  /**
-   * Save tunnel configuration to disk
-   * Always saves to port-specific config file
-   */
-  async saveConfig(config: Partial<TunnelConfig>): Promise<void> {
-    // Merge with existing config
-    this.config = { ...this.config, ...config };
-    this.status.enabled = this.config.enabled;
-
-    // Always save to port-specific config file
-    const portConfigFile = getPortConfigFile(this.localPort);
-
-    // Ensure directory exists
-    await fs.mkdir(path.dirname(portConfigFile), { recursive: true });
-
-    // Save to disk
-    await fs.writeFile(portConfigFile, JSON.stringify(this.config, null, 2), 'utf-8');
-
-    // Update config source
-    this.configSource = 'port-specific';
-    this.status.configSource = 'port-specific';
-
-    console.log(`[Tunnel] Configuration saved to: ${portConfigFile}`);
-  }
-
-  /**
-   * Get current tunnel configuration
-   */
-  getConfig(): TunnelConfig {
-    // Return config without exposing the full token
+  private createDefaultStatus(cfg: TunnelConfig): TunnelStatus {
     return {
-      ...this.config,
-      token: this.config.token ? `${this.config.token.slice(0, 8)}...` : '',
+      id: cfg.id,
+      label: cfg.label,
+      enabled: cfg.enabled,
+      connected: false,
+      domain: null,
+      lastError: null,
+      connectedAt: null,
+      reconnectCount: 0,
+      serverUrl: cfg.serverUrl,
+      localPort: this.localPort,
     };
   }
 
-  /**
-   * Get current tunnel status
-   */
-  getStatus(): TunnelStatus {
-    return { ...this.status };
+  private async persistConfigs(configs?: TunnelConfig[]): Promise<void> {
+    const data = configs || Array.from(this.configs.values());
+    const portConfigFile = getPortConfigFile(this.localPort);
+    await fs.mkdir(path.dirname(portConfigFile), { recursive: true });
+    await fs.writeFile(portConfigFile, JSON.stringify(data, null, 2), 'utf-8');
+    this.configSource = 'port-specific';
   }
 
-  /**
-   * Connect to the tunnel server
-   * @param force Force takeover existing connection (for manual use via API)
-   */
-  async connect(force = false): Promise<void> {
-    if (!this.config.token) {
-      throw new Error('Tunnel token is not configured');
+  // ---------------------------------------------------------------------------
+  // Config CRUD
+  // ---------------------------------------------------------------------------
+
+  getConfig(tunnelId: string): TunnelConfig | undefined {
+    const cfg = this.configs.get(tunnelId);
+    if (!cfg) return undefined;
+    return {
+      ...cfg,
+      token: cfg.token ? `${cfg.token.slice(0, 8)}...` : '',
+    };
+  }
+
+  getAllConfigs(): TunnelConfig[] {
+    return Array.from(this.configs.values()).map((cfg) => ({
+      ...cfg,
+      token: cfg.token ? `${cfg.token.slice(0, 8)}...` : '',
+    }));
+  }
+
+  async saveConfig(tunnelId: string, partial: Partial<TunnelConfig>): Promise<TunnelConfig> {
+    const existing = this.configs.get(tunnelId);
+    if (!existing) throw new Error(`Tunnel not found: ${tunnelId}`);
+
+    const updated = { ...existing, ...partial, id: tunnelId };
+    this.configs.set(tunnelId, updated);
+
+    // Sync status label / enabled / serverUrl
+    const st = this.statuses.get(tunnelId);
+    if (st) {
+      st.label = updated.label;
+      st.enabled = updated.enabled;
+      st.serverUrl = updated.serverUrl;
     }
 
-    // Disconnect existing connection if any
-    if (this.client) {
-      this.disconnect();
+    await this.persistConfigs();
+    return updated;
+  }
+
+  async addTunnel(partial: Partial<TunnelConfig>): Promise<TunnelConfig> {
+    const id = partial.id || generateTunnelId();
+    const cfg: TunnelConfig = {
+      ...DEFAULT_TUNNEL_VALUES,
+      ...partial,
+      id,
+      label: partial.label || partial.tunnelName || '新隧道',
+    };
+    this.configs.set(id, cfg);
+    this.statuses.set(id, this.createDefaultStatus(cfg));
+    await this.persistConfigs();
+    console.log(`[Tunnel] Added tunnel: ${id} (${cfg.label})`);
+    return cfg;
+  }
+
+  async removeTunnel(tunnelId: string): Promise<void> {
+    this.disconnect(tunnelId);
+    this.configs.delete(tunnelId);
+    this.statuses.delete(tunnelId);
+    await this.persistConfigs();
+    console.log(`[Tunnel] Removed tunnel: ${tunnelId}`);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Status
+  // ---------------------------------------------------------------------------
+
+  getStatus(tunnelId: string): TunnelStatus | undefined {
+    return this.statuses.get(tunnelId);
+  }
+
+  getAllStatuses(): TunnelStatus[] {
+    return Array.from(this.statuses.values());
+  }
+
+  // ---------------------------------------------------------------------------
+  // Connect / Disconnect
+  // ---------------------------------------------------------------------------
+
+  async connect(tunnelId: string, force = false): Promise<void> {
+    const cfg = this.configs.get(tunnelId);
+    if (!cfg) throw new Error(`Tunnel not found: ${tunnelId}`);
+    if (!cfg.token) throw new Error('Tunnel token is not configured');
+
+    // Disconnect existing connection
+    if (this.clients.has(tunnelId)) {
+      this.disconnect(tunnelId);
     }
 
     const targetUrl = `http://localhost:${this.localPort}`;
-    // Use websocketUrl from config if available, otherwise generate from serverUrl
-    const wsUrl = this.config.websocketUrl || getWebSocketUrl(this.config.serverUrl);
+    const wsUrl = cfg.websocketUrl || getWebSocketUrl(cfg.serverUrl);
 
-    console.log(`[Tunnel] Connecting to ${wsUrl}...`);
-    console.log(`[Tunnel] Token: ${this.config.token.slice(0, 10)}...`);
-    console.log(`[Tunnel] Target: ${targetUrl}`);
-    if (force) {
-      console.log('[Tunnel] Force mode enabled - will takeover existing connection');
-    }
+    console.log(`[Tunnel:${tunnelId}] Connecting to ${wsUrl}...`);
+    console.log(`[Tunnel:${tunnelId}] Token: ${cfg.token.slice(0, 10)}...`);
+    console.log(`[Tunnel:${tunnelId}] Target: ${targetUrl}`);
+    if (force) console.log(`[Tunnel:${tunnelId}] Force mode enabled`);
 
-    const requestTimeout = this.config.requestTimeout || 300000; // Default: 5 minutes
-    
+    const requestTimeout = cfg.requestTimeout || 300000;
+
     const clientConfig: TunnelClientConfig = {
       serverUrl: wsUrl,
-      token: this.config.token,
+      token: cfg.token,
       targetUrl,
-      reconnectInterval: this.config.reconnectInterval || 5000,
-      maxReconnectAttempts: this.config.maxReconnectAttempts || 0,
+      reconnectInterval: cfg.reconnectInterval || 5000,
+      maxReconnectAttempts: cfg.maxReconnectAttempts || 0,
       requestTimeout,
       force,
     };
-    
-    console.log(`[Tunnel] Request timeout: ${requestTimeout}ms (${requestTimeout / 1000}s)`);
 
-    this.client = new TunnelClient(clientConfig);
+    const client = new TunnelClient(clientConfig);
+    this.clients.set(tunnelId, client);
 
-    // Set up event handlers
-    this.client.on('onConnect', (domain: string) => {
-      console.log(`[Tunnel] Connected! Domain: ${domain}`);
-      this.status.connected = true;
-      this.status.domain = domain;
-      this.status.lastError = null;
-      this.status.connectedAt = new Date().toISOString();
-      this.status.reconnectCount = 0;
+    const status = this.statuses.get(tunnelId)!;
+
+    client.on('onConnect', (domain: string) => {
+      console.log(`[Tunnel:${tunnelId}] Connected! Domain: ${domain}`);
+      status.connected = true;
+      status.domain = domain;
+      status.lastError = null;
+      status.connectedAt = new Date().toISOString();
+      status.reconnectCount = 0;
     });
 
-    this.client.on('onDisconnect', () => {
-      console.log('[Tunnel] Disconnected');
-      this.status.connected = false;
-      this.status.reconnectCount++;
+    client.on('onDisconnect', () => {
+      console.log(`[Tunnel:${tunnelId}] Disconnected`);
+      status.connected = false;
+      status.reconnectCount++;
     });
 
-    this.client.on('onError', (error: Error) => {
-      console.error('[Tunnel] Error:', error.message);
-      this.status.lastError = error.message;
+    client.on('onError', (error: Error) => {
+      console.error(`[Tunnel:${tunnelId}] Error:`, error.message);
+      status.lastError = error.message;
     });
 
-    this.client.on('onRequest', (request: any) => {
-      const queryStr = request.query && Object.keys(request.query).length > 0 
-        ? '?' + new URLSearchParams(request.query).toString() 
-        : '';
-      
-      console.log(`[Tunnel] ${request.method} ${request.path}${queryStr}`);
+    client.on('onRequest', (request: any) => {
+      const queryStr =
+        request.query && Object.keys(request.query).length > 0
+          ? '?' + new URLSearchParams(request.query).toString()
+          : '';
+      console.log(`[Tunnel:${tunnelId}] ${request.method} ${request.path}${queryStr}`);
     });
 
-    // Tunely client has built-in exponential backoff with jitter for reconnection.
-    // For "already connected" errors, it tracks consecutive rejections and
-    // increases delay up to 5 minutes max.
-    this.client.run().catch((error) => {
-      console.error('[Tunnel] Client run error:', error);
-      this.status.lastError = error.message;
+    client.run().catch((error) => {
+      console.error(`[Tunnel:${tunnelId}] Client run error:`, error);
+      status.lastError = error.message;
     });
 
-    // Wait a bit for initial connection
     await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (!this.status.connected) {
-      console.log('[Tunnel] Initial connection pending...');
+    if (!status.connected) {
+      console.log(`[Tunnel:${tunnelId}] Initial connection pending...`);
     }
   }
 
-  /**
-   * Disconnect from the tunnel server
-   */
-  disconnect(): void {
-    if (this.client) {
-      console.log('[Tunnel] Disconnecting...');
-      this.client.stop();
-      this.client = null;
+  disconnect(tunnelId: string): void {
+    const client = this.clients.get(tunnelId);
+    if (client) {
+      console.log(`[Tunnel:${tunnelId}] Disconnecting...`);
+      client.stop();
+      this.clients.delete(tunnelId);
     }
-    this.status.connected = false;
-    this.status.domain = null;
-    this.status.connectedAt = null;
-  }
-
-  /**
-   * Update configuration and optionally reconnect
-   */
-  async updateConfig(newConfig: Partial<TunnelConfig>, reconnect = true): Promise<void> {
-    await this.saveConfig(newConfig);
-
-    if (reconnect && this.config.enabled && this.config.token) {
-      await this.connect();
-    } else if (!this.config.enabled) {
-      this.disconnect();
+    const status = this.statuses.get(tunnelId);
+    if (status) {
+      status.connected = false;
+      status.domain = null;
+      status.connectedAt = null;
     }
   }
 
-  /**
-   * Test tunnel connection with current config
-   */
-  async testConnection(): Promise<{ success: boolean; domain?: string; error?: string }> {
-    if (!this.config.token) {
-      return { success: false, error: 'Token is not configured' };
-    }
+  // ---------------------------------------------------------------------------
+  // Batch operations
+  // ---------------------------------------------------------------------------
 
-    try {
-      // Try to connect
-      await this.connect();
+  async connectAll(): Promise<{ tunnelId: string; success: boolean; error?: string }[]> {
+    const results: { tunnelId: string; success: boolean; error?: string }[] = [];
+    const configs = Array.from(this.configs.values()).filter((c) => c.token);
 
-      // Wait for connection
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+    await Promise.allSettled(
+      configs.map(async (cfg) => {
+        try {
+          await this.connect(cfg.id);
+          results.push({ tunnelId: cfg.id, success: true });
+        } catch (err) {
+          results.push({
+            tunnelId: cfg.id,
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      }),
+    );
+    return results;
+  }
 
-      if (this.status.connected) {
-        return { success: true, domain: this.status.domain || undefined };
-      } else {
-        return {
-          success: false,
-          error: this.status.lastError || 'Connection timeout',
-        };
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+  disconnectAll(): void {
+    for (const id of this.clients.keys()) {
+      this.disconnect(id);
     }
   }
 
-  /**
-   * Check if a tunnel name is available
-   * @param name The tunnel name to check (e.g., "my-dev")
-   */
-  async checkTunnelName(name: string): Promise<TunnelCheckResult> {
+  // ---------------------------------------------------------------------------
+  // Tunnel provisioning (create on remote server)
+  // ---------------------------------------------------------------------------
+
+  async checkTunnelName(
+    name: string,
+    serverUrl: string,
+  ): Promise<TunnelCheckResult> {
     if (!name || name.trim() === '') {
       return { available: false, reason: '隧道名称不能为空' };
     }
 
-    const apiBaseUrl = getApiBaseUrl(this.config.serverUrl);
+    const apiBaseUrl = getApiBaseUrl(serverUrl);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/tunnels/check-availability?name=${encodeURIComponent(name)}`);
+      const response = await fetch(
+        `${apiBaseUrl}/api/tunnels/check-availability?name=${encodeURIComponent(name)}`,
+      );
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         return {
           available: false,
-          reason: errorData.reason || errorData.message || errorData.error || `检查失败: HTTP ${response.status}`
+          reason:
+            errorData.reason ||
+            errorData.message ||
+            errorData.error ||
+            `检查失败: HTTP ${response.status}`,
         };
       }
 
@@ -444,16 +522,16 @@ class TunnelService {
     }
   }
 
-  /**
-   * Create a tunnel and get the token
-   * @param name The tunnel name to create (e.g., "my-dev")
-   */
-  async createTunnel(name: string, accessToken?: string): Promise<TunnelCreateResult> {
+  async createTunnelOnServer(
+    name: string,
+    serverUrl: string,
+    accessToken?: string,
+  ): Promise<TunnelCreateResult> {
     if (!name || name.trim() === '') {
       return { success: false, error: '隧道名称不能为空' };
     }
 
-    const apiBaseUrl = getApiBaseUrl(this.config.serverUrl);
+    const apiBaseUrl = getApiBaseUrl(serverUrl);
 
     try {
       const headers: Record<string, string> = {
@@ -466,34 +544,30 @@ class TunnelService {
       const response = await fetch(`${apiBaseUrl}/api/tunnels`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({
-          domain: name.trim(),
-          name: name.trim(),
-        }),
+        body: JSON.stringify({ domain: name.trim(), name: name.trim() }),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         return {
           success: false,
-          error: errorData.reason || errorData.message || errorData.error || `创建失败: HTTP ${response.status}`
+          error:
+            errorData.reason ||
+            errorData.message ||
+            errorData.error ||
+            `创建失败: HTTP ${response.status}`,
         };
       }
 
       const data = await response.json();
-
       if (data.token) {
         return {
           success: true,
           token: data.token,
           domain: data.domain || `${name}.tunnel`,
         };
-      } else {
-        return {
-          success: false,
-          error: data.error || data.message || '未返回 Token',
-        };
       }
+      return { success: false, error: data.error || data.message || '未返回 Token' };
     } catch (error) {
       console.error('[Tunnel] Error creating tunnel:', error);
       return {
@@ -504,118 +578,84 @@ class TunnelService {
   }
 
   /**
-   * Create tunnel and save config in one step
-   * @param name The tunnel name to create
-   * @param autoConnect Whether to enable auto-connect
-   * @param protocol The protocol to use (https or http)
-   * @param websocketUrl The WebSocket URL from server info
-   * @param domainSuffix The domain suffix (e.g., ".agentstudio.woa.com")
+   * Create tunnel on remote server, persist config, and optionally connect.
+   * Returns the new tunnel's config ID.
    */
-  async createAndSave(name: string, autoConnect: boolean = false, protocol: 'https' | 'http' = 'https', websocketUrl?: string, domainSuffix?: string, accessToken?: string): Promise<TunnelCreateResult> {
-    const result = await this.createTunnel(name, accessToken);
+  async createAndSave(opts: {
+    name: string;
+    serverUrl: string;
+    label?: string;
+    autoConnect?: boolean;
+    protocol?: 'https' | 'http';
+    websocketUrl?: string;
+    domainSuffix?: string;
+    accessToken?: string;
+  }): Promise<TunnelCreateResult> {
+    const result = await this.createTunnelOnServer(
+      opts.name,
+      opts.serverUrl,
+      opts.accessToken,
+    );
 
-    if (result.success && result.token) {
-      // Save the config with the new token
-      await this.saveConfig({
-        enabled: autoConnect,
-        tunnelName: name,
-        token: result.token,
-        protocol,
-        websocketUrl,
-        domainSuffix,
-      });
+    if (!result.success || !result.token) return result;
 
-      // Try to connect
-      if (autoConnect) {
-        await this.connect();
+    const cfg = await this.addTunnel({
+      label: opts.label || opts.name,
+      enabled: opts.autoConnect ?? false,
+      serverUrl: opts.serverUrl,
+      token: result.token,
+      tunnelName: opts.name,
+      protocol: opts.protocol || 'https',
+      websocketUrl: opts.websocketUrl,
+      domainSuffix: opts.domainSuffix,
+    });
+
+    result.tunnelId = cfg.id;
+
+    if (opts.autoConnect) {
+      try {
+        await this.connect(cfg.id);
+      } catch (err) {
+        console.error(`[Tunnel:${cfg.id}] Auto-connect after create failed:`, err);
       }
     }
 
     return result;
   }
 
-  /**
-   * Perform health check on tunnel connection
-   * @returns true if tunnel is actually reachable, false otherwise
-   */
-  async performHealthCheck(): Promise<boolean> {
-    if (!this.status.connected || !this.status.domain) {
-      return false;
-    }
+  // ---------------------------------------------------------------------------
+  // Health check (per-tunnel)
+  // ---------------------------------------------------------------------------
+
+  async performHealthCheck(tunnelId: string): Promise<boolean> {
+    const status = this.statuses.get(tunnelId);
+    const cfg = this.configs.get(tunnelId);
+    if (!status?.connected || !status.domain || !cfg) return false;
 
     try {
-      const protocol = this.config.protocol || 'https';
-      const fullDomain = this.config.domainSuffix 
-        ? `${this.status.domain}${this.config.domainSuffix}`
-        : this.status.domain;
-      
+      const protocol = cfg.protocol || 'https';
+      const fullDomain = cfg.domainSuffix
+        ? `${status.domain}${cfg.domainSuffix}`
+        : status.domain;
       const testUrl = `${protocol}://${fullDomain}/api/version`;
-      
+
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 3000);
-      
       const response = await fetch(testUrl, {
         method: 'HEAD',
         signal: controller.signal,
       });
-      
       clearTimeout(timeout);
-      
-      // 200 or 401 both indicate the tunnel is working
-      // (401 just means auth is required, but the tunnel itself is up)
+
       return response.ok || response.status === 401;
     } catch (error) {
-      console.warn('[Tunnel] Health check failed:', error instanceof Error ? error.message : String(error));
+      console.warn(
+        `[Tunnel:${tunnelId}] Health check failed:`,
+        error instanceof Error ? error.message : String(error),
+      );
       return false;
-    }
-  }
-
-  /**
-   * Start periodic health check
-   */
-  private startHealthCheck(): void {
-    // Clear existing interval if any
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-    }
-
-    // Check every 30 seconds
-    this.healthCheckInterval = setInterval(async () => {
-      // Only check if we think we're connected and tunnel is enabled
-      if (!this.status.connected || !this.config.enabled) {
-        return;
-      }
-
-      const isHealthy = await this.performHealthCheck();
-      
-      if (!isHealthy && !this.reconnecting) {
-        console.warn('[Tunnel] Health check failed - connection appears to be dead. Auto-reconnecting...');
-        this.status.connected = false;
-        this.reconnecting = true;
-        
-        try {
-          await this.disconnect();
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          await this.connect();
-        } catch (error) {
-          console.error('[Tunnel] Auto-reconnect after health check failure failed:', error);
-        } finally {
-          this.reconnecting = false;
-        }
-      }
-    }, 30000); // 30 seconds
-  }
-
-  /**
-   * Stop health check
-   */
-  private stopHealthCheck(): void {
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
     }
   }
 }
 
-// Export singleton instance
 export const tunnelService = new TunnelService();

@@ -1,0 +1,36 @@
+name: 健康检查
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+cases:
+  - name: "通用健康检查端点返回 200"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/health"
+    expect:
+      status: 200
+      body:
+        status: "ok"
+        timestamp: { exists: true }
+      responseTime: { lt: 2000 }
+
+  - name: "A2A 专用健康检查返回正确协议信息"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/health"
+    expect:
+      status: 200
+      body:
+        status: "ok"
+        protocol: "A2A"
+        version: { exists: true }
+        timestamp: { exists: true }
+        features:
+          agentCard: true
+          syncMessages: true
+          asyncTasks: true
+          apiKeyAuth: true
+      responseTime: { lt: 2000 }

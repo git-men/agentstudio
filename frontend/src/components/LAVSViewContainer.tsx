@@ -10,9 +10,11 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { LAVSClient, LAVSManifest, LAVSViewComponent } from '../lavs';
+import { LAVSClient, LAVSViewComponent } from 'lavs-client';
+import type { LAVSManifest } from 'lavs-client';
 import type { AgentConfig } from '../types';
 import { useAgentStore } from '../stores/useAgentStore';
+import { eventBus, EVENTS } from '../utils/eventBus';
 
 interface LAVSViewContainerProps {
   agent: AgentConfig;
@@ -154,6 +156,31 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
       iframeRef.current.contentWindow.postMessage(message, '*');
     }
   }, [lastToolExecution, componentLoaded]);
+
+  // Fallback: refresh LAVS view when AI response completes (covers all tool execution paths)
+  useEffect(() => {
+    if (!componentLoaded || !iframeRef.current) return;
+
+    const handleResponseComplete = () => {
+      if (iframeRef.current?.contentWindow) {
+        const message = {
+          type: 'lavs-agent-action',
+          action: {
+            type: 'tool_executed',
+            tool: '__lavs_refresh__',
+            timestamp: Date.now(),
+          }
+        };
+        console.log('[LAVS] AI response complete — sending refresh to iframe');
+        iframeRef.current.contentWindow.postMessage(message, '*');
+      }
+    };
+
+    eventBus.on(EVENTS.AI_RESPONSE_COMPLETE, handleResponseComplete);
+    return () => {
+      eventBus.off(EVENTS.AI_RESPONSE_COMPLETE, handleResponseComplete);
+    };
+  }, [componentLoaded]);
 
   /**
    * Load local component as iframe

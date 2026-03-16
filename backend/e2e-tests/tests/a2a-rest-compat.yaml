@@ -1,0 +1,155 @@
+name: A2A REST 协议向后兼容
+sequential: true
+
+setup:
+  - waitHealthy:
+      timeout: 60s
+
+  - name: "获取 A2A Agent 映射"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/a2a/mapping/{{config.project_path_encoded}}"
+    save:
+      a2a_agent_id: "a2aAgentId"
+
+  - name: "创建测试用 API Key"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}"
+      headers:
+        Content-Type: application/json
+      body:
+        description: "E2E REST 兼容测试密钥 - {{timestamp}}"
+    save:
+      api_key: "key"
+      api_key_id: "id"
+
+cases:
+  # =========================================================================
+  # Agent Card (REST 路径: /.well-known/agent-card.json)
+  # =========================================================================
+
+  - name: "REST 路径获取 Agent Card"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/.well-known/agent-card.json"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+    expect:
+      status: 200
+      body:
+        name: { exists: true, type: string }
+        description: { exists: true }
+        skills: { exists: true }
+      responseTime: { lt: 3000 }
+
+  # =========================================================================
+  # POST /messages — 同步消息 (REST)
+  # =========================================================================
+
+  - name: "REST message 同步请求"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/messages"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        message: "Hello from E2E REST compat test. Reply with OK."
+      timeout: 120s
+    expect:
+      status: 200
+      body:
+        response: { exists: true, type: string, length: { gt: 0 } }
+    save:
+      rest_session_id: "sessionId"
+
+  # =========================================================================
+  # POST /tasks — 创建异步任务 (REST)
+  # =========================================================================
+
+  - name: "REST 创建异步任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/tasks"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        message: "E2E task test: count to 3"
+        timeout: 60000
+    expect:
+      status: 202
+      body:
+        taskId: { exists: true, type: string }
+        status: "pending"
+        checkUrl: { exists: true, contains: "/tasks/" }
+    save:
+      task_id: "taskId"
+
+  # =========================================================================
+  # GET /tasks/:taskId — 查询任务状态 (REST)
+  # =========================================================================
+
+  - name: "REST 查询任务状态"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+    expect:
+      status: 200
+      body:
+        taskId: "{{runtime.task_id}}"
+        status: { in: ["pending", "running", "completed", "failed"] }
+        createdAt: { exists: true }
+
+  - name: "REST 查询不存在的任务返回 404"
+    request:
+      method: GET
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/tasks/non-existent-task-id"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+    expect:
+      status: 404
+      body:
+        code: "TASK_NOT_FOUND"
+
+  # =========================================================================
+  # DELETE /tasks/:taskId — 取消任务 (REST)
+  # =========================================================================
+
+  - name: "REST 取消任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+    expect:
+      status: [200, 400]
+
+  # =========================================================================
+  # 双协议共存验证：同一端点支持 REST 和 JSON-RPC
+  # =========================================================================
+
+  - name: "同一端点 REST 请求不含 jsonrpc 字段时仍可用"
+    request:
+      method: POST
+      url: "{{config.base_url}}/a2a/{{runtime.a2a_agent_id}}/messages"
+      headers:
+        Authorization: "Bearer {{runtime.api_key}}"
+        Content-Type: application/json
+      body:
+        message: "Reply OK"
+      timeout: 180s
+    expect:
+      status: 200
+      body:
+        response: { exists: true }
+
+teardown:
+  - name: "清理测试 API Key"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/a2a/api-keys/{{config.project_path_encoded}}/{{runtime.api_key_id}}"
+    ignoreError: true

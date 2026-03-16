@@ -400,6 +400,13 @@
       "scheduledTasks": "定时任务",
       "customAgents": "自定义 Agent"
     },
+    "providerCheck": {
+      "title": "模型供应商尚未配置",
+      "description": "当前默认模型供应商不可用，请在供应商设置中配置 API 密钥。",
+      "configure": "前往配置",
+      "later": "稍后配置",
+      "checking": "正在检查模型供应商可用性..."
+    },
     "sessions": {
       "title": "活跃会话",
       "clearAll": "清除全部",
@@ -956,7 +963,23 @@
       "saveFailed": "保存配置失败",
       "copyFailed": "复制失败"
     },
-    "commandCopied": "命令已复制到剪贴板"
+    "commandCopied": "命令已复制到剪贴板",
+    "tabs": {
+      "myServers": "我的 MCP",
+      "marketplace": "推荐 MCP"
+    },
+    "presets": {
+      "loading": "加载推荐 MCP 中...",
+      "searchPlaceholder": "搜索 MCP 服务...",
+      "noResults": "未找到匹配的 MCP 服务",
+      "install": "安装",
+      "installed": "已安装",
+      "installSuccess": "{{name}} 安装成功",
+      "installFailed": "安装失败",
+      "missingEnvVars": "请填写所有必填项",
+      "configureTitle": "配置 {{name}}",
+      "configureDescription": "请填写所需配置以安装此 MCP 服务。"
+    }
   },
   "commands": {
     "title": "自定义命令",

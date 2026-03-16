@@ -7,7 +7,8 @@
 
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
-import { LAVSToolGenerator, GeneratedTool } from './tool-generator.js';
+import { LAVSToolGenerator } from 'lavs-runtime';
+import type { GeneratedTool } from 'lavs-runtime';
 import path from 'path';
 import { AGENTS_DIR } from '../config/paths.js';
 

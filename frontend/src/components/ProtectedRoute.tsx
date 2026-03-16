@@ -109,7 +109,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       const guardTimer = setTimeout(() => {
         if (!cancelled) {
           setIsVerifying(false);
-          setIsValid(false);
+          const tokenStillExists = currentServiceId ? !!getToken(currentServiceId) : false;
+          setIsValid(tokenStillExists);
         }
       }, VERIFY_GUARD_MS);
 
@@ -117,14 +118,23 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         if (isAuthenticated) {
           const valid = await verifyToken();
           if (!cancelled) {
-            setIsValid(valid);
+            if (valid) {
+              setIsValid(true);
+            } else {
+              // verifyToken keeps the token on network errors but removes it on auth rejection (401).
+              // If token still exists, this was a transient failure (e.g. backend still starting up)
+              // → trust the locally-valid token to avoid false redirects.
+              const tokenStillExists = currentServiceId ? !!getToken(currentServiceId) : false;
+              setIsValid(tokenStillExists);
+            }
           }
         } else {
           if (!cancelled) setIsValid(false);
         }
       } catch (e) {
         if (!cancelled) {
-          setIsValid(false);
+          const tokenStillExists = currentServiceId ? !!getToken(currentServiceId) : false;
+          setIsValid(tokenStillExists);
         }
       } finally {
         clearTimeout(guardTimer);
