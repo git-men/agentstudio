@@ -1,0 +1,243 @@
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useAgent, useProjectSessions } from '../hooks/useAgents';
+import { useProjects } from '../hooks/useProjects';
+import { useSharedStore } from '../stores/useSharedStore';
+import { sessionStoreManager } from '../services/SessionStoreManager';
+import { SessionStoreProvider } from '../stores/SessionStoreContext';
+import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
+import { ProjectSessionListPanel } from '../components/workspace/ProjectSessionListPanel';
+import { AgentPickerModal } from '../components/workspace/AgentPickerModal';
+import { AGUIChatPanel } from '../components/AGUIChatPanel';
+import { MessageSquarePlus, FolderOpen, ArrowLeft } from 'lucide-react';
+import useEngine from '../hooks/useEngine';
+import type { AgentConfig } from '../types/index.js';
+
+/**
+ * ProjectWorkspacePage — project-centric multi-session workspace.
+ * Route: /project-workspace?project=<encodedPath>&session=<id>
+ *
+ * Unlike WorkspacePage (agent-centric), this view shows all sessions
+ * under a project directory, regardless of which agent created them.
+ * Creating a new session requires selecting an agent first.
+ */
+export const ProjectWorkspacePage: React.FC = () => {
+  const { t } = useTranslation('pages');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  const projectPath = searchParams.get('project') || '';
+  const sessionFromUrl = searchParams.get('session');
+
+  // Fetch project metadata to get defaultAgent and project name
+  const { data: projectsData } = useProjects();
+  const project = useMemo(
+    () => projectsData?.projects?.find((p) => p.path === projectPath),
+    [projectsData, projectPath],
+  );
+
+  const { engineType: serviceEngineType } = useEngine();
+  const isEngineReady = !!serviceEngineType;
+  const { data: sessionsData } = useProjectSessions(projectPath, undefined, isEngineReady);
+
+  const setCurrentAgent = useSharedStore((s) => s.setCurrentAgent);
+
+  // Track which agent each session uses. For new sessions this is set by
+  // the picker; for existing sessions we fall back to the project's default.
+  const [sessionAgentMap, setSessionAgentMap] = useState<Record<string, string>>({});
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionFromUrl);
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
+
+  // Resolve the active agent: per-session override > project default
+  const activeAgentId = useMemo(() => {
+    if (activeSessionId && sessionAgentMap[activeSessionId]) {
+      return sessionAgentMap[activeSessionId];
+    }
+    // Check if the session data from backend has agentId
+    const backendSession = sessionsData?.sessions?.find(
+      (s: any) => s.id === activeSessionId,
+    );
+    if (backendSession?.agentId) return backendSession.agentId;
+    return project?.defaultAgent || '';
+  }, [activeSessionId, sessionAgentMap, sessionsData, project]);
+
+  const { data: agentData } = useAgent(activeAgentId);
+  const agent = agentData?.agent;
+
+  // Sync agent to shared store
+  useEffect(() => {
+    if (agent) setCurrentAgent(agent);
+  }, [agent, setCurrentAgent]);
+
+  // Auto-select first session
+  useEffect(() => {
+    if (!activeSessionId && sessionsData?.sessions?.length > 0) {
+      setActiveSessionId(sessionsData.sessions[0].id);
+    }
+  }, [activeSessionId, sessionsData]);
+
+  // Keep URL in sync
+  useEffect(() => {
+    if (!projectPath) return;
+    const params = new URLSearchParams(searchParams);
+    if (activeSessionId) {
+      params.set('session', activeSessionId);
+    } else {
+      params.delete('session');
+    }
+    params.set('project', projectPath);
+    if (params.toString() !== searchParams.toString()) {
+      setSearchParams(params, { replace: true });
+    }
+  }, [activeSessionId, projectPath, searchParams, setSearchParams]);
+
+  // Dispose all stores on unmount
+  useEffect(() => {
+    return () => sessionStoreManager.disposeAll();
+  }, []);
+
+  // Get or create the active session's store
+  const activeStore = useMemo(() => {
+    if (!activeSessionId || !activeAgentId) return null;
+    return sessionStoreManager.getOrCreate(activeSessionId, activeAgentId);
+  }, [activeSessionId, activeAgentId]);
+
+  const handleSessionSelect = useCallback(
+    (sessionId: string) => {
+      if (sessionId === activeSessionId) return;
+      if (activeAgentId) {
+        sessionStoreManager.getOrCreate(sessionId, activeAgentId);
+      }
+      setActiveSessionId(sessionId);
+    },
+    [activeAgentId, activeSessionId],
+  );
+
+  const handleNewSession = useCallback(() => {
+    setShowAgentPicker(true);
+  }, []);
+
+  const handleAgentSelected = useCallback(
+    (selectedAgent: AgentConfig) => {
+      setShowAgentPicker(false);
+      const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setSessionAgentMap((prev) => ({ ...prev, [newId]: selectedAgent.id }));
+      sessionStoreManager.getOrCreate(newId, selectedAgent.id);
+      setActiveSessionId(newId);
+    },
+    [],
+  );
+
+  const handleRemoveSession = useCallback(
+    (sessionId: string) => {
+      sessionStoreManager.dispose(sessionId);
+      setSessionAgentMap((prev) => {
+        const next = { ...prev };
+        delete next[sessionId];
+        return next;
+      });
+      if (activeSessionId === sessionId) {
+        const remaining = sessionsData?.sessions?.filter(
+          (s: any) => s.id !== sessionId,
+        );
+        setActiveSessionId(remaining?.[0]?.id ?? null);
+      }
+    },
+    [activeSessionId, sessionsData],
+  );
+
+  const handleSessionChange = useCallback(
+    (sessionId: string | null) => {
+      if (sessionId) setActiveSessionId(sessionId);
+    },
+    [],
+  );
+
+  // ---------- Error states ----------
+
+  if (!projectPath) {
+    return (
+      <div className="h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center max-w-md">
+          <FolderOpen className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+            {t('projectWorkspace.noProject', 'No project selected')}
+          </h1>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">
+            {t('projectWorkspace.noProjectDesc', 'Please select a project from the projects page.')}
+          </p>
+          <button
+            onClick={() => navigate('/projects')}
+            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            {t('projectWorkspace.goToProjects', 'Go to Projects')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------- Empty state (no sessions) ----------
+
+  const renderEmptyState = () => (
+    <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
+      <div className="text-center max-w-sm px-6">
+        <MessageSquarePlus className="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-4" />
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+          {t('projectWorkspace.emptyTitle', 'Project Workspace')}
+        </h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+          {t(
+            'projectWorkspace.emptyDescription',
+            'Create a new session to start working on this project. You can choose which agent to use.',
+          )}
+        </p>
+        <button
+          onClick={handleNewSession}
+          className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          {t('workspace.newSession', 'New Session')}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ---------- Main render ----------
+
+  return (
+    <div className="h-screen bg-gray-100 dark:bg-gray-900">
+      <WorkspaceLayout
+        sidebar={
+          <ProjectSessionListPanel
+            projectPath={projectPath}
+            projectName={project?.name}
+            activeSessionId={activeSessionId}
+            onSessionSelect={handleSessionSelect}
+            onNewSession={handleNewSession}
+            onRemoveSession={handleRemoveSession}
+          />
+        }
+      >
+        {activeStore && agent ? (
+          <SessionStoreProvider value={activeStore}>
+            <AGUIChatPanel
+              agent={agent}
+              projectPath={projectPath}
+              onSessionChange={handleSessionChange}
+            />
+          </SessionStoreProvider>
+        ) : (
+          renderEmptyState()
+        )}
+      </WorkspaceLayout>
+
+      <AgentPickerModal
+        open={showAgentPicker}
+        onClose={() => setShowAgentPicker(false)}
+        onSelect={handleAgentSelected}
+      />
+    </div>
+  );
+};

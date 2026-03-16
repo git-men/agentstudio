@@ -13,6 +13,7 @@ import {
   Shield,
   Settings,
   GitBranch,
+  LayoutGrid,
 } from 'lucide-react';
 import { formatRelativeTime } from '../utils';
 import { API_BASE } from '../lib/config';
@@ -57,6 +58,7 @@ interface ProjectTableProps {
   onVersionManagement: (project: Project) => void;
   onSettings: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
+  onOpenWorkspace?: (project: Project) => void;
   onAgentChanged?: (projectId: string, newAgent: Agent) => void;
   className?: string;
 }
@@ -72,6 +74,7 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   onVersionManagement,
   onSettings,
   onDeleteProject,
+  onOpenWorkspace,
   onAgentChanged,
   className = '',
 }) => {
@@ -219,6 +222,15 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
       >
         <GitBranch className="w-3.5 h-3.5" />
       </button>
+      {onOpenWorkspace && (
+        <button
+          onClick={() => onOpenWorkspace(project)}
+          className="p-1.5 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 rounded-md transition-colors"
+          title="Workspace"
+        >
+          <LayoutGrid className="w-3.5 h-3.5" />
+        </button>
+      )}
       <button
         onClick={() => onSettings(project)}
         className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-md transition-colors"
@@ -322,6 +334,15 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
                   >
                     <GitBranch className="w-4 h-4" />
                   </button>
+                  {onOpenWorkspace && (
+                    <button
+                      onClick={() => onOpenWorkspace(project)}
+                      className="p-2 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/50 rounded-md transition-colors"
+                      title="Workspace"
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => onSettings(project)}
                     className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-md transition-colors"

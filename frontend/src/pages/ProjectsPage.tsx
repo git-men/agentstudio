@@ -377,6 +377,12 @@ export const ProjectsPage: React.FC = () => {
     ));
   };
 
+  const handleOpenWorkspace = (project: Project) => {
+    const params = new URLSearchParams();
+    params.set('project', project.path);
+    navigate(`/project-workspace?${params.toString()}`);
+  };
+
   const handleDeleteProject = async (project: Project) => {
     const confirmed = await confirm({
       title: t('projects.deleteTitle', '删除确认'),
@@ -644,6 +650,7 @@ export const ProjectsPage: React.FC = () => {
           onVersionManagement={handleVersionManagement}
           onSettings={handleSettings}
           onDeleteProject={handleDeleteProject}
+          onOpenWorkspace={handleOpenWorkspace}
           onAgentChanged={handleAgentChanged}
         />
       )}

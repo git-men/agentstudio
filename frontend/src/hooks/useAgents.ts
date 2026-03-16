@@ -185,6 +185,24 @@ export const useAgentSessionMessages = (agentId: string, sessionId: string | nul
   });
 };
 
+// Project-centric session hooks (workspace view driven by projectPath)
+export const useProjectSessions = (projectPath: string, searchTerm?: string, enabled: boolean = true) => {
+  return useQuery({
+    queryKey: ['project-sessions', projectPath, searchTerm],
+    queryFn: async () => {
+      const url = new URL(`${API_BASE}/sessions/by-project`);
+      url.searchParams.set('projectPath', projectPath);
+      if (searchTerm && searchTerm.trim()) {
+        url.searchParams.append('search', searchTerm.trim());
+      }
+      const response = await authFetch(url.toString());
+      if (!response.ok) throw new Error('Failed to fetch project sessions');
+      return response.json();
+    },
+    enabled: enabled && !!projectPath,
+  });
+};
+
 // Agent-specific AI chat hook
 export const useAgentChat = () => {
   return {

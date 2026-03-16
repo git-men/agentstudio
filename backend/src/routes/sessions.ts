@@ -960,6 +960,80 @@ router.get('/_status', (req, res) => {
   }
 });
 
+// GET /api/sessions/by-project - Get sessions by project path (project-centric view)
+router.get('/by-project', async (req, res) => {
+  try {
+    const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
+    const { search } = req.query;
+
+    if (!projectPath) {
+      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    }
+
+    let sessions: any[] = [];
+    const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+
+    if (defaultEngine.readSessions) {
+      const engineSessions = await defaultEngine.readSessions(projectPath);
+      sessions = engineSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        createdAt: session.createdAt,
+        lastUpdated: session.lastUpdated,
+        messageCount: session.messages.length,
+      }));
+    } else {
+      const claudeSessions = readClaudeHistorySessions(projectPath);
+      sessions = claudeSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        createdAt: session.createdAt,
+        lastUpdated: session.lastUpdated,
+        messageCount: session.messages.length,
+      }));
+    }
+
+    // Merge live sessions from SessionManager that target this projectPath
+    const liveSessionsInfo = sessionManager.getSessionsInfo();
+    const existingIds = new Set(sessions.map(s => s.id));
+    for (const live of liveSessionsInfo) {
+      if (live.projectPath === projectPath && !existingIds.has(live.sessionId)) {
+        sessions.push({
+          id: live.sessionId,
+          agentId: live.agentId,
+          title: live.sessionTitle || `Session ${live.sessionId.slice(0, 8)}`,
+          createdAt: live.lastActivity,
+          lastUpdated: live.lastActivity,
+          messageCount: 0,
+          isActive: live.isActive,
+        });
+      }
+    }
+
+    // Enrich with live status
+    const liveMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
+    sessions = sessions.map(s => {
+      const live = liveMap.get(s.id);
+      return {
+        ...s,
+        agentId: s.agentId || live?.agentId || undefined,
+        isActive: live ? live.isActive : false,
+        isProcessing: live ? sessionManager.isSessionBusy(s.id) : false,
+      };
+    });
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const term = search.trim().toLowerCase();
+      sessions = sessions.filter(s => s.title?.toLowerCase().includes(term));
+    }
+
+    res.json({ sessions, projectPath });
+  } catch (error) {
+    console.error('Failed to get project sessions:', error);
+    res.status(500).json({ error: 'Failed to retrieve project sessions' });
+  }
+});
+
 // GET /api/sessions/:agentId - Get agent sessions
 router.get('/:agentId', async (req, res) => {
   try {
