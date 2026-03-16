@@ -15,17 +15,42 @@ class SessionStoreManagerImpl {
   private stores = new Map<string, StoreApi<SessionState & SessionActions>>();
   private streams = new Map<string, SessionStreamManager>();
 
+  static readonly MAX_SESSIONS = 50;
+
   /**
    * Returns the existing store for `sessionId`, or creates a new one.
-   * Subsequent calls with the same `sessionId` return the same StoreApi.
+   * If the session count exceeds MAX_SESSIONS, disposes the least-recently-active
+   * idle session to prevent unbounded memory growth.
    */
   getOrCreate(sessionId: string, agentId: string): StoreApi<SessionState & SessionActions> {
     let store = this.stores.get(sessionId);
     if (!store) {
+      this.evictIfNeeded();
       store = createSessionStore(sessionId, agentId);
       this.stores.set(sessionId, store);
     }
     return store;
+  }
+
+  private evictIfNeeded(): void {
+    if (this.stores.size < SessionStoreManagerImpl.MAX_SESSIONS) return;
+
+    let oldestId: string | null = null;
+    let oldestActivity = Infinity;
+
+    for (const [id, store] of this.stores) {
+      const state = store.getState();
+      if (state.isAiTyping || id.startsWith('__pending')) continue;
+      if (state.lastActivity < oldestActivity) {
+        oldestActivity = state.lastActivity;
+        oldestId = id;
+      }
+    }
+
+    if (oldestId) {
+      console.log(`[SessionStoreManager] Evicting least-active session: ${oldestId}`);
+      this.dispose(oldestId);
+    }
   }
 
   /**
@@ -70,11 +95,17 @@ class SessionStoreManagerImpl {
   }
 
   /**
-   * Disposes every tracked session. Called on workspace unmount to prevent
-   * memory leaks (FR-017).
+   * Disposes every tracked session that is not currently streaming.
+   * Sessions still streaming are kept alive to avoid corrupting their state.
+   * Called on workspace unmount to prevent memory leaks (FR-017).
    */
   disposeAll(): void {
     for (const id of Array.from(this.stores.keys())) {
+      const store = this.stores.get(id);
+      if (store?.getState().isAiTyping) {
+        console.warn(`[SessionStoreManager] Skipping dispose for streaming session: ${id}`);
+        continue;
+      }
       this.dispose(id);
     }
   }

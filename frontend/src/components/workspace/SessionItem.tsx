@@ -3,6 +3,9 @@ import { useStore } from 'zustand';
 import { X } from 'lucide-react';
 import type { StoreApi } from 'zustand';
 import type { SessionState, SessionActions } from '../../stores/createSessionStore';
+import { createSessionStore } from '../../stores/createSessionStore';
+
+const EMPTY_STORE = createSessionStore('__empty__', '__empty__');
 
 interface SessionItemProps {
   sessionId: string;
@@ -63,15 +66,9 @@ export const SessionItem: React.FC<SessionItemProps> = ({
     },
     [sessionId, onRemove, showRemoveConfirm],
   );
-  const isAiTyping = storeApi
-    ? // eslint-disable-next-line react-hooks/rules-of-hooks
-      useStore(storeApi, (s) => s.isAiTyping)
-    : false;
-
-  const status = storeApi
-    ? // eslint-disable-next-line react-hooks/rules-of-hooks
-      useStore(storeApi, (s) => s.status)
-    : 'idle';
+  const effectiveStore = storeApi ?? EMPTY_STORE;
+  const isAiTyping = useStore(effectiveStore, (s) => s.isAiTyping);
+  const status = useStore(effectiveStore, (s) => s.status);
 
   const effectiveStatus = isAiTyping ? 'running' : status;
   const badge = STATUS_BADGE[effectiveStatus] || STATUS_BADGE.idle;

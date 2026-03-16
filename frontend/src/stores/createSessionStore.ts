@@ -146,19 +146,22 @@ export function createSessionStore(
     // ==================================================================
 
     addMessage: (message) =>
-      set((state) => ({
-        messages: [
-          ...state.messages,
-          {
-            ...message,
-            id: generateId(),
-            timestamp: Date.now(),
-            agentId: state.agentId,
-            messageParts: [],
-          },
-        ],
-        lastActivity: Date.now(),
-      })),
+      set((state) => {
+        if (state.isDisposed) return state;
+        return {
+          messages: [
+            ...state.messages,
+            {
+              ...message,
+              id: generateId(),
+              timestamp: Date.now(),
+              agentId: state.agentId,
+              messageParts: [],
+            },
+          ],
+          lastActivity: Date.now(),
+        };
+      }),
 
     updateMessage: (messageId, updates) =>
       set((state) => ({
@@ -344,11 +347,19 @@ export function createSessionStore(
         })),
       })),
 
-    setAiTyping: (typing) => set({ isAiTyping: typing, lastActivity: Date.now() }),
+    setAiTyping: (typing) =>
+      set((state) => {
+        if (state.isDisposed) return state;
+        return { isAiTyping: typing, lastActivity: Date.now() };
+      }),
 
     clearMessages: () => set({ messages: [] }),
 
-    loadSessionMessages: (messages) => set({ messages, messagesLoaded: true }),
+    loadSessionMessages: (messages) =>
+      set((state) => {
+        if (state.isDisposed) return state;
+        return { messages, messagesLoaded: true };
+      }),
 
     // ==================================================================
     // MCP Actions

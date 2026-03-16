@@ -211,13 +211,16 @@ function bindToSession(
 
   const store = sessionStoreManager.getOrCreate(sessionId, agentId);
 
-  // Transfer any pending facade state to the new session store
-  // (handles the case where messages were added before sessionId was assigned)
+  // Transfer pending facade state to the new session store ONLY if the facade
+  // is actively typing (i.e. the messages belong to an in-flight request, not
+  // stale leftovers from a previous session).
   const facadeState = facadeGet();
-  if (facadeState.messages.length > 0 && store.getState().messages.length === 0) {
+  if (
+    facadeState.isAiTyping &&
+    facadeState.messages.length > 0 &&
+    store.getState().messages.length === 0
+  ) {
     store.getState().loadSessionMessages(facadeState.messages);
-  }
-  if (facadeState.isAiTyping && !store.getState().isAiTyping) {
     store.setState({ isAiTyping: true });
   }
 
@@ -251,11 +254,16 @@ function getCurrentSessionStore(get: () => AgentState): StoreApi<SessionState & 
  * All existing consumers (ChatPage, AGUIChatPanel, etc.) continue working
  * without ANY changes.
  */
+// Module-level unsubscribe for HMR safety
+let _sharedStoreUnsub: (() => void) | null = null;
+
 export const useAgentStore = create<AgentState>((set, get) => {
   // ------------------------------------------------------------------
   // Subscribe to shared store → sync shared fields into facade
+  // Unsubscribe previous listener first (HMR / SSR safety).
   // ------------------------------------------------------------------
-  useSharedStore.subscribe((shared) => {
+  if (_sharedStoreUnsub) _sharedStoreUnsub();
+  _sharedStoreUnsub = useSharedStore.subscribe((shared) => {
     set({
       currentAgent: shared.currentAgent,
       selectedEngine: shared.selectedEngine,

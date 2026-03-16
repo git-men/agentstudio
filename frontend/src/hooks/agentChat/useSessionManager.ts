@@ -111,9 +111,14 @@ export const useSessionManager = ({
 
         // Stale-check: if streaming started while the fetch was in flight,
         // discard the result — the store already has live-streamed data.
-        const { isAiTyping } = useAgentStore.getState();
-        if (isAiTyping) {
-          console.log(`[SessionManager] Discarding fetched messages — streaming is active`);
+        // Check the target session store first (workspace mode), then fall back
+        // to the global facade (legacy mode).
+        const targetStore = sessionStoreManager.getStore(sessionId);
+        const isTargetStreaming = targetStore
+          ? targetStore.getState().isAiTyping
+          : useAgentStore.getState().isAiTyping;
+        if (isTargetStreaming) {
+          console.log(`[SessionManager] Discarding fetched messages — streaming is active for ${sessionId}`);
           return;
         }
 
@@ -131,11 +136,14 @@ export const useSessionManager = ({
 
   const handleSwitchSession = useCallback(
     async (sessionId: string) => {
-      // Refuse to switch while streaming — it would corrupt both sessions
-      const { isAiTyping } = useAgentStore.getState();
-      if (isAiTyping) {
-        console.warn(`[SessionManager] Ignoring session switch to ${sessionId} — AI is still streaming`);
-        return;
+      // In workspace mode, multiple sessions can stream independently, so only
+      // block switching for legacy (single-session) mode.
+      if (!sessionStore) {
+        const { isAiTyping } = useAgentStore.getState();
+        if (isAiTyping) {
+          console.warn(`[SessionManager] Ignoring session switch to ${sessionId} — AI is still streaming`);
+          return;
+        }
       }
 
       console.log(`[SessionManager] Switching to session ${sessionId}`);
@@ -166,11 +174,16 @@ export const useSessionManager = ({
   }, [onSessionChange, setCurrentSessionId, sessionStore, facadeClearMessages, textareaRef]);
 
   const handleRefreshMessages = useCallback(async () => {
-    // Guard: don't refresh while streaming
-    const { isAiTyping } = useAgentStore.getState();
-    if (isAiTyping) {
-      console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
-      return;
+    // Guard: don't refresh while the target session is streaming
+    if (currentSessionId) {
+      const targetStore = sessionStoreManager.getStore(currentSessionId);
+      const isStreaming = targetStore
+        ? targetStore.getState().isAiTyping
+        : useAgentStore.getState().isAiTyping;
+      if (isStreaming) {
+        console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
+        return;
+      }
     }
     if (currentSessionId) {
       setIsLoadingMessages(true);

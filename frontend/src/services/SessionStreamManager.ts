@@ -39,6 +39,11 @@ export class SessionStreamManager {
   // Public API
   // -------------------------------------------------------------------
 
+  /** Returns the bound session store for identity checks. */
+  getStore(): StoreApi<SessionState & SessionActions> {
+    return this.store;
+  }
+
   setTranslateFn(fn: TranslateFn): void {
     this.translateFn = fn;
   }
@@ -777,7 +782,7 @@ export class SessionStreamManager {
       this.actions.updateMcpStatus({
         hasError: true,
         connectionErrors: failedServers,
-        lastError: `连接失败: ${failedServers.map((s: any) => s.name).join(', ')}`,
+        lastError: `${t('mcpStatus.connectionFailed')}: ${failedServers.map((s: any) => s.name).join(', ')}`,
       });
     } else if (eventData.subtype === 'connection_success') {
       const connectedServers = eventData.connectedServers || [];
@@ -792,12 +797,12 @@ export class SessionStreamManager {
 
   private handleMcpError(eventData: any): void {
     if (eventData.subtype === 'execution_failed') {
-      const toolName = eventData.tool || '未知工具';
-      const errorMessage = eventData.error || '执行失败';
+      const toolName = eventData.tool || t('mcpStatus.unknownTool');
+      const errorMessage = eventData.error || t('mcpStatus.executionFailed');
       const details = eventData.details || '';
       this.actions.updateMcpStatus({
         hasError: true,
-        lastError: `工具执行失败: ${toolName} - ${errorMessage}`,
+        lastError: `${t('mcpStatus.toolExecutionFailed')}: ${toolName} - ${errorMessage}`,
         lastErrorDetails: details,
       });
     }

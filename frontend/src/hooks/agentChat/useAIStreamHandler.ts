@@ -74,6 +74,8 @@ export const useAIStreamHandler = ({
 
   // Ref holding the internally-managed SessionStreamManager (legacy mode).
   const internalManagerRef = useRef<SessionStreamManager | null>(null);
+  // Tracks the unique pending store ID for this handler instance.
+  const pendingStoreIdRef = useRef<string | null>(null);
 
   /**
    * Lazily creates (or returns existing) SessionStreamManager for legacy mode.
@@ -93,18 +95,18 @@ export const useAIStreamHandler = ({
     }
 
     if (!store) {
-      // Fallback: create a pending session store.
-      // Messages added before sessionId assignment will be transferred when
-      // setCurrentSessionId is called (handled by the useAgentStore facade).
-      store = sessionStoreManager.getOrCreate('__pending__', agentId);
+      // Fallback: create a pending session store with unique ID to avoid
+      // collisions when multiple sessions are initialized concurrently.
+      const pendingId = `__pending_${Date.now()}_${Math.random().toString(36).substr(2, 6)}__`;
+      store = sessionStoreManager.getOrCreate(pendingId, agentId);
+      pendingStoreIdRef.current = pendingId;
     }
 
     const mgr = new SessionStreamManager(store);
     mgr.setTranslateFn(t);
     internalManagerRef.current = mgr;
 
-    // Attach to sessionStoreManager for lifecycle management
-    const sid = currentSessionId || '__pending__';
+    const sid = currentSessionId || pendingStoreIdRef.current || '__pending__';
     sessionStoreManager.attachStream(sid, mgr);
 
     return mgr;
@@ -154,7 +156,8 @@ export const useAIStreamHandler = ({
 
           // Rebind internal manager to the real session store
           if (internalManagerRef.current) {
-            const pendingStore = sessionStoreManager.getStore('__pending__');
+            const pendingId = pendingStoreIdRef.current;
+            const pendingStore = pendingId ? sessionStoreManager.getStore(pendingId) : undefined;
             const realStore = sessionStoreManager.getOrCreate(newSessionId!, agentId);
 
             // Transfer any messages from pending store
@@ -166,8 +169,9 @@ export const useAIStreamHandler = ({
               if (pendingStore.getState().isAiTyping) {
                 realStore.setState({ isAiTyping: true });
               }
-              sessionStoreManager.dispose('__pending__');
+              sessionStoreManager.dispose(pendingId!);
             }
+            pendingStoreIdRef.current = null;
 
             // Create new manager bound to the real store
             const mgr = new SessionStreamManager(realStore);
@@ -272,6 +276,12 @@ export const useAIStreamHandler = ({
       setAiTyping(false);
       setIsInitializingSession(false);
       abortControllerRef.current = null;
+
+      // Clean up pending store on error to prevent leaks
+      if (pendingStoreIdRef.current) {
+        sessionStoreManager.dispose(pendingStoreIdRef.current);
+        pendingStoreIdRef.current = null;
+      }
 
       if (error instanceof DOMException && error.name === 'AbortError') {
         return;

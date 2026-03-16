@@ -483,12 +483,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         if (!isWorkspaceMode || !sessionStoreApi) return undefined;
         if (
             workspaceStreamManagerRef.current &&
-            (workspaceStreamManagerRef.current as any)._store === sessionStoreApi
+            workspaceStreamManagerRef.current.getStore() === sessionStoreApi
         ) {
             return workspaceStreamManagerRef.current;
         }
         const mgr = new SessionStreamManager(sessionStoreApi);
-        (mgr as any)._store = sessionStoreApi;
         workspaceStreamManagerRef.current = mgr;
 
         const sid = sessionStoreApi.getState().sessionId;
