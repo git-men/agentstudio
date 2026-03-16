@@ -1035,6 +1035,53 @@ router.get('/:agentId', async (req, res) => {
         console.log(`🔄 [DEBUG] Mapped AgentStorage session ${index + 1}:`, mappedSession);
         return mappedSession;
       });
+
+      // Fallback: also read from Claude/engine history using agent's effective
+      // working directory. This catches sessions created via /api/agents/chat
+      // that bypass AgentStorage (e.g. workspace mode).
+      const effectivePath = agent.workingDirectory
+        ? path.resolve(process.cwd(), resolvePath(agent.workingDirectory))
+        : process.cwd();
+
+      const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+      let historySessions: typeof sessions = [];
+
+      try {
+        if (defaultEngine.readSessions) {
+          console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history for effective path:`, effectivePath);
+          const engineSessions = await defaultEngine.readSessions(effectivePath);
+          historySessions = engineSessions.map((s) => ({
+            id: s.id,
+            agentId,
+            title: s.title,
+            createdAt: s.createdAt,
+            lastUpdated: s.lastUpdated,
+            messageCount: s.messages.length
+          }));
+        } else {
+          console.log(`📂 [DEBUG] Reading Claude history for effective path:`, effectivePath);
+          const claudeSessions = readClaudeHistorySessions(effectivePath);
+          historySessions = claudeSessions.map((s) => ({
+            id: s.id,
+            agentId,
+            title: s.title,
+            createdAt: s.createdAt,
+            lastUpdated: s.lastUpdated,
+            messageCount: s.messages.length
+          }));
+        }
+        console.log(`📊 [DEBUG] Found ${historySessions.length} sessions from history fallback`);
+      } catch (historyErr) {
+        console.warn('⚠️ Failed to read history sessions:', historyErr);
+      }
+
+      const existingIds = new Set(sessions.map(s => s.id));
+      for (const hs of historySessions) {
+        if (!existingIds.has(hs.id)) {
+          sessions.push(hs);
+          existingIds.add(hs.id);
+        }
+      }
     }
     
     // Merge in active sessions from SessionManager for this agent.
@@ -1165,7 +1212,30 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
           });
         }
       } else {
-        return res.status(404).json({ error: 'Session not found' });
+        // Last resort: try reading from Claude/engine history using the agent's
+        // effective working directory (covers sessions that were created via chat
+        // and whose live ClaudeSession has already been cleaned up).
+        const agent = globalAgentStorage.getAgent(agentId);
+        const effectivePath = agent?.workingDirectory
+          ? path.resolve(process.cwd(), resolvePath(agent.workingDirectory))
+          : process.cwd();
+
+        console.log(`🔍 [FALLBACK] Trying history at effective path: ${effectivePath} for session ${sessionId}`);
+
+        const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+        if (defaultEngine.readSession) {
+          session = await defaultEngine.readSession(effectivePath, sessionId);
+        }
+        if (!session) {
+          const claudeSessions = readClaudeHistorySessions(effectivePath);
+          session = claudeSessions.find(s => s.id === sessionId) || null;
+        }
+        if (session) {
+          console.log(`✅ [FALLBACK] Found session with ${session.messages?.length || 0} messages`);
+          session = { ...session, agentId };
+        } else {
+          return res.status(404).json({ error: 'Session not found' });
+        }
       }
     }
     
