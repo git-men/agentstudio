@@ -223,6 +223,7 @@ export const ProjectWorkspacePage: React.FC = () => {
         {activeStore && agent ? (
           <SessionStoreProvider value={activeStore}>
             <AGUIChatPanel
+              key={activeSessionId}
               agent={agent}
               projectPath={projectPath}
               onSessionChange={handleSessionChange}

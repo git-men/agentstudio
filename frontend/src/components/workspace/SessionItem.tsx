@@ -81,10 +81,13 @@ export const SessionItem: React.FC<SessionItemProps> = ({
   const displayTitle = title || 'New Session';
 
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
       className={`
-        w-full text-left px-3 py-2.5 rounded-lg transition-colors group
+        w-full text-left px-3 py-2.5 rounded-lg transition-colors group cursor-pointer
         ${
           isActive
             ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
@@ -93,7 +96,6 @@ export const SessionItem: React.FC<SessionItemProps> = ({
       `}
     >
       <div className="flex items-center gap-2 min-w-0">
-        {/* Status dot + animated indicator */}
         <span className="flex-shrink-0 relative flex items-center justify-center w-2.5 h-2.5">
           <span
             className={`block w-2 h-2 rounded-full ${badge.dot}`}
@@ -103,7 +105,6 @@ export const SessionItem: React.FC<SessionItemProps> = ({
           )}
         </span>
 
-        {/* Title */}
         <span
           className={`
             flex-1 truncate text-sm
@@ -113,12 +114,10 @@ export const SessionItem: React.FC<SessionItemProps> = ({
           {displayTitle}
         </span>
 
-        {/* Relative timestamp */}
         <span className="flex-shrink-0 text-xs text-gray-400 dark:text-gray-500">
           {relativeTime}
         </span>
 
-        {/* Remove button — visible on hover */}
         {onRemove && (
           <button
             onClick={handleRemoveClick}
@@ -134,6 +133,6 @@ export const SessionItem: React.FC<SessionItemProps> = ({
           </button>
         )}
       </div>
-    </button>
+    </div>
   );
 };
