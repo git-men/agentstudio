@@ -8,19 +8,30 @@ import { sessionStoreManager } from '../services/SessionStoreManager';
 import { SessionStoreProvider } from '../stores/SessionStoreContext';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ProjectSessionListPanel } from '../components/workspace/ProjectSessionListPanel';
+import { ProjectToolbar } from '../components/workspace/ProjectToolbar';
 import { AgentPickerModal } from '../components/workspace/AgentPickerModal';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
+import { FileExplorer } from '../components/FileExplorer';
+import { ProjectMemoryModal } from '../components/ProjectMemoryModal';
+import { ProjectCommandsModal } from '../components/ProjectCommandsModal';
+import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
+import { ProjectA2AModal } from '../components/ProjectA2AModal';
+import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
+import { ProjectVersionModal } from '../components/ProjectVersionModal';
 import { MessageSquarePlus, FolderOpen, ArrowLeft } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
+import { openUrlInContext } from '../utils/navigation';
 import type { AgentConfig } from '../types/index.js';
 
 /**
  * ProjectWorkspacePage — project-centric multi-session workspace.
  * Route: /project-workspace?project=<encodedPath>&session=<id>
  *
- * Unlike WorkspacePage (agent-centric), this view shows all sessions
- * under a project directory, regardless of which agent created them.
- * Creating a new session requires selecting an agent first.
+ * Features:
+ * - Left sidebar: session list (from ProjectSessionListPanel)
+ * - Center: chat panel (AGUIChatPanel)
+ * - Right panel: file browser (FileExplorer, toggleable)
+ * - Bottom toolbar: project management actions (memory, commands, sub-agents, etc.)
  */
 export const ProjectWorkspacePage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -30,10 +41,9 @@ export const ProjectWorkspacePage: React.FC = () => {
   const projectPath = searchParams.get('project') || '';
   const sessionFromUrl = searchParams.get('session');
 
-  // Fetch project metadata to get defaultAgent and project name
   const { data: projectsData } = useProjects();
   const project = useMemo(
-    () => projectsData?.projects?.find((p) => p.path === projectPath),
+    () => projectsData?.projects?.find((p: any) => p.path === projectPath),
     [projectsData, projectPath],
   );
 
@@ -43,18 +53,25 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const setCurrentAgent = useSharedStore((s) => s.setCurrentAgent);
 
-  // Track which agent each session uses. For new sessions this is set by
-  // the picker; for existing sessions we fall back to the project's default.
+  // ---------- Session state ----------
   const [sessionAgentMap, setSessionAgentMap] = useState<Record<string, string>>({});
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionFromUrl);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
 
-  // Resolve the active agent: per-session override > project default
+  // ---------- Panel & modal state ----------
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [memoryProject, setMemoryProject] = useState<any>(null);
+  const [commandsProject, setCommandsProject] = useState<any>(null);
+  const [subAgentsProject, setSubAgentsProject] = useState<any>(null);
+  const [a2aProject, setA2aProject] = useState<any>(null);
+  const [settingsProject, setSettingsProject] = useState<any>(null);
+  const [versionProject, setVersionProject] = useState<any>(null);
+
+  // ---------- Derived state ----------
   const activeAgentId = useMemo(() => {
     if (activeSessionId && sessionAgentMap[activeSessionId]) {
       return sessionAgentMap[activeSessionId];
     }
-    // Check if the session data from backend has agentId
     const backendSession = sessionsData?.sessions?.find(
       (s: any) => s.id === activeSessionId,
     );
@@ -65,19 +82,16 @@ export const ProjectWorkspacePage: React.FC = () => {
   const { data: agentData } = useAgent(activeAgentId);
   const agent = agentData?.agent;
 
-  // Sync agent to shared store
   useEffect(() => {
     if (agent) setCurrentAgent(agent);
   }, [agent, setCurrentAgent]);
 
-  // Auto-select first session
   useEffect(() => {
     if (!activeSessionId && sessionsData?.sessions?.length > 0) {
       setActiveSessionId(sessionsData.sessions[0].id);
     }
   }, [activeSessionId, sessionsData]);
 
-  // Keep URL in sync
   useEffect(() => {
     if (!projectPath) return;
     const params = new URLSearchParams(searchParams);
@@ -92,17 +106,16 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   }, [activeSessionId, projectPath, searchParams, setSearchParams]);
 
-  // Dispose all stores on unmount
   useEffect(() => {
     return () => sessionStoreManager.disposeAll();
   }, []);
 
-  // Get or create the active session's store
   const activeStore = useMemo(() => {
     if (!activeSessionId || !activeAgentId) return null;
     return sessionStoreManager.getOrCreate(activeSessionId, activeAgentId);
   }, [activeSessionId, activeAgentId]);
 
+  // ---------- Session handlers ----------
   const handleSessionSelect = useCallback(
     (sessionId: string) => {
       if (sessionId === activeSessionId) return;
@@ -154,8 +167,16 @@ export const ProjectWorkspacePage: React.FC = () => {
     [],
   );
 
-  // ---------- Error states ----------
+  // ---------- Toolbar handlers ----------
+  const handleOpenInChat = useCallback(() => {
+    if (!project) return;
+    const agentToUse = project.defaultAgent || 'claude-code';
+    const params = new URLSearchParams();
+    params.set('project', project.path);
+    openUrlInContext(`/chat/${agentToUse}?${params.toString()}`, navigate);
+  }, [project, navigate]);
 
+  // ---------- Error state ----------
   if (!projectPath) {
     return (
       <div className="h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
@@ -179,8 +200,7 @@ export const ProjectWorkspacePage: React.FC = () => {
     );
   }
 
-  // ---------- Empty state (no sessions) ----------
-
+  // ---------- Empty state ----------
   const renderEmptyState = () => (
     <div className="flex-1 flex items-center justify-center bg-white dark:bg-gray-900">
       <div className="text-center max-w-sm px-6">
@@ -205,7 +225,6 @@ export const ProjectWorkspacePage: React.FC = () => {
   );
 
   // ---------- Main render ----------
-
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
@@ -217,6 +236,32 @@ export const ProjectWorkspacePage: React.FC = () => {
             onSessionSelect={handleSessionSelect}
             onNewSession={handleNewSession}
             onRemoveSession={handleRemoveSession}
+          />
+        }
+        rightPanel={
+          <FileExplorer
+            projectPath={projectPath}
+            onFileSelect={(filePath) => {
+              console.log('Selected file:', filePath);
+            }}
+            className="h-full"
+          />
+        }
+        rightPanelVisible={fileBrowserOpen}
+        onToggleRightPanel={() => setFileBrowserOpen((v) => !v)}
+        footer={
+          <ProjectToolbar
+            projectName={project?.name || project?.dirName || 'Project'}
+            projectPath={projectPath}
+            fileBrowserOpen={fileBrowserOpen}
+            onToggleFileBrowser={() => setFileBrowserOpen((v) => !v)}
+            onMemoryManagement={() => setMemoryProject(project)}
+            onCommandManagement={() => setCommandsProject(project)}
+            onSubAgentManagement={() => setSubAgentsProject(project)}
+            onA2AManagement={() => setA2aProject(project)}
+            onVersionManagement={() => setVersionProject(project)}
+            onSettings={() => setSettingsProject(project)}
+            onOpenInChat={handleOpenInChat}
           />
         }
       >
@@ -234,10 +279,51 @@ export const ProjectWorkspacePage: React.FC = () => {
         )}
       </WorkspaceLayout>
 
+      {/* Modals */}
       <AgentPickerModal
         open={showAgentPicker}
         onClose={() => setShowAgentPicker(false)}
         onSelect={handleAgentSelected}
+      />
+
+      {memoryProject && (
+        <ProjectMemoryModal
+          project={memoryProject}
+          onClose={() => setMemoryProject(null)}
+        />
+      )}
+
+      {commandsProject && (
+        <ProjectCommandsModal
+          project={commandsProject}
+          onClose={() => setCommandsProject(null)}
+        />
+      )}
+
+      {subAgentsProject && (
+        <ProjectSubAgentsModal
+          project={subAgentsProject}
+          onClose={() => setSubAgentsProject(null)}
+        />
+      )}
+
+      {a2aProject && (
+        <ProjectA2AModal
+          project={a2aProject}
+          onClose={() => setA2aProject(null)}
+        />
+      )}
+
+      <ProjectSettingsModal
+        isOpen={!!settingsProject}
+        project={settingsProject}
+        onClose={() => setSettingsProject(null)}
+      />
+
+      <ProjectVersionModal
+        isOpen={!!versionProject}
+        project={versionProject}
+        onClose={() => setVersionProject(null)}
       />
     </div>
   );
