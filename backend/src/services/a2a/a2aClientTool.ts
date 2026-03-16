@@ -354,9 +354,19 @@ async function callExternalAgentStreamFetch(
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+      redirect: 'manual',
     });
 
     clearTimeout(timeoutId);
+
+    // Detect redirect (auth gateway redirecting to login page)
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      const errMsg = `Agent server returned redirect (${response.status}). This usually means the API key is invalid or expired. Redirect: ${location.substring(0, 200)}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -597,9 +607,15 @@ async function callExternalAgentSyncFetch(
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+      redirect: 'manual',
     });
 
     clearTimeout(timeoutId);
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      return { success: false, error: `Agent server returned redirect (${response.status}). API key may be invalid or expired. Redirect: ${location.substring(0, 200)}` };
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -857,8 +873,14 @@ async function callJsonRpcSync(
       headers: buildJsonRpcHeaders(apiKey, customHeaders),
       body: buildJsonRpcBody('message/send', message, requestId, contextId, taskId, customHeaders),
       signal: controller.signal,
+      redirect: 'manual',
     });
     clearTimeout(timeoutId);
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      return { success: false, error: `Agent server returned redirect (${response.status}). API key may be invalid or expired. Redirect: ${location.substring(0, 200)}` };
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
@@ -934,8 +956,18 @@ async function callJsonRpcStream(
       headers: buildJsonRpcHeaders(apiKey, customHeaders, true),
       body: buildJsonRpcBody('message/stream', message, requestId, contextId, taskId, customHeaders),
       signal: controller.signal,
+      redirect: 'manual',
     });
     clearTimeout(timeoutId);
+
+    // Detect redirect (auth gateway redirecting to login page)
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      const errMsg = `Agent server returned redirect (${response.status}). This usually means the API key is invalid or expired. Redirect: ${location.substring(0, 200)}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => response.statusText);
@@ -964,6 +996,15 @@ async function callJsonRpcStream(
           taskId: result.taskId || result.id,
         };
       }
+    }
+
+    // Reject non-SSE responses (e.g. HTML login pages after auth failure)
+    if (!contentType.includes('text/event-stream') && !contentType.includes('application/json')) {
+      const bodyPreview = await response.text().catch(() => '').then(t => t.substring(0, 300));
+      const errMsg = `Unexpected response content-type: ${contentType || 'none'}. Expected text/event-stream. Body preview: ${bodyPreview}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
     }
 
     if (!response.body) {
@@ -1043,36 +1084,67 @@ async function parseA2AStandardSseStream(
         if (a2aEvent.contextId) finalContextId = a2aEvent.contextId;
         if (a2aEvent.taskId) finalTaskId = a2aEvent.taskId;
 
-        switch (a2aEvent.kind) {
-          case 'status-update': {
-            const state = a2aEvent.status?.state;
-            if (a2aEvent.final && state) {
-              finalState = state as TaskState;
-            }
-            break;
-          }
-          case 'artifact-update': {
-            const parts = a2aEvent.artifact?.parts || [];
-            for (const part of parts) {
-              if (part.kind === 'text' || part.type === 'text') {
-                collectedText += part.text || '';
+        // A2A standard events use `kind`, SDK-style events use `type`
+        const eventKind = a2aEvent.kind;
+        const eventType = a2aEvent.type;
+
+        if (eventKind) {
+          // A2A standard protocol events
+          switch (eventKind) {
+            case 'status-update': {
+              const state = a2aEvent.status?.state;
+              if (a2aEvent.final && state) {
+                finalState = state as TaskState;
               }
+              break;
             }
-            break;
-          }
-          case 'message': {
-            // Complete message — use its text as the definitive response
-            const parts = a2aEvent.parts || [];
-            let msgText = '';
-            for (const part of parts) {
-              if (part.kind === 'text' || part.type === 'text') {
-                msgText += part.text || '';
+            case 'artifact-update': {
+              const parts = a2aEvent.artifact?.parts || [];
+              for (const part of parts) {
+                if (part.kind === 'text' || part.type === 'text') {
+                  collectedText += part.text || '';
+                }
               }
+              break;
             }
-            if (msgText) {
-              collectedText = msgText;
+            case 'message': {
+              const parts = a2aEvent.parts || [];
+              let msgText = '';
+              for (const part of parts) {
+                if (part.kind === 'text' || part.type === 'text') {
+                  msgText += part.text || '';
+                }
+              }
+              if (msgText) {
+                collectedText = msgText;
+              }
+              break;
             }
-            break;
+          }
+        } else if (eventType) {
+          // SDK-style events (backward compatibility with servers that use `type` instead of `kind`)
+          switch (eventType) {
+            case 'assistant': {
+              if (a2aEvent.message?.content) {
+                for (const block of a2aEvent.message.content) {
+                  if (block.type === 'text') {
+                    collectedText += block.text || '';
+                  }
+                }
+              }
+              break;
+            }
+            case 'result': {
+              const isError = a2aEvent.subtype === 'error' || a2aEvent.is_error;
+              finalState = isError ? 'failed' : 'completed';
+              break;
+            }
+            case 'system': {
+              if (a2aEvent.sessionId) {
+                finalContextId = a2aEvent.sessionId;
+              }
+              break;
+            }
           }
         }
 
