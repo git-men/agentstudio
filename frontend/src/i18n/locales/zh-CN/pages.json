@@ -72,7 +72,7 @@
     "enterSystem": "进入系统"
   },
   "landing": {
-    "pageTitle": "AgentStudio - Agent 工作台 | Claude Agent SDK 驱动",
+    "pageTitle": "ClawStudio - Agent 工作台 | 多模型 AI Agent 协作工作台",
     "metaDescription": "Agent for Work - 本地的 Agent 工作台，由 Claude Agent SDK 强力驱动。数据完全私有，支持定时任务、A2A 协议、自定义 Agent。",
     "nav": {
       "enterWorkspace": "进入工作台",
@@ -175,7 +175,7 @@
       "example4": "代码审查 Agent"
     },
     "comparison": {
-      "title": "AgentStudio vs Claude Code",
+      "title": "ClawStudio vs Claude Code",
       "subtitle": "同样的 Claude Agent SDK，更友好的使用体验",
       "dimension": "对比维度",
       "interface": "交互形态",
@@ -201,7 +201,7 @@
     },
     "footer": {
       "description": "Agent for Work - 本地的 Agent 工作台，由 Claude Agent SDK 强力驱动。",
-      "copyright": "© 2026 AgentStudio. GPL v3 License.",
+      "copyright": "© 2026 ClawStudio. GPL v3 License.",
       "product": "产品",
       "workspace": "工作台",
       "sourceCode": "源码",
@@ -679,7 +679,7 @@
     },
     "mcpAdmin": {
       "title": "MCP Admin Server",
-      "subtitle": "配置 MCP Admin API，允许外部 AI 工具管理您的 AgentStudio",
+      "subtitle": "配置 MCP Admin API，允许外部 AI 工具管理您的 ClawStudio",
       "refresh": "刷新",
       "serverStatus": "服务器状态",
       "status": {
@@ -754,7 +754,7 @@
         "button": "使用帮助",
         "title": "MCP Admin Server 使用帮助",
         "whatIs": "什么是 MCP Admin Server？",
-        "whatIsDesc": "MCP Admin Server 是一个标准的 MCP（Model Context Protocol）服务器，允许其他 AI 工具（如 Cursor、Claude Desktop）通过 MCP 协议远程管理您的 AgentStudio。通过这个接口，您可以在其他 AI 工具中直接查询和管理 AgentStudio 的项目、智能体、MCP 服务器等。",
+        "whatIsDesc": "MCP Admin Server 是一个标准的 MCP（Model Context Protocol）服务器，允许其他 AI 工具（如 Cursor、Claude Desktop）通过 MCP 协议远程管理您的 ClawStudio。通过这个接口，您可以在其他 AI 工具中直接查询和管理 ClawStudio 的项目、智能体、MCP 服务器等。",
         "howToUse": "如何使用？",
         "step1": "在本页面创建一个 Admin API 密钥",
         "step2": "点击「查看配置」获取配置代码片段",
@@ -801,8 +801,8 @@
       "title": "遥测与分析",
       "description": "管理匿名使用数据收集",
       "enableTelemetry": "启用匿名遥测",
-      "enableDescription": "分享匿名使用数据，帮助我们改进 AgentStudio",
-      "statusEnabled": "遥测已启用。感谢您帮助改进 AgentStudio！",
+      "enableDescription": "分享匿名使用数据，帮助我们改进 ClawStudio",
+      "statusEnabled": "遥测已启用。感谢您帮助改进 ClawStudio！",
       "statusDisabled": "遥测已禁用。不会收集任何数据。",
       "whatWeCollect": "我们收集的数据",
       "whatWeNeverCollect": "我们绝不收集的数据",
@@ -825,9 +825,9 @@
       "privacyNote": "隐私优先",
       "privacyNoteDesc": "所有遥测数据都是匿名和聚合的。我们无法识别个人用户。您可以随时禁用遥测。",
       "consent": {
-        "title": "帮助改进 AgentStudio",
+        "title": "帮助改进 ClawStudio",
         "subtitle": "匿名使用数据",
-        "description": "我们收集匿名使用数据，以了解 AgentStudio 的使用方式并改善用户体验。不会收集任何个人信息。",
+        "description": "我们收集匿名使用数据，以了解 ClawStudio 的使用方式并改善用户体验。不会收集任何个人信息。",
         "whatWeCollect": "我们收集的数据",
         "item1": "匿名安装 ID",
         "item2": "应用版本和操作系统类型",

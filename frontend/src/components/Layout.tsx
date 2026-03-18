@@ -36,10 +36,8 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
                 <Menu className="w-5 h-5" />
               </button>
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
-                  <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="Agent Studio" className="w-8 h-8" />
-                </div>
-                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Agent Studio</h1>
+                <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-8 h-8 rounded-lg" />
+                <h1 className="text-lg font-semibold text-gray-900 dark:text-white">ClawStudio</h1>
               </div>
               <div className="w-9 h-9" /> {/* Spacer for balance */}
             </div>

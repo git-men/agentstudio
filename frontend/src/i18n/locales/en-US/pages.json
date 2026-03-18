@@ -72,7 +72,7 @@
     "enterSystem": "Enter System"
   },
   "landing": {
-    "pageTitle": "AgentStudio - Agent Workspace | Powered by Claude Agent SDK",
+    "pageTitle": "ClawStudio - Agent Workspace | Multi-Model AI Agent Workspace",
     "metaDescription": "Agent for Work - Your local Agent workspace powered by Claude Agent SDK. Fully private data, scheduled tasks, A2A protocol, and custom agents.",
     "nav": {
       "enterWorkspace": "Enter Workspace",
@@ -175,7 +175,7 @@
       "example4": "Code Review Agent"
     },
     "comparison": {
-      "title": "AgentStudio vs Claude Code",
+      "title": "ClawStudio vs Claude Code",
       "subtitle": "Same Claude Agent SDK, friendlier experience",
       "dimension": "Comparison",
       "interface": "Interface",
@@ -209,7 +209,7 @@
     },
     "footer": {
       "description": "Agent for Work - Your local Agent workspace powered by Claude Agent SDK.",
-      "copyright": "© 2026 AgentStudio. GPL v3 License.",
+      "copyright": "© 2026 ClawStudio. GPL v3 License.",
       "product": "Product",
       "workspace": "Workspace",
       "sourceCode": "Source Code",
@@ -652,7 +652,7 @@
     },
     "mcpAdmin": {
       "title": "MCP Admin Server",
-      "subtitle": "Configure MCP Admin API to allow external AI tools to manage your AgentStudio",
+      "subtitle": "Configure MCP Admin API to allow external AI tools to manage your ClawStudio",
       "refresh": "Refresh",
       "serverStatus": "Server Status",
       "status": {
@@ -726,7 +726,7 @@
         "button": "Help",
         "title": "MCP Admin Server Help",
         "whatIs": "What is MCP Admin Server?",
-        "whatIsDesc": "MCP Admin Server is a standard MCP (Model Context Protocol) server that allows other AI tools (like Cursor, Claude Desktop) to remotely manage your AgentStudio via MCP protocol. Through this interface, you can directly query and manage AgentStudio's projects, agents, MCP servers, etc. from other AI tools.",
+        "whatIsDesc": "MCP Admin Server is a standard MCP (Model Context Protocol) server that allows other AI tools (like Cursor, Claude Desktop) to remotely manage your ClawStudio via MCP protocol. Through this interface, you can directly query and manage ClawStudio's projects, agents, MCP servers, etc. from other AI tools.",
         "howToUse": "How to use?",
         "step1": "Create an Admin API key on this page",
         "step2": "Click \"View Config\" to get the configuration snippet",
@@ -773,8 +773,8 @@
       "title": "Telemetry & Analytics",
       "description": "Manage anonymous usage data collection",
       "enableTelemetry": "Enable Anonymous Telemetry",
-      "enableDescription": "Help improve AgentStudio by sharing anonymous usage data",
-      "statusEnabled": "Telemetry is enabled. Thank you for helping improve AgentStudio!",
+      "enableDescription": "Help improve ClawStudio by sharing anonymous usage data",
+      "statusEnabled": "Telemetry is enabled. Thank you for helping improve ClawStudio!",
       "statusDisabled": "Telemetry is disabled. No data is being collected.",
       "whatWeCollect": "What We Collect",
       "whatWeNeverCollect": "What We Never Collect",
@@ -797,9 +797,9 @@
       "privacyNote": "Privacy First",
       "privacyNoteDesc": "All telemetry data is anonymized and aggregated. We cannot identify individual users. You can disable telemetry at any time.",
       "consent": {
-        "title": "Help Improve AgentStudio",
+        "title": "Help Improve ClawStudio",
         "subtitle": "Anonymous usage data",
-        "description": "We collect anonymous usage data to understand how AgentStudio is used and to improve the experience. No personal information is collected.",
+        "description": "We collect anonymous usage data to understand how ClawStudio is used and to improve the experience. No personal information is collected.",
         "whatWeCollect": "What we collect",
         "item1": "Anonymous installation ID",
         "item2": "App version and OS type",

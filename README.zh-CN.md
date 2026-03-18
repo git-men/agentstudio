@@ -1,12 +1,12 @@
-# AgentStudio
+# ClawStudio
 
 <div align="center">
 
-![AgentStudio](./frontend/public/cc-studio.png)
+![ClawStudio](./frontend/public/cc-studio.png)
 
 **Agent for Work — 本地的 Agent 工作台**
 
-由 Claude Agent SDK 和 Cursor CLI 双引擎驱动
+由 OpenClaw 驱动的多模型 AI Agent 协作工作台
 
 [![GPL v3 License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://opensource.org/licenses/GPL-3.0)
 [![GitHub stars](https://img.shields.io/github/stars/okguitar/agentstudio.svg)](https://github.com/okguitar/agentstudio/stargazers)
