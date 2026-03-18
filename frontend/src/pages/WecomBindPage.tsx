@@ -32,7 +32,14 @@ interface BindResult {
 
 interface PreflightData {
   auth: { ready: boolean };
-  tunnel: { configured: boolean; connected: boolean; domain: string | null; server_url: string };
+  tunnel: {
+    configured: boolean;
+    connected: boolean;
+    domain: string | null;
+    server_url: string;
+    has_token?: boolean;
+    can_auto_provision?: boolean;
+  };
 }
 
 interface ProcessingStep {
@@ -173,31 +180,19 @@ export const WecomBindPage: React.FC = () => {
 
     setStep('processing');
     setErrorMessage('');
-    setProcessingSteps([
-      { label: '获取 A2A 端点', status: 'active' },
-      { label: '创建 API Key', status: 'pending' },
-      { label: '注册企微机器人', status: 'pending' },
-      { label: '生成回调配置', status: 'pending' },
-    ]);
 
-    const advanceStep = (idx: number, error = false) => {
-      setProcessingSteps((prev) =>
-        prev.map((s, i) => {
-          if (i < idx) return { ...s, status: 'done' };
-          if (i === idx) return { ...s, status: error ? 'error' : 'active' };
-          return s;
-        }),
-      );
-    };
+    const needsTunnel = !preflight?.tunnel.connected;
+    const steps: ProcessingStep[] = [
+      ...(needsTunnel ? [{ label: '建立隧道连接', status: 'active' as const }] : []),
+      { label: '获取 A2A 端点', status: 'pending' as const },
+      { label: '创建 API Key', status: 'pending' as const },
+      { label: '注册企微机器人', status: 'pending' as const },
+      { label: '生成回调配置', status: 'pending' as const },
+    ];
+    if (!needsTunnel) steps[0].status = 'active';
+    setProcessingSteps(steps);
 
     try {
-      await new Promise((r) => setTimeout(r, 400));
-      advanceStep(1);
-      await new Promise((r) => setTimeout(r, 300));
-      advanceStep(2);
-      await new Promise((r) => setTimeout(r, 300));
-      advanceStep(3);
-
       const resp = await authFetch(`${API_BASE}/wecom/bind`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -221,12 +216,18 @@ export const WecomBindPage: React.FC = () => {
       await new Promise((r) => setTimeout(r, 500));
       setBindResult(data);
       setStep('result');
+      checkPreflight();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setErrorMessage(msg);
       setProcessingSteps((prev) => {
-        const lastActive = prev.findIndex((s) => s.status === 'active');
-        return prev.map((s, i) => (i === lastActive ? { ...s, status: 'error' as const } : s));
+        const lastDone = [...prev].reverse().findIndex((s) => s.status === 'done');
+        const errorIdx = lastDone >= 0 ? prev.length - lastDone : prev.findIndex((s) => s.status !== 'done');
+        return prev.map((s, i) => {
+          if (i < errorIdx) return { ...s, status: 'done' as const };
+          if (i === errorIdx) return { ...s, status: 'error' as const };
+          return s;
+        });
       });
     }
   };
@@ -326,6 +327,38 @@ export const WecomBindPage: React.FC = () => {
                     <ExternalLink className="w-3.5 h-3.5" />
                     登录 AS Enterprise
                   </button>
+                </div>
+              </div>
+            )}
+
+            {/* Tunnel status banner */}
+            {preflight && preflight.auth.ready && !preflight.tunnel.connected && (
+              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl">
+                <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    隧道未连接
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                    {preflight.tunnel.can_auto_provision
+                      ? '点击绑定时将自动创建并连接隧道，无需手动配置。'
+                      : '需要先在设置中配置隧道连接，确保外部能访问本地 Agent。'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Connected tunnel info */}
+            {preflight && preflight.tunnel.connected && preflight.tunnel.domain && (
+              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-xl">
+                <Check className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200">
+                    隧道已连接
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-300 mt-1 font-mono">
+                    {preflight.tunnel.domain}.tunnel
+                  </p>
                 </div>
               </div>
             )}

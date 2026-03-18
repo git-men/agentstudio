@@ -18,23 +18,89 @@ const router: RouterType = Router();
 
 const PIGEON_RELAY = 'http://npd-sre.tencent-cloud.com/pigeon/relay/wecom/bot';
 const DEFAULT_DISPATCH_CALLBACK = 'http://agentstudio.woa.com/callback';
+const DEFAULT_DISPATCH_SERVER = 'https://agentstudio.woa.com';
+const DEFAULT_DISPATCH_WS = 'ws://21.6.243.90:8083/ws/tunnel';
+
+function getRawTunnelConfig(): any | null {
+  const raw = (tunnelService as any).configs as Map<string, any> | undefined;
+  return raw && raw.size > 0 ? raw.values().next().value : null;
+}
 
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
-  const configs = tunnelService.getAllConfigs();
-  const config = configs[0];
-  if (!config?.serverUrl) return null;
+  const rawCfg = getRawTunnelConfig();
+  const serverUrl = rawCfg?.serverUrl;
+  if (!serverUrl) return null;
 
-  const baseUrl = config.serverUrl.replace(/\/+$/, '');
+  const baseUrl = serverUrl.replace(/\/+$/, '');
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  const raw = (tunnelService as any).configs?.values()?.next()?.value as
-    | { enterpriseToken?: string }
-    | undefined;
-  if (raw?.enterpriseToken) {
-    headers['Authorization'] = `Bearer ${raw.enterpriseToken}`;
+  if (rawCfg?.enterpriseToken) {
+    headers['Authorization'] = `Bearer ${rawCfg.enterpriseToken}`;
   }
 
   return { baseUrl, headers };
+}
+
+/**
+ * Ensure a tunnel is connected. If not, try to auto-provision one using
+ * the enterprise token on hand. Returns the connected tunnel status or null.
+ */
+async function ensureTunnelConnected(): Promise<{ domain: string; protocol: string } | null> {
+  const statuses = tunnelService.getAllStatuses();
+  const configs = tunnelService.getAllConfigs();
+  const status = statuses[0];
+  const config = configs[0];
+
+  if (status?.connected && status.domain) {
+    return { domain: status.domain, protocol: (config as any)?.protocol || 'https' };
+  }
+
+  // Tunnel exists with a token but disconnected — try reconnecting
+  const rawCfg = getRawTunnelConfig();
+  if (rawCfg?.token && rawCfg.id) {
+    try {
+      await tunnelService.connect(rawCfg.id, true);
+      const refreshed = tunnelService.getStatus(rawCfg.id);
+      if (refreshed?.connected && refreshed.domain) {
+        return { domain: refreshed.domain, protocol: rawCfg.protocol || 'https' };
+      }
+    } catch {
+      // fall through to auto-create
+    }
+  }
+
+  // No usable tunnel token — auto-create one if we have enterprise credentials
+  if (!rawCfg?.enterpriseToken) return null;
+
+  const serverUrl = rawCfg.serverUrl || DEFAULT_DISPATCH_SERVER;
+  const tunnelName = `wecom-auto-${Date.now().toString(36)}`;
+
+  const result = await tunnelService.createAndSave({
+    name: tunnelName,
+    serverUrl,
+    label: '企微自动隧道',
+    autoConnect: true,
+    protocol: 'https',
+    websocketUrl: rawCfg.websocketUrl || DEFAULT_DISPATCH_WS,
+    accessToken: rawCfg.enterpriseToken,
+  });
+
+  if (!result.success || !result.tunnelId) return null;
+
+  // Copy enterprise credentials to the new tunnel config
+  if (result.tunnelId) {
+    await tunnelService.saveConfig(result.tunnelId, {
+      enterpriseToken: rawCfg.enterpriseToken,
+      enterpriseUrl: rawCfg.enterpriseUrl,
+    });
+  }
+
+  const newStatus = tunnelService.getStatus(result.tunnelId!);
+  if (newStatus?.connected && newStatus.domain) {
+    return { domain: newStatus.domain, protocol: 'https' };
+  }
+
+  return null;
 }
 
 function generateAlphanumeric(byteLen: number, outputLen: number): string {
@@ -51,10 +117,10 @@ function generateAlphanumeric(byteLen: number, outputLen: number): string {
  */
 router.get('/preflight', async (_req: Request, res: Response) => {
   try {
-    const rawConfigs = (tunnelService as any).configs as Map<string, any> | undefined;
-    const firstConfig = rawConfigs && rawConfigs.size > 0 ? rawConfigs.values().next().value : null;
-    const hasAuth = !!firstConfig?.enterpriseToken;
-    const serverUrl = firstConfig?.serverUrl || '';
+    const rawCfg = getRawTunnelConfig();
+    const hasAuth = !!rawCfg?.enterpriseToken;
+    const serverUrl = rawCfg?.serverUrl || '';
+    const hasToken = !!rawCfg?.token;
 
     const statuses = tunnelService.getAllStatuses();
     const tunnelConnected = statuses.length > 0 && statuses[0].connected;
@@ -67,6 +133,8 @@ router.get('/preflight', async (_req: Request, res: Response) => {
         connected: tunnelConnected,
         domain: tunnelDomain,
         server_url: serverUrl,
+        has_token: hasToken,
+        can_auto_provision: hasAuth && !!serverUrl,
       },
     });
   } catch (error) {
@@ -135,16 +203,12 @@ router.post('/bind', async (req: Request, res: Response) => {
   }
 
   try {
-    // --- Step 1: Resolve A2A endpoint (tunnel required) ---
-    const allStatuses = tunnelService.getAllStatuses();
-    const allConfigs = tunnelService.getAllConfigs();
-    const tunnelStatus = allStatuses[0] ?? { connected: false, domain: null };
-    const tunnelConfig = allConfigs[0] ?? ({} as any);
-
-    if (!tunnelStatus.connected || !tunnelStatus.domain) {
+    // --- Step 1: Ensure tunnel is connected (auto-provision if needed) ---
+    const tunnel = await ensureTunnelConnected();
+    if (!tunnel) {
       return res.status(400).json({
         error: 'tunnel_required',
-        message: '需要先连接隧道，否则 as-dispatch 无法访问本地 Agent。请在设置中配置并连接隧道。',
+        message: '无法建立隧道连接。请先完成 AS Enterprise 登录，程序将自动创建并连接隧道。',
       });
     }
 
@@ -154,8 +218,8 @@ router.post('/bind', async (req: Request, res: Response) => {
       .slice(-12)}`;
     const a2aAgentId = await getOrCreateA2AId(projectId, 'claude-code', project_path);
 
-    const protocol = (tunnelConfig.protocol as string) || 'https';
-    const tunnelDomain = `${tunnelStatus.domain}.tunnel`;
+    const protocol = tunnel.protocol || 'https';
+    const tunnelDomain = tunnel.domain.endsWith('.tunnel') ? tunnel.domain : `${tunnel.domain}.tunnel`;
     const baseUrl = `${protocol}://${tunnelDomain}`;
     const accessMode = 'tunnel';
 
