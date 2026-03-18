@@ -559,6 +559,14 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         const isTempId = currentSessionId?.startsWith('session_') || currentSessionId?.startsWith('__pending_');
         const effectiveSessionId = (sessionStore && isTempId) ? undefined : currentSessionId;
 
+        console.log('[MessageSender] Session ID decision:', {
+          currentSessionId,
+          isTempId,
+          effectiveSessionId,
+          hasSessionStore: !!sessionStore,
+          projectPath,
+        });
+
         await agentChatMutation.mutateAsync({
           agentId: agent.id,
           message: userMessage,

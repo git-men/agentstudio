@@ -1272,6 +1272,15 @@ router.post('/chat', async (req, res) => {
               sessionManager.confirmSessionId(claudeSession, responseSessionId, configSnapshot);
               console.log(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
 
+              // When the frontend sent an existing session ID (actualSessionId) but
+              // the SDK issued a different ID (responseSessionId), also register an
+              // alias so that subsequent requests using the original session ID can
+              // still find this session in memory.
+              if (actualSessionId && actualSessionId !== responseSessionId) {
+                sessionManager.registerSessionAlias(actualSessionId, claudeSession);
+                console.log(`🔗 Aliased frontend session ${actualSessionId} → SDK session ${responseSessionId}`);
+              }
+
               if (tempSessionId !== responseSessionId) {
                 notificationChannelManager.updateChannelSession(sseChannelId, responseSessionId);
                 frontendToolBridge.updateSessionId(tempSessionId, responseSessionId);

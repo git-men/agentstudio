@@ -289,6 +289,28 @@ export class SessionManager {
   }
 
   /**
+   * Register an alias so that getSession(aliasId) returns the same session
+   * already registered under its primary (SDK-issued) sessionId.
+   *
+   * Used when the frontend sends an old session ID (e.g. from history) and the
+   * backend resumes it under a new SDK-issued UUID. The alias ensures subsequent
+   * requests from the frontend (using the old ID) still find the active session.
+   */
+  registerSessionAlias(aliasId: string, session: ClaudeSession): void {
+    if (this.sessions.has(aliasId)) return; // already mapped
+    this.sessions.set(aliasId, session);
+    this.sessionHeartbeats.set(aliasId, Date.now());
+
+    const agentId = session.getAgentId();
+    if (!this.agentSessions.has(agentId)) {
+      this.agentSessions.set(agentId, new Set());
+    }
+    this.agentSessions.get(agentId)!.add(aliasId);
+
+    console.log(`🔗 Registered session alias: ${aliasId} → same ClaudeSession for agent: ${agentId}`);
+  }
+
+  /**
    * 替换会话ID（用于resume时Claude SDK返回新的sessionId的情况）
    * @param session 会话实例
    * @param oldSessionId 原始的sessionId

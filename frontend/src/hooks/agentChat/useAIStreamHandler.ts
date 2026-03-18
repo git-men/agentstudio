@@ -146,6 +146,13 @@ export const useAIStreamHandler = ({
       ) {
         const newSessionId = eventData.sessionId || eventData.session_id;
 
+        console.log('[StreamHandler] system/init received', {
+          currentSessionId,
+          newSessionId,
+          sessionIdField: eventData.sessionId,
+          session_idField: eventData.session_id,
+        });
+
         setIsInitializingSession(false);
 
         const isTempSessionId = (id: string) =>
@@ -154,6 +161,11 @@ export const useAIStreamHandler = ({
         const needsRealIdReplacement =
           (!currentSessionId && newSessionId) ||
           (currentSessionId && isTempSessionId(currentSessionId) && newSessionId && newSessionId !== currentSessionId);
+
+        console.log('[StreamHandler] needsRealIdReplacement:', needsRealIdReplacement, {
+          currentIsTemp: currentSessionId ? isTempSessionId(currentSessionId) : 'null',
+          idsMatch: currentSessionId === newSessionId,
+        });
 
         if (needsRealIdReplacement) {
           const oldTempId = currentSessionId && isTempSessionId(currentSessionId) ? currentSessionId : null;

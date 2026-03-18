@@ -77,6 +77,14 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
 
     if (!manifest || !manifest.view || !containerRef.current) return;
 
+    // Clear previous content to avoid duplicate iframes on re-runs
+    const container = containerRef.current;
+    container.innerHTML = '';
+    iframeRef.current = null;
+    setComponentLoaded(false);
+
+    let cancelled = false;
+
     const loadComponent = async () => {
       try {
         const { component } = manifest.view!;
@@ -84,8 +92,6 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
 
         switch (component.type) {
           case 'local': {
-            // For local components, we'll load them as iframe
-            // This is a PoC approach - in production, you'd want proper sandboxing
             await loadLocalComponent(component.path);
             break;
           }
@@ -96,15 +102,12 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
           }
 
           case 'npm': {
-            // For npm packages, you'd typically bundle them with your app
-            // or use dynamic import if configured in your build system
             console.warn('[LAVS] NPM component loading not yet implemented');
             setError('NPM component loading not yet implemented');
             break;
           }
 
           case 'inline': {
-            // Create component from inline code
             loadInlineComponent(component.code);
             break;
           }
@@ -113,14 +116,20 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
             throw new Error(`Unknown component type: ${(component as any).type}`);
         }
 
-        setComponentLoaded(true);
+        if (!cancelled) setComponentLoaded(true);
       } catch (err: any) {
         console.error('[LAVS] Failed to load component:', err);
-        setError(err.message || 'Failed to load view component');
+        if (!cancelled) setError(err.message || 'Failed to load view component');
       }
     };
 
     loadComponent();
+
+    return () => {
+      cancelled = true;
+      container.innerHTML = '';
+      iframeRef.current = null;
+    };
   }, [manifest]);
 
   // Inject LAVS client into component after it's loaded
