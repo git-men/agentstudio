@@ -13,11 +13,19 @@ export function useAgentLAVS(agentId: string) {
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
+    setHasLAVS(false);
+    setManifest(null);
+    setError(null);
+
+    if (!agentId) {
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
     const checkLAVS = async () => {
       try {
-        setLoading(true);
-        setError(null);
-
         const client = new LAVSClient({ agentId });
         const manifestData = await client.getManifest();
 

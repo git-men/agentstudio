@@ -9,9 +9,12 @@ import { SessionStoreProvider } from '../stores/SessionStoreContext';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ProjectSessionListPanel } from '../components/workspace/ProjectSessionListPanel';
 import { ProjectToolbar } from '../components/workspace/ProjectToolbar';
+import type { RightPanelView } from '../components/workspace/ProjectToolbar';
 import { AgentPickerModal } from '../components/workspace/AgentPickerModal';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
 import { FileExplorer } from '../components/FileExplorer';
+import { LAVSViewContainer } from '../components/LAVSViewContainer';
+import { useAgentLAVS } from '../hooks/useAgentLAVS';
 import { ProjectMemoryModal } from '../components/ProjectMemoryModal';
 import { ProjectCommandsModal } from '../components/ProjectCommandsModal';
 import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
@@ -59,7 +62,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [showAgentPicker, setShowAgentPicker] = useState(false);
 
   // ---------- Panel & modal state ----------
-  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
+  const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>(null);
   const [memoryProject, setMemoryProject] = useState<any>(null);
   const [commandsProject, setCommandsProject] = useState<any>(null);
   const [subAgentsProject, setSubAgentsProject] = useState<any>(null);
@@ -82,9 +85,27 @@ export const ProjectWorkspacePage: React.FC = () => {
   const { data: agentData } = useAgent(activeAgentId);
   const agent = agentData?.agent;
 
+  // LAVS detection for the active agent
+  const { hasLAVS, loading: lavsLoading } = useAgentLAVS(activeAgentId);
+  const hasLAVSView = hasLAVS && !lavsLoading;
+
   useEffect(() => {
     if (agent) setCurrentAgent(agent);
   }, [agent, setCurrentAgent]);
+
+  // Auto-open LAVS view when agent has it and right panel is closed
+  useEffect(() => {
+    if (hasLAVSView && rightPanelView === null) {
+      setRightPanelView('lavs');
+    }
+  }, [hasLAVSView]);
+
+  // When switching agents, fall back from LAVS if new agent doesn't have it
+  useEffect(() => {
+    if (!lavsLoading && !hasLAVS && rightPanelView === 'lavs') {
+      setRightPanelView('files');
+    }
+  }, [hasLAVS, lavsLoading, rightPanelView]);
 
   useEffect(() => {
     if (!activeSessionId && sessionsData?.sessions?.length > 0) {
@@ -240,22 +261,30 @@ export const ProjectWorkspacePage: React.FC = () => {
           />
         }
         rightPanel={
-          <FileExplorer
-            projectPath={projectPath}
-            onFileSelect={(filePath) => {
-              console.log('Selected file:', filePath);
-            }}
-            className="h-full"
-          />
+          rightPanelView === 'lavs' && agent ? (
+            <LAVSViewContainer
+              agent={agent}
+              projectPath={projectPath}
+            />
+          ) : (
+            <FileExplorer
+              projectPath={projectPath}
+              onFileSelect={(filePath) => {
+                console.log('Selected file:', filePath);
+              }}
+              className="h-full"
+            />
+          )
         }
-        rightPanelVisible={fileBrowserOpen}
-        onToggleRightPanel={() => setFileBrowserOpen((v) => !v)}
+        rightPanelVisible={rightPanelView !== null}
+        onToggleRightPanel={() => setRightPanelView((v) => (v ? null : 'files'))}
         footer={
           <ProjectToolbar
             projectName={project?.name || project?.dirName || 'Project'}
             projectPath={projectPath}
-            fileBrowserOpen={fileBrowserOpen}
-            onToggleFileBrowser={() => setFileBrowserOpen((v) => !v)}
+            rightPanelView={rightPanelView}
+            hasLAVS={hasLAVSView}
+            onSetRightPanelView={setRightPanelView}
             onMemoryManagement={() => setMemoryProject(project)}
             onCommandManagement={() => setCommandsProject(project)}
             onSubAgentManagement={() => setSubAgentsProject(project)}

@@ -8,13 +8,17 @@ import {
   Settings,
   FolderTree,
   ExternalLink,
+  LayoutDashboard,
 } from 'lucide-react';
+
+export type RightPanelView = 'files' | 'lavs';
 
 interface ProjectToolbarProps {
   projectName: string;
   projectPath: string;
-  fileBrowserOpen: boolean;
-  onToggleFileBrowser: () => void;
+  rightPanelView: RightPanelView | null;
+  hasLAVS: boolean;
+  onSetRightPanelView: (view: RightPanelView | null) => void;
   onMemoryManagement: () => void;
   onCommandManagement: () => void;
   onSubAgentManagement: () => void;
@@ -48,8 +52,9 @@ const ToolbarButton: React.FC<{
 export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   projectName,
   projectPath,
-  fileBrowserOpen,
-  onToggleFileBrowser,
+  rightPanelView,
+  hasLAVS,
+  onSetRightPanelView,
   onMemoryManagement,
   onCommandManagement,
   onSubAgentManagement,
@@ -58,6 +63,10 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   onSettings,
   onOpenInChat,
 }) => {
+  const toggleView = (view: RightPanelView) => {
+    onSetRightPanelView(rightPanelView === view ? null : view);
+  };
+
   return (
     <div className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
       {/* Project indicator */}
@@ -80,9 +89,19 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
       <ToolbarButton
         icon={<FolderTree className="w-3.5 h-3.5" />}
         label="文件"
-        onClick={onToggleFileBrowser}
-        active={fileBrowserOpen}
+        onClick={() => toggleView('files')}
+        active={rightPanelView === 'files'}
       />
+
+      {/* LAVS Agent view toggle — only shown when agent has LAVS */}
+      {hasLAVS && (
+        <ToolbarButton
+          icon={<LayoutDashboard className="w-3.5 h-3.5" />}
+          label="Agent 视图"
+          onClick={() => toggleView('lavs')}
+          active={rightPanelView === 'lavs'}
+        />
+      )}
 
       <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
 
