@@ -121,6 +121,10 @@ FROM oven/bun:1-slim AS bun
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    openssh-client \
+    python3 \
+    python3-pip \
+    python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
