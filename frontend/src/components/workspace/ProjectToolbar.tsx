@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Brain,
   Command,
@@ -7,14 +7,17 @@ import {
   GitBranch,
   Settings,
   FolderTree,
-  ExternalLink,
   LayoutDashboard,
+  Server,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
+import { getApiBase } from '../../lib/config';
+import { loadBackendServices, getCurrentService } from '../../utils/backendServiceStorage';
 
 export type RightPanelView = 'files' | 'lavs';
 
 interface ProjectToolbarProps {
-  projectName: string;
   projectPath: string;
   rightPanelView: RightPanelView | null;
   hasLAVS: boolean;
@@ -25,7 +28,6 @@ interface ProjectToolbarProps {
   onA2AManagement: () => void;
   onVersionManagement: () => void;
   onSettings: () => void;
-  onOpenInChat?: () => void;
 }
 
 const ToolbarButton: React.FC<{
@@ -49,8 +51,77 @@ const ToolbarButton: React.FC<{
   </button>
 );
 
+interface ServiceInfo {
+  name: string;
+  url: string;
+  isConnected: boolean;
+  isLoading: boolean;
+  version?: string;
+  backendName?: string;
+}
+
+/**
+ * Compact backend info popover shown on click.
+ */
+const BackendInfoPopover: React.FC<{ info: ServiceInfo; onClose: () => void }> = ({ info, onClose }) => {
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={popoverRef}
+      className="absolute bottom-full left-0 mb-2 w-64 p-3 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded-lg shadow-lg z-50"
+    >
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold text-sm">{info.name}</span>
+          {info.isLoading ? (
+            <div className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          ) : info.isConnected ? (
+            <CheckCircle className="w-3.5 h-3.5 text-green-400" />
+          ) : (
+            <XCircle className="w-3.5 h-3.5 text-red-400" />
+          )}
+        </div>
+
+        <div className="text-gray-300 dark:text-gray-600 break-all">{info.url}</div>
+
+        {info.version && (
+          <div className="flex justify-between">
+            <span>版本:</span>
+            <span>v{info.version}</span>
+          </div>
+        )}
+
+        {info.backendName && (
+          <div className="flex justify-between">
+            <span>服务端:</span>
+            <span>{info.backendName}</span>
+          </div>
+        )}
+
+        <div className="flex justify-between">
+          <span>状态:</span>
+          <span className={info.isConnected ? 'text-green-400 dark:text-green-600' : 'text-red-400 dark:text-red-600'}>
+            {info.isConnected ? '已连接' : '未连接'}
+          </span>
+        </div>
+      </div>
+      <div className="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-900 dark:border-t-gray-100" />
+    </div>
+  );
+};
+
 export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
-  projectName,
   projectPath,
   rightPanelView,
   hasLAVS,
@@ -61,31 +132,85 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   onA2AManagement,
   onVersionManagement,
   onSettings,
-  onOpenInChat,
 }) => {
   const toggleView = (view: RightPanelView) => {
     onSetRightPanelView(rightPanelView === view ? null : view);
   };
 
+  // ---------- Backend service info ----------
+  const [serviceInfo, setServiceInfo] = useState<ServiceInfo>({
+    name: '默认服务',
+    url: '',
+    isConnected: false,
+    isLoading: true,
+  });
+  const [showBackendPopover, setShowBackendPopover] = useState(false);
+
+  useEffect(() => {
+    const backendServices = loadBackendServices();
+    const currentService = getCurrentService(backendServices);
+    const name = currentService?.name || '默认服务';
+    const url = currentService?.url || '';
+
+    setServiceInfo((prev) => ({ ...prev, name, url }));
+
+    const checkHealth = async () => {
+      try {
+        const apiBase = getApiBase();
+        const response = await fetch(`${apiBase}/health`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+          signal: AbortSignal.timeout(3000),
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setServiceInfo({
+            name,
+            url,
+            isConnected: true,
+            isLoading: false,
+            version: data.version,
+            backendName: data.name,
+          });
+        } else {
+          setServiceInfo({ name, url, isConnected: false, isLoading: false });
+        }
+      } catch {
+        setServiceInfo({ name, url, isConnected: false, isLoading: false });
+      }
+    };
+
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
-      {/* Project indicator */}
-      <div className="flex items-center gap-1.5 mr-2 pr-3 border-r border-gray-200 dark:border-gray-700">
-        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 truncate max-w-[120px]">
-          {projectName}
-        </span>
-        {onOpenInChat && (
-          <button
-            onClick={onOpenInChat}
-            className="text-gray-400 hover:text-blue-500 transition-colors"
-            title="在聊天页面打开"
-          >
-            <ExternalLink className="w-3 h-3" />
-          </button>
+      {/* Left: backend service indicator */}
+      <div className="relative flex items-center gap-1.5 mr-2 pr-3 border-r border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => setShowBackendPopover((v) => !v)}
+          className="flex items-center gap-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors"
+          title="查看后端详情"
+        >
+          <Server className="w-3.5 h-3.5" />
+          <span className="truncate max-w-[140px]">{serviceInfo.name}</span>
+          {serviceInfo.isLoading ? (
+            <div className="w-3 h-3 border-[1.5px] border-gray-400 border-t-transparent rounded-full animate-spin" />
+          ) : serviceInfo.isConnected ? (
+            <CheckCircle className="w-3 h-3 text-green-500" />
+          ) : (
+            <XCircle className="w-3 h-3 text-red-500" />
+          )}
+        </button>
+
+        {showBackendPopover && (
+          <BackendInfoPopover info={serviceInfo} onClose={() => setShowBackendPopover(false)} />
         )}
       </div>
 
-      {/* File browser toggle */}
+      {/* View toggles */}
       <ToolbarButton
         icon={<FolderTree className="w-3.5 h-3.5" />}
         label="文件"
@@ -93,7 +218,6 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         active={rightPanelView === 'files'}
       />
 
-      {/* LAVS Agent view toggle — only shown when agent has LAVS */}
       {hasLAVS && (
         <ToolbarButton
           icon={<LayoutDashboard className="w-3.5 h-3.5" />}
@@ -103,9 +227,10 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         />
       )}
 
-      <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
+      {/* Spacer pushes management buttons to the right */}
+      <div className="flex-1" />
 
-      {/* Project management actions */}
+      {/* Project management actions — right side */}
       <ToolbarButton
         icon={<Brain className="w-3.5 h-3.5" />}
         label="记忆"
@@ -132,22 +257,13 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         onClick={onVersionManagement}
       />
 
-      <div className="flex-1" />
+      <div className="w-px h-4 bg-gray-200 dark:bg-gray-700 mx-1" />
 
-      {/* Settings on far right */}
       <ToolbarButton
         icon={<Settings className="w-3.5 h-3.5" />}
         label="项目设置"
         onClick={onSettings}
       />
-
-      {/* Project path tooltip */}
-      <span
-        className="text-[10px] text-gray-400 dark:text-gray-500 truncate max-w-[200px] hidden xl:inline"
-        title={projectPath}
-      >
-        {projectPath}
-      </span>
     </div>
   );
 };

@@ -52,6 +52,8 @@ interface AGUIChatPanelProps {
     onSessionChange?: (sessionId: string | null) => void;
     initialMessage?: string;
     environmentContext?: string;
+    /** When true, the top header bar (agent info, new session, history, refresh) is hidden. */
+    hideHeader?: boolean;
 }
 
 /**
@@ -62,7 +64,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     projectPath: rawProjectPath,
     onSessionChange,
     initialMessage,
-    environmentContext
+    environmentContext,
+    hideHeader = false,
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
@@ -757,7 +760,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-            {/* Header */}
+            {/* Header — hidden when embedded in ProjectWorkspacePage */}
+            {!hideHeader && (
             <div className="flex-shrink-0 h-12 px-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 flex items-center">
                 <div className="flex items-center justify-between w-full">
                     {/* Title with AGUI badge */}
@@ -820,6 +824,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     </div>
                 </div>
             </div>
+            )}
+
+            {/* EngineSelector must always mount (headless sync) even when header is hidden */}
+            {hideHeader && <EngineSelector disabled={isAiTyping} />}
 
             {/* Messages Area */}
             <div className="flex-1 relative min-h-0">

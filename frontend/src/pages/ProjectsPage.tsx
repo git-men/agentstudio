@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
-import { openUrlInContext } from '../utils/navigation';
 import {
   Plus,
   Search,
@@ -336,11 +335,9 @@ export const ProjectsPage: React.FC = () => {
         setProjects(prev => [result.project, ...prev]);
         setShowCreateModal(false);
 
-        // 创建完成后跳转到聊天界面
         const params = new URLSearchParams();
         params.set('project', result.project.path);
-        const url = `/chat/${data.agentId}?${params.toString()}`;
-        openUrlInContext(url, navigate);
+        navigate(`/project-workspace?${params.toString()}`);
       } else {
         const error = await response.json();
         throw new Error(error.error || t('projects.errors.createFailed'));
@@ -351,36 +348,16 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
-  const handleOpenProject = async (project: Project) => {
-    // If project has agents but no default, show selection dialog
-    if (project.agents.length > 0 && !project.defaultAgent) {
-      setAgentSelectProject(project);
-      return;
-    }
-
-    // Use default agent or fallback to claude-code
-    const agentToUse = project.defaultAgent || 'claude-code';
-    
-    // Open project with agent
-    console.log('Opening project:', project.name, 'with agent:', agentToUse);
+  const handleOpenProject = (project: Project) => {
     const params = new URLSearchParams();
     params.set('project', project.path);
-    const url = `/chat/${agentToUse}?${params.toString()}`;
-    console.log('Generated URL:', url);
-    openUrlInContext(url, navigate);
+    navigate(`/project-workspace?${params.toString()}`);
 
-    // Update last accessed time
     setProjects(prev => prev.map(p => 
       p.id === project.id 
         ? { ...p, lastAccessed: new Date().toISOString() }
         : p
     ));
-  };
-
-  const handleOpenWorkspace = (project: Project) => {
-    const params = new URLSearchParams();
-    params.set('project', project.path);
-    navigate(`/project-workspace?${params.toString()}`);
   };
 
   const handleDeleteProject = async (project: Project) => {
@@ -470,14 +447,11 @@ export const ProjectsPage: React.FC = () => {
           p.id === agentSelectProject.id ? data.project : p
         ));
 
-        // Close selection dialog
         setAgentSelectProject(null);
 
-        // Open project with selected agent
         const params = new URLSearchParams();
         params.set('project', data.project.path);
-        const url = `/chat/${agentId}?${params.toString()}`;
-        openUrlInContext(url, navigate);
+        navigate(`/project-workspace?${params.toString()}`);
       } else {
         const error = await response.json();
         showError(t('errors:agent.setFailed'), error.error || t('errors:common.unknownError'));
@@ -538,16 +512,9 @@ export const ProjectsPage: React.FC = () => {
         });
 
         if (shouldOpen) {
-          // If there are multiple agents, show agent selection dialog
-          if (enabledAgents.length > 1) {
-            setAgentSelectProject(result.project);
-          } else {
-            // Only one agent available, open directly with that agent
-            const params = new URLSearchParams();
-            params.set('project', result.project.path);
-            const url = `/chat/${firstAgent.id}?${params.toString()}`;
-            openUrlInContext(url, navigate);
-          }
+          const params = new URLSearchParams();
+          params.set('project', result.project.path);
+          navigate(`/project-workspace?${params.toString()}`);
         }
       } else {
         const error = await response.json();
@@ -650,7 +617,6 @@ export const ProjectsPage: React.FC = () => {
           onVersionManagement={handleVersionManagement}
           onSettings={handleSettings}
           onDeleteProject={handleDeleteProject}
-          onOpenWorkspace={handleOpenWorkspace}
           onAgentChanged={handleAgentChanged}
         />
       )}

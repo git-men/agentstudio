@@ -24,7 +24,6 @@ import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
 import { ProjectVersionModal } from '../components/ProjectVersionModal';
 import { MessageSquarePlus, FolderOpen, Search, Clock } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
-import { openUrlInContext } from '../utils/navigation';
 import { formatRelativeTime } from '../utils/dateFormat';
 import type { AgentConfig } from '../types/index.js';
 
@@ -322,15 +321,6 @@ export const ProjectWorkspacePage: React.FC = () => {
     [queryClient, projectPath],
   );
 
-  // ---------- Toolbar handlers ----------
-  const handleOpenInChat = useCallback(() => {
-    if (!project) return;
-    const agentToUse = project.defaultAgent || 'claude-code';
-    const params = new URLSearchParams();
-    params.set('project', project.path);
-    openUrlInContext(`/chat/${agentToUse}?${params.toString()}`, navigate);
-  }, [project, navigate]);
-
   // ---------- No project: inline project picker ----------
   if (!projectPath) {
     return <ProjectPicker projects={projectsData?.projects} navigate={navigate} />;
@@ -365,6 +355,7 @@ export const ProjectWorkspacePage: React.FC = () => {
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
         defaultRightWidth={600}
+        hideRightToggle
         sidebar={
           <ProjectSessionListPanel
             projectPath={projectPath}
@@ -395,7 +386,6 @@ export const ProjectWorkspacePage: React.FC = () => {
         onToggleRightPanel={() => setRightPanelView((v) => (v ? null : 'files'))}
         footer={
           <ProjectToolbar
-            projectName={project?.name || project?.dirName || 'Project'}
             projectPath={projectPath}
             rightPanelView={rightPanelView}
             hasLAVS={hasLAVSView}
@@ -406,7 +396,6 @@ export const ProjectWorkspacePage: React.FC = () => {
             onA2AManagement={() => setA2aProject(project)}
             onVersionManagement={() => setVersionProject(project)}
             onSettings={() => setSettingsProject(project)}
-            onOpenInChat={handleOpenInChat}
           />
         }
       >
@@ -417,6 +406,7 @@ export const ProjectWorkspacePage: React.FC = () => {
               agent={agent}
               projectPath={projectPath}
               onSessionChange={handleSessionChange}
+              hideHeader
             />
           </SessionStoreProvider>
         ) : (

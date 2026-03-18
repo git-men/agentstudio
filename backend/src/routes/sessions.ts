@@ -1046,12 +1046,22 @@ router.get('/by-project', async (req, res) => {
       }
     }
 
-    // Enrich with live status
+    // Enrich with live status and fresher timestamps
     const liveMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
     sessions = sessions.map(s => {
       const live = liveMap.get(s.id);
+      let lastUpdated = s.lastUpdated;
+      if (live?.lastActivity) {
+        const liveTime = typeof live.lastActivity === 'number'
+          ? new Date(live.lastActivity).toISOString()
+          : live.lastActivity;
+        if (new Date(liveTime).getTime() > new Date(lastUpdated).getTime()) {
+          lastUpdated = liveTime;
+        }
+      }
       return {
         ...s,
+        lastUpdated,
         agentId: s.agentId || live?.agentId || undefined,
         isActive: live ? live.isActive : false,
         isProcessing: live ? sessionManager.isSessionBusy(s.id) : false,

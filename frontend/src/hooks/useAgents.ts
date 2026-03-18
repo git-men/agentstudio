@@ -200,6 +200,8 @@ export const useProjectSessions = (projectPath: string, searchTerm?: string, ena
       return response.json();
     },
     enabled: enabled && !!projectPath,
+    refetchInterval: 5000,
+    refetchOnWindowFocus: true,
   });
 };
 

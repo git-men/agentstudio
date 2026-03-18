@@ -11,6 +11,8 @@ interface WorkspaceLayoutProps {
   footer?: React.ReactNode;
   /** Initial width for the right panel (default 360px) */
   defaultRightWidth?: number;
+  /** When true, the floating right-panel toggle button is hidden (use toolbar toggle instead). */
+  hideRightToggle?: boolean;
 }
 
 const MIN_WIDTH = 200;
@@ -34,6 +36,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   onToggleRightPanel,
   footer,
   defaultRightWidth = RIGHT_DEFAULT,
+  hideRightToggle = false,
 }) => {
   const sidebarWidth = useSharedStore((s) => s.workspaceSidebarWidth);
   const setSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
@@ -168,8 +171,8 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
           </div>
         )}
 
-        {/* Right panel toggle */}
-        {onToggleRightPanel && (
+        {/* Right panel toggle (hidden when toolbar provides its own toggle) */}
+        {onToggleRightPanel && !hideRightToggle && (
           <button
             onClick={onToggleRightPanel}
             className="absolute top-3 right-2 z-20 p-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"

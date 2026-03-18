@@ -266,6 +266,9 @@ export const useAIStreamHandler = ({
           if (currentSessionId) {
             queryClient.invalidateQueries({ queryKey: ['agent-sessions', agentId] });
           }
+          if (projectPath) {
+            queryClient.invalidateQueries({ queryKey: ['project-sessions', projectPath] });
+          }
         }
       }
 
