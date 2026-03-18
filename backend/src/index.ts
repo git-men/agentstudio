@@ -33,6 +33,7 @@ import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
+import wecomRouter from './routes/wecom';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
@@ -319,15 +320,14 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
-      // For embedded mode: Allow same-origin requests from any host/IP
-      // This allows the frontend (served from the same server) to access the API
-      // Extract protocol, host, and port from origin
+      // For embedded/network mode: Allow requests from IP-based origins
+      // when the server is bound to all interfaces (0.0.0.0 / ::).
+      // This covers tunnel/proxy scenarios (e.g. as-dispatch on a different port)
+      // where the browser's origin IP+port differs from the server's own port.
       try {
         const originUrl = new URL(origin);
         const serverHost = `${originUrl.protocol}//${originUrl.host}`;
 
-        // Check if origin matches the server's actual address
-        // In embedded mode, origin should be the same as the server address
         const serverPort = PORT;
         const possibleServerUrls = [
           `http://${HOST}:${serverPort}`,
@@ -338,11 +338,10 @@ const app: express.Express = express();
           `https://127.0.0.1:${serverPort}`,
         ];
 
-        // Also check if origin matches any of the server's network interfaces
-        // For 0.0.0.0, allow any IP:port combination that matches the server port
         if (HOST === '0.0.0.0' || HOST === '::') {
-          if (originUrl.port === serverPort.toString()) {
-            // Same port = likely same-origin request in embedded mode
+          const hostname = originUrl.hostname;
+          const isIPOrigin = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+          if (isIPOrigin) {
             return callback(null, true);
           }
         }
@@ -647,6 +646,7 @@ const app: express.Express = express();
   app.use('/api/task-executor', authMiddleware, taskExecutorRouter);
   app.use('/api/version', authMiddleware, versionRouter);
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
+  app.use('/api/wecom', authMiddleware, wecomRouter); // WeCom bot binding wizard
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service

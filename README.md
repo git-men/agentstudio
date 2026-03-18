@@ -1,12 +1,12 @@
-# AgentStudio
+# ClawStudio
 
 <div align="center">
 
-![AgentStudio](./frontend/public/cc-studio.png)
+![ClawStudio](./frontend/public/cc-studio.png)
 
 **Agent for Work — Your Local Agent Workspace**
 
-Powered by Claude Agent SDK & Cursor CLI
+Powered by OpenClaw & Multi-Model AI Agents
 
 [![GPL v3 License](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://opensource.org/licenses/GPL-3.0)
 [![GitHub stars](https://img.shields.io/github/stars/okguitar/agentstudio.svg)](https://github.com/okguitar/agentstudio/stargazers)

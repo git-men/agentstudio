@@ -21,8 +21,9 @@ export const configureTunnelTool: ToolDefinition = {
   tool: {
     name: 'configure_tunnel',
     description:
-      'Configure the tunnel server URL and enterprise token (one-time setup). ' +
-      'The enterprise token is your as-enterprise JWT access token. ' +
+      'Configure the tunnel server URL and optionally the enterprise token (one-time setup). ' +
+      'If you have already called login_enterprise, the enterprise token is stored automatically ' +
+      'and you only need to provide server_url. ' +
       'After configuring, use create_tunnel to create a tunnel.',
     inputSchema: {
       type: 'object',
@@ -33,29 +34,45 @@ export const configureTunnelTool: ToolDefinition = {
         },
         enterprise_token: {
           type: 'string',
-          description: 'as-enterprise JWT access token for API authentication',
+          description:
+            'as-enterprise JWT access token for API authentication. ' +
+            'Optional if login_enterprise was already called (token is reused automatically).',
         },
         tunnel_id: {
           type: 'string',
           description: 'Optional: ID of existing tunnel to update. If omitted, creates a placeholder config.',
         },
       },
-      required: ['server_url', 'enterprise_token'],
+      required: ['server_url'],
     },
   },
   handler: async (params): Promise<McpToolCallResult> => {
     try {
       const serverUrl = params.server_url as string;
-      const enterpriseToken = params.enterprise_token as string;
+      let enterpriseToken = params.enterprise_token as string | undefined;
       const tunnelId = (params.tunnel_id as string) || firstTunnelId();
 
+      // If no token provided, try to reuse existing stored token
+      if (!enterpriseToken && tunnelId) {
+        const rawConfigs = (tunnelService as any).configs as Map<string, any> | undefined;
+        const existing = rawConfigs?.get(tunnelId);
+        if (existing?.enterpriseToken) {
+          enterpriseToken = existing.enterpriseToken;
+        }
+      }
+
+      const updatePayload: Record<string, any> = { serverUrl };
+      if (enterpriseToken) {
+        updatePayload.enterpriseToken = enterpriseToken;
+      }
+
       if (tunnelId) {
-        await tunnelService.saveConfig(tunnelId, { serverUrl, enterpriseToken });
+        await tunnelService.saveConfig(tunnelId, updatePayload);
       } else {
         await tunnelService.addTunnel({
           label: '默认隧道',
           serverUrl,
-          enterpriseToken,
+          enterpriseToken: enterpriseToken || '',
           enabled: false,
           token: '',
         });
@@ -69,6 +86,7 @@ export const configureTunnelTool: ToolDefinition = {
               success: true,
               message: '隧道服务配置已保存',
               server_url: serverUrl,
+              has_enterprise_token: !!enterpriseToken,
             }),
           },
         ],
@@ -116,14 +134,24 @@ export const createTunnelTool: ToolDefinition = {
       const autoConnect = (params.auto_connect as boolean) ?? false;
 
       let serverUrl = params.server_url as string | undefined;
-      if (!serverUrl) {
-        const configs = tunnelService.getAllConfigs();
-        serverUrl = configs[0]?.serverUrl;
+      let accessToken: string | undefined;
+
+      // Resolve server URL and enterprise token from stored config
+      const rawConfigs = (tunnelService as any).configs as Map<string, any> | undefined;
+      if (rawConfigs && rawConfigs.size > 0) {
+        const firstConfig = rawConfigs.values().next().value;
+        if (!serverUrl) {
+          serverUrl = firstConfig?.serverUrl;
+        }
+        if (firstConfig?.enterpriseToken) {
+          accessToken = firstConfig.enterpriseToken;
+        }
       }
+
       if (!serverUrl) {
         return {
           content: [
-            { type: 'text', text: JSON.stringify({ success: false, error: '未配置隧道服务器地址，请先调用 configure_tunnel 完成初始化配置' }) },
+            { type: 'text', text: JSON.stringify({ success: false, error: '未配置隧道服务器地址，请先调用 login_enterprise 登录或 configure_tunnel 完成初始化配置' }) },
           ],
           isError: true,
         };
@@ -134,6 +162,7 @@ export const createTunnelTool: ToolDefinition = {
         serverUrl,
         autoConnect,
         protocol: 'https',
+        accessToken,
       });
 
       if (result.success) {

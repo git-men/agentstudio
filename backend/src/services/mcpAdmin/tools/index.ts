@@ -18,6 +18,7 @@ export { marketplaceTools } from './marketplaceTools.js';
 export { a2aTools } from './a2aTools.js';
 export { tunnelTools } from './tunnelTools.js';
 export { wecomBotTools } from './wecomBotTools.js';
+export { enterpriseAuthTools } from './enterpriseAuthTools.js';
 
 import { projectTools } from './projectTools.js';
 import { agentTools } from './agentTools.js';
@@ -33,6 +34,7 @@ import { marketplaceTools } from './marketplaceTools.js';
 import { a2aTools } from './a2aTools.js';
 import { tunnelTools } from './tunnelTools.js';
 import { wecomBotTools } from './wecomBotTools.js';
+import { enterpriseAuthTools } from './enterpriseAuthTools.js';
 import type { ToolDefinition } from '../types.js';
 
 /**
@@ -53,4 +55,5 @@ export const allTools: ToolDefinition[] = [
   ...a2aTools,
   ...tunnelTools,
   ...wecomBotTools,
+  ...enterpriseAuthTools,
 ];

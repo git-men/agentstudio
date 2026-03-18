@@ -195,6 +195,12 @@ export const ClassicDashboard: React.FC = () => {
       color: 'text-blue-500 bg-blue-50 dark:bg-blue-900/30'
     },
     { 
+      icon: MessageCircle, 
+      label: t('dashboard.quickLinks.wecomBind', { defaultValue: '企微绑定' }), 
+      path: '/wecom-bind',
+      color: 'text-green-500 bg-green-50 dark:bg-green-900/30'
+    },
+    { 
       icon: Settings, 
       label: t('dashboard.quickLinks.modelSettings', { defaultValue: '模型供应商' }), 
       path: '/settings/suppliers',
@@ -458,7 +464,7 @@ export const ClassicDashboard: React.FC = () => {
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-4 text-center">
               {t('dashboard.quickLinks.title', { defaultValue: '快捷入口' })}
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               {quickLinks.map((link, index) => (
                 <button
                   key={index}

@@ -1,7 +1,7 @@
 {
   "name": "agentstudio",
   "version": "0.4.4",
-  "description": "Claude-powered AgentStudio with React frontend and Node.js backend, built on top of Claude Code SDK",
+  "description": "ClawStudio - Multi-model AI Agent workspace with React frontend and Node.js backend, powered by OpenClaw",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
