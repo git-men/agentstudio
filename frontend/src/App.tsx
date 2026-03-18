@@ -25,6 +25,7 @@ const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => 
 const AgentsPage = lazy(() => import('./pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(module => ({ default: module.ProjectsPage })));
 const McpPage = lazy(() => import('./pages/McpPage').then(module => ({ default: module.McpPage })));
+const WecomBindPage = lazy(() => import('./pages/WecomBindPage').then(module => ({ default: module.WecomBindPage })));
 const SettingsLayout = lazy(() => import('./components/SettingsLayout').then(module => ({ default: module.SettingsLayout })));
 const GeneralSettingsPage = lazy(() => import('./pages/settings/GeneralSettingsPage').then(module => ({ default: module.GeneralSettingsPage })));
 const SupplierSettingsPage = lazy(() => import('./pages/settings/VersionSettingsPage').then(module => ({ default: module.VersionSettingsPage })));
@@ -150,6 +151,11 @@ const AppContent: React.FC = () => {
               <PageGate module="manage.mcp">
                 <Layout><McpPage /></Layout>
               </PageGate>
+            </ProtectedRoute>
+          } />
+          <Route path="/wecom-bind" element={
+            <ProtectedRoute>
+              <Layout><WecomBindPage /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/rules" element={

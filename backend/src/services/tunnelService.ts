@@ -39,6 +39,8 @@ export interface TunnelConfig {
   token: string;
   /** as-enterprise JWT token for creating/managing tunnels via API */
   enterpriseToken?: string;
+  /** as-enterprise server URL (for token verification/refresh, may differ from tunnel serverUrl) */
+  enterpriseUrl?: string;
   /** Tunnel name (subdomain part, e.g., "my-dev" for my-dev.tunnel) */
   tunnelName?: string;
   /** Domain suffix (e.g., ".agentstudio.woa.com") */
@@ -101,6 +103,7 @@ interface LegacyTunnelConfig {
   websocketUrl?: string;
   token: string;
   enterpriseToken?: string;
+  enterpriseUrl?: string;
   tunnelName?: string;
   domainSuffix?: string;
   protocol?: 'https' | 'http';

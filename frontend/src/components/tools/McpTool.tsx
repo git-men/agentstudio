@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BaseToolComponent, ToolInput } from './BaseToolComponent';
 import type { BaseToolExecution } from './sdk-types';
@@ -31,6 +31,62 @@ interface McpResourceContent {
 }
 
 type McpContent = McpTextContent | McpImageContent | McpResourceContent | { type: string; [key: string]: unknown };
+
+interface RedirectAction {
+  action: 'redirect';
+  auth_url: string;
+  message?: string;
+  provider?: string;
+  [key: string]: unknown;
+}
+
+function tryParseRedirectAction(text: string): RedirectAction | null {
+  try {
+    const parsed = JSON.parse(text);
+    if (parsed?.action === 'redirect' && typeof parsed?.auth_url === 'string') {
+      return parsed as RedirectAction;
+    }
+  } catch { /* not JSON */ }
+  return null;
+}
+
+const AuthRedirectContent: React.FC<{ redirect: RedirectAction }> = ({ redirect }) => {
+  const openedRef = useRef(false);
+
+  useEffect(() => {
+    if (!openedRef.current) {
+      openedRef.current = true;
+      window.open(redirect.auth_url, '_blank', 'noopener,noreferrer');
+    }
+  }, [redirect.auth_url]);
+
+  return (
+    <div className="p-4 rounded-lg border bg-blue-50 border-blue-200">
+      <div className="flex items-center gap-2 mb-2">
+        <svg className="w-5 h-5 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+        <span className="text-sm font-medium text-blue-700">
+          {redirect.message || '正在打开登录页面...'}
+        </span>
+      </div>
+      <p className="text-xs text-blue-600/80 mb-3">
+        已在新窗口中打开登录页面。完成登录后，令牌将自动保存到 AgentStudio。
+      </p>
+      <a
+        href={redirect.auth_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors no-underline"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+        </svg>
+        如果未自动打开，点此登录
+      </a>
+    </div>
+  );
+};
 
 // MCP工具结果类型
 interface McpResult {
@@ -82,14 +138,20 @@ function parseMcpResult(result: string): McpResult | null {
  */
 const McpContentRenderer: React.FC<{ content: McpContent }> = ({ content }) => {
   switch (content.type) {
-    case 'text':
+    case 'text': {
+      const textValue = (content as McpTextContent).text;
+      const redirect = tryParseRedirectAction(textValue);
+      if (redirect) {
+        return <AuthRedirectContent redirect={redirect} />;
+      }
       return (
         <div className="p-3 rounded-md border bg-green-50 border-green-200">
           <pre className="text-sm font-mono text-green-700 whitespace-pre-wrap break-words">
-            {(content as McpTextContent).text}
+            {textValue}
           </pre>
         </div>
       );
+    }
       
     case 'image': {
       const { t } = useTranslation('components');
