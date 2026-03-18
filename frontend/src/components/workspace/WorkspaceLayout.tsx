@@ -74,7 +74,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         setRightWidth(Math.max(RIGHT_MIN, Math.min(rightMax, newWidth)));
       }
     },
-    [isDraggingLeft, isDraggingRight, setSidebarWidth],
+    [isDraggingLeft, isDraggingRight, setSidebarWidth, sidebarCollapsed, sidebarWidth],
   );
 
   const handleMouseUp = useCallback(() => {
@@ -164,10 +164,14 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         {/* Right panel */}
         {showRight && (
           <div
-            className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700"
+            className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 relative"
             style={{ width: rightWidth }}
           >
             {rightPanel}
+            {/* Transparent overlay to prevent iframe from consuming mouse events during drag */}
+            {isDraggingRight && (
+              <div className="absolute inset-0 z-50" style={{ cursor: 'col-resize' }} />
+            )}
           </div>
         )}
 
