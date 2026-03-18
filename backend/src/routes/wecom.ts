@@ -168,31 +168,42 @@ router.post('/bind', async (req: Request, res: Response) => {
       `企微机器人 - ${projectName}`,
     );
 
-    // --- Step 3: Register bot in as-dispatch ---
+    // --- Step 3: Register or update bot in as-dispatch ---
     const { baseUrl: dispatchUrl, headers } = client;
-    const fetchOpts: any = {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        bot_key: botKey,
-        name: `${projectName}-agent`,
-        target_url: a2aEndpoint,
-        api_key: apiKey,
-        owner_id: 'wecom-wizard',
-        description: `由企微绑定向导自动创建`,
-        timeout: 300,
-        enabled: true,
-      }),
-    };
-    if (dispatchUrl.startsWith('https://')) {
-      fetchOpts.tls = { rejectUnauthorized: false };
-    }
+    const tlsOpt = dispatchUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
-    const botResponse = await fetch(`${dispatchUrl}/api/bots`, fetchOpts);
+    const botPayload = {
+      bot_key: botKey,
+      name: `${projectName}-agent`,
+      target_url: a2aEndpoint,
+      api_key: apiKey,
+      owner_id: 'wecom-wizard',
+      description: `由企微绑定向导自动创建`,
+      timeout: 300,
+      enabled: true,
+    };
+
+    // Check if bot already exists — if so, update (PUT); otherwise create (POST)
+    const checkResp = await fetch(`${dispatchUrl}/api/bots/${botKey}`, {
+      method: 'GET',
+      headers,
+      ...tlsOpt,
+    } as any);
+    const botExists = checkResp.ok && (await checkResp.json().catch(() => ({ success: false }))).success;
+
+    const botResponse = await fetch(
+      botExists ? `${dispatchUrl}/api/bots/${botKey}` : `${dispatchUrl}/api/bots`,
+      {
+        method: botExists ? 'PUT' : 'POST',
+        headers,
+        body: JSON.stringify(botPayload),
+        ...tlsOpt,
+      } as any,
+    );
     if (!botResponse.ok) {
       const err = await botResponse.json().catch(() => ({}));
       return res.status(502).json({
-        error: `as-dispatch 注册失败`,
+        error: `as-dispatch ${botExists ? '更新' : '注册'}失败`,
         details: err,
         status: botResponse.status,
       });
