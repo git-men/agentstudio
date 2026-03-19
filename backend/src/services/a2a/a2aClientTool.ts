@@ -133,6 +133,12 @@ export async function callExternalAgent(
 
     // Route to standard A2A JSON-RPC or legacy custom REST protocol
     if (protocolType === 'a2a-jsonrpc') {
+      if (useTask) {
+        console.warn(
+          `[A2A Client Tool] useTask=true is not supported with a2a-jsonrpc protocol. ` +
+          `Falling back to synchronous message/send. Agent: ${agentUrl}`
+        );
+      }
       return await callExternalAgentJsonRpc(
         agentUrl, message, apiKey || '', timeout, stream,
         projectId, customHeaders, input.contextId, input.taskId
