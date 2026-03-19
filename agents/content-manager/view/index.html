@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>内容运营素材管理</title>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/antd@5.22/dist/antd.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/antd@5.22/dist/reset.css" rel="stylesheet">
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/@ant-design/icons@5/dist/index.umd.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #root { height: 100%; overflow: hidden; }
+    .drag-over { outline: 2px solid #1677ff; outline-offset: -2px; border-radius: 8px; }
+    .drag-ghost { opacity: 0.35; }
+    .img-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .img-cell { display: flex; flex-direction: column; align-items: center; }
+    .img-cell span { font-size: 9px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; text-align: center; margin-top: 1px; }
+    .ant-table-cell { vertical-align: top !important; }
+    .ant-collapse-header { padding: 8px 12px !important; }
+    .ant-collapse-content-box { padding: 0 !important; }
+    .ant-card { border-radius: 10px; overflow: hidden; }
+    .ant-typography-edit-content { margin: 0 !important; left: 0 !important; }
+    .highlight-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
+const {
+  ConfigProvider, theme, Layout, Space, Button, Typography, Tag, Table,
+  Card, Collapse, Modal, Input, Dropdown, Image, Tooltip, Spin, Empty, Popconfirm,
+  message, Flex, Badge, Divider,
+} = antd;
+const { Content } = Layout;
+const { Text, Paragraph } = Typography;
+const { TextArea } = Input;
+const icons = window.icons || window.AntDesignIcons || {};
+const {
+  PlusOutlined, SearchOutlined, DownloadOutlined, CopyOutlined, FileExcelOutlined,
+  MenuOutlined, DeleteOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
+  LoadingOutlined,
+} = icons;
+
+const AGENT_ID = window.LAVS_AGENT_ID || '';
+const PROJECT_PATH = window.LAVS_PROJECT_PATH || '';
+const SHORT_LIMIT = 15;
+const LONG_LIMIT = 30;
+
+const IMG_TYPES = [
+  { key: '1920', label: '1920' },
+  { key: '1280_pure', label: '1280净图' },
+  { key: '1280_mark', label: '1280硬压' },
+  { key: 'ott', label: 'OTT图' },
+  { key: 'gif', label: 'GIF' },
+];
+
+// ─── API ─────────────────────────────────────────────────────────────────────
+async function lavsCall(endpoint, input = {}) {
+  const url = `/api/agents/${AGENT_ID}/lavs/${endpoint}`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (PROJECT_PATH) headers['X-Project-Path'] = PROJECT_PATH;
+  const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(input) });
+  const data = await res.json();
+  if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+  return data.result;
+}
+
+function aiSilent(prompt) {
+  return new Promise((resolve, reject) => {
+    const id = Date.now() + Math.random();
+    const handler = (e) => {
+      if (e.data?.type === 'lavs-ai-result' && e.data.id === id) {
+        window.removeEventListener('message', handler);
+        e.data.error ? reject(new Error(e.data.error)) : resolve(e.data.result);
+      }
+    };
+    window.addEventListener('message', handler);
+    window.parent.postMessage({ type: 'lavs-ai-silent', id, prompt }, '*');
+  });
+}
+
+function aiChat(msg) {
+  window.parent.postMessage({ type: 'lavs-ai-chat', message: msg }, '*');
+}
+
+// ─── Content Check ───────────────────────────────────────────────────────────
+function buildCheckPrompt(entryList, date) {
+  const lines = entryList.map(e => {
+    const parts = [];
+    parts.push(`ID: ${e.id}`);
+    if (e.shortHighlight) parts.push(`短看点: ${e.shortHighlight}`);
+    if (e.longHighlight) parts.push(`长看点: ${e.longHighlight}`);
+    return parts.join(' | ');
+  }).join('\n');
+
+  return `请审核以下 ${entryList.length} 条素材的文字内容（检测错别字、政治风险、舆情风险），然后对每条调用 lavs_updateEntry 工具更新 contentCheck 字段。
+
+contentCheck 格式为：{"shortHighlight":{"passed":true/false,"issues":[...]},"longHighlight":{"passed":true/false,"issues":[...]}}
+issues 中每项包含 type(typo/political/sentiment)、severity(low/medium/high)、description。
+没有问题的字段 passed 设为 true，issues 为空数组。
+
+日期: ${date}
+待审核条目：
+${lines}`;
+}
+
+function groupByCid(entries) {
+  const map = new Map();
+  for (const e of entries) {
+    if (!map.has(e.cid)) map.set(e.cid, { cid: e.cid, showName: e.showName, cidOrder: e.cidOrder || 0, updateTime: '', entries: [] });
+    const g = map.get(e.cid);
+    g.entries.push(e);
+    if (e.updateTime && !g.updateTime) g.updateTime = e.updateTime;
+  }
+  return Array.from(map.values()).sort((a, b) => a.cidOrder - b.cidOrder);
+}
+
+// ─── Export (ExcelJS) ─────────────────────────────────────────────────────────
+let excelLoading = null;
+function loadExcelJS() {
+  if (window.ExcelJS) return Promise.resolve();
+  if (excelLoading) return excelLoading;
+  excelLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('ExcelJS 加载失败'));
+    document.head.appendChild(s);
+  });
+  return excelLoading;
+}
+
+async function fetchImageBase64(url) {
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch { return null; }
+}
+
+function getImageExt(url) {
+  if (/gif/i.test(url)) return 'gif';
+  if (/png/i.test(url)) return 'png';
+  return 'jpeg';
+}
+
+async function exportExcel(entries, date, onProgress) {
+  await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(date);
+
+  const baseColumns = [
+    { header: 'cid', key: 'cid', width: 20 },
+    { header: 'showName', key: 'showName', width: 12 },
+    { header: 'title', key: 'title', width: 14 },
+    { header: 'section', key: 'section', width: 10 },
+    { header: 'updateTime', key: 'updateTime', width: 12 },
+    { header: 'shortHighlight', key: 'shortHighlight', width: 22 },
+    { header: 'shortHighlightLen', key: 'shortHighlightLen', width: 6 },
+    { header: 'longHighlight', key: 'longHighlight', width: 28 },
+    { header: 'longHighlightLen', key: 'longHighlightLen', width: 6 },
+    { header: 'pcAutoPlay', key: 'pcAutoPlay', width: 16 },
+    { header: 'peoplePackage', key: 'peoplePackage', width: 16 },
+  ];
+
+  const imgColumns = [];
+  for (const { key } of IMG_TYPES) {
+    imgColumns.push({ header: `img_${key}`, key: `img_${key}`, width: 22 });
+    imgColumns.push({ header: `url_${key}`, key: `url_${key}`, width: 40 });
+  }
+
+  ws.columns = [...baseColumns, ...imgColumns];
+
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
+
+  for (let ei = 0; ei < entries.length; ei++) {
+    const e = entries[ei];
+    if (onProgress) onProgress(ei + 1, entries.length);
+    const rowNum = ei + 2;
+    const rowData = {
+      cid: e.cid, showName: e.showName, title: e.title, section: e.section || '',
+      updateTime: e.updateTime || '',
+      shortHighlight: e.shortHighlight || '', shortHighlightLen: (e.shortHighlight||'').length,
+      longHighlight: e.longHighlight || '', longHighlightLen: (e.longHighlight||'').length,
+      pcAutoPlay: e.pcAutoPlay || '', peoplePackage: e.peoplePackage || '',
+    };
+
+    for (const { key } of IMG_TYPES) {
+      const url = e.images?.[key] || '';
+      rowData[`url_${key}`] = url;
+    }
+
+    const row = ws.addRow(rowData);
+    row.height = 80;
+
+    for (const { key } of IMG_TYPES) {
+      const url = e.images?.[key];
+      if (!url) continue;
+
+      const urlColKey = `url_${key}`;
+      const urlCol = ws.getColumn(urlColKey);
+      if (urlCol) {
+        const cell = row.getCell(urlColKey);
+        cell.value = { text: url, hyperlink: url };
+        cell.font = { color: { argb: 'FF1677FF' }, underline: true, size: 9 };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+      }
+
+      const imgColKey = `img_${key}`;
+      const imgCol = ws.getColumn(imgColKey);
+      if (imgCol) {
+        const b64 = await fetchImageBase64(url);
+        if (b64) {
+          try {
+            const imgId = wb.addImage({ base64: b64, extension: getImageExt(url) });
+            const colIdx = imgCol.number - 1;
+            ws.addImage(imgId, {
+              tl: { col: colIdx + 0.1, row: rowNum - 1 + 0.1 },
+              ext: { width: 140, height: 80 },
+            });
+          } catch (imgErr) { console.warn('Image insert failed:', key, imgErr.message); }
+        }
+      }
+    }
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `素材_${date}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+const ISSUE_LABELS = { typo: '错别字', political: '政治', sentiment: '舆情', other: '其他' };
+const SEV_COLORS = { high: '#ff4d4f', medium: '#faad14', low: '#1677ff' };
+
+// ─── Components ──────────────────────────────────────────────────────────────
+
+function HighlightCell({ entry, field, limit, checkingIds, onRefresh }) {
+  const value = entry[field] || '';
+  const len = value.length;
+  const cc = entry.contentCheck?.[field];
+  const isChecking = checkingIds.has(entry.id);
+  const over = len > limit;
+
+  const handleSave = async (newVal) => {
+    if (newVal === value) return;
+    try {
+      await lavsCall('updateEntry', { id: entry.id, updates: { [field]: newVal, contentCheck: null } });
+      if (onRefresh) await onRefresh();
+    } catch (e) { message.error('保存失败'); }
+  };
+
+  return (
+    <div style={{ minWidth: 0 }}>
+      <Paragraph
+        editable={{ onChange: handleSave, triggerType: ['text'], autoSize: true }}
+        style={{ marginBottom: 0, fontSize: 13, lineHeight: 1.6 }}>
+        {value || '-'}
+      </Paragraph>
+      <div className="highlight-tags">
+        <Tag color={over ? 'error' : 'success'} bordered={false} style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>
+          {len}/{limit}
+        </Tag>
+        {isChecking && (
+          <Tag icon={<LoadingOutlined spin />} color="processing" bordered={false}
+            style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>审核中</Tag>
+        )}
+        {!isChecking && cc && cc.passed && (
+          <Tag icon={<CheckCircleOutlined />} color="success" bordered={false}
+            style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>通过</Tag>
+        )}
+        {!isChecking && cc && !cc.passed && cc.issues?.map((iss, i) => (
+          <Tooltip key={i} title={iss.description} placement="topLeft">
+            <Tag color="error" bordered={false}
+              style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>
+              {ISSUE_LABELS[iss.type] || iss.type}: {iss.description}
+            </Tag>
+          </Tooltip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const { Popover } = antd;
+
+function ImgThumb({ url, label }) {
+  return (
+    <Popover
+      content={<img src={url} alt={label} style={{ maxWidth: 480, maxHeight: 320, objectFit: 'contain', display: 'block' }} />}
+      placement="left" mouseEnterDelay={0.3} overlayInnerStyle={{ padding: 4 }}>
+      <div className="img-cell">
+        <Image src={url} alt={label} height={52} width="100%" preview={{ mask: null }}
+          style={{ objectFit: 'contain', borderRadius: 4 }}
+          fallback="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='52'%3E%3Crect fill='%23f5f5f5' width='80' height='52' rx='4'/%3E%3C/svg%3E" />
+        <span title={label}>{label}</span>
+      </div>
+    </Popover>
+  );
+}
+
+function ImagesCell({ images }) {
+  if (!images || Object.keys(images).length === 0)
+    return <Text type="secondary" style={{ fontSize: 12 }}>-</Text>;
+
+  return (
+    <Image.PreviewGroup>
+      <div className="img-grid">
+        {IMG_TYPES.map(({ key, label }) => {
+          const url = images[key];
+          if (!url) return null;
+          return <ImgThumb key={key} url={url} label={label} />;
+        })}
+      </div>
+    </Image.PreviewGroup>
+  );
+}
+
+function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandlers }) {
+  const { cid, showName, updateTime, entries } = group;
+
+  const columns = [
+    {
+      title: '标题', dataIndex: 'title', width: 140,
+      render: (_, e) => (
+        <div>
+          <Text strong style={{ fontSize: 13 }}>{e.title}</Text>
+          {e.section && <div><Tag bordered={false} style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>{e.section}</Tag></div>}
+          {e.pcAutoPlay && <div><Text type="secondary" style={{ fontSize: 10 }}>VID: {e.pcAutoPlay}</Text></div>}
+        </div>
+      ),
+    },
+    {
+      title: '短看点', dataIndex: 'shortHighlight',
+      render: (_, e) => <HighlightCell entry={e} field="shortHighlight" limit={SHORT_LIMIT} checkingIds={checkingIds} onRefresh={onRefresh} />,
+    },
+    {
+      title: '长看点', dataIndex: 'longHighlight',
+      render: (_, e) => <HighlightCell entry={e} field="longHighlight" limit={LONG_LIMIT} checkingIds={checkingIds} onRefresh={onRefresh} />,
+    },
+    {
+      title: '图片', dataIndex: 'images', width: 220,
+      render: (_, e) => <ImagesCell images={e.images} />,
+    },
+    {
+      title: '', width: 56, align: 'center',
+      render: (_, e) => (
+        <Space direction="vertical" size={2}>
+          <Tooltip title="审核">
+            <Button type="text" size="small" icon={<SearchOutlined />} onClick={() => onCheck(e.id)} />
+          </Tooltip>
+          <Popconfirm title="确认删除？" onConfirm={() => onDelete(e.id)} okText="删" cancelText="否" placement="left">
+            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
+
+  const label = (
+    <Flex align="center" gap={6} style={{ width: '100%', minHeight: 28 }} {...dragHandlers} draggable>
+      <MenuOutlined style={{ color: '#aaa', cursor: 'grab', fontSize: 12, flexShrink: 0 }} />
+      <Text strong style={{ fontSize: 14 }}>{showName}</Text>
+      {updateTime && <Tag color="blue" bordered={false} style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>{updateTime}</Tag>}
+      <Text type="secondary" copyable={{ text: cid, tooltips: ['复制 CID', '已复制'] }}
+        style={{ fontSize: 11, fontFamily: 'monospace' }}>{cid}</Text>
+      <Badge count={entries.length} color="#1677ff" size="small" style={{ marginLeft: 'auto' }} />
+    </Flex>
+  );
+
+  return (
+    <Card size="small" style={{ marginBottom: 10 }} data-cid={cid} styles={{ body: { padding: 0 } }}>
+      <Collapse ghost defaultActiveKey={['c']} expandIconPosition="start"
+        items={[{ key: 'c', label, children: (
+          <Table dataSource={entries} columns={columns} rowKey="id"
+            pagination={false} size="small" bordered={false} />
+        )}]} />
+    </Card>
+  );
+}
+
+// ─── App ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [entries, setEntries] = useState([]);
+  const [date, setDate] = useState(dayjs().format('YYYY-MM-DD'));
+  const [loading, setLoading] = useState(false);
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [checkingAll, setCheckingAll] = useState(false);
+  const [checkingIds, setCheckingIds] = useState(new Set());
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportText, setExportText] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [messageApi, contextHolder] = message.useMessage();
+  const dragCidRef = useRef(null);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const result = await lavsCall('listEntries', { date });
+      setEntries(result.entries || []);
+      setCheckingAll(false);
+      setCheckingIds(new Set());
+    } catch (e) { messageApi.error('加载失败: ' + e.message); }
+    finally { setLoading(false); }
+  }, [date]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === 'lavs-agent-action' || e.data?.type === 'lavs-ai-chat-done') loadData();
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [loadData]);
+
+  const groups = useMemo(() => groupByCid(entries), [entries]);
+  const cidCount = useMemo(() => new Set(entries.map(e => e.cid)).size, [entries]);
+
+  const handlePasteAdd = () => {
+    if (!pasteText.trim()) { messageApi.warning('请粘贴文本'); return; }
+    const prompt = `请解析以下运营素材文本，添加到 ${date} 的数据中：\n\`\`\`\n${pasteText}\n\`\`\``;
+    setPasteOpen(false);
+    setPasteText('');
+    messageApi.info('已发送给 AI 解析...');
+    aiChat(prompt);
+  };
+
+  const handleCheckSingle = (entryId) => {
+    const entry = entries.find(e => e.id === entryId);
+    if (!entry) return;
+    if (!entry.shortHighlight && !entry.longHighlight) { messageApi.info('无文本可检测'); return; }
+    setCheckingIds(s => new Set(s).add(entryId));
+    messageApi.info('已发送审核请求...');
+    aiChat(buildCheckPrompt([entry], date));
+  };
+
+  const handleCheckAll = () => {
+    const toCheck = entries.filter(e => e.shortHighlight || e.longHighlight);
+    if (!toCheck.length) { messageApi.info('无文本可检测'); return; }
+    setCheckingAll(true);
+    setCheckingIds(new Set(entries.map(e => e.id)));
+    messageApi.info('已发送审核请求...');
+    aiChat(buildCheckPrompt(toCheck, date));
+  };
+
+  const handleDelete = async (entryId) => {
+    try {
+      await lavsCall('deleteEntry', { date, id: entryId });
+      await loadData();
+      messageApi.success('已删除');
+    } catch (e) { messageApi.error('删除失败: ' + e.message); }
+  };
+
+  const handleExportText = async () => {
+    setExportLoading(true);
+    setExportOpen(true);
+    setExportText('');
+    try {
+      const result = await lavsCall('exportEntries', { date, format: 'text' });
+      setExportText(result.content || '');
+    } catch (e) {
+      messageApi.error('导出失败: ' + e.message);
+      setExportOpen(false);
+    } finally { setExportLoading(false); }
+  };
+
+  const handleCopyExportText = async () => {
+    try {
+      await navigator.clipboard.writeText(exportText);
+      messageApi.success('已复制到剪贴板');
+      setExportOpen(false);
+    } catch (e) { messageApi.error('复制失败: ' + e.message); }
+  };
+
+  const handleExportExcel = async () => {
+    try {
+      messageApi.loading({ content: '正在加载 ExcelJS...', key: 'xl', duration: 0 });
+      await exportExcel(entries, date, (cur, total) => {
+        messageApi.loading({ content: `导出中 ${cur}/${total}（含图片下载）...`, key: 'xl', duration: 0 });
+      });
+      messageApi.success({ content: 'Excel 已下载', key: 'xl' });
+    } catch (e) { messageApi.error({ content: '导出失败: ' + e.message, key: 'xl' }); }
+  };
+
+  const makeDragHandlers = (cid) => ({
+    onDragStart: (e) => { dragCidRef.current = cid; e.currentTarget.closest('[data-cid]')?.classList.add('drag-ghost'); e.dataTransfer.effectAllowed = 'move'; },
+    onDragEnd: (e) => { e.currentTarget.closest('[data-cid]')?.classList.remove('drag-ghost'); dragCidRef.current = null; document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over')); },
+    onDragOver: (e) => { e.preventDefault(); e.stopPropagation(); const c = e.currentTarget.closest('[data-cid]'); if (c && c.dataset.cid !== dragCidRef.current) c.classList.add('drag-over'); },
+    onDragLeave: (e) => { e.currentTarget.closest('[data-cid]')?.classList.remove('drag-over'); },
+    onDrop: async (e) => {
+      e.preventDefault();
+      const c = e.currentTarget.closest('[data-cid]');
+      c?.classList.remove('drag-over');
+      const target = c?.dataset.cid;
+      if (!dragCidRef.current || dragCidRef.current === target) return;
+      const order = groups.map(g => g.cid);
+      const from = order.indexOf(dragCidRef.current), to = order.indexOf(target);
+      if (from === -1 || to === -1) return;
+      order.splice(from, 1);
+      order.splice(to, 0, dragCidRef.current);
+      try { await lavsCall('reorderCids', { date, cidOrder: order }); await loadData(); messageApi.success('排序已更新'); }
+      catch (err) { messageApi.error('排序失败'); }
+    },
+  });
+
+  const isDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+
+  return (
+    <ConfigProvider theme={{
+      algorithm: isDark ? theme.darkAlgorithm : theme.defaultAlgorithm,
+      token: { borderRadius: 8, fontSize: 13 },
+      components: {
+        Table: { cellPaddingBlockSm: 8, cellPaddingInlineSm: 10 },
+        Card: { paddingLG: 0 },
+      },
+    }}>
+      {contextHolder}
+      <Layout style={{ height: '100vh', background: isDark ? '#141414' : '#f5f5f5' }}>
+        <div style={{
+          background: isDark ? '#1f1f1f' : '#fff',
+          borderBottom: '1px solid ' + (isDark ? '#303030' : '#e8e8e8'),
+          padding: '8px 14px',
+          display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0, flexWrap: 'wrap',
+        }}>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            style={{ padding: '3px 8px', borderRadius: 6, border: '1px solid ' + (isDark ? '#424242' : '#d9d9d9'),
+              background: isDark ? '#141414' : '#fff', color: isDark ? '#ffffffd9' : '#000', fontSize: 13, height: 28 }} />
+          <Text type="secondary" style={{ fontSize: 12 }}>
+            {entries.length} 条 · {cidCount} CID
+          </Text>
+          <div style={{ flex: 1 }} />
+          <Space size={6}>
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setPasteOpen(true)}>粘贴添加</Button>
+            <Button size="small" icon={<SearchOutlined />} loading={checkingAll} onClick={handleCheckAll}>全部检测</Button>
+            <Dropdown menu={{ items: [
+              { key: 'text', icon: <CopyOutlined />, label: '复制为文本', onClick: handleExportText },
+              { key: 'excel', icon: <FileExcelOutlined />, label: '导出 Excel', onClick: handleExportExcel },
+            ]}} placement="bottomRight">
+              <Button size="small" icon={<DownloadOutlined />}>导出</Button>
+            </Dropdown>
+          </Space>
+        </div>
+
+        <Content style={{ overflow: 'auto', padding: 12 }}>
+          <Spin spinning={loading}>
+            {entries.length === 0 && !loading ? (
+              <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 'calc(100vh - 80px)' }}>
+                <Empty description="暂无数据，点击「粘贴添加」导入" />
+              </div>
+            ) : (
+              groups.map(g => (
+                <CIDGroup key={g.cid} group={g} checkingIds={checkingIds}
+                  onCheck={handleCheckSingle} onDelete={handleDelete}
+                  onRefresh={loadData} dragHandlers={makeDragHandlers(g.cid)} />
+              ))
+            )}
+          </Spin>
+        </Content>
+      </Layout>
+
+      <Modal title="粘贴运营素材文本" open={pasteOpen} onCancel={() => setPasteOpen(false)}
+        width={600} okText="AI 解析并添加" onOk={handlePasteAdd}
+        okButtonProps={{ disabled: !pasteText.trim() }}>
+        <TextArea rows={14} value={pasteText} onChange={e => setPasteText(e.target.value)}
+          placeholder="粘贴运营素材文本，AI 会自动识别并添加..." style={{ fontSize: 13 }} />
+      </Modal>
+
+      <Modal title="复制为文本" open={exportOpen} onCancel={() => setExportOpen(false)}
+        width={640} okText="复制到剪贴板" okButtonProps={{ icon: <CopyOutlined />, disabled: exportLoading || !exportText }}
+        onOk={handleCopyExportText}>
+        <Spin spinning={exportLoading}>
+          <TextArea rows={18} value={exportText} onChange={e => setExportText(e.target.value)}
+            placeholder="导出内容加载中..." style={{ fontSize: 13, fontFamily: 'monospace' }} />
+        </Spin>
+      </Modal>
+    </ConfigProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
