@@ -475,7 +475,7 @@ export const WecomBindPage: React.FC = () => {
                 )}
 
                 <div className="mt-3 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
-                  获取方式：打开企微群 → 群设置（右上 ···） → 群机器人 → 添加 → 新建 → 复制
+                  获取方式：打开企微群 → 群设置（右上 ···） → 消息推送 → 添加 → 新建 → 复制
                   Webhook 地址
                 </div>
               </div>

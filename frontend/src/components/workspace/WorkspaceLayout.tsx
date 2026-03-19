@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useSharedStore } from '../../stores/useSharedStore';
 
 interface WorkspaceLayoutProps {
@@ -41,7 +41,6 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   const sidebarWidth = useSharedStore((s) => s.workspaceSidebarWidth);
   const setSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
   const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
-  const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
 
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
@@ -128,19 +127,6 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
             <div className="absolute inset-y-0 -left-1 -right-1" />
           </div>
         )}
-
-        {/* Left sidebar toggle */}
-        <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          className="absolute top-3 left-2 z-20 p-1 rounded-md bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 shadow-sm transition-colors"
-          style={!sidebarCollapsed ? { left: sidebarWidth - 28 } : undefined}
-        >
-          {sidebarCollapsed ? (
-            <PanelLeftOpen className="w-4 h-4" />
-          ) : (
-            <PanelLeftClose className="w-4 h-4" />
-          )}
-        </button>
 
         {/* Main panel */}
         <div className="flex-1 min-w-0 flex flex-col">

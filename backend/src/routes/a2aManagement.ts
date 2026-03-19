@@ -410,8 +410,10 @@ router.post('/import-projects/:projectPath', async (req: Request, res: Response)
         // Get or create A2A agent ID for target project
         const a2aAgentId = await getOrCreateA2AId(projectId, agentType, decodedTargetPath);
 
-        // Build agent card for target project
-        const baseUrl = `${req.protocol}://${req.get('host')}`;
+        // Intra-service import: both projects are on the same AgentStudio instance,
+        // always use localhost to avoid unnecessary tunnel round-trips.
+        const port = parseInt(process.env.PORT || '4936', 10);
+        const baseUrl = `http://localhost:${port}`;
         const targetProjectName = decodedTargetPath.split('/').pop() || decodedTargetPath;
         const projectContext: ProjectContext = {
           projectId,

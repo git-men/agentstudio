@@ -154,8 +154,11 @@ export const useSessionManager = ({
       onSessionChange?.(sessionId);
       await loadMessagesForSession(sessionId);
       setIsLoadingMessages(false);
+      setTimeout(() => {
+        textareaRef?.current?.focus();
+      }, 0);
     },
-    [onSessionChange, setCurrentSessionId, loadMessagesForSession],
+    [onSessionChange, setCurrentSessionId, loadMessagesForSession, textareaRef],
   );
 
   const handleNewSession = useCallback(() => {

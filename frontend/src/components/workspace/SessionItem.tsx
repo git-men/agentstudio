@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useMemo, useState, useCallback, useEffect } from 'react';
 import { useStore } from 'zustand';
 import { X } from 'lucide-react';
 import type { StoreApi } from 'zustand';
@@ -73,9 +73,15 @@ export const SessionItem: React.FC<SessionItemProps> = ({
   const effectiveStatus = isAiTyping ? 'running' : status;
   const badge = STATUS_BADGE[effectiveStatus] || STATUS_BADGE.idle;
 
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   const relativeTime = useMemo(
     () => formatRelativeTime(lastActivity),
-    [lastActivity],
+    [lastActivity, tick],
   );
 
   const displayTitle = title || 'New Session';

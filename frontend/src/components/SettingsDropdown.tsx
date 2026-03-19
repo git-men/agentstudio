@@ -101,9 +101,9 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-lg transition-colors border ${isOpen
-          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+        className={`flex items-center space-x-2 px-2 py-1.5 text-sm rounded-md transition-colors ${isOpen
+          ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
         disabled={isAiTyping}
         title={t('agentChat.settings.title')}

@@ -69,22 +69,52 @@ interface SubAgentMessage {
 }
 
 // 读取子Agent的消息文件并提取完整消息流
-function readSubAgentMessageFlow(projectPath: string, agentId: string): SubAgentMessage[] {
+function readSubAgentMessageFlow(projectPath: string, agentId: string, sessionId?: string): SubAgentMessage[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
     // Search all directories (macOS EMFILE workaround may store files in custom dir)
     let agentFilePath: string | null = null;
     for (const projectsDir of getAllProjectsDirs()) {
       const historyDir = path.join(projectsDir, claudeProjectPath);
-      const candidatePath = path.join(historyDir, `agent-${agentId}.jsonl`);
-      if (fs.existsSync(candidatePath)) {
-        agentFilePath = candidatePath;
+
+      // New format: {historyDir}/{sessionId}/subagents/agent-{agentId}.jsonl
+      if (sessionId) {
+        const nestedPath = path.join(historyDir, sessionId, 'subagents', `agent-${agentId}.jsonl`);
+        if (fs.existsSync(nestedPath)) {
+          agentFilePath = nestedPath;
+          break;
+        }
+      }
+
+      // Legacy flat format: {historyDir}/agent-{agentId}.jsonl
+      const flatPath = path.join(historyDir, `agent-${agentId}.jsonl`);
+      if (fs.existsSync(flatPath)) {
+        agentFilePath = flatPath;
         break;
+      }
+
+      // Fallback: scan all {sessionId}/subagents/ directories if sessionId not provided
+      if (!sessionId) {
+        try {
+          const entries = fs.readdirSync(historyDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const scanPath = path.join(historyDir, entry.name, 'subagents', `agent-${agentId}.jsonl`);
+              if (fs.existsSync(scanPath)) {
+                agentFilePath = scanPath;
+                break;
+              }
+            }
+          }
+        } catch {
+          // directory read failed, skip
+        }
+        if (agentFilePath) break;
       }
     }
 
     if (!agentFilePath) {
-      console.log(`❌ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}`);
+      console.log(`⚠️ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}${sessionId ? ` (session: ${sessionId})` : ''}`);
       return [];
     }
     
@@ -624,7 +654,7 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
                           const subAgentId = msg.toolUseResult.agentId;
                           console.log(`🔧 [TASK] Found Task tool with sub-agent: ${subAgentId}`);
                           
-                          const subAgentMessageFlow = readSubAgentMessageFlow(projectPath, subAgentId);
+                          const subAgentMessageFlow = readSubAgentMessageFlow(projectPath, subAgentId, sessionId);
                           
                           if (subAgentMessageFlow.length > 0) {
                             // Attach sub-agent message flow to toolUseResult

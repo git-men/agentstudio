@@ -142,6 +142,13 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // Auto-send ref for initial message
     const shouldAutoSendRef = useRef(false);
 
+    // Auto-focus textarea on mount (covers session switching in workspace mode)
+    useEffect(() => {
+        setTimeout(() => {
+            textareaRef.current?.focus();
+        }, 0);
+    }, []);
+
     // Process initial message
     useEffect(() => {
         if (initialMessage && !hasProcessedInitialMessage) {
@@ -432,6 +439,18 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             });
         }
     }, [currentSessionId, isAiTyping, loadMessagesForSession, setIsLoadingMessages]);
+
+    // Auto-focus textarea when AI finishes responding
+    const prevIsAiTypingRef = useRef(false);
+    useEffect(() => {
+        const wasTyping = prevIsAiTypingRef.current;
+        prevIsAiTypingRef.current = isAiTyping;
+        if (wasTyping && !isAiTyping) {
+            setTimeout(() => {
+                textareaRef.current?.focus();
+            }, 0);
+        }
+    }, [isAiTyping]);
 
     // Restore model/provider from active session when page refreshes
     useEffect(() => {

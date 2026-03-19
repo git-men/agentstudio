@@ -631,6 +631,18 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     }
   }, [isAiTyping]);
 
+  // Auto-focus textarea when AI finishes responding
+  const prevIsAiTypingRef = useRef(false);
+  useEffect(() => {
+    const wasTyping = prevIsAiTypingRef.current;
+    prevIsAiTypingRef.current = isAiTyping;
+    if (wasTyping && !isAiTyping) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+    }
+  }, [isAiTyping]);
+
   // Load session messages into the store when query data arrives.
   // The query is disabled during streaming (paused=isAiTyping).
   // When streaming ends, the query re-enables and may return stale cached

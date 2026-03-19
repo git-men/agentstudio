@@ -19,7 +19,7 @@ interface BackendOnboardingWizardProps {
 export const BackendOnboardingWizard: React.FC<BackendOnboardingWizardProps> = ({ onComplete }) => {
   const { t } = useTranslation('onboarding');
   const navigate = useNavigate();
-  const { services, addService, switchService } = useBackendServices();
+  const { services, addService, updateService, switchService } = useBackendServices();
   const [step, setStep] = useState<Step>('welcome');
   const [detectedService, setDetectedService] = useState<{ name: string; url: string } | null>(null);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -69,16 +69,23 @@ export const BackendOnboardingWizard: React.FC<BackendOnboardingWizardProps> = (
   const handleUseDetectedService = () => {
     if (!detectedService) return;
 
-    // Add service if not exists
+    // Check if service already exists at the detected URL
     const existingService = services.find(s => s.url === detectedService.url);
-    if (!existingService) {
-      const newService = addService({
-        name: detectedService.name,
-        url: detectedService.url
-      });
-      switchService(newService.id);
-    } else {
+    if (existingService) {
       switchService(existingService.id);
+    } else {
+      // Update the default service's URL instead of adding a new one
+      const defaultService = services.find(s => s.isDefault);
+      if (defaultService) {
+        updateService(defaultService.id, { url: detectedService.url });
+        switchService(defaultService.id);
+      } else {
+        const newService = addService({
+          name: detectedService.name,
+          url: detectedService.url
+        });
+        switchService(newService.id);
+      }
     }
 
     // Mark as completed
