@@ -69,22 +69,52 @@ interface SubAgentMessage {
 }
 
 // 读取子Agent的消息文件并提取完整消息流
-function readSubAgentMessageFlow(projectPath: string, agentId: string): SubAgentMessage[] {
+function readSubAgentMessageFlow(projectPath: string, agentId: string, sessionId?: string): SubAgentMessage[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
     // Search all directories (macOS EMFILE workaround may store files in custom dir)
     let agentFilePath: string | null = null;
     for (const projectsDir of getAllProjectsDirs()) {
       const historyDir = path.join(projectsDir, claudeProjectPath);
-      const candidatePath = path.join(historyDir, `agent-${agentId}.jsonl`);
-      if (fs.existsSync(candidatePath)) {
-        agentFilePath = candidatePath;
+
+      // New format: {historyDir}/{sessionId}/subagents/agent-{agentId}.jsonl
+      if (sessionId) {
+        const nestedPath = path.join(historyDir, sessionId, 'subagents', `agent-${agentId}.jsonl`);
+        if (fs.existsSync(nestedPath)) {
+          agentFilePath = nestedPath;
+          break;
+        }
+      }
+
+      // Legacy flat format: {historyDir}/agent-{agentId}.jsonl
+      const flatPath = path.join(historyDir, `agent-${agentId}.jsonl`);
+      if (fs.existsSync(flatPath)) {
+        agentFilePath = flatPath;
         break;
+      }
+
+      // Fallback: scan all {sessionId}/subagents/ directories if sessionId not provided
+      if (!sessionId) {
+        try {
+          const entries = fs.readdirSync(historyDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isDirectory()) {
+              const scanPath = path.join(historyDir, entry.name, 'subagents', `agent-${agentId}.jsonl`);
+              if (fs.existsSync(scanPath)) {
+                agentFilePath = scanPath;
+                break;
+              }
+            }
+          }
+        } catch {
+          // directory read failed, skip
+        }
+        if (agentFilePath) break;
       }
     }
 
     if (!agentFilePath) {
-      console.log(`❌ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}`);
+      console.log(`⚠️ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}${sessionId ? ` (session: ${sessionId})` : ''}`);
       return [];
     }
     
@@ -349,7 +379,14 @@ function processCompactContextMessages(messages: ClaudeHistoryMessage[]): Claude
 }
 
 
-function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] {
+interface ReadSessionsOptions {
+  /** Filter out automated task sessions whose title starts with [TASK_...] */
+  excludeAutomatedTasks?: boolean;
+  /** Max sessions to return (newest first based on file mtime) */
+  limit?: number;
+}
+
+function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOptions): ClaudeHistorySession[] {
   try {
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
     const allDirs = getAllProjectsDirs();
@@ -375,9 +412,24 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
         .filter(file => !file.startsWith('.'))
         .filter(file => !file.startsWith('agent-')); // 过滤掉 agent-xxx.jsonl 文件
 
+      // Sort files by modification time (newest first) for better perf with limit
+      const sortedFiles = jsonlFiles.map(file => {
+        try {
+          const stat = fs.statSync(path.join(historyDir, file));
+          return { file, mtime: stat.mtimeMs };
+        } catch {
+          return { file, mtime: 0 };
+        }
+      }).sort((a, b) => b.mtime - a.mtime);
+
+      // Apply limit: process at most N files per directory
+      const filesToProcess = options?.limit
+        ? sortedFiles.slice(0, options.limit)
+        : sortedFiles;
+
       const sessions: ClaudeHistorySession[] = [];
 
-    for (const filename of jsonlFiles) {
+    for (const { file: filename } of filesToProcess) {
       const sessionId = filename.replace('.jsonl', '');
       const filePath = path.join(historyDir, filename);
       
@@ -434,6 +486,11 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
         // Final fallback
         if (!title) {
           title = `会话 ${sessionId.slice(0, 8)}`;
+        }
+
+        // Skip automated task sessions early (before expensive message processing)
+        if (options?.excludeAutomatedTasks && /^\[TASK_\w+\]/.test(title)) {
+          continue;
         }
 
         // Process compact context messages before filtering
@@ -597,7 +654,7 @@ function readClaudeHistorySessions(projectPath: string): ClaudeHistorySession[] 
                           const subAgentId = msg.toolUseResult.agentId;
                           console.log(`🔧 [TASK] Found Task tool with sub-agent: ${subAgentId}`);
                           
-                          const subAgentMessageFlow = readSubAgentMessageFlow(projectPath, subAgentId);
+                          const subAgentMessageFlow = readSubAgentMessageFlow(projectPath, subAgentId, sessionId);
                           
                           if (subAgentMessageFlow.length > 0) {
                             // Attach sub-agent message flow to toolUseResult
@@ -960,6 +1017,99 @@ router.get('/_status', (req, res) => {
   }
 });
 
+// GET /api/sessions/by-project - Get sessions by project path (project-centric view)
+router.get('/by-project', async (req, res) => {
+  try {
+    const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
+    const { search } = req.query;
+    const showAutomated = req.query.showAutomated === 'true';
+
+    if (!projectPath) {
+      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    }
+
+    let sessions: any[] = [];
+    const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+    const sessionOpts: ReadSessionsOptions = {
+      excludeAutomatedTasks: !showAutomated,
+      limit: 200,
+    };
+
+    if (defaultEngine.readSessions) {
+      const engineSessions = await defaultEngine.readSessions(projectPath);
+      sessions = engineSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        createdAt: session.createdAt,
+        lastUpdated: session.lastUpdated,
+        messageCount: session.messages.length,
+      }));
+      // Filter automated tasks from engine results too
+      if (!showAutomated) {
+        sessions = sessions.filter(s => !/^\[TASK_\w+\]/.test(s.title || ''));
+      }
+    } else {
+      const claudeSessions = readClaudeHistorySessions(projectPath, sessionOpts);
+      sessions = claudeSessions.map((session) => ({
+        id: session.id,
+        title: session.title,
+        createdAt: session.createdAt,
+        lastUpdated: session.lastUpdated,
+        messageCount: session.messages.length,
+      }));
+    }
+
+    // Merge live sessions from SessionManager that target this projectPath
+    const liveSessionsInfo = sessionManager.getSessionsInfo();
+    const existingIds = new Set(sessions.map(s => s.id));
+    for (const live of liveSessionsInfo) {
+      if (live.projectPath === projectPath && !existingIds.has(live.sessionId)) {
+        sessions.push({
+          id: live.sessionId,
+          agentId: live.agentId,
+          title: live.sessionTitle || `Session ${live.sessionId.slice(0, 8)}`,
+          createdAt: live.lastActivity,
+          lastUpdated: live.lastActivity,
+          messageCount: 0,
+          isActive: live.isActive,
+        });
+      }
+    }
+
+    // Enrich with live status and fresher timestamps
+    const liveMap = new Map(liveSessionsInfo.map(s => [s.sessionId, s]));
+    sessions = sessions.map(s => {
+      const live = liveMap.get(s.id);
+      let lastUpdated = s.lastUpdated;
+      if (live?.lastActivity) {
+        const liveTime = typeof live.lastActivity === 'number'
+          ? new Date(live.lastActivity).toISOString()
+          : live.lastActivity;
+        if (new Date(liveTime).getTime() > new Date(lastUpdated).getTime()) {
+          lastUpdated = liveTime;
+        }
+      }
+      return {
+        ...s,
+        lastUpdated,
+        agentId: s.agentId || live?.agentId || undefined,
+        isActive: live ? live.isActive : false,
+        isProcessing: live ? sessionManager.isSessionBusy(s.id) : false,
+      };
+    });
+
+    if (search && typeof search === 'string' && search.trim()) {
+      const term = search.trim().toLowerCase();
+      sessions = sessions.filter(s => s.title?.toLowerCase().includes(term));
+    }
+
+    res.json({ sessions, projectPath });
+  } catch (error) {
+    console.error('Failed to get project sessions:', error);
+    res.status(500).json({ error: 'Failed to retrieve project sessions' });
+  }
+});
+
 // GET /api/sessions/:agentId - Get agent sessions
 router.get('/:agentId', async (req, res) => {
   try {
@@ -1035,6 +1185,53 @@ router.get('/:agentId', async (req, res) => {
         console.log(`🔄 [DEBUG] Mapped AgentStorage session ${index + 1}:`, mappedSession);
         return mappedSession;
       });
+
+      // Fallback: also read from Claude/engine history using agent's effective
+      // working directory. This catches sessions created via /api/agents/chat
+      // that bypass AgentStorage (e.g. workspace mode).
+      const effectivePath = agent.workingDirectory
+        ? path.resolve(process.cwd(), resolvePath(agent.workingDirectory))
+        : process.cwd();
+
+      const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+      let historySessions: typeof sessions = [];
+
+      try {
+        if (defaultEngine.readSessions) {
+          console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history for effective path:`, effectivePath);
+          const engineSessions = await defaultEngine.readSessions(effectivePath);
+          historySessions = engineSessions.map((s) => ({
+            id: s.id,
+            agentId,
+            title: s.title,
+            createdAt: s.createdAt,
+            lastUpdated: s.lastUpdated,
+            messageCount: s.messages.length
+          }));
+        } else {
+          console.log(`📂 [DEBUG] Reading Claude history for effective path:`, effectivePath);
+          const claudeSessions = readClaudeHistorySessions(effectivePath);
+          historySessions = claudeSessions.map((s) => ({
+            id: s.id,
+            agentId,
+            title: s.title,
+            createdAt: s.createdAt,
+            lastUpdated: s.lastUpdated,
+            messageCount: s.messages.length
+          }));
+        }
+        console.log(`📊 [DEBUG] Found ${historySessions.length} sessions from history fallback`);
+      } catch (historyErr) {
+        console.warn('⚠️ Failed to read history sessions:', historyErr);
+      }
+
+      const existingIds = new Set(sessions.map(s => s.id));
+      for (const hs of historySessions) {
+        if (!existingIds.has(hs.id)) {
+          sessions.push(hs);
+          existingIds.add(hs.id);
+        }
+      }
     }
     
     // Merge in active sessions from SessionManager for this agent.
@@ -1165,7 +1362,30 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
           });
         }
       } else {
-        return res.status(404).json({ error: 'Session not found' });
+        // Last resort: try reading from Claude/engine history using the agent's
+        // effective working directory (covers sessions that were created via chat
+        // and whose live ClaudeSession has already been cleaned up).
+        const agent = globalAgentStorage.getAgent(agentId);
+        const effectivePath = agent?.workingDirectory
+          ? path.resolve(process.cwd(), resolvePath(agent.workingDirectory))
+          : process.cwd();
+
+        console.log(`🔍 [FALLBACK] Trying history at effective path: ${effectivePath} for session ${sessionId}`);
+
+        const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+        if (defaultEngine.readSession) {
+          session = await defaultEngine.readSession(effectivePath, sessionId);
+        }
+        if (!session) {
+          const claudeSessions = readClaudeHistorySessions(effectivePath);
+          session = claudeSessions.find(s => s.id === sessionId) || null;
+        }
+        if (session) {
+          console.log(`✅ [FALLBACK] Found session with ${session.messages?.length || 0} messages`);
+          session = { ...session, agentId };
+        } else {
+          return res.status(404).json({ error: 'Session not found' });
+        }
       }
     }
     

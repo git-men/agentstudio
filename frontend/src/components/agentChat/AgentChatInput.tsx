@@ -116,7 +116,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
 
   return (
     <div
-      className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
+      className={`flex-shrink-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl mx-4 mb-3 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
         }`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -133,31 +133,28 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
       )}
 
       {/* Text Input Area */}
-      <div className="p-4 pb-2">
-        <textarea
-          ref={textareaRef}
-          value={inputMessage}
-          onChange={setInputMessage}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          placeholder={
-            selectedImages.length > 0
-              ? t('agentChat.addDescription')
-              : t('agentChat.inputPlaceholder')
-          }
-          rows={1}
-          className="w-full resize-none border border-gray-300 dark:border-gray-600 rounded-lg px-4 py-3 text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:border-transparent transition-all duration-200 disabled:bg-gray-50 dark:disabled:bg-gray-700 disabled:text-gray-500 dark:disabled:text-gray-400"
-          style={{
-            '--focus-ring-color': 'hsl(var(--primary))',
-            minHeight: '44px',
-            maxHeight: '120px'
-          } as React.CSSProperties}
-          disabled={isAiTyping}
-        />
-      </div>
+      <textarea
+        ref={textareaRef}
+        value={inputMessage}
+        onChange={setInputMessage}
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        placeholder={
+          selectedImages.length > 0
+            ? t('agentChat.addDescription')
+            : t('agentChat.inputPlaceholder')
+        }
+        rows={1}
+        className="w-full resize-none bg-transparent px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none transition-all duration-200 disabled:text-gray-500 dark:disabled:text-gray-400"
+        style={{
+          minHeight: '44px',
+          maxHeight: '120px'
+        }}
+        disabled={isAiTyping}
+      />
 
       {/* Toolbar */}
-      <div className="px-4 pb-4 pt-2 border-t border-gray-100 dark:border-gray-700">
+      <div className="px-3 pt-0 pb-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-1">
             {/* Hidden file input */}
@@ -257,26 +254,25 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             {isAiTyping ? (
               <button
                 onClick={onStopGeneration}
-                className={`flex items-center space-x-2 px-4 py-2 text-white rounded-lg transition-colors text-sm font-medium shadow-sm`}
-                style={{ backgroundColor: 'rgb(239, 68, 68)' }}
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 text-red-600 dark:text-red-400 rounded-md transition-colors text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20"
                 title={t('agentChatPanel.stopGeneration')}
               >
-                <Square className="w-4 h-4" />
+                <Square className="w-3.5 h-3.5" />
                 <span>{t('agentChatPanel.stop')}</span>
               </button>
             ) : (
               <button
                 onClick={onSend}
                 disabled={isSendDisabled}
-                className="flex items-center space-x-2 px-4 py-2 text-white rounded-lg hover:opacity-90 disabled:bg-gray-300 dark:disabled:bg-gray-700 dark:disabled:text-gray-500 disabled:cursor-not-allowed transition-all duration-200 text-sm font-medium shadow-sm"
-                style={{ backgroundColor: !isSendDisabled ? 'hsl(var(--primary))' : undefined }}
+                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 text-sm font-medium disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                style={{ color: !isSendDisabled ? 'hsl(var(--primary))' : undefined }}
                 title={
                   isAiTyping ? t('agentChatPanel.aiTyping') :
                     !inputMessage.trim() && selectedImages.length === 0 ? t('agentChatPanel.noContentToSend') :
                       t('agentChatPanel.sendMessage')
                 }
               >
-                <Send className="w-4 h-4" />
+                <Send className="w-3.5 h-3.5" />
                 <span>{t('agentChatPanel.send')}</span>
               </button>
             )}

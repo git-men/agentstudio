@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
-import { openUrlInContext } from '../utils/navigation';
 import {
   Plus,
   Search,
@@ -15,12 +13,6 @@ import {
 import { ProjectTable } from '../components/ProjectTable';
 import { useAgents } from '../hooks/useAgents';
 import { FileBrowser } from '../components/FileBrowser';
-import { ProjectMemoryModal } from '../components/ProjectMemoryModal';
-import { ProjectCommandsModal } from '../components/ProjectCommandsModal';
-import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
-import { ProjectA2AModal } from '../components/ProjectA2AModal';
-import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
-import { ProjectVersionModal } from '../components/ProjectVersionModal';
 import { useConfirm } from '../hooks/useConfirm';
 
 interface Project {
@@ -250,21 +242,22 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   );
 };
 
+const openProjectWindow = (projectPath: string) => {
+  const params = new URLSearchParams();
+  params.set('project', projectPath);
+  const url = `/project-workspace?${params.toString()}`;
+  const windowName = `project_${projectPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
+  window.open(url, windowName);
+};
+
 export const ProjectsPage: React.FC = () => {
   const { t } = useTranslation('pages');
-  const navigate = useNavigate();
   const { data: agentsData } = useAgents();
   const confirm = useConfirm();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [memoryProject, setMemoryProject] = useState<Project | null>(null);
-  const [commandsProject, setCommandsProject] = useState<Project | null>(null);
-  const [subAgentsProject, setSubAgentsProject] = useState<Project | null>(null);
-  const [a2aProject, setA2aProject] = useState<Project | null>(null);
-  const [settingsProject, setSettingsProject] = useState<Project | null>(null);
-  const [versionProject, setVersionProject] = useState<Project | null>(null);
   const [agentSelectProject, setAgentSelectProject] = useState<Project | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [importProjectPath, setImportProjectPath] = useState('');
@@ -332,15 +325,10 @@ export const ProjectsPage: React.FC = () => {
       if (response.ok) {
         const result = await response.json();
 
-        // Add new project to the list
         setProjects(prev => [result.project, ...prev]);
         setShowCreateModal(false);
 
-        // 创建完成后跳转到聊天界面
-        const params = new URLSearchParams();
-        params.set('project', result.project.path);
-        const url = `/chat/${data.agentId}?${params.toString()}`;
-        openUrlInContext(url, navigate);
+        openProjectWindow(result.project.path);
       } else {
         const error = await response.json();
         throw new Error(error.error || t('projects.errors.createFailed'));
@@ -351,25 +339,9 @@ export const ProjectsPage: React.FC = () => {
     }
   };
 
-  const handleOpenProject = async (project: Project) => {
-    // If project has agents but no default, show selection dialog
-    if (project.agents.length > 0 && !project.defaultAgent) {
-      setAgentSelectProject(project);
-      return;
-    }
+  const handleOpenProject = (project: Project) => {
+    openProjectWindow(project.path);
 
-    // Use default agent or fallback to claude-code
-    const agentToUse = project.defaultAgent || 'claude-code';
-    
-    // Open project with agent
-    console.log('Opening project:', project.name, 'with agent:', agentToUse);
-    const params = new URLSearchParams();
-    params.set('project', project.path);
-    const url = `/chat/${agentToUse}?${params.toString()}`;
-    console.log('Generated URL:', url);
-    openUrlInContext(url, navigate);
-
-    // Update last accessed time
     setProjects(prev => prev.map(p => 
       p.id === project.id 
         ? { ...p, lastAccessed: new Date().toISOString() }
@@ -403,30 +375,6 @@ export const ProjectsPage: React.FC = () => {
         showError(t('projects.errors.deleteFailed'), error instanceof Error ? error.message : t('errors:common.unknownError'));
       }
     }
-  };
-
-  const handleMemoryManagement = (project: Project) => {
-    setMemoryProject(project);
-  };
-
-  const handleCommandManagement = (project: Project) => {
-    setCommandsProject(project);
-  };
-
-  const handleSubAgentManagement = (project: Project) => {
-    setSubAgentsProject(project);
-  };
-
-  const handleA2AManagement = (project: Project) => {
-    setA2aProject(project);
-  };
-
-  const handleSettings = (project: Project) => {
-    setSettingsProject(project);
-  };
-
-  const handleVersionManagement = (project: Project) => {
-    setVersionProject(project);
   };
 
   const handleAgentChanged = (projectId: string, newAgent: any) => {
@@ -464,14 +412,9 @@ export const ProjectsPage: React.FC = () => {
           p.id === agentSelectProject.id ? data.project : p
         ));
 
-        // Close selection dialog
         setAgentSelectProject(null);
 
-        // Open project with selected agent
-        const params = new URLSearchParams();
-        params.set('project', data.project.path);
-        const url = `/chat/${agentId}?${params.toString()}`;
-        openUrlInContext(url, navigate);
+        openProjectWindow(data.project.path);
       } else {
         const error = await response.json();
         showError(t('errors:agent.setFailed'), error.error || t('errors:common.unknownError'));
@@ -532,16 +475,7 @@ export const ProjectsPage: React.FC = () => {
         });
 
         if (shouldOpen) {
-          // If there are multiple agents, show agent selection dialog
-          if (enabledAgents.length > 1) {
-            setAgentSelectProject(result.project);
-          } else {
-            // Only one agent available, open directly with that agent
-            const params = new URLSearchParams();
-            params.set('project', result.project.path);
-            const url = `/chat/${firstAgent.id}?${params.toString()}`;
-            openUrlInContext(url, navigate);
-          }
+          openProjectWindow(result.project.path);
         }
       } else {
         const error = await response.json();
@@ -637,12 +571,6 @@ export const ProjectsPage: React.FC = () => {
           projects={filteredProjects}
           agents={enabledAgents}
           onOpenProject={handleOpenProject}
-          onMemoryManagement={handleMemoryManagement}
-          onCommandManagement={handleCommandManagement}
-          onSubAgentManagement={handleSubAgentManagement}
-          onA2AManagement={handleA2AManagement}
-          onVersionManagement={handleVersionManagement}
-          onSettings={handleSettings}
           onDeleteProject={handleDeleteProject}
           onAgentChanged={handleAgentChanged}
         />
@@ -729,53 +657,6 @@ export const ProjectsPage: React.FC = () => {
         onClose={() => setShowCreateModal(false)}
         onConfirm={handleCreateProject}
         agents={enabledAgents}
-      />
-
-      {/* Memory Management Modal */}
-      {memoryProject && (
-        <ProjectMemoryModal
-          project={memoryProject}
-          onClose={() => setMemoryProject(null)}
-        />
-      )}
-
-      {/* Commands Management Modal */}
-      {commandsProject && (
-        <ProjectCommandsModal
-          project={commandsProject}
-          onClose={() => setCommandsProject(null)}
-        />
-      )}
-
-      {/* SubAgents Management Modal */}
-      {subAgentsProject && (
-        <ProjectSubAgentsModal
-          project={subAgentsProject}
-          onClose={() => setSubAgentsProject(null)}
-        />
-      )}
-
-      {/* A2A Management Modal */}
-      {a2aProject && (
-        <ProjectA2AModal
-          project={a2aProject}
-          onClose={() => setA2aProject(null)}
-        />
-      )}
-
-      {/* Project Settings Modal */}
-      <ProjectSettingsModal
-        isOpen={!!settingsProject}
-        project={settingsProject}
-        onClose={() => setSettingsProject(null)}
-        onSaved={() => fetchProjects()}
-      />
-
-      {/* Project Version Modal */}
-      <ProjectVersionModal
-        isOpen={!!versionProject}
-        project={versionProject}
-        onClose={() => setVersionProject(null)}
       />
 
       {/* Agent Selection Modal */}

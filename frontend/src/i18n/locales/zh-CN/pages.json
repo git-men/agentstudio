@@ -367,6 +367,11 @@
       "error": "❌ 发生错误"
     }
   },
+  "workspace": {
+    "emptyTitle": "欢迎使用工作台",
+    "emptyDescription": "创建一个新会话开始与你的 Agent 对话。",
+    "newSession": "新建会话"
+  },
   "dashboard": {
     "title": "首页",
     "welcome": "欢迎回到Claude Code工作台",

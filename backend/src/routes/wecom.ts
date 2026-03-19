@@ -159,9 +159,23 @@ router.post('/auth/start', async (req: Request, res: Response) => {
       Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
     registerPendingAuth(state, enterpriseUrl);
 
-    const protocol = req.headers['x-forwarded-proto'] || 'http';
-    const host = req.headers.host || `localhost:${process.env.PORT || '4936'}`;
-    const callbackUrl = `${protocol}://${host}/api/auth/enterprise/callback`;
+    // Build callback URL. Priority:
+    // 1. AGENTSTUDIO_PUBLIC_URL env var (explicit, most reliable for reverse-proxy deployments)
+    // 2. x-forwarded-host header (nginx should set this with the *original* Host including port)
+    // 3. Host header (works when Express is accessed directly without a proxy)
+    const publicUrl = process.env.AGENTSTUDIO_PUBLIC_URL;
+    let callbackUrl: string;
+    if (publicUrl) {
+      callbackUrl = `${publicUrl.replace(/\/+$/, '')}/api/auth/enterprise/callback`;
+    } else {
+      const proto = (req.headers['x-forwarded-proto'] as string) || 'http';
+      // x-forwarded-host preserves the original host:port; fall back to Host header
+      const host =
+        (req.headers['x-forwarded-host'] as string) ||
+        req.headers.host ||
+        `localhost:${process.env.PORT || '4936'}`;
+      callbackUrl = `${proto}://${host}/api/auth/enterprise/callback`;
+    }
 
     const authUrl =
       `${enterpriseUrl}/api/v1/auth/tof/grant` +

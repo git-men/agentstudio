@@ -73,6 +73,8 @@ export const getA2AEndpointTool: ToolDefinition = {
       }
 
       const a2aEndpoint = `${baseUrl}/a2a/${a2aAgentId}/messages`;
+      const localBaseUrl = `http://localhost:${port}`;
+      const localEndpoint = `${localBaseUrl}/a2a/${a2aAgentId}/messages`;
 
       return {
         content: [
@@ -82,7 +84,9 @@ export const getA2AEndpointTool: ToolDefinition = {
               {
                 a2aAgentId,
                 a2aEndpoint,
+                localEndpoint,
                 baseUrl,
+                localBaseUrl,
                 port,
                 accessMode,
                 tunnelConnected: tunnelStatus.connected,
@@ -276,25 +280,10 @@ export const allowA2ACallTool: ToolDefinition = {
       const agentType = 'claude-code';
       const a2aAgentId = await getOrCreateA2AId(targetProjectId, agentType, targetProjectPath);
 
-      // Resolve base URL (tunnel or local)
+      // Intra-service call: both projects are on the same AgentStudio instance,
+      // always use localhost to avoid unnecessary tunnel round-trips.
       const port = parseInt(process.env.PORT || '4936', 10);
-      const allStatuses = tunnelService.getAllStatuses();
-      const allConfigs = tunnelService.getAllConfigs();
-      const tunnelStatus = allStatuses[0] ?? { connected: false, domain: null };
-      const tunnelConfig = allConfigs[0] ?? { protocol: 'https', domainSuffix: '', serverUrl: '', tunnelName: '' };
-
-      let baseUrl: string;
-      if (tunnelStatus.connected && tunnelStatus.domain) {
-        const protocol = tunnelConfig.protocol || 'https';
-        const fullDomain = tunnelConfig.domainSuffix
-          ? `${tunnelStatus.domain}${tunnelConfig.domainSuffix}`
-          : tunnelStatus.domain;
-        baseUrl = `${protocol}://${fullDomain}`;
-      } else {
-        const networkInfo = getNetworkInfo();
-        const ip = networkInfo.bestLocalIP || 'localhost';
-        baseUrl = `http://${ip}:${port}`;
-      }
+      const baseUrl = `http://localhost:${port}`;
 
       const agentStorage = new AgentStorage();
       const agentConfig = agentStorage.getAgent(agentType);

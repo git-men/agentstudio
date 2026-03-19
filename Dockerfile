@@ -58,10 +58,15 @@ RUN cd backend && pnpm run build
 # -----------------------------------------------------------------------------
 FROM node:20-slim AS node
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
+
 RUN apt-get update && apt-get install -y \
     curl \
     wget \
     git \
+    python3 \
+    python3-venv \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
@@ -118,9 +123,18 @@ CMD ["node", "dist/index.js"]
 # -----------------------------------------------------------------------------
 FROM oven/bun:1-slim AS bun
 
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
+
 RUN apt-get update && apt-get install -y \
     curl \
     git \
+    openssh-client \
+    python3 \
+    python3-pip \
+    python3-venv \
+    nodejs \
+    npm \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

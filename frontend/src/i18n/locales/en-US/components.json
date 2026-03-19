@@ -1330,5 +1330,24 @@
     "permissionDenied": "Please allow microphone access",
     "noDevice": "No microphone device found",
     "tooShort": "Recording too short"
+  },
+  "workspace": {
+    "newSession": "New Session",
+    "searchSessions": "Search sessions…",
+    "noSessions": "No sessions yet",
+    "noMatchingSessions": "No matching sessions",
+    "createFirst": "Click \"New Session\" to start",
+    "removeSession": "Remove session",
+    "removeConfirm": "Click again to confirm",
+    "sessionRemoved": "Session removed",
+    "status": {
+      "idle": "Idle",
+      "running": "Running",
+      "completed": "Done",
+      "error": "Error"
+    },
+    "defaultTitle": "New Session",
+    "sidebarToggle": "Toggle sidebar",
+    "loadingMessages": "Loading messages…"
   }
 }

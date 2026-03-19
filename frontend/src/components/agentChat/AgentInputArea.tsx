@@ -456,7 +456,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
   return (
     <>
       <div
-        className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''}`}
+        className={`flex-shrink-0 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
