@@ -216,7 +216,19 @@ export const useAIStreamHandler = ({
         setIsInitializingSession(false);
         setCurrentSessionId(resumeData.newSessionId);
         setIsNewSession(true);
-        onSessionChange?.(resumeData.newSessionId);
+
+        const isTempSessionId = (id: string) =>
+          id.startsWith('session_') || id.startsWith('__pending_');
+        const isTempCurrent = currentSessionId ? isTempSessionId(currentSessionId) : true;
+
+        if (isTempCurrent || !currentSessionId) {
+          onSessionChange?.(resumeData.newSessionId);
+        } else {
+          // Real → different real: silently migrate store.
+          if (externalStreamManager && currentSessionId) {
+            sessionStoreManager.migrateSession(currentSessionId, resumeData.newSessionId);
+          }
+        }
 
         // Delegate the "add resume message" to the manager's store
         const mgr = getOrCreateManager();

@@ -11,7 +11,6 @@ import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ProjectSessionListPanel } from '../components/workspace/ProjectSessionListPanel';
 import { ProjectToolbar } from '../components/workspace/ProjectToolbar';
 import type { RightPanelView } from '../components/workspace/ProjectToolbar';
-import { AgentPickerModal } from '../components/workspace/AgentPickerModal';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
 import { FileExplorer } from '../components/FileExplorer';
 import { LAVSViewContainer } from '../components/LAVSViewContainer';
@@ -25,7 +24,6 @@ import { ProjectVersionModal } from '../components/ProjectVersionModal';
 import { MessageSquarePlus, FolderOpen, Search, Clock } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
 import { formatRelativeTime } from '../utils/dateFormat';
-import type { AgentConfig } from '../types/index.js';
 
 /**
  * Inline project picker shown when no project is selected.
@@ -166,15 +164,17 @@ export const ProjectWorkspacePage: React.FC = () => {
   // ---------- Session state ----------
   const [sessionAgentMap, setSessionAgentMap] = useState<Record<string, string>>({});
   const [activeSessionId, setActiveSessionId] = useState<string | null>(sessionFromUrl);
-  const [showAgentPicker, setShowAgentPicker] = useState(false);
 
   // Stable render key for AGUIChatPanel — only changes on explicit user session
   // switches, NOT during temp→real ID migration (which would cause unnecessary remount
   // and disrupt the active SSE stream).
   const chatPanelKeyRef = useRef(0);
 
+  const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
+  const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
+
   // ---------- Panel & modal state ----------
-  const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>(null);
+  const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>('files');
   const [memoryProject, setMemoryProject] = useState<any>(null);
   const [commandsProject, setCommandsProject] = useState<any>(null);
   const [subAgentsProject, setSubAgentsProject] = useState<any>(null);
@@ -205,9 +205,9 @@ export const ProjectWorkspacePage: React.FC = () => {
     if (agent) setCurrentAgent(agent);
   }, [agent, setCurrentAgent]);
 
-  // Auto-open LAVS view when agent has it and right panel is closed
+  // Auto-open LAVS view when agent has it (prioritize over default files view)
   useEffect(() => {
-    if (hasLAVSView && rightPanelView === null) {
+    if (hasLAVSView && rightPanelView !== 'lavs') {
       setRightPanelView('lavs');
     }
   }, [hasLAVSView]);
@@ -262,20 +262,15 @@ export const ProjectWorkspacePage: React.FC = () => {
   );
 
   const handleNewSession = useCallback(() => {
-    setShowAgentPicker(true);
-  }, []);
+    const defaultAgentId = project?.defaultAgent;
+    if (!defaultAgentId) return;
+    const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setSessionAgentMap((prev) => ({ ...prev, [newId]: defaultAgentId }));
+    sessionStoreManager.getOrCreate(newId, defaultAgentId);
+    chatPanelKeyRef.current += 1;
+    setActiveSessionId(newId);
+  }, [project]);
 
-  const handleAgentSelected = useCallback(
-    (selectedAgent: AgentConfig) => {
-      setShowAgentPicker(false);
-      const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-      setSessionAgentMap((prev) => ({ ...prev, [newId]: selectedAgent.id }));
-      sessionStoreManager.getOrCreate(newId, selectedAgent.id);
-      chatPanelKeyRef.current += 1;
-      setActiveSessionId(newId);
-    },
-    [],
-  );
 
   const handleRemoveSession = useCallback(
     (sessionId: string) => {
@@ -299,26 +294,44 @@ export const ProjectWorkspacePage: React.FC = () => {
     (sessionId: string | null) => {
       if (!sessionId) return;
 
-      setActiveSessionId((prevId) => {
-        // Migrate agent mapping from temp ID → real UUID
-        const isTempId = (id: string) =>
-          id.startsWith('session_') || id.startsWith('__pending_');
-        if (prevId && isTempId(prevId) && !isTempId(sessionId)) {
-          setSessionAgentMap((prev) => {
-            const agentId = prev[prevId];
-            if (!agentId) return prev;
-            const next = { ...prev, [sessionId]: agentId };
-            delete next[prevId];
-            return next;
-          });
-        }
-        return sessionId;
-      });
+      const isTempId = (id: string) =>
+        id.startsWith('session_') || id.startsWith('__pending_');
 
-      // Invalidate project sessions so sidebar refreshes
-      queryClient.invalidateQueries({ queryKey: ['project-sessions', projectPath] });
+      // Capture prevId synchronously before state update for migration logic
+      const prevId = activeSessionId;
+      const isRealToReal =
+        prevId !== null &&
+        prevId !== sessionId &&
+        !isTempId(prevId) &&
+        !isTempId(sessionId);
+
+      if (prevId && prevId !== sessionId) {
+        // Migrate agent mapping for any ID change (temp→real or real→real)
+        setSessionAgentMap((prev) => {
+          const agentId = prev[prevId];
+          if (!agentId) return prev;
+          const next = { ...prev, [sessionId]: agentId };
+          delete next[prevId];
+          return next;
+        });
+
+        // For real→real transitions (e.g. CLI branching / compaction),
+        // re-key the store in place so the active panel keeps its messages.
+        if (isRealToReal) {
+          sessionStoreManager.migrateSession(prevId, sessionId);
+        }
+      }
+
+      setActiveSessionId(sessionId);
+
+      // Only refresh sidebar for meaningful changes (temp→real or new session).
+      // Skip for real→real re-keying to avoid showing the new CLI session ID
+      // as a duplicate entry alongside the original.
+      if (!isRealToReal) {
+        queryClient.invalidateQueries({ queryKey: ['project-sessions', projectPath] });
+      }
     },
-    [queryClient, projectPath],
+    [queryClient, projectPath, activeSessionId],
   );
 
   // ---------- No project: inline project picker ----------
@@ -389,6 +402,8 @@ export const ProjectWorkspacePage: React.FC = () => {
             projectPath={projectPath}
             rightPanelView={rightPanelView}
             hasLAVS={hasLAVSView}
+            sidebarCollapsed={sidebarCollapsed}
+            onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
             onSetRightPanelView={setRightPanelView}
             onMemoryManagement={() => setMemoryProject(project)}
             onCommandManagement={() => setCommandsProject(project)}
@@ -413,13 +428,6 @@ export const ProjectWorkspacePage: React.FC = () => {
           renderEmptyState()
         )}
       </WorkspaceLayout>
-
-      {/* Modals */}
-      <AgentPickerModal
-        open={showAgentPicker}
-        onClose={() => setShowAgentPicker(false)}
-        onSelect={handleAgentSelected}
-      />
 
       {memoryProject && (
         <ProjectMemoryModal

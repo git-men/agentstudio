@@ -156,6 +156,87 @@ describe('SessionStoreManager', () => {
     });
   });
 
+  describe('migrateSession (duplicate sidebar regression)', () => {
+    it('re-keys store from oldId to newId', () => {
+      const store = manager.getOrCreate('old-uuid', 'agent-1');
+      store.getState().addMessage({ content: 'hello', role: 'user' });
+
+      const migrated = manager.migrateSession('old-uuid', 'new-uuid');
+
+      expect(migrated).toBe(store);
+      expect(manager.getStore('old-uuid')).toBeUndefined();
+      expect(manager.getStore('new-uuid')).toBe(store);
+      expect(store.getState().sessionId).toBe('new-uuid');
+      expect(store.getState().messages).toHaveLength(1);
+    });
+
+    it('re-keys attached stream along with the store', () => {
+      const store = manager.getOrCreate('old-uuid', 'agent-1');
+      const stream = new SessionStreamManager(store);
+      manager.attachStream('old-uuid', stream);
+
+      manager.migrateSession('old-uuid', 'new-uuid');
+
+      expect(manager.getStream('old-uuid')).toBeUndefined();
+      expect(manager.getStream('new-uuid')).toBe(stream);
+    });
+
+    it('returns existing store if oldId === newId (no-op)', () => {
+      const store = manager.getOrCreate('same-id', 'agent-1');
+      const result = manager.migrateSession('same-id', 'same-id');
+
+      expect(result).toBe(store);
+      expect(manager.getStore('same-id')).toBe(store);
+    });
+
+    it('returns undefined if oldId store does not exist', () => {
+      const result = manager.migrateSession('nonexistent', 'new-id');
+      expect(result).toBeUndefined();
+    });
+
+    it('preserves messages and state across migration', () => {
+      const store = manager.getOrCreate('temp-session', 'agent-1');
+      store.getState().addMessage({ content: 'msg1', role: 'user' });
+      store.getState().addMessage({ content: 'msg2', role: 'assistant' });
+      store.getState().setStatus('running');
+      store.getState().setTitle('My Chat');
+
+      manager.migrateSession('temp-session', 'real-uuid-123');
+
+      const migrated = manager.getStore('real-uuid-123')!;
+      expect(migrated.getState().messages).toHaveLength(2);
+      expect(migrated.getState().messages[0].content).toBe('msg1');
+      expect(migrated.getState().messages[1].content).toBe('msg2');
+      expect(migrated.getState().status).toBe('running');
+      expect(migrated.getState().title).toBe('My Chat');
+      expect(migrated.getState().sessionId).toBe('real-uuid-123');
+    });
+
+    it('updates getActiveSessionIds after migration', () => {
+      manager.getOrCreate('old-id', 'agent-1');
+      manager.getOrCreate('other-id', 'agent-1');
+
+      manager.migrateSession('old-id', 'new-id');
+
+      const ids = manager.getActiveSessionIds();
+      expect(ids).toContain('new-id');
+      expect(ids).toContain('other-id');
+      expect(ids).not.toContain('old-id');
+    });
+
+    it('does not affect other sessions', () => {
+      manager.getOrCreate('session-a', 'agent-1');
+      const storeB = manager.getOrCreate('session-b', 'agent-1');
+      storeB.getState().addMessage({ content: 'independent', role: 'user' });
+
+      manager.migrateSession('session-a', 'session-a-new');
+
+      expect(manager.getStore('session-b')).toBe(storeB);
+      expect(storeB.getState().messages).toHaveLength(1);
+      expect(storeB.getState().sessionId).toBe('session-b');
+    });
+  });
+
   describe('getActiveSessionIds', () => {
     it('returns empty array initially', () => {
       expect(manager.getActiveSessionIds()).toEqual([]);

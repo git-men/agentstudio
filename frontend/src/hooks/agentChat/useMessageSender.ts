@@ -328,9 +328,21 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
             case 'RUN_STARTED':
               setIsInitializingSession(false);
               if (event.threadId && event.threadId !== currentSessionId) {
-                setCurrentSessionId(event.threadId);
-                setIsNewSession(true);
-                onSessionChange?.(event.threadId);
+                const isTempCurrent = currentSessionId?.startsWith('session_') || currentSessionId?.startsWith('__pending_');
+                if (isTempCurrent || !currentSessionId) {
+                  setCurrentSessionId(event.threadId);
+                  setIsNewSession(true);
+                  onSessionChange?.(event.threadId);
+                } else {
+                  // Real → different real (e.g. CLI assigned a new session ID on resume).
+                  // Silently re-key the store so subsequent messages use the new ID,
+                  // but do NOT call onSessionChange to avoid creating a duplicate
+                  // sidebar entry.
+                  if (externalStreamManager) {
+                    sessionStoreManager.migrateSession(currentSessionId, event.threadId);
+                  }
+                  setCurrentSessionId(event.threadId);
+                }
               }
               break;
 
@@ -506,8 +518,20 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
               const customEvent = event as { name?: string; data?: any };
               if (customEvent.name === 'session_id_updated' && customEvent.data?.sessionId) {
                 const cliSessionId = customEvent.data.sessionId;
-                setCurrentSessionId(cliSessionId);
-                onSessionChange?.(cliSessionId);
+                if (cliSessionId !== currentSessionId) {
+                  const isTempCurrent = currentSessionId?.startsWith('session_') || currentSessionId?.startsWith('__pending_');
+                  if (isTempCurrent || !currentSessionId) {
+                    setCurrentSessionId(cliSessionId);
+                    onSessionChange?.(cliSessionId);
+                  } else {
+                    // Real → different real: silently migrate store without
+                    // creating a duplicate sidebar entry.
+                    if (externalStreamManager) {
+                      sessionStoreManager.migrateSession(currentSessionId, cliSessionId);
+                    }
+                    setCurrentSessionId(cliSessionId);
+                  }
+                }
               }
               if (customEvent.name === 'auto_compact') {
                 const preTokens = customEvent.data?.preTokens || 0;
