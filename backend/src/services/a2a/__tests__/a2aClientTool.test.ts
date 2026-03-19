@@ -707,4 +707,158 @@ describe('a2aClientTool - MCP Tool for Calling External Agents', () => {
       expect(result.error).toBeDefined();
     });
   });
+
+  // =========================================================================
+  // useTask + a2a-jsonrpc protocol fallback
+  // =========================================================================
+
+  describe('useTask with a2a-jsonrpc protocol', () => {
+    it('should log warning and fall back to sync when useTask=true with a2a-jsonrpc', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      vi.mocked(a2aConfigService.loadA2AConfig).mockResolvedValue({
+        allowedAgents: [
+          {
+            name: 'JSON-RPC Agent',
+            url: 'https://jsonrpc.example.com/a2a/agent-1',
+            apiKey: 'key-123',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+          },
+        ],
+        taskTimeout: 300000,
+        maxConcurrentTasks: 5,
+      });
+
+      // Mock fetch to return a valid JSON-RPC response
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          result: {
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Hello from JSON-RPC' }],
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const input: CallExternalAgentInput = {
+        agentUrl: 'https://jsonrpc.example.com/a2a/agent-1',
+        message: 'Test async',
+        useTask: true, // explicitly requesting async mode
+      };
+
+      const result = await callExternalAgent(input, 'proj-123');
+
+      // Should have logged a warning about useTask not being supported
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('useTask=true is not supported with a2a-jsonrpc protocol')
+      );
+
+      // Should still succeed via sync fallback
+      expect(result.success).toBe(true);
+      expect(result.data).toContain('Hello from JSON-RPC');
+
+      warnSpy.mockRestore();
+    });
+
+    it('should NOT log warning when useTask=false with a2a-jsonrpc', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      vi.mocked(a2aConfigService.loadA2AConfig).mockResolvedValue({
+        allowedAgents: [
+          {
+            name: 'JSON-RPC Agent',
+            url: 'https://jsonrpc.example.com/a2a/agent-1',
+            apiKey: 'key-123',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+          },
+        ],
+        taskTimeout: 300000,
+        maxConcurrentTasks: 5,
+      });
+
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({
+          jsonrpc: '2.0',
+          id: 'req-1',
+          result: {
+            kind: 'message',
+            role: 'agent',
+            parts: [{ kind: 'text', text: 'Sync response' }],
+          },
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const input: CallExternalAgentInput = {
+        agentUrl: 'https://jsonrpc.example.com/a2a/agent-1',
+        message: 'Test sync',
+        useTask: false,
+      };
+
+      await callExternalAgent(input, 'proj-123');
+
+      // Should NOT have logged the useTask warning
+      const useTaskWarnings = warnSpy.mock.calls.filter(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('useTask=true')
+      );
+      expect(useTaskWarnings.length).toBe(0);
+
+      warnSpy.mockRestore();
+    });
+
+    it('should NOT log warning when useTask=true with custom protocol', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      vi.mocked(a2aConfigService.loadA2AConfig).mockResolvedValue({
+        allowedAgents: [
+          {
+            name: 'Custom Agent',
+            url: 'https://custom.example.com/a2a/agent-1',
+            apiKey: 'key-123',
+            enabled: true,
+            protocolType: 'custom',
+          },
+        ],
+        taskTimeout: 300000,
+        maxConcurrentTasks: 5,
+      });
+
+      // Mock fetch to return task creation response
+      vi.mocked(global.fetch).mockResolvedValue(
+        new Response(JSON.stringify({
+          taskId: 'task-abc',
+          status: 'pending',
+          checkUrl: '/tasks/task-abc',
+        }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      );
+
+      const input: CallExternalAgentInput = {
+        agentUrl: 'https://custom.example.com/a2a/agent-1',
+        message: 'Test async custom',
+        useTask: true,
+      };
+
+      await callExternalAgent(input, 'proj-123');
+
+      // Should NOT log the jsonrpc-specific warning
+      const jsonrpcWarnings = warnSpy.mock.calls.filter(
+        (c: any[]) => typeof c[0] === 'string' && c[0].includes('a2a-jsonrpc protocol')
+      );
+      expect(jsonrpcWarnings.length).toBe(0);
+
+      warnSpy.mockRestore();
+    });
+  });
 });
