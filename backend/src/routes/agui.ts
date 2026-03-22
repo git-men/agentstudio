@@ -564,6 +564,41 @@ router.get('/status', (_req, res) => {
 });
 
 // =============================================================================
+// Dispatch IM API (forward message to WeChat Work via as-dispatch)
+// =============================================================================
+
+/**
+ * POST /api/agui/dispatch-im
+ *
+ * Proxy endpoint for the frontend to dispatch a message to an IM channel.
+ * Calls as-dispatch POST /api/im/send with JWT auth.
+ */
+router.post('/dispatch-im', async (req, res) => {
+  try {
+    const { sessionId, messageContent, botKey, chatId, projectName, agentId } = req.body as {
+      sessionId: string;
+      messageContent: string;
+      botKey: string;
+      chatId: string;
+      projectName?: string;
+      agentId?: string;
+    };
+
+    if (!sessionId || !messageContent || !botKey || !chatId) {
+      return res.status(400).json({ error: 'sessionId, messageContent, botKey, and chatId are required' });
+    }
+
+    const { sendToIM } = await import('../services/dispatchService.js');
+    const result = await sendToIM({ sessionId, messageContent, botKey, chatId, projectName, agentId });
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[AGUI] dispatch-im error:', error);
+    return res.status(500).json({ error: 'Failed to dispatch message to IM' });
+  }
+});
+
+// =============================================================================
 // Session Inject API (for Facilitator Agent)
 // =============================================================================
 
