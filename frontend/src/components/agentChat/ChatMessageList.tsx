@@ -1,7 +1,10 @@
-import React, { useMemo } from 'react';
-import { MapPin } from 'lucide-react';
+import React, { useMemo, useState, useCallback } from 'react';
+import { MapPin, Forward, Check, Loader2, AlertCircle } from 'lucide-react';
 import { ChatMessageRenderer } from '../ChatMessageRenderer';
 import { useTranslation } from 'react-i18next';
+import { useDispatchIM } from '../../hooks/useDispatchIM';
+import { DispatchIMDialog } from '../chat/DispatchIMDialog';
+import type { DispatchStatus } from '../../types/dispatch';
 
 const ENVIRONMENT_CONTEXT_RE = /^<environment_context>\n([\s\S]*?)\n<\/environment_context>\n\n/;
 
@@ -32,6 +35,8 @@ export interface ChatMessageListProps {
   onScrollToBottom: () => void;
   onFrontendToolSubmit?: (toolCallId: string, result: unknown) => Promise<{ success: boolean; error?: string }>;
   onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
+  sessionId?: string;
+  projectName?: string;
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
@@ -43,9 +48,34 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   messagesContainerRef,
   messagesEndRef,
   onFrontendToolSubmit,
-  onFrontendToolCancel
+  onFrontendToolCancel,
+  sessionId,
+  projectName,
 }) => {
   const { t } = useTranslation('components');
+  const { dispatchToIM, getStatus, resetStatus } = useDispatchIM();
+  const [dispatchDialog, setDispatchDialog] = useState<{ messageId: string; content: string } | null>(null);
+
+  const handleForwardClick = useCallback((messageId: string, content: string) => {
+    resetStatus(messageId);
+    setDispatchDialog({ messageId, content });
+  }, [resetStatus]);
+
+  const handleDispatchConfirm = useCallback(async (botKey: string, chatId: string) => {
+    if (!dispatchDialog || !sessionId) return;
+    await dispatchToIM(dispatchDialog.messageId, {
+      sessionId,
+      messageContent: dispatchDialog.content,
+      botKey,
+      chatId,
+      projectName,
+    });
+    setDispatchDialog(null);
+  }, [dispatchDialog, sessionId, projectName, dispatchToIM]);
+
+  const handleDispatchCancel = useCallback(() => {
+    setDispatchDialog(null);
+  }, []);
 
   // Memoize rendered messages to prevent unnecessary re-renders
   const renderedMessages = useMemo(() => {
@@ -81,8 +111,11 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
         }
       }
 
+      const msgDispatch = message.role === 'assistant' ? getStatus(message.id) : null;
+      const plainText = message.content || '';
+
       return (
-        <div key={message.id} className="px-4">
+        <div key={message.id} className="px-4 group/msg">
           {envLabel && (
             <div className="flex items-center gap-1 mb-1 justify-end">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
@@ -105,10 +138,37 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               onFrontendToolCancel={onFrontendToolCancel}
             />
           </div>
+
+          {/* Forward button + dispatch status for assistant messages */}
+          {message.role === 'assistant' && plainText && (
+            <div className="flex items-center gap-2 mt-1 min-h-[20px]">
+              {msgDispatch?.status === 'sent' ? (
+                <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title={`已转发 (${msgDispatch.shortId})`}>
+                  <Check size={12} /> 已转发
+                </span>
+              ) : msgDispatch?.status === 'sending' ? (
+                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                  <Loader2 size={12} className="animate-spin" /> 发送中…
+                </span>
+              ) : msgDispatch?.status === 'error' ? (
+                <span className="inline-flex items-center gap-1 text-xs text-red-500" title={msgDispatch.error}>
+                  <AlertCircle size={12} /> 转发失败
+                </span>
+              ) : null}
+
+              <button
+                onClick={() => handleForwardClick(message.id, plainText)}
+                className="opacity-0 group-hover/msg:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400"
+                title="转发到企业微信"
+              >
+                <Forward size={13} />
+              </button>
+            </div>
+          )}
         </div>
       );
     });
-  }, [messages, onFrontendToolSubmit, onFrontendToolCancel]);
+  }, [messages, onFrontendToolSubmit, onFrontendToolCancel, getStatus, handleForwardClick]);
 
   return (
     <div
@@ -169,6 +229,18 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
       )}
 
       <div ref={messagesEndRef} />
+
+      {/* Dispatch IM Dialog */}
+      {dispatchDialog && (
+        <DispatchIMDialog
+          isOpen
+          messagePreview={dispatchDialog.content}
+          dispatchStatus={getStatus(dispatchDialog.messageId).status}
+          error={getStatus(dispatchDialog.messageId).error}
+          onConfirm={handleDispatchConfirm}
+          onCancel={handleDispatchCancel}
+        />
+      )}
     </div>
   );
 };
