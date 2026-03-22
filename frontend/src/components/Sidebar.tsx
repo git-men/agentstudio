@@ -493,9 +493,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                       <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
                         {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
                       </div>
-                      <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                        Enterprise
-                      </div>
+                      {enterpriseProfile?.email && enterpriseProfile?.name && enterpriseProfile.email !== enterpriseProfile.name && (
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                          {enterpriseProfile.email}
+                        </div>
+                      )}
                     </div>
                     <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showEnterpriseMenu ? 'rotate-180' : ''}`} />
                   </button>
