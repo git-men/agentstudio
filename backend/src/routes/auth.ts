@@ -241,6 +241,9 @@ function renderCallbackPage(success: boolean, message: string): string {
   const hint = success
     ? '此页面将在 <span id="countdown">10</span> 秒后自动关闭'
     : '请返回 ClawStudio 重试';
+  const closeBtn = success
+    ? '<button onclick="window.close()" style="margin-top:1.2rem;padding:.5rem 1.5rem;border:1px solid #475569;border-radius:.5rem;background:transparent;color:#cbd5e1;cursor:pointer;font-size:.9rem;">关闭页面</button>'
+    : '';
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>ClawStudio 企业版认证</title>
 <style>
@@ -257,6 +260,7 @@ function renderCallbackPage(success: boolean, message: string): string {
   <div class="icon">${icon}</div>
   <div class="msg">${message}</div>
   <div class="hint">${hint}</div>
+  ${closeBtn}
 </div>${autoCloseScript}</body></html>`;
 }
 

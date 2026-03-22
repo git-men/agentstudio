@@ -439,10 +439,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
           <div className="space-y-2">
             {/* Enterprise identity (collapsed) */}
             {isEnterpriseAuth ? (
-              <button
-                onClick={() => enterpriseLogin()}
+              <div
                 title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
-                className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="w-full flex items-center justify-center p-2"
               >
                 {enterpriseProfile?.avatarUrl ? (
                   <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
@@ -451,7 +450,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                     {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
                   </div>
                 )}
-              </button>
+              </div>
             ) : (
               <button
                 onClick={() => enterpriseLogin()}
