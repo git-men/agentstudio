@@ -31,6 +31,7 @@ router.get('/profile', async (_req: Request, res: Response) => {
       userId: profile.userId,
       name: profile.name,
       email: profile.email,
+      avatarUrl: profile.avatarUrl,
       enterpriseUrl: profile.enterpriseUrl,
       loginAt: profile.loginAt,
       tokenPreview: profile.token.slice(0, 20) + '...',

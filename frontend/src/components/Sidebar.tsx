@@ -25,7 +25,6 @@ import {
   PanelLeftOpen,
   Building2,
   LogOut,
-  User,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -437,16 +436,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
       {/* Footer */}
       <div className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-4'}`}>
         {collapsed ? (
-          /* Collapsed: only toggle icon centered */
-          onToggleCollapse && (
-            <button
-              onClick={onToggleCollapse}
-              title="展开侧边栏"
-              className="w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <PanelLeftOpen className="w-4 h-4" />
-            </button>
-          )
+          <div className="space-y-2">
+            {/* Enterprise identity (collapsed) */}
+            {isEnterpriseAuth ? (
+              <button
+                onClick={() => enterpriseLogin()}
+                title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                {enterpriseProfile?.avatarUrl ? (
+                  <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                    {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </button>
+            ) : (
+              <button
+                onClick={() => enterpriseLogin()}
+                title="连接企业版"
+                className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Building2 className="w-5 h-5" />
+              </button>
+            )}
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="展开侧边栏"
+                className="w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         ) : (
           <div className="space-y-3">
             <UpdateNotification compact />
@@ -459,9 +483,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                     onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
                     className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
                   >
-                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                      <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                    </div>
+                    {enterpriseProfile?.avatarUrl ? (
+                      <img src={enterpriseProfile.avatarUrl} alt="" className="flex-shrink-0 w-7 h-7 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                        {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0 text-left">
                       <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
                         {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}

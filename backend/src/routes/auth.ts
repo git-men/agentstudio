@@ -163,6 +163,9 @@ router.get('/enterprise/callback', async (req: Request, res: Response) => {
   const token = req.query.token as string | undefined;
   const state = req.query.state as string | undefined;
   const error = req.query.error as string | undefined;
+  const userName = req.query.user_name as string | undefined;
+  const userEmail = req.query.user_email as string | undefined;
+  const userAvatar = req.query.user_avatar as string | undefined;
 
   if (error) {
     res.status(400).send(renderCallbackPage(false, `登录失败: ${error}`));
@@ -194,19 +197,23 @@ router.get('/enterprise/callback', async (req: Request, res: Response) => {
   }
 
   if (!enterpriseUrl) {
-    // Use a default or ask user — for now just store token without server URL
-    enterpriseUrl = '';
+    enterpriseUrl = 'https://tas.woa.com';
   }
 
   try {
     // Store in both systems for backward compatibility
     await storeEnterpriseToken(enterpriseUrl, token);
-    await enterpriseAuthService.login(enterpriseUrl, token);
 
+    const userInfo = (userName || userEmail)
+      ? { name: userName, email: userEmail, avatarUrl: userAvatar }
+      : undefined;
+    await enterpriseAuthService.login(enterpriseUrl, token, userInfo);
+
+    const displayName = userName || userEmail || '';
     res.send(
       renderCallbackPage(
         true,
-        'AS Enterprise 登录成功！令牌已自动保存到 AgentStudio。你可以关闭此页面。',
+        `ClawStudio 企业版登录成功！${displayName ? `欢迎，${displayName}。` : ''}令牌已自动保存到 ClawStudio。`,
       ),
     );
   } catch (err) {
@@ -220,8 +227,22 @@ router.get('/enterprise/callback', async (req: Request, res: Response) => {
 function renderCallbackPage(success: boolean, message: string): string {
   const color = success ? '#10b981' : '#ef4444';
   const icon = success ? '✓' : '✕';
+  const autoCloseScript = success
+    ? `<script>
+  let sec = 10;
+  const el = document.getElementById('countdown');
+  const t = setInterval(() => {
+    sec--;
+    if (el) el.textContent = sec;
+    if (sec <= 0) { clearInterval(t); window.close(); }
+  }, 1000);
+</script>`
+    : '';
+  const hint = success
+    ? '此页面将在 <span id="countdown">10</span> 秒后自动关闭'
+    : '请返回 ClawStudio 重试';
   return `<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>AS Enterprise 认证</title>
+<html><head><meta charset="utf-8"><title>ClawStudio 企业版认证</title>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
          display: flex; align-items: center; justify-content: center;
@@ -235,8 +256,8 @@ function renderCallbackPage(success: boolean, message: string): string {
 <body><div class="card">
   <div class="icon">${icon}</div>
   <div class="msg">${message}</div>
-  <div class="hint">${success ? '此页面可以安全关闭' : '请返回 AgentStudio 重试'}</div>
-</div></body></html>`;
+  <div class="hint">${hint}</div>
+</div>${autoCloseScript}</body></html>`;
 }
 
 export default router;

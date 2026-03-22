@@ -12,6 +12,7 @@ export interface EnterpriseProfile {
   userId?: string | number;
   name?: string;
   email?: string;
+  avatarUrl?: string;
   enterpriseUrl?: string;
   loginAt?: string;
 }

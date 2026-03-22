@@ -22,6 +22,8 @@ export interface EnterpriseProfile {
   name?: string;
   /** User email */
   email?: string;
+  /** Avatar URL */
+  avatarUrl?: string;
   /** AS Enterprise server URL */
   enterpriseUrl: string;
   /** JWT access token */
@@ -101,35 +103,51 @@ class EnterpriseAuthService {
   async login(
     enterpriseUrl: string,
     token: string,
-    userInfo?: { userId?: string | number; name?: string; email?: string },
+    userInfo?: { userId?: string | number; name?: string; email?: string; avatarUrl?: string },
   ): Promise<EnterpriseProfile> {
-    const url = enterpriseUrl.replace(/\/+$/, '');
+    const url = (enterpriseUrl || 'https://tas.woa.com').replace(/\/+$/, '');
 
     this.profile = {
       userId: userInfo?.userId,
       name: userInfo?.name,
       email: userInfo?.email,
+      avatarUrl: userInfo?.avatarUrl,
       enterpriseUrl: url,
       token,
       loginAt: new Date().toISOString(),
     };
 
-    // Try to fetch user info if not provided
-    if (!userInfo?.name && !userInfo?.email) {
+    // Try to decode user_id from JWT payload if not provided
+    if (!userInfo?.userId) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+          if (payload.user_id) this.profile.userId = payload.user_id;
+        }
+      } catch {
+        // ignore decode errors
+      }
+    }
+
+    // Try to fetch user info from enterprise backend if not provided via redirect
+    if (!userInfo?.name && !userInfo?.email && url) {
       try {
         const resp = await fetch(`${url}/api/v1/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
+          redirect: 'manual',
           signal: AbortSignal.timeout(5000),
         });
         if (resp.ok) {
           const data = await resp.json();
           const user = data.data || data;
-          this.profile.userId = user.id || user.user_id;
+          this.profile.userId = user.id || user.user_id || this.profile.userId;
           this.profile.name = user.name || user.username;
           this.profile.email = user.email;
+          if (user.avatar_url) this.profile.avatarUrl = user.avatar_url;
         }
       } catch {
-        // Non-critical — profile works without user info
+        // Non-critical — user info may come from redirect params instead
       }
     }
 
