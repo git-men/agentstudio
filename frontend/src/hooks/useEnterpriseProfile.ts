@@ -50,7 +50,7 @@ export function useEnterpriseProfile() {
       });
       const data = await resp.json();
       if (data.auth_url) {
-        window.open(data.auth_url, '_blank', 'noopener,noreferrer');
+        window.open(data.auth_url, '_blank');
         // Start polling for auth completion
         pollForAuth();
       }
