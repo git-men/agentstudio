@@ -552,6 +552,7 @@ export const NewDashboard: React.FC = () => {
           </h1>
         </div>
 
+        <div style={{ zoom: 1.142857 } as any}>
         {/* ── IM Integrations (top section) ── */}
         <section className="mb-8">
           <div className="flex items-center justify-between mb-3">
@@ -587,18 +588,19 @@ export const NewDashboard: React.FC = () => {
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors flex-shrink-0" />
             </button>
-            <div className="flex items-center gap-3 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-dashed border-gray-200 dark:border-gray-700 text-left opacity-60 cursor-default">
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gray-100 dark:bg-gray-700/50 flex items-center justify-center text-lg">
+            <button
+              onClick={() => navigate('/wechat-bind')}
+              className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-sm transition-all group text-left"
+            >
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center text-lg">
                 💬
               </div>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-medium text-gray-500 dark:text-gray-400 flex items-center gap-2">
-                  微信
-                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-400 font-normal">即将推出</span>
-                </div>
+                <div className="text-sm font-medium text-gray-800 dark:text-gray-200">微信</div>
                 <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">绑定微信机器人</div>
               </div>
-            </div>
+              <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
+            </button>
           </div>
         </section>
 
@@ -757,6 +759,7 @@ export const NewDashboard: React.FC = () => {
             </div>
           )}
         </section>
+        </div>
       </div>
 
       {/* ─── Right column: Embedded Meta Agent panel ─── */}

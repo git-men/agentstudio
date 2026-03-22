@@ -28,6 +28,7 @@ const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(module => ({
 const McpPage = lazy(() => import('./pages/McpPage').then(module => ({ default: module.McpPage })));
 const WecomBindPage = lazy(() => import('./pages/WecomBindPage').then(module => ({ default: module.WecomBindPage })));
 const QQBotBindPage = lazy(() => import('./pages/QQBotBindPage').then(module => ({ default: module.QQBotBindPage })));
+const WechatBindPage = lazy(() => import('./pages/WechatBindPage').then(module => ({ default: module.WechatBindPage })));
 const SettingsLayout = lazy(() => import('./components/SettingsLayout').then(module => ({ default: module.SettingsLayout })));
 const GeneralSettingsPage = lazy(() => import('./pages/settings/GeneralSettingsPage').then(module => ({ default: module.GeneralSettingsPage })));
 const SupplierSettingsPage = lazy(() => import('./pages/settings/VersionSettingsPage').then(module => ({ default: module.VersionSettingsPage })));
@@ -183,6 +184,11 @@ const AppContent: React.FC = () => {
           <Route path="/qqbot-bind" element={
             <ProtectedRoute>
               <Layout><QQBotBindPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/wechat-bind" element={
+            <ProtectedRoute>
+              <Layout><WechatBindPage /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/rules" element={

@@ -35,6 +35,7 @@ import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
 import wecomRouter from './routes/wecom';
 import qqbotRouter from './routes/qqbot';
+import wechatRouter from './routes/wechat';
 import enterpriseRouter from './routes/enterprise';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
@@ -671,6 +672,7 @@ const app: express.Express = express();
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/wecom', authMiddleware, wecomRouter); // WeCom bot binding wizard
   app.use('/api/qqbot', authMiddleware, qqbotRouter); // QQ Bot binding wizard
+  app.use('/api/wechat', authMiddleware, wechatRouter); // WeChat personal bot binding wizard
   app.use('/api/enterprise', authMiddleware, enterpriseRouter); // Enterprise auth management
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
