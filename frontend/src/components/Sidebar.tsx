@@ -20,7 +20,9 @@ import {
   Puzzle,
   Mic,
   FileCode,
-  Webhook
+  Webhook,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -177,9 +179,11 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
 
 interface SidebarProps {
   onClose?: () => void; // For mobile sidebar auto-close
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, onToggleCollapse }) => {
   const { t } = useTranslation('pages');
   const location = useLocation();
   const navigate = useNavigate();
@@ -271,6 +275,55 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     const isExpanded = isMenuExpanded(item.name);
     const isActive = isItemActive(item);
 
+    if (collapsed) {
+      // Collapsed mode: icon only, no submenu
+      const handleClick = () => {
+        if (hasSubmenu) {
+          // Navigate to the first submenu item
+          navigate(item.submenu[0].href);
+        }
+        if (isMobile && onClose) onClose();
+      };
+      const icon = (
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+      );
+      if (hasSubmenu) {
+        return (
+          <li key={item.name}>
+            <button
+              onClick={handleClick}
+              title={item.name}
+              className={`w-full flex items-center justify-center p-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {icon}
+            </button>
+          </li>
+        );
+      }
+      return (
+        <li key={item.name}>
+          <NavLink
+            to={item.href}
+            onClick={() => { if (isMobile && onClose) onClose(); }}
+            title={item.name}
+            className={({ isActive }) =>
+              `flex items-center justify-center p-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+              }`
+            }
+          >
+            {icon}
+          </NavLink>
+        </li>
+      );
+    }
+
     if (hasSubmenu) {
       return (
         <li key={item.nameKey}>
@@ -301,7 +354,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
                     <NavLink
                       to={subItem.href}
                       onClick={() => {
-                        // Auto-close sidebar on mobile after navigation
                         if (isMobile && onClose) {
                           onClose();
                         }
@@ -331,7 +383,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         <NavLink
           to={item.href}
           onClick={() => {
-            // Auto-close sidebar on mobile after navigation
             if (isMobile && onClose) {
               onClose();
             }
@@ -352,36 +403,64 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40">
+    <div className={`${collapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40 transition-all duration-200`}>
       {/* Logo */}
-      <div className="px-6 py-8 flex-shrink-0">
+      <div className={`${collapsed ? 'px-2 py-4' : 'px-6 py-8'} flex-shrink-0`}>
         <button
           onClick={() => navigate('/')}
-          className="flex items-center space-x-3 w-full text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg p-2"
+          title="ClawStudio"
+          className={`flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-lg ${collapsed ? 'justify-center w-full p-2' : 'w-full p-2'}`}
         >
-          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg" />
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
-          </div>
+          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg flex-shrink-0" />
+          {!collapsed && (
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
+            </div>
+          )}
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-4 pb-4">
-        <ul className="space-y-2">
+      <nav className={`flex-1 overflow-y-auto ${collapsed ? 'px-2' : 'px-4'} pb-4`}>
+        <ul className="space-y-1">
           {navigationItems.map(renderNavItem)}
         </ul>
       </nav>
 
       {/* Footer */}
-      <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="space-y-3">
-          {/* Update Notification */}
-          <UpdateNotification compact />
-          {/* Service Status Indicator */}
-          <ServiceStatusIndicator onManageServices={() => setShowServiceManagement(true)} />
-        </div>
+      <div className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-4'}`}>
+        {collapsed ? (
+          /* Collapsed: only toggle icon centered */
+          onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              title="展开侧边栏"
+              className="w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              <PanelLeftOpen className="w-4 h-4" />
+            </button>
+          )
+        ) : (
+          <div className="space-y-3">
+            <UpdateNotification compact />
+            {/* Service status + collapse toggle in same row */}
+            <div className="flex items-center gap-1">
+              <div className="flex-1 min-w-0">
+                <ServiceStatusIndicator onManageServices={() => setShowServiceManagement(true)} />
+              </div>
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  title="收起侧边栏"
+                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Service Management Modal */}

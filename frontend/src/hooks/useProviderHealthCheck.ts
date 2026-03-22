@@ -48,9 +48,32 @@ export function useProviderHealthCheck() {
 
   const recheck = useCallback(async () => {
     if (!versionsData) return;
+
+    if (versionsData.versions.length === 0) {
+      setStatus({
+        checked: true,
+        available: false,
+        error: 'no_provider',
+        message: '尚未配置任何模型供应商，请前往供应商设置添加 API 密钥。',
+        loading: false,
+        dismissed: false,
+      });
+      return;
+    }
+
     const defaultVersion = versionsData.versions.find(v => v.id === versionsData.defaultVersionId)
       ?? versionsData.versions.find(v => v.isSystem);
-    if (!defaultVersion) return;
+    if (!defaultVersion) {
+      setStatus({
+        checked: true,
+        available: false,
+        error: 'no_default_provider',
+        message: '尚未设置默认模型供应商，请前往供应商设置进行配置。',
+        loading: false,
+        dismissed: false,
+      });
+      return;
+    }
 
     setStatus(prev => ({ ...prev, loading: true }));
     try {
@@ -87,6 +110,22 @@ export function useProviderHealthCheck() {
     if (engineLoading || versionsLoading) return;
     if (!isClaudeEngine) return;
 
+    if (!versionsData) return;
+
+    // No providers configured at all → show banner immediately, bypass cache
+    if (versionsData.versions.length === 0) {
+      setStatus({
+        checked: true,
+        available: false,
+        error: 'no_provider',
+        message: '尚未配置任何模型供应商，请前往供应商设置添加 API 密钥。',
+        loading: false,
+        dismissed: false,
+      });
+      return;
+    }
+
+    // Has providers — check the cache before making API call
     const cached = localStorage.getItem(STORAGE_KEY);
     if (cached) {
       try {
@@ -105,10 +144,20 @@ export function useProviderHealthCheck() {
       }
     }
 
-    if (!versionsData) return;
     const defaultVersion = versionsData.versions.find(v => v.id === versionsData.defaultVersionId)
       ?? versionsData.versions.find(v => v.isSystem);
-    if (!defaultVersion) return;
+    if (!defaultVersion) {
+      // Has versions but none set as default/system — still guide user to configure
+      setStatus({
+        checked: true,
+        available: false,
+        error: 'no_default_provider',
+        message: '尚未设置默认模型供应商，请前往供应商设置进行配置。',
+        loading: false,
+        dismissed: false,
+      });
+      return;
+    }
 
     let cancelled = false;
 

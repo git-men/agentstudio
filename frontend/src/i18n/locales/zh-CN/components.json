@@ -236,6 +236,15 @@
       "title": "选择文件 - {{projectPath}}",
       "currentProject": "当前项目"
     },
+    "attachment": {
+      "title": "添加附件",
+      "image": "图片",
+      "file": "项目文件",
+      "selectFile": "选择项目文件"
+    },
+    "screenCapture": {
+      "title": "截取屏幕（或使用系统截图后粘贴）"
+    },
     "maxTurnsReached": "⏱️ **达到最大轮次限制**",
     "permissionDenials": "⚠️ **权限拒绝的操作**:",
     "permissionNote": "💡 某些操作需要用户权限确认才能执行。",

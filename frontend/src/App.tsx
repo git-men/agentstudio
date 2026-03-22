@@ -22,10 +22,12 @@ const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
 
 // 懒加载页面组件
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
+const NewDashboard = lazy(() => import('./pages/NewDashboard').then(module => ({ default: module.NewDashboard })));
 const AgentsPage = lazy(() => import('./pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(module => ({ default: module.ProjectsPage })));
 const McpPage = lazy(() => import('./pages/McpPage').then(module => ({ default: module.McpPage })));
 const WecomBindPage = lazy(() => import('./pages/WecomBindPage').then(module => ({ default: module.WecomBindPage })));
+const QQBotBindPage = lazy(() => import('./pages/QQBotBindPage').then(module => ({ default: module.QQBotBindPage })));
 const SettingsLayout = lazy(() => import('./components/SettingsLayout').then(module => ({ default: module.SettingsLayout })));
 const GeneralSettingsPage = lazy(() => import('./pages/settings/GeneralSettingsPage').then(module => ({ default: module.GeneralSettingsPage })));
 const SupplierSettingsPage = lazy(() => import('./pages/settings/VersionSettingsPage').then(module => ({ default: module.VersionSettingsPage })));
@@ -146,6 +148,12 @@ const AppContent: React.FC = () => {
               </PageGate>
             </ProtectedRoute>
           } />
+          {/* [WIP] New Dashboard — for testing, will replace /dashboard once confirmed */}
+          <Route path="/dashboard-new" element={
+            <ProtectedRoute>
+              <Layout><NewDashboard /></Layout>
+            </ProtectedRoute>
+          } />
           <Route path="/agents" element={
             <ProtectedRoute>
               <PageGate module="manage.agents">
@@ -170,6 +178,11 @@ const AppContent: React.FC = () => {
           <Route path="/wecom-bind" element={
             <ProtectedRoute>
               <Layout><WecomBindPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/qqbot-bind" element={
+            <ProtectedRoute>
+              <Layout><QQBotBindPage /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/rules" element={

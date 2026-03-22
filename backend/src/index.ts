@@ -34,6 +34,7 @@ import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
 import wecomRouter from './routes/wecom';
+import qqbotRouter from './routes/qqbot';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
@@ -647,6 +648,7 @@ const app: express.Express = express();
   app.use('/api/version', authMiddleware, versionRouter);
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/wecom', authMiddleware, wecomRouter); // WeCom bot binding wizard
+  app.use('/api/qqbot', authMiddleware, qqbotRouter); // QQ Bot binding wizard
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service

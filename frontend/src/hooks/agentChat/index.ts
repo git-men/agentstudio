@@ -8,3 +8,4 @@ export { useAIStreamHandler, type UseAIStreamHandlerProps } from './useAIStreamH
 export { useMessageSender, type UseMessageSenderProps } from './useMessageSender';
 export { useSessionManager, type UseSessionManagerProps, type UseSessionManagerReturn } from './useSessionManager';
 export { useUIState, type UseUIStateReturn } from './useUIState';
+export { useScreenCapture } from './useScreenCapture';

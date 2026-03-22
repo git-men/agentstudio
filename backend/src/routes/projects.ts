@@ -14,6 +14,9 @@ import {
   getApiKey,
 } from '../services/a2a/apiKeyService.js';
 import { A2AConfigSchema, GenerateApiKeyRequestSchema, validateSafe } from '../schemas/a2a.js';
+import { engineManager } from '../engines/index.js';
+import { resolvePath } from '../config/paths.js';
+import { sessionManager } from '../services/sessionManager.js';
 
 const router: express.Router = express.Router();
 const readFile = promisify(fs.readFile);
@@ -43,6 +46,61 @@ router.get('/', async (_req, res) => {
   } catch (error) {
     console.error('Error fetching projects:', error);
     res.status(500).json({ error: 'Failed to fetch projects' });
+  }
+});
+
+// GET /api/projects/activity - Get latest session title per project (for dashboard)
+// Returns a map of projectPath → lastMessage for each requested project.
+router.get('/activity', async (req, res) => {
+  try {
+    const rawPaths = req.query.paths;
+    if (!rawPaths || typeof rawPaths !== 'string') {
+      return res.status(400).json({ error: 'paths query parameter is required (comma-separated)' });
+    }
+
+    const projectPaths = rawPaths.split(',').map(p => p.trim()).filter(Boolean);
+    const result: Record<string, string | null> = {};
+
+    const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+
+    for (const rawPath of projectPaths) {
+      try {
+        const resolvedPath = resolvePath(rawPath);
+        let latestTitle: string | null = null;
+
+        if (defaultEngine.readSessions) {
+          const sessions = await defaultEngine.readSessions(resolvedPath);
+          if (sessions.length > 0) {
+            const sorted = sessions.sort(
+              (a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime()
+            );
+            latestTitle = sorted[0].title || null;
+          }
+        }
+
+        // Also check live sessions from SessionManager
+        const liveSessions = sessionManager.getSessionsInfo();
+        for (const live of liveSessions) {
+          if (live.projectPath === resolvedPath && live.sessionTitle) {
+            const liveTime = typeof live.lastActivity === 'number'
+              ? live.lastActivity
+              : new Date(live.lastActivity).getTime();
+            if (!latestTitle || liveTime > Date.now() - 60000) {
+              latestTitle = live.sessionTitle;
+            }
+          }
+        }
+
+        result[rawPath] = latestTitle;
+      } catch {
+        result[rawPath] = null;
+      }
+    }
+
+    res.json({ activity: result });
+  } catch (error) {
+    console.error('Error fetching project activity:', error);
+    res.status(500).json({ error: 'Failed to fetch project activity' });
   }
 });
 

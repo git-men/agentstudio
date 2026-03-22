@@ -135,3 +135,7 @@ tests:
     - name: "设置页面"
       id: ui-settings
       file: tests/e2e/browser-yaml/settings.yaml
+
+    - name: "后端服务自动发现"
+      id: ui-backend-detection
+      file: tests/e2e/browser-yaml/backend-service-detection.yaml

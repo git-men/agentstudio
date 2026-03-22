@@ -58,18 +58,13 @@ export const useSessionManager = ({
   const [isNewSession, setIsNewSession] = useState(false);
   const [hasSuccessfulResponse, setHasSuccessfulResponse] = useState(false);
 
-  // Decide where to load messages: target session store or facade
+  // Decide where to load messages: target session store or facade.
+  // Workspace mode: write into the exact store from SessionStoreContext.
+  // Legacy mode: write into the useAgentStore facade so the UI sees them immediately.
   const loadIntoStore = useCallback(
-    (messages: any[], targetSessionId?: string) => {
+    (messages: any[]) => {
       if (sessionStore) {
         sessionStore.getState().loadSessionMessages(messages);
-      } else if (targetSessionId) {
-        const store = sessionStoreManager.getStore(targetSessionId);
-        if (store) {
-          store.getState().loadSessionMessages(messages);
-        } else {
-          facadeLoadMessages(messages);
-        }
       } else {
         facadeLoadMessages(messages);
       }
@@ -111,11 +106,8 @@ export const useSessionManager = ({
 
         // Stale-check: if streaming started while the fetch was in flight,
         // discard the result — the store already has live-streamed data.
-        // Check the target session store first (workspace mode), then fall back
-        // to the global facade (legacy mode).
-        const targetStore = sessionStoreManager.getStore(sessionId);
-        const isTargetStreaming = targetStore
-          ? targetStore.getState().isAiTyping
+        const isTargetStreaming = sessionStore
+          ? sessionStore.getState().isAiTyping
           : useAgentStore.getState().isAiTyping;
         if (isTargetStreaming) {
           console.log(`[SessionManager] Discarding fetched messages — streaming is active for ${sessionId}`);
@@ -126,12 +118,12 @@ export const useSessionManager = ({
           ...msg,
           timestamp: new Date(msg.timestamp),
         }));
-        loadIntoStore(converted, sessionId);
+        loadIntoStore(converted);
       } catch (err) {
         console.warn('[SessionManager] Error fetching messages:', err);
       }
     },
-    [agentId, projectPath, loadIntoStore],
+    [agentId, projectPath, loadIntoStore, sessionStore],
   );
 
   const handleSwitchSession = useCallback(
@@ -179,9 +171,8 @@ export const useSessionManager = ({
   const handleRefreshMessages = useCallback(async () => {
     // Guard: don't refresh while the target session is streaming
     if (currentSessionId) {
-      const targetStore = sessionStoreManager.getStore(currentSessionId);
-      const isStreaming = targetStore
-        ? targetStore.getState().isAiTyping
+      const isStreaming = sessionStore
+        ? sessionStore.getState().isAiTyping
         : useAgentStore.getState().isAiTyping;
       if (isStreaming) {
         console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
@@ -193,7 +184,7 @@ export const useSessionManager = ({
       await loadMessagesForSession(currentSessionId);
       setIsLoadingMessages(false);
     }
-  }, [currentSessionId, loadMessagesForSession]);
+  }, [currentSessionId, loadMessagesForSession, sessionStore]);
 
   return {
     isLoadingMessages,

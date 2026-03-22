@@ -35,13 +35,12 @@ cases:
         Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
-        path: "/tmp/e2e-a2a-caller"
+        dirName: "/tmp/e2e-a2a-caller"
         name: "e2e-a2a-caller"
     expect:
-      status:
-        oneOf: [200, 201]
+      status: [200, 409]
     save:
-      caller_path: "path"
+      caller_path: "project.path"
 
   - name: "注册被调用方项目"
     request:
@@ -51,13 +50,12 @@ cases:
         Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
-        path: "/tmp/e2e-a2a-target"
+        dirName: "/tmp/e2e-a2a-target"
         name: "e2e-a2a-target"
     expect:
-      status:
-        oneOf: [200, 201]
+      status: [200, 409]
     save:
-      target_path: "path"
+      target_path: "project.path"
 
   # --- 核心：通过 A2A 管理 API 导入项目 ---
 

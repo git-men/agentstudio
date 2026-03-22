@@ -33,6 +33,7 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const lavsClientRef = useRef<LAVSClient | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const messageHandlerCleanupRef = useRef<(() => void) | null>(null);
 
   // Subscribe to tool execution notifications from store
   const lastToolExecution = useAgentStore((state) => state.lastToolExecution);
@@ -129,6 +130,8 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
       cancelled = true;
       container.innerHTML = '';
       iframeRef.current = null;
+      messageHandlerCleanupRef.current?.();
+      messageHandlerCleanupRef.current = null;
     };
   }, [manifest]);
 
@@ -215,47 +218,49 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     iframe.style.border = 'none';
     iframe.setAttribute('data-lavs-component', 'true');
 
+    // Register the postMessage bridge BEFORE appending the iframe to the DOM.
+    // This prevents a race condition: the iframe's module script runs before the
+    // load event fires, so it may call window.parent.postMessage('lavs-call')
+    // while the parent has not yet set up its listener. Moving the listener here
+    // ensures no messages are lost.
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'lavs-call') {
+        if (!lavsClientRef.current) return;
+        lavsClientRef.current.call(event.data.endpoint, event.data.input)
+          .then(result => {
+            iframe.contentWindow?.postMessage({
+              type: 'lavs-result',
+              id: event.data.id,
+              result,
+            }, '*');
+          })
+          .catch(error => {
+            iframe.contentWindow?.postMessage({
+              type: 'lavs-error',
+              id: event.data.id,
+              error: error.message,
+            }, '*');
+          });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    messageHandlerCleanupRef.current = () => window.removeEventListener('message', handleMessage);
+
     console.log('[LAVS] Iframe created, appending to DOM');
 
-    // Set up load handlers BEFORE appending to DOM
     const loadPromise = new Promise<void>((resolve, reject) => {
       iframe.onload = () => {
         console.log('[LAVS] Iframe loaded successfully');
-        // Inject LAVS client into iframe
-        if (iframe.contentWindow && lavsClientRef.current) {
-          // Create a message handler for cross-frame communication
-          const handleMessage = (event: MessageEvent) => {
-            if (event.data.type === 'lavs-call') {
-              // Forward LAVS calls from iframe to client
-              lavsClientRef.current!.call(event.data.endpoint, event.data.input)
-                .then(result => {
-                  iframe.contentWindow!.postMessage({
-                    type: 'lavs-result',
-                    id: event.data.id,
-                    result,
-                  }, '*');
-                })
-                .catch(error => {
-                  iframe.contentWindow!.postMessage({
-                    type: 'lavs-error',
-                    id: event.data.id,
-                    error: error.message,
-                  }, '*');
-                });
-            }
-          };
-
-          window.addEventListener('message', handleMessage);
-          resolve();
-        }
+        resolve();
       };
       iframe.onerror = (err) => {
         console.error('[LAVS] Iframe failed to load', err);
+        window.removeEventListener('message', handleMessage);
         reject(err);
       };
     });
 
-    // Add iframe to DOM FIRST (this triggers loading)
+    // Add iframe to DOM (this triggers loading)
     containerRef.current.appendChild(iframe);
     console.log('[LAVS] Iframe appended to DOM, waiting for load...');
 
@@ -263,7 +268,12 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     iframeRef.current = iframe;
 
     // Wait for iframe to load
-    await loadPromise;
+    try {
+      await loadPromise;
+    } catch (err) {
+      // handleMessage already removed on onerror; re-throw to caller
+      throw err;
+    }
   };
 
   /**

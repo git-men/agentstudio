@@ -448,41 +448,66 @@ export class ProjectMetadataStorage {
       }
     }
 
-    // Third pass: include agent workingDirectory paths as projects.
-    // Agents (e.g. meta-agent) may declare a dedicated workingDirectory like ~/.as-jarvis.
-    // In Claude Code the project directory IS the working directory, so these should be
-    // visible in the project list even before the user has opened them via Claude CLI.
+    // Third pass: include agent workingDirectory and agent.projects[] paths as projects.
+    // Agents may declare a dedicated workingDirectory (e.g. ~/.as-jarvis) or an array
+    // of associated project paths. Both should appear in the project list.
     try {
       const allAgents = this.agentStorage.getAllAgents();
       for (const agent of allAgents) {
-        if (!agent.workingDirectory) continue;
+        // 3a: workingDirectory
+        if (agent.workingDirectory) {
+          const resolvedPath = agent.workingDirectory.startsWith('~')
+            ? path.join(os.homedir(), agent.workingDirectory.slice(1))
+            : agent.workingDirectory;
 
-        // Resolve ~ to home directory
-        const resolvedPath = agent.workingDirectory.startsWith('~')
-          ? path.join(os.homedir(), agent.workingDirectory.slice(1))
-          : agent.workingDirectory;
+          const realPath = this.resolveRealPath(resolvedPath);
 
-        const realPath = this.resolveRealPath(resolvedPath);
+          if (!processedRealPaths.has(realPath)) {
+            if (!fs.existsSync(resolvedPath)) {
+              try {
+                fs.mkdirSync(resolvedPath, { recursive: true });
+                console.log(`📁 Created agent workingDirectory: ${resolvedPath}`);
+              } catch (mkdirErr) {
+                console.warn(`[getAllProjects] Failed to create workingDirectory ${resolvedPath}:`, mkdirErr);
+              }
+            }
 
-        if (processedRealPaths.has(realPath)) continue;
-
-        // Ensure the directory exists so it can be used as a project root
-        if (!fs.existsSync(resolvedPath)) {
-          try {
-            fs.mkdirSync(resolvedPath, { recursive: true });
-            console.log(`📁 Created agent workingDirectory: ${resolvedPath}`);
-          } catch (mkdirErr) {
-            console.warn(`[getAllProjects] Failed to create workingDirectory ${resolvedPath}:`, mkdirErr);
-            continue;
+            if (fs.existsSync(resolvedPath)) {
+              const metadata = this.getOrCreateMetadataForPath(resolvedPath);
+              const enriched = this.enrichProjectWithAgentInfo(metadata);
+              projects.push(enriched);
+              processedPaths.add(resolvedPath);
+              processedRealPaths.add(realPath);
+              console.log(`🤖 Added agent workingDirectory as project: ${resolvedPath} (agent: ${agent.id})`);
+            }
           }
         }
 
-        const metadata = this.getOrCreateMetadataForPath(resolvedPath);
-        const enriched = this.enrichProjectWithAgentInfo(metadata);
-        projects.push(enriched);
-        processedPaths.add(resolvedPath);
-        processedRealPaths.add(realPath);
-        console.log(`🤖 Added agent workingDirectory as project: ${resolvedPath} (agent: ${agent.id})`);
+        // 3b: agent.projects[] — explicit project associations declared in agent config
+        if (agent.projects && Array.isArray(agent.projects)) {
+          for (const projectPath of agent.projects) {
+            const resolvedPath = projectPath.startsWith('~')
+              ? path.join(os.homedir(), projectPath.slice(1))
+              : projectPath;
+
+            if (!fs.existsSync(resolvedPath)) continue;
+
+            const realPath = this.resolveRealPath(resolvedPath);
+            if (processedRealPaths.has(realPath)) {
+              // Project already discovered — ensure agent association exists in metadata
+              this.ensureAgentAssociation(realPath, agent.id);
+              continue;
+            }
+
+            const metadata = this.getOrCreateMetadataForPath(resolvedPath);
+            this.ensureAgentAssociation(metadata.path, agent.id);
+            const enriched = this.enrichProjectWithAgentInfo(metadata);
+            projects.push(enriched);
+            processedPaths.add(resolvedPath);
+            processedRealPaths.add(realPath);
+            console.log(`📂 Added agent project association: ${resolvedPath} (agent: ${agent.id})`);
+          }
+        }
       }
     } catch (agentScanErr) {
       console.warn('[getAllProjects] Failed to scan agent workingDirectories:', agentScanErr);
@@ -617,6 +642,32 @@ export class ProjectMetadataStorage {
   /**
    * Add an agent to a project
    */
+  /**
+   * Ensure an agent is associated with a project in metadata.
+   * Unlike addAgentToProject, this only adds the association if missing — it does
+   * not update lastUsed or other fields, making it safe for bulk discovery passes.
+   */
+  private ensureAgentAssociation(projectPath: string, agentId: string): void {
+    const metadata = this.getProjectMetadata(projectPath);
+    if (!metadata) return;
+
+    if (metadata.agents[agentId]) return;
+
+    const now = new Date().toISOString();
+    metadata.agents[agentId] = {
+      enabled: true,
+      lastUsed: now,
+      sessionCount: 0,
+      customConfig: {}
+    };
+
+    if (!metadata.defaultAgent) {
+      metadata.defaultAgent = agentId;
+    }
+
+    this.saveProjectMetadata(projectPath, metadata);
+  }
+
   addAgentToProject(projectPath: string, agentId: string): void {
     const metadata = this.getProjectMetadata(projectPath);
     if (!metadata) return;

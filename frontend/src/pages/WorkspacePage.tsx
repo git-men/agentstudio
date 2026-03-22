@@ -196,6 +196,7 @@ export const WorkspacePage: React.FC = () => {
               agent={agent}
               projectPath={agent.workingDirectory || undefined}
               onSessionChange={handleSessionChange}
+              onNewSession={handleNewSession}
             />
           </SessionStoreProvider>
         ) : (
