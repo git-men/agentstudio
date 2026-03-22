@@ -35,6 +35,7 @@ import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
 import wecomRouter from './routes/wecom';
 import qqbotRouter from './routes/qqbot';
+import enterpriseRouter from './routes/enterprise';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
@@ -54,6 +55,7 @@ import { initializeScheduler, shutdownScheduler } from './services/schedulerServ
 import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
+import { enterpriseAuthService } from './services/enterpriseAuthService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
@@ -422,11 +424,31 @@ const app: express.Express = express();
     console.error('[Scheduler] Error initializing scheduler:', error);
   }
 
-  // 4. Tunnel Service: Initialize WebSocket tunnel for external access
+  // 4. Enterprise Auth + Tunnel Service
+  console.info('[EnterpriseAuth] Initializing enterprise auth service...');
+  try {
+    await enterpriseAuthService.initialize();
+    console.info('[EnterpriseAuth] Enterprise auth service initialized');
+  } catch (error) {
+    console.error('[EnterpriseAuth] Error:', error);
+  }
+
   console.info('[Tunnel] Initializing tunnel service...');
   try {
     await tunnelService.initialize(PORT);
     console.info('[Tunnel] Tunnel service initialized');
+
+    // Backward compatibility: migrate enterpriseToken from tunnel config
+    if (!enterpriseAuthService.isAuthenticated()) {
+      const rawConfigs = (tunnelService as any).configs as Map<string, any>;
+      if (rawConfigs?.size > 0) {
+        const tunnelConfigArray = Array.from(rawConfigs.values());
+        const migrated = await enterpriseAuthService.migrateFromTunnelConfig(tunnelConfigArray);
+        if (migrated) {
+          console.info('[EnterpriseAuth] Migrated token from tunnel config');
+        }
+      }
+    }
   } catch (error) {
     console.error('[Tunnel] Error initializing tunnel service:', error);
   }
@@ -649,6 +671,7 @@ const app: express.Express = express();
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
   app.use('/api/wecom', authMiddleware, wecomRouter); // WeCom bot binding wizard
   app.use('/api/qqbot', authMiddleware, qqbotRouter); // QQ Bot binding wizard
+  app.use('/api/enterprise', authMiddleware, enterpriseRouter); // Enterprise auth management
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service

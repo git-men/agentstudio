@@ -10,9 +10,9 @@ import { Router, Request, Response } from 'express';
 import type { Router as RouterType } from 'express';
 import crypto from 'crypto';
 import { tunnelService } from '../services/tunnelService.js';
+import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 import { getOrCreateA2AId } from '../services/a2a/agentMappingService.js';
 import { generateApiKey } from '../services/a2a/apiKeyService.js';
-import { registerPendingAuth } from '../services/mcpAdmin/tools/enterpriseAuthTools.js';
 
 const router: RouterType = Router();
 
@@ -21,22 +21,14 @@ const DEFAULT_DISPATCH_CALLBACK = 'http://agentstudio.woa.com/callback';
 const DEFAULT_DISPATCH_SERVER = 'https://agentstudio.woa.com';
 const DEFAULT_DISPATCH_WS = 'ws://21.6.243.90:8083/ws/tunnel';
 
-function getRawTunnelConfig(): any | null {
-  const raw = (tunnelService as any).configs as Map<string, any> | undefined;
-  return raw && raw.size > 0 ? raw.values().next().value : null;
-}
-
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
-  const rawCfg = getRawTunnelConfig();
-  const serverUrl = rawCfg?.serverUrl;
+  const configs = tunnelService.getAllConfigs();
+  const config = configs[0];
+  const serverUrl = config?.serverUrl;
   if (!serverUrl) return null;
 
   const baseUrl = serverUrl.replace(/\/+$/, '');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-  if (rawCfg?.enterpriseToken) {
-    headers['Authorization'] = `Bearer ${rawCfg.enterpriseToken}`;
-  }
+  const headers = enterpriseAuthService.getAuthHeaders();
 
   return { baseUrl, headers };
 }
@@ -47,22 +39,22 @@ function getDispatchClient(): { baseUrl: string; headers: Record<string, string>
  */
 async function ensureTunnelConnected(): Promise<{ domain: string; protocol: string } | null> {
   const statuses = tunnelService.getAllStatuses();
-  const configs = tunnelService.getAllConfigs();
+  const tunnelConfigs = tunnelService.getAllConfigs();
   const status = statuses[0];
-  const config = configs[0];
+  const config = tunnelConfigs[0];
 
   if (status?.connected && status.domain) {
     return { domain: status.domain, protocol: (config as any)?.protocol || 'https' };
   }
 
   // Tunnel exists with a token but disconnected — try reconnecting
-  const rawCfg = getRawTunnelConfig();
-  if (rawCfg?.token && rawCfg.id) {
+  const existingCfg = tunnelConfigs.find(c => c.token);
+  if (existingCfg) {
     try {
-      await tunnelService.connect(rawCfg.id, true);
-      const refreshed = tunnelService.getStatus(rawCfg.id);
+      await tunnelService.connect(existingCfg.id, true);
+      const refreshed = tunnelService.getStatus(existingCfg.id);
       if (refreshed?.connected && refreshed.domain) {
-        return { domain: refreshed.domain, protocol: rawCfg.protocol || 'https' };
+        return { domain: refreshed.domain, protocol: existingCfg.protocol || 'https' };
       }
     } catch {
       // fall through to auto-create
@@ -70,9 +62,10 @@ async function ensureTunnelConnected(): Promise<{ domain: string; protocol: stri
   }
 
   // No usable tunnel token — auto-create one if we have enterprise credentials
-  if (!rawCfg?.enterpriseToken) return null;
+  const enterpriseToken = enterpriseAuthService.getToken();
+  if (!enterpriseToken) return null;
 
-  const serverUrl = rawCfg.serverUrl || DEFAULT_DISPATCH_SERVER;
+  const serverUrl = config?.serverUrl || DEFAULT_DISPATCH_SERVER;
   const tunnelName = `wecom-auto-${Date.now().toString(36)}`;
 
   const result = await tunnelService.createAndSave({
@@ -81,19 +74,11 @@ async function ensureTunnelConnected(): Promise<{ domain: string; protocol: stri
     label: '企微自动隧道',
     autoConnect: true,
     protocol: 'https',
-    websocketUrl: rawCfg.websocketUrl || DEFAULT_DISPATCH_WS,
-    accessToken: rawCfg.enterpriseToken,
+    websocketUrl: (config as any)?.websocketUrl || DEFAULT_DISPATCH_WS,
+    accessToken: enterpriseToken,
   });
 
   if (!result.success || !result.tunnelId) return null;
-
-  // Copy enterprise credentials to the new tunnel config
-  if (result.tunnelId) {
-    await tunnelService.saveConfig(result.tunnelId, {
-      enterpriseToken: rawCfg.enterpriseToken,
-      enterpriseUrl: rawCfg.enterpriseUrl,
-    });
-  }
 
   const newStatus = tunnelService.getStatus(result.tunnelId!);
   if (newStatus?.connected && newStatus.domain) {
@@ -117,10 +102,10 @@ function generateAlphanumeric(byteLen: number, outputLen: number): string {
  */
 router.get('/preflight', async (_req: Request, res: Response) => {
   try {
-    const rawCfg = getRawTunnelConfig();
-    const hasAuth = !!rawCfg?.enterpriseToken;
-    const serverUrl = rawCfg?.serverUrl || '';
-    const hasToken = !!rawCfg?.token;
+    const hasAuth = enterpriseAuthService.isAuthenticated();
+    const configs = tunnelService.getAllConfigs();
+    const serverUrl = configs[0]?.serverUrl || '';
+    const hasToken = !!configs[0]?.token;
 
     const statuses = tunnelService.getAllStatuses();
     const tunnelConnected = statuses.length > 0 && statuses[0].connected;
@@ -157,6 +142,9 @@ router.post('/auth/start', async (req: Request, res: Response) => {
 
     const state =
       Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+    // Import registerPendingAuth lazily for backward compat with auth callback
+    const { registerPendingAuth } = await import('../services/mcpAdmin/tools/enterpriseAuthTools.js');
     registerPendingAuth(state, enterpriseUrl);
 
     // Build callback URL. Priority:

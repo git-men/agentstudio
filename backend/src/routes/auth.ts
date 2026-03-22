@@ -5,6 +5,7 @@ import {
   resolvePendingAuth,
   storeEnterpriseToken,
 } from '../services/mcpAdmin/tools/enterpriseAuthTools.js';
+import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 
 const router: Router = express.Router();
 
@@ -198,7 +199,10 @@ router.get('/enterprise/callback', async (req: Request, res: Response) => {
   }
 
   try {
+    // Store in both systems for backward compatibility
     await storeEnterpriseToken(enterpriseUrl, token);
+    await enterpriseAuthService.login(enterpriseUrl, token);
+
     res.send(
       renderCallbackPage(
         true,

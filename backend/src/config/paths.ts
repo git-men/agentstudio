@@ -125,6 +125,12 @@ export function getTunnelConfigFile(port: number): string {
 }
 
 /**
+ * File path for enterprise profile.
+ * Default: ~/.agentstudio/data/enterprise-profile.json
+ */
+export const ENTERPRISE_PROFILE_FILE = join(DATA_DIR, 'enterprise-profile.json');
+
+/**
  * File path for speech-to-text configuration.
  * Default: ~/.agentstudio/data/speech-to-text.json
  */

@@ -14,12 +14,15 @@ import {
   EyeOff,
   Wifi,
   WifiOff,
+  ShieldCheck,
+  ExternalLink,
 } from 'lucide-react';
 import { useProjects } from '../hooks/useProjects';
+import { useEnterpriseProfile } from '../hooks/useEnterpriseProfile';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 
-type WizardStep = 'form' | 'processing' | 'result';
+type WizardStep = 'form' | 'auth' | 'processing' | 'result';
 
 interface BindResult {
   bot_key: string;
@@ -35,10 +38,9 @@ interface BindResult {
 }
 
 interface PreflightData {
-  dispatch: {
-    reachable: boolean;
-    url: string;
-  };
+  auth: { ready: boolean; name?: string; email?: string };
+  tunnel: { connected: boolean; domain: string | null };
+  dispatch: { reachable: boolean; url: string | null };
 }
 
 interface ProcessingStep {
@@ -82,6 +84,7 @@ export const QQBotBindPage: React.FC = () => {
   const navigate = useNavigate();
   const { data: projectsData, isLoading: isLoadingProjects } = useProjects();
   const projects = projectsData?.projects || [];
+  const { isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin } = useEnterpriseProfile();
 
   const [step, setStep] = useState<WizardStep>('form');
   const [selectedProject, setSelectedProject] = useState<string>('');
@@ -94,6 +97,7 @@ export const QQBotBindPage: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [preflight, setPreflight] = useState<PreflightData | null>(null);
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+  const [authPolling, setAuthPolling] = useState(false);
 
   const isAppIdValid = /^\d{6,20}$/.test(appId.trim());
   const isSecretValid = clientSecret.trim().length >= 8;
@@ -122,18 +126,68 @@ export const QQBotBindPage: React.FC = () => {
     }
   }, []);
 
+  const startAuth = async () => {
+    try {
+      const resp = await authFetch(`${API_BASE}/enterprise/auth/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await resp.json();
+      if (data.auth_url) {
+        window.open(data.auth_url, '_blank', 'noopener,noreferrer');
+        setStep('auth');
+        setAuthPolling(true);
+        pollAuthStatus();
+      }
+    } catch {
+      setErrorMessage('无法发起 OAuth 登录');
+    }
+  };
+
+  const pollAuthStatus = useCallback(async () => {
+    let attempts = 0;
+    const maxAttempts = 60;
+    const poll = async () => {
+      if (attempts >= maxAttempts) {
+        setAuthPolling(false);
+        setErrorMessage('OAuth 登录超时，请重试');
+        return;
+      }
+      attempts++;
+      const result = await checkPreflight();
+      if (result?.auth?.ready) {
+        setAuthPolling(false);
+        setPreflight(result);
+        setStep('form');
+        return;
+      }
+      setTimeout(poll, 2000);
+    };
+    setTimeout(poll, 2000);
+  }, [checkPreflight]);
+
   const handleBind = async () => {
     if (!canSubmit) return;
+
+    const pf = await checkPreflight();
+    if (!pf?.auth?.ready) {
+      startAuth();
+      return;
+    }
 
     setStep('processing');
     setErrorMessage('');
 
+    const needsTunnel = !preflight?.tunnel.connected;
     const steps: ProcessingStep[] = [
-      { label: '获取 A2A 端点', status: 'active' },
-      { label: '创建 API Key', status: 'pending' },
-      { label: '注册 QQ Bot', status: 'pending' },
-      { label: '启动 WebSocket 连接', status: 'pending' },
+      ...(needsTunnel ? [{ label: '建立隧道连接', status: 'active' as const }] : []),
+      { label: '获取 A2A 端点', status: 'pending' as const },
+      { label: '创建 API Key', status: 'pending' as const },
+      { label: '注册 QQ Bot', status: 'pending' as const },
+      { label: '启动 WebSocket 连接', status: 'pending' as const },
     ];
+    if (!needsTunnel) steps[0].status = 'active';
     setProcessingSteps(steps);
 
     try {
@@ -151,6 +205,10 @@ export const QQBotBindPage: React.FC = () => {
       const data = await resp.json();
 
       if (!resp.ok || !data.success) {
+        if (data.error === 'enterprise_auth_required') {
+          startAuth();
+          return;
+        }
         throw new Error(data.error || data.message || `HTTP ${resp.status}`);
       }
 
@@ -209,41 +267,115 @@ export const QQBotBindPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Auth step */}
+        {step === 'auth' && (
+          <div className="w-full max-w-xl">
+            <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 text-center">
+              <div className="inline-flex p-4 bg-blue-50 dark:bg-blue-900/30 rounded-2xl mb-4">
+                <ShieldCheck className="w-10 h-10 text-blue-500" />
+              </div>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                等待登录确认
+              </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                已在新窗口打开 iOA 登录页面。
+                <br />
+                完成授权后，此页面会自动继续。
+              </p>
+              {authPolling && (
+                <div className="flex items-center justify-center gap-2 text-sm text-blue-600 dark:text-blue-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  正在等待登录...
+                </div>
+              )}
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <button
+                  onClick={startAuth}
+                  className="flex items-center gap-2 px-4 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  重新打开登录页
+                </button>
+                <button
+                  onClick={() => setStep('form')}
+                  className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+                >
+                  返回
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Form step */}
         {step === 'form' && (
           <div className="w-full max-w-xl">
-            {/* Dispatch status banner */}
-            {preflight && !preflight.dispatch.reachable && (
-              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl">
-                <WifiOff className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            {/* Auth status banner */}
+            {preflight && !preflight.auth.ready && (
+              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/50 rounded-xl">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                    as-dispatch 服务不可达
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                    需要先登录 AS Enterprise
                   </p>
-                  <p className="text-xs text-red-600 dark:text-red-300 mt-1">
-                    无法连接 {preflight.dispatch.url}。请确保 as-dispatch 正在运行。
+                  <p className="text-xs text-amber-600 dark:text-amber-300 mt-1">
+                    绑定前需要认证身份。点击下方按钮开始登录。
                   </p>
                   <button
-                    onClick={checkPreflight}
-                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-700/50 dark:text-red-200 rounded-lg transition-colors"
+                    onClick={startAuth}
+                    className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-100 hover:bg-amber-200 dark:bg-amber-800/50 dark:hover:bg-amber-700/50 dark:text-amber-200 rounded-lg transition-colors"
                   >
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    重新检测
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    登录 AS Enterprise
                   </button>
                 </div>
               </div>
             )}
 
-            {preflight && preflight.dispatch.reachable && (
+            {/* Tunnel status banner */}
+            {preflight && preflight.auth.ready && !preflight.tunnel.connected && (
+              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl">
+                <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    隧道未连接
+                  </p>
+                  <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
+                    请先在设置中配置并连接隧道，确保外部能访问本地 Agent。
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Dispatch status */}
+            {preflight && preflight.auth.ready && preflight.tunnel.connected && preflight.dispatch.reachable && (
               <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-xl">
                 <Wifi className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                    as-dispatch 已连接
+                    就绪
                   </p>
                   <p className="text-xs text-green-600 dark:text-green-300 mt-1 font-mono">
-                    {preflight.dispatch.url}
+                    {preflight.tunnel.domain}.tunnel — {preflight.auth.name || 'Enterprise'}
                   </p>
+                </div>
+              </div>
+            )}
+
+            {preflight && preflight.dispatch.url && !preflight.dispatch.reachable && preflight.auth.ready && (
+              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl">
+                <WifiOff className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                    as-dispatch 不可达
+                  </p>
+                  <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                    无法连接 {preflight.dispatch.url}
+                  </p>
+                  <button onClick={checkPreflight} className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-700/50 dark:text-red-200 rounded-lg transition-colors">
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    重新检测
+                  </button>
                 </div>
               </div>
             )}
@@ -269,9 +401,7 @@ export const QQBotBindPage: React.FC = () => {
                     <div className="flex items-center gap-2.5">
                       <Folder className="w-4 h-4 text-gray-400" />
                       <span className="text-sm text-gray-700 dark:text-gray-300">
-                        {isLoadingProjects
-                          ? '加载中...'
-                          : selectedProjectObj?.name || '选择项目'}
+                        {isLoadingProjects ? '加载中...' : selectedProjectObj?.name || '选择项目'}
                       </span>
                     </div>
                     <ChevronDown className="w-4 h-4 text-gray-400" />
@@ -279,39 +409,17 @@ export const QQBotBindPage: React.FC = () => {
 
                   {showProjectDropdown && (
                     <>
-                      <div
-                        className="fixed inset-0 z-10"
-                        onClick={() => setShowProjectDropdown(false)}
-                      />
+                      <div className="fixed inset-0 z-10" onClick={() => setShowProjectDropdown(false)} />
                       <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-20 max-h-48 overflow-y-auto">
                         {projects.map((project) => (
                           <button
                             key={project.id}
-                            onClick={() => {
-                              setSelectedProject(project.path);
-                              setShowProjectDropdown(false);
-                            }}
-                            className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2.5 first:rounded-t-xl last:rounded-b-xl transition-colors ${
-                              selectedProject === project.path
-                                ? 'bg-blue-50 dark:bg-blue-900/20'
-                                : ''
-                            }`}
+                            onClick={() => { setSelectedProject(project.path); setShowProjectDropdown(false); }}
+                            className={`w-full px-4 py-3 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 flex items-center gap-2.5 first:rounded-t-xl last:rounded-b-xl transition-colors ${selectedProject === project.path ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
                           >
-                            <Folder
-                              className={`w-4 h-4 shrink-0 ${
-                                selectedProject === project.path
-                                  ? 'text-blue-500'
-                                  : 'text-gray-400'
-                              }`}
-                            />
+                            <Folder className={`w-4 h-4 shrink-0 ${selectedProject === project.path ? 'text-blue-500' : 'text-gray-400'}`} />
                             <div className="min-w-0">
-                              <div
-                                className={`text-sm truncate ${
-                                  selectedProject === project.path
-                                    ? 'text-blue-600 dark:text-blue-400 font-medium'
-                                    : 'text-gray-700 dark:text-gray-300'
-                                }`}
-                              >
+                              <div className={`text-sm truncate ${selectedProject === project.path ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>
                                 {project.name}
                               </div>
                               <div className="text-xs text-gray-400 truncate">{project.path}</div>
@@ -319,9 +427,7 @@ export const QQBotBindPage: React.FC = () => {
                           </button>
                         ))}
                         {projects.length === 0 && (
-                          <div className="px-4 py-6 text-center text-sm text-gray-400">
-                            暂无项目，请先在项目管理中创建
-                          </div>
+                          <div className="px-4 py-6 text-center text-sm text-gray-400">暂无项目</div>
                         )}
                       </div>
                     </>
@@ -342,56 +448,38 @@ export const QQBotBindPage: React.FC = () => {
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                      AppID
-                    </label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">AppID</label>
                     <input
                       type="text"
                       value={appId}
                       onChange={(e) => setAppId(e.target.value)}
                       placeholder="例如: 1903102623"
-                      className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl border text-sm font-mono outline-none transition-colors ${
-                        appId && !isAppIdValid
-                          ? 'border-red-300 dark:border-red-700 focus:border-red-400'
-                          : 'border-gray-200 dark:border-gray-700 focus:border-blue-400 dark:focus:border-blue-500'
-                      } text-gray-700 dark:text-gray-300 placeholder-gray-400`}
+                      className={`w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl border text-sm font-mono outline-none transition-colors ${appId && !isAppIdValid ? 'border-red-300 dark:border-red-700' : 'border-gray-200 dark:border-gray-700 focus:border-blue-400'} text-gray-700 dark:text-gray-300 placeholder-gray-400`}
                     />
                     {appId && !isAppIdValid && (
                       <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        AppID 应为 6-20 位数字
+                        <AlertCircle className="w-3.5 h-3.5" /> AppID 应为 6-20 位数字
                       </p>
                     )}
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">
-                      ClientSecret
-                    </label>
+                    <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">ClientSecret</label>
                     <div className="relative">
                       <input
                         type={showSecret ? 'text' : 'password'}
                         value={clientSecret}
                         onChange={(e) => setClientSecret(e.target.value)}
                         placeholder="QQ 开放平台获取的 AppSecret"
-                        className={`w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-900 rounded-xl border text-sm font-mono outline-none transition-colors ${
-                          clientSecret && !isSecretValid
-                            ? 'border-red-300 dark:border-red-700 focus:border-red-400'
-                            : 'border-gray-200 dark:border-gray-700 focus:border-blue-400 dark:focus:border-blue-500'
-                        } text-gray-700 dark:text-gray-300 placeholder-gray-400`}
+                        className={`w-full px-4 py-3 pr-12 bg-gray-50 dark:bg-gray-900 rounded-xl border text-sm font-mono outline-none transition-colors ${clientSecret && !isSecretValid ? 'border-red-300 dark:border-red-700' : 'border-gray-200 dark:border-gray-700 focus:border-blue-400'} text-gray-700 dark:text-gray-300 placeholder-gray-400`}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowSecret(!showSecret)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                      >
+                      <button type="button" onClick={() => setShowSecret(!showSecret)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                         {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     {clientSecret && !isSecretValid && (
                       <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        ClientSecret 长度不足
+                        <AlertCircle className="w-3.5 h-3.5" /> ClientSecret 长度不足
                       </p>
                     )}
                   </div>
@@ -399,12 +487,7 @@ export const QQBotBindPage: React.FC = () => {
 
                 <div className="mt-3 text-xs text-gray-400 dark:text-gray-500 leading-relaxed">
                   获取方式：
-                  <a
-                    href="https://q.qq.com/qqbot/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-500 hover:text-blue-600 underline"
-                  >
+                  <a href="https://q.qq.com/qqbot/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-600 underline">
                     QQ 开放平台
                   </a>
                   {' → 应用管理 → 选择应用 → AppID / AppSecret'}
@@ -418,17 +501,15 @@ export const QQBotBindPage: React.FC = () => {
                     3
                   </span>
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">
-                    Bot 名称
-                    <span className="ml-1.5 text-xs font-normal text-gray-400">（可选）</span>
+                    Bot 名称<span className="ml-1.5 text-xs font-normal text-gray-400">（可选）</span>
                   </span>
                 </div>
-
                 <input
                   type="text"
                   value={botName}
                   onChange={(e) => setBotName(e.target.value)}
                   placeholder={selectedProjectObj ? `${selectedProjectObj.name} QQ Bot` : 'My QQ Bot'}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 focus:border-blue-400 dark:focus:border-blue-500 text-sm outline-none transition-colors text-gray-700 dark:text-gray-300 placeholder-gray-400"
+                  className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 focus:border-blue-400 text-sm outline-none transition-colors text-gray-700 dark:text-gray-300 placeholder-gray-400"
                 />
               </div>
 
@@ -436,7 +517,7 @@ export const QQBotBindPage: React.FC = () => {
               <div className="p-6">
                 <button
                   onClick={handleBind}
-                  disabled={!canSubmit || (preflight !== null && !preflight.dispatch.reachable)}
+                  disabled={!canSubmit}
                   className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-700 text-white font-medium rounded-xl transition-colors disabled:cursor-not-allowed"
                 >
                   <Bot className="w-4 h-4" />
@@ -451,42 +532,17 @@ export const QQBotBindPage: React.FC = () => {
         {step === 'processing' && (
           <div className="w-full max-w-xl">
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 text-center">
-                正在绑定...
-              </h2>
-
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 text-center">正在绑定...</h2>
               <div className="space-y-4">
                 {processingSteps.map((s, i) => (
                   <div key={i} className="flex items-center gap-3">
                     <div className="w-6 h-6 shrink-0 flex items-center justify-center">
-                      {s.status === 'done' && (
-                        <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
-                          <Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400" />
-                        </div>
-                      )}
-                      {s.status === 'active' && (
-                        <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
-                      )}
-                      {s.status === 'pending' && (
-                        <div className="w-5 h-5 rounded-full border-2 border-gray-200 dark:border-gray-700" />
-                      )}
-                      {s.status === 'error' && (
-                        <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
-                          <AlertCircle className="w-3.5 h-3.5 text-red-500" />
-                        </div>
-                      )}
+                      {s.status === 'done' && <div className="w-6 h-6 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center"><Check className="w-3.5 h-3.5 text-green-600 dark:text-green-400" /></div>}
+                      {s.status === 'active' && <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />}
+                      {s.status === 'pending' && <div className="w-5 h-5 rounded-full border-2 border-gray-200 dark:border-gray-700" />}
+                      {s.status === 'error' && <div className="w-6 h-6 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center"><AlertCircle className="w-3.5 h-3.5 text-red-500" /></div>}
                     </div>
-                    <span
-                      className={`text-sm ${
-                        s.status === 'done'
-                          ? 'text-green-700 dark:text-green-400'
-                          : s.status === 'active'
-                            ? 'text-blue-700 dark:text-blue-400 font-medium'
-                            : s.status === 'error'
-                              ? 'text-red-600 dark:text-red-400'
-                              : 'text-gray-400 dark:text-gray-500'
-                      }`}
-                    >
+                    <span className={`text-sm ${s.status === 'done' ? 'text-green-700 dark:text-green-400' : s.status === 'active' ? 'text-blue-700 dark:text-blue-400 font-medium' : s.status === 'error' ? 'text-red-600 dark:text-red-400' : 'text-gray-400 dark:text-gray-500'}`}>
                       {s.label}
                     </span>
                   </div>
@@ -496,13 +552,7 @@ export const QQBotBindPage: React.FC = () => {
               {errorMessage && (
                 <div className="mt-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl">
                   <p className="text-sm text-red-700 dark:text-red-300">{errorMessage}</p>
-                  <button
-                    onClick={() => {
-                      setStep('form');
-                      setErrorMessage('');
-                    }}
-                    className="mt-3 text-sm text-red-600 hover:text-red-800 dark:text-red-400 font-medium"
-                  >
+                  <button onClick={() => { setStep('form'); setErrorMessage(''); }} className="mt-3 text-sm text-red-600 hover:text-red-800 dark:text-red-400 font-medium">
                     ← 返回修改
                   </button>
                 </div>
@@ -515,84 +565,54 @@ export const QQBotBindPage: React.FC = () => {
         {step === 'result' && bindResult && (
           <div className="w-full max-w-xl">
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {/* Success header */}
               <div className="px-6 py-5 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center">
-                    {bindResult.connection?.connected ? (
-                      <Wifi className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    ) : (
-                      <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                    )}
+                    {bindResult.connection?.connected ? <Wifi className="w-5 h-5 text-blue-600 dark:text-blue-400" /> : <Check className="w-5 h-5 text-blue-600 dark:text-blue-400" />}
                   </div>
                   <div>
                     <h2 className="text-lg font-semibold text-blue-800 dark:text-blue-200">
                       {bindResult.connection?.connected ? 'QQ Bot 已上线！' : '绑定成功！'}
                     </h2>
-                    <p className="text-sm text-blue-600 dark:text-blue-400">
-                      {bindResult.project_name} 已绑定到 QQ Bot
-                    </p>
+                    <p className="text-sm text-blue-600 dark:text-blue-400">{bindResult.project_name} 已绑定到 QQ Bot</p>
                   </div>
                 </div>
               </div>
 
-              {/* Connection status */}
               <div className="p-6 border-b border-gray-100 dark:border-gray-700">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-2.5 h-2.5 rounded-full ${
-                    bindResult.connection?.connected
-                      ? 'bg-green-500 animate-pulse'
-                      : 'bg-yellow-500'
-                  }`} />
+                  <div className={`w-2.5 h-2.5 rounded-full ${bindResult.connection?.connected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
                   <span className="text-sm font-medium text-gray-900 dark:text-white">
                     WebSocket 连接状态：
-                    {bindResult.connection?.connected ? (
-                      <span className="text-green-600 dark:text-green-400 ml-1">已连接</span>
-                    ) : (
-                      <span className="text-yellow-600 dark:text-yellow-400 ml-1">连接中...</span>
-                    )}
+                    {bindResult.connection?.connected
+                      ? <span className="text-green-600 dark:text-green-400 ml-1">已连接</span>
+                      : <span className="text-yellow-600 dark:text-yellow-400 ml-1">连接中...</span>}
                   </span>
                 </div>
-
                 <div className="space-y-3">
                   <CopyField label="Bot Key" value={bindResult.bot_key} />
                   <CopyField label="AppID" value={bindResult.app_id} />
                   <CopyField label="A2A 端点" value={bindResult.a2a_endpoint} />
-                  {bindResult.connection?.session_id && (
-                    <CopyField label="Session ID" value={bindResult.connection.session_id} />
-                  )}
                 </div>
               </div>
 
-              {/* Instructions */}
               <div className="p-6">
                 <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 rounded-xl">
                   <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
                     <strong>测试方式：</strong>
-                    {bindResult.connection?.connected ? (
-                      <>在 QQ 中找到你的 Bot，直接发送消息即可测试。Bot 会通过 AgentStudio 项目中的 AI Agent 回复。</>
-                    ) : (
-                      <>Bot 已注册但 WebSocket 连接可能仍在建立中。请稍等几秒后在 QQ 中测试。如果无法收到回复，请检查 as-dispatch 的日志。</>
-                    )}
+                    {bindResult.connection?.connected
+                      ? <>在 QQ 中找到你的 Bot，直接发送消息即可测试。</>
+                      : <>Bot 已注册但 WebSocket 连接可能仍在建立中。请稍等几秒后在 QQ 中测试。</>}
                   </p>
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  返回首页
+                <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
+                  <ArrowLeft className="w-4 h-4" /> 返回首页
                 </button>
-                <button
-                  onClick={handleReset}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-                >
-                  <RefreshCw className="w-4 h-4" />
-                  再绑定一个
+                <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+                  <RefreshCw className="w-4 h-4" /> 再绑定一个
                 </button>
               </div>
             </div>

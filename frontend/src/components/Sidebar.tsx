@@ -23,6 +23,9 @@ import {
   Webhook,
   PanelLeftClose,
   PanelLeftOpen,
+  Building2,
+  LogOut,
+  User,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -31,6 +34,7 @@ import { UpdateNotification } from './UpdateNotification';
 import { useMobileContext } from '../contexts/MobileContext';
 import useEngine from '../hooks/useEngine';
 import useProduct from '../hooks/useProduct';
+import { useEnterpriseProfile } from '../hooks/useEnterpriseProfile';
 import type { EngineFeatureKey, ConfigCapabilityKey } from '../types/engine';
 
 // Navigation item type with optional engine and product requirements
@@ -193,6 +197,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
     return location.pathname.startsWith('/settings') ? [t('nav.settings')] : [];
   });
   const [showServiceManagement, setShowServiceManagement] = useState(false);
+  const [showEnterpriseMenu, setShowEnterpriseMenu] = useState(false);
+  const { profile: enterpriseProfile, isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin, logout: enterpriseLogout } = useEnterpriseProfile();
 
   // Get engine capabilities for filtering navigation items
   const { isFeatureSupported, isConfigSupported, engineType, isLoading: isEngineLoading } = useEngine();
@@ -409,9 +415,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
         <button
           onClick={() => navigate('/')}
           title="ClawStudio"
-          className={`flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-lg ${collapsed ? 'justify-center w-full p-2' : 'w-full p-2'}`}
+          className={`flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-lg ${collapsed ? 'justify-center w-full p-1' : 'w-full p-2'}`}
         >
-          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg flex-shrink-0" />
+          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg flex-shrink-0 object-contain" />
           {!collapsed && (
             <div className="flex flex-col min-w-0">
               <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
@@ -444,6 +450,72 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
         ) : (
           <div className="space-y-3">
             <UpdateNotification compact />
+
+            {/* Enterprise identity */}
+            <div className="relative">
+              {isEnterpriseAuth ? (
+                <>
+                  <button
+                    onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
+                  >
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                      <User className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    </div>
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+                        {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                      </div>
+                      <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                        Enterprise
+                      </div>
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showEnterpriseMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showEnterpriseMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowEnterpriseMenu(false)} />
+                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                        <button
+                          onClick={() => {
+                            setShowEnterpriseMenu(false);
+                            enterpriseLogin();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          重新登录
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowEnterpriseMenu(false);
+                            enterpriseLogout();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          退出企业版
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={() => enterpriseLogin()}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group"
+                >
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 transition-colors">
+                    <Building2 className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                  </div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    连接企业版
+                  </span>
+                </button>
+              )}
+            </div>
+
             {/* Service status + collapse toggle in same row */}
             <div className="flex items-center gap-1">
               <div className="flex-1 min-w-0">
