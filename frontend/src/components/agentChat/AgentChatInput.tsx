@@ -131,7 +131,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
 
   return (
     <div
-      className={`flex-shrink-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl mx-4 mb-3 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
+      className={`flex-shrink-0 shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.08),0_4px_10px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.25),0_4px_10px_-2px_rgba(0,0,0,0.15)] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl mx-4 mb-3 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
         }`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}

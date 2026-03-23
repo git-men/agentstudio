@@ -217,9 +217,10 @@ export const MetaAgentBubble: React.FC = () => {
     return null;
   }
 
-  // On the dashboard, the Meta Agent panel is embedded inline —
+  // On pages that embed the Meta Agent panel inline (DashboardShell),
   // hide the floating overlay entirely to avoid duplication.
-  if (location.pathname === '/dashboard' || location.pathname === '/dashboard-new') {
+  const inlinePanelPaths = ['/dashboard', '/dashboard-new', '/wecom-bind', '/qqbot-bind', '/wechat-bind'];
+  if (inlinePanelPaths.includes(location.pathname)) {
     return null;
   }
 
