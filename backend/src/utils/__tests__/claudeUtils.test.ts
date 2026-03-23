@@ -42,6 +42,11 @@ vi.mock('../../services/a2a/a2aIntegration', () => ({
   integrateA2AMcpServer: vi.fn()
 }));
 
+// Mock lavsIntegration
+vi.mock('../lavs/lavs-integration', () => ({
+  integrateLAVSMcpServer: vi.fn()
+}));
+
 describe('claudeUtils', () => {
   beforeEach(() => {
     vi.clearAllMocks();

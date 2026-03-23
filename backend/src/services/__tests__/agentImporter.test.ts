@@ -112,7 +112,7 @@ describe('AgentImporter', () => {
         // Agent source file exists
         if (pathStr.includes('agents/test-agent.json') && pathStr.includes('marketplaces')) return true;
         // Target agent file doesn't exist yet
-        if (pathStr.includes('.claude/agents/test-agent.json')) return false;
+        if (pathStr.includes('.claude/agents/test-agent.')) return false;
         // Marketplace path and directories exist
         return true;
       });
@@ -135,6 +135,7 @@ describe('AgentImporter', () => {
         description: 'A test agent'
       });
       
+      console.log('AGENT IMPORTER TEST RESULT:', result.error);
       expect(result.success).toBe(true);
       expect(result.agentId).toBe('test-agent');
       expect(result.agentName).toBe('Test Agent');
