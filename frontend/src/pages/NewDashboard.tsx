@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Zap,
   Maximize2,
+  Smartphone,
 } from 'lucide-react';
 import { ProjectSelector } from '../components/ProjectSelector';
 import { FileBrowser } from '../components/FileBrowser';
@@ -32,6 +33,7 @@ import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
 import { useConfirm } from '../hooks/useConfirm';
 import { AgentEditModal } from '../components/AgentEditModal';
+import { IMBindingModal } from '../components/IMBindingModal';
 import { fetchProjectActivity } from '../utils/projectLastMessage';
 import type { AgentConfig } from '../types/index.js';
 
@@ -388,6 +390,23 @@ export const NewDashboard: React.FC = () => {
   // ── Create Agent modal ──
   const [showCreateAgentModal, setShowCreateAgentModal] = useState(false);
 
+  // ── IM Binding state ──
+  const [bindingCounts, setBindingCounts] = useState<Record<string, number>>({ wecom: 0, qqbot: 0, weixin: 0 });
+  const [imModalPlatform, setImModalPlatform] = useState<'wecom' | 'qqbot' | 'weixin' | null>(null);
+
+  useEffect(() => {
+    authFetch(`${API_BASE}/im-bindings`)
+      .then(r => r.ok ? r.json() : { bindings: [] })
+      .then(data => {
+        const counts: Record<string, number> = { wecom: 0, qqbot: 0, weixin: 0 };
+        for (const b of data.bindings || []) {
+          if (b.platform in counts) counts[b.platform]++;
+        }
+        setBindingCounts(counts);
+      })
+      .catch(() => {});
+  }, [imModalPlatform]);
+
   const allEnabledAgents = agents.filter(a => a.enabled);
 
   useEffect(() => {
@@ -524,7 +543,7 @@ export const NewDashboard: React.FC = () => {
     const agent = agents.find(a => a.id === project.defaultAgent && a.enabled)
       || agents.find(a => a.enabled);
     if (agent) {
-      navigate(`/chat/${agent.id}?project=${encodeURIComponent(project.path)}`);
+      navigate(`/project-workspace?project=${encodeURIComponent(project.path)}&agent=${agent.id}`);
     }
   };
 
@@ -563,7 +582,7 @@ export const NewDashboard: React.FC = () => {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <button
-              onClick={() => navigate('/wecom-bind')}
+              onClick={() => bindingCounts.wecom > 0 ? setImModalPlatform('wecom') : navigate('/wecom-bind')}
               className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-green-300 dark:hover:border-green-600 hover:shadow-sm transition-all group text-left"
             >
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/30 flex items-center justify-center">
@@ -571,12 +590,21 @@ export const NewDashboard: React.FC = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-gray-800 dark:text-gray-200">企业微信</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">绑定企微群机器人</div>
+                <div className="text-xs mt-0.5">
+                  {bindingCounts.wecom > 0 ? (
+                    <span className="text-green-600 dark:text-green-400 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500" />
+                      已绑定 {bindingCounts.wecom} 个
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 dark:text-gray-500">绑定企微群机器人</span>
+                  )}
+                </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-green-500 transition-colors flex-shrink-0" />
             </button>
             <button
-              onClick={() => navigate('/qqbot-bind')}
+              onClick={() => bindingCounts.qqbot > 0 ? setImModalPlatform('qqbot') : navigate('/qqbot-bind')}
               className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all group text-left"
             >
               <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center text-lg">
@@ -584,20 +612,38 @@ export const NewDashboard: React.FC = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-gray-800 dark:text-gray-200">QQ Bot</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">绑定 QQ 机器人</div>
+                <div className="text-xs mt-0.5">
+                  {bindingCounts.qqbot > 0 ? (
+                    <span className="text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      已绑定 {bindingCounts.qqbot} 个
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 dark:text-gray-500">绑定 QQ 机器人</span>
+                  )}
+                </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-blue-500 transition-colors flex-shrink-0" />
             </button>
             <button
-              onClick={() => navigate('/wechat-bind')}
+              onClick={() => bindingCounts.weixin > 0 ? setImModalPlatform('weixin') : navigate('/wechat-bind')}
               className="flex items-center gap-3 p-4 bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-emerald-300 dark:hover:border-emerald-600 hover:shadow-sm transition-all group text-left"
             >
-              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center text-lg">
-                💬
+              <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-900/30 flex items-center justify-center">
+                <Smartphone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium text-gray-800 dark:text-gray-200">微信</div>
-                <div className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">绑定微信机器人</div>
+                <div className="text-xs mt-0.5">
+                  {bindingCounts.weixin > 0 ? (
+                    <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                      已绑定 {bindingCounts.weixin} 个
+                    </span>
+                  ) : (
+                    <span className="text-gray-400 dark:text-gray-500">绑定微信机器人</span>
+                  )}
+                </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-300 dark:text-gray-600 group-hover:text-emerald-500 transition-colors flex-shrink-0" />
             </button>
@@ -985,6 +1031,24 @@ export const NewDashboard: React.FC = () => {
       agent={null}
       agents={agents}
     />
+
+    {/* ── IM Binding Management Modal ── */}
+    {imModalPlatform && (
+      <IMBindingModal
+        platform={imModalPlatform}
+        isOpen={true}
+        onClose={() => setImModalPlatform(null)}
+        onNewBind={() => {
+          setImModalPlatform(null);
+          const routes: Record<string, string> = {
+            wecom: '/wecom-bind',
+            qqbot: '/qqbot-bind',
+            weixin: '/wechat-bind',
+          };
+          navigate(routes[imModalPlatform] || '/dashboard');
+        }}
+      />
+    )}
     </>
   );
 };
