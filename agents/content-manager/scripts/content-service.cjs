@@ -165,6 +165,16 @@ function actionAdd(input) {
   return { added: added.length, entries: added };
 }
 
+const UPDATE_FIELD_ALIASES = {
+  shortTitle: 'shortHighlight',
+  short_highlight: 'shortHighlight',
+  longTitle: 'longHighlight',
+  long_highlight: 'longHighlight',
+  pcAutoplay: 'pcAutoPlay',
+  autoPlay: 'pcAutoPlay',
+  category: 'section',
+};
+
 function actionUpdate(input) {
   const date = input.date || todayStr();
   const entries = readEntries(date);
@@ -187,7 +197,8 @@ function actionUpdate(input) {
 
   for (const [k, v] of Object.entries(updates)) {
     if (k === 'id') continue;
-    entries[idx][k] = v;
+    const canonicalKey = UPDATE_FIELD_ALIASES[k] || k;
+    entries[idx][canonicalKey] = v;
   }
 
   writeEntries(date, entries);

@@ -4,13 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>内容运营素材管理</title>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/antd@5.22/dist/antd.min.js"></script>
-  <link href="https://cdn.jsdelivr.net/npm/antd@5.22/dist/reset.css" rel="stylesheet">
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/@ant-design/icons@5/dist/index.umd.min.js"></script>
-  <script crossorigin src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+  <script crossorigin src="https://registry.npmmirror.com/react/18.3.1/files/umd/react.production.min.js"></script>
+  <script crossorigin src="https://registry.npmmirror.com/react-dom/18.3.1/files/umd/react-dom.production.min.js"></script>
+  <script crossorigin src="https://registry.npmmirror.com/dayjs/1.11.20/files/dayjs.min.js"></script>
+  <script crossorigin src="https://registry.npmmirror.com/antd/5.22.7/files/dist/antd.min.js"></script>
+  <link href="https://registry.npmmirror.com/antd/5.22.7/files/dist/reset.css" rel="stylesheet">
+  <script crossorigin src="https://registry.npmmirror.com/@ant-design/icons/5.6.1/files/dist/index.umd.min.js"></script>
+  <script crossorigin src="https://registry.npmmirror.com/@babel/standalone/7.29.2/files/babel.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     html, body, #root { height: 100%; overflow: hidden; }
@@ -127,7 +127,7 @@ function loadExcelJS() {
   if (excelLoading) return excelLoading;
   excelLoading = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+    s.src = 'https://registry.npmmirror.com/exceljs/4.4.0/files/dist/exceljs.min.js';
     s.onload = resolve;
     s.onerror = () => reject(new Error('ExcelJS 加载失败'));
     document.head.appendChild(s);

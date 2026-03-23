@@ -531,11 +531,11 @@ router.get('/:agentId/lavs-view', async (req, res) => {
     // CSP: restrict scripts to self, allow connecting to LAVS API
     res.setHeader('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.sheetjs.com https://cdn.jsdelivr.net",
-      "style-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net",
-      "connect-src 'self' https://unpkg.com https://cdn.sheetjs.com https://cdn.jsdelivr.net https://*.qpic.cn https://*.puui.qpic.cn",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.sheetjs.com https://registry.npmmirror.com",
+      "style-src 'self' 'unsafe-inline' https://unpkg.com https://registry.npmmirror.com",
+      "connect-src 'self' https://unpkg.com https://cdn.sheetjs.com https://registry.npmmirror.com https://*.qpic.cn https://*.puui.qpic.cn",
       "img-src 'self' data: https:",
-      "font-src 'self' data: https://unpkg.com https://cdn.jsdelivr.net",
+      "font-src 'self' data: https://unpkg.com https://registry.npmmirror.com",
       "frame-ancestors 'self'",
     ].join('; '));
     // Prevent MIME type sniffing

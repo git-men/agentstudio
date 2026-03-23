@@ -73,7 +73,11 @@ function jsonSchemaToZodShape(schema: any): z.ZodRawShape {
         zodType = z.array(z.any());
         break;
       case 'object':
-        zodType = z.object({});
+        if (propSchema.additionalProperties || !propSchema.properties) {
+          zodType = z.record(z.string(), z.any());
+        } else {
+          zodType = z.object(jsonSchemaToZodShape(propSchema)).passthrough();
+        }
         break;
       default:
         zodType = z.any();

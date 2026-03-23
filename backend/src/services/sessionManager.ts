@@ -3,7 +3,7 @@ import { ClaudeSession } from './claudeSession';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { getProjectsDir } from '../config/sdkConfig.js';
+import { getProjectsDir, getAllProjectsDirs } from '../config/sdkConfig.js';
 
 /**
  * 会话配置快照
@@ -98,23 +98,20 @@ export class SessionManager {
     }
 
     try {
-      // 使用与sessions.ts相同的路径转换逻辑
       const claudeProjectPath = this.convertProjectPathToClaudeFormat(projectPath);
-      const historyDir = path.join(getProjectsDir(), claudeProjectPath);
-      
-      // 检查会话文件是否存在（Claude存储为.jsonl格式）
-      const sessionFile = path.join(historyDir, `${sessionId}.jsonl`);
-      
-      console.log(`🔍 Checking for session file: ${sessionFile}`);
-      const exists = fs.existsSync(sessionFile);
-      
-      if (exists) {
-        console.log(`✅ Found session file: ${sessionFile}`);
-      } else {
-        console.log(`❌ Session ${sessionId} not found at: ${sessionFile}`);
+      const allDirs = getAllProjectsDirs();
+
+      for (const projectsDir of allDirs) {
+        const sessionFile = path.join(projectsDir, claudeProjectPath, `${sessionId}.jsonl`);
+        console.log(`🔍 Checking for session file: ${sessionFile}`);
+        if (fs.existsSync(sessionFile)) {
+          console.log(`✅ Found session file: ${sessionFile}`);
+          return true;
+        }
       }
-      
-      return exists;
+
+      console.log(`❌ Session ${sessionId} not found in any projects directory`);
+      return false;
     } catch (error) {
       console.error('Error checking session existence:', error);
       return false;
