@@ -53,6 +53,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   search: '🔍',
   reference: '📚',
   ai: '🤖',
+  internal: '🏢',
 };
 
 interface McpPresetMarketProps {
@@ -147,11 +148,27 @@ export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled })
           ...(Object.keys(env).length > 0 ? { env } : {}),
         };
       } else {
+        const headers: Record<string, string> = { ...(preset.headers || {}) };
+        let url = preset.url || '';
+
+        for (const [key, value] of Object.entries(envValues)) {
+          if (key.startsWith('HEADER_')) {
+            const headerName = preset.requiredEnvVars?.find(v => v.key === key)?.label || key.replace('HEADER_', '');
+            headers[headerName] = value;
+          } else if (key.startsWith('URLPARAM_')) {
+            const paramName = preset.requiredEnvVars?.find(v => v.key === key)?.label || key.replace('URLPARAM_', '');
+            const separator = url.includes('?') ? '&' : '?';
+            url = `${url}${separator}${paramName}=${encodeURIComponent(value)}`;
+          } else {
+            url = url.replace(`<${key}>`, value).replace(`<${key.toLowerCase()}>`, value);
+          }
+        }
+
         config = {
           type: 'http',
           source: 'local',
-          url: preset.url,
-          ...(preset.headers ? { headers: preset.headers } : {}),
+          url,
+          ...(Object.keys(headers).length > 0 ? { headers } : {}),
         };
       }
 
