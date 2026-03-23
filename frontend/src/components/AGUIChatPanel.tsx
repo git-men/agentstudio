@@ -46,6 +46,7 @@ import { useRatingTool } from '../hooks/useRatingTool';
 import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
 import { useDispatchIM } from '../hooks/useDispatchIM';
 import { DispatchIMDialog } from './chat/DispatchIMDialog';
+import { useInjectObserver } from '../hooks/useInjectObserver';
 
 
 interface AGUIChatPanelProps {
@@ -122,6 +123,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     const ctxSetAiTyping = useSessionStoreOptional((s) => s.setAiTyping);
     const ctxRemovePendingFrontendTool = useSessionStoreOptional((s) => s.removePendingFrontendTool);
     const ctxSessionId = useSessionStoreOptional((s) => s.sessionId);
+    const ctxLoadSessionMessages = useSessionStoreOptional((s) => s.loadSessionMessages);
 
     // Shared state — always from the shared singleton
     const selectedEngine = useSharedStore((s) => s.selectedEngine);
@@ -456,6 +458,15 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         enabled: !!currentSessionId,
         isNewSession,
         hasSuccessfulResponse
+    });
+
+    // Observe externally injected messages (e.g. WeChat Work replies)
+    useInjectObserver({
+        sessionId: currentSessionId,
+        agentId: agent.id,
+        projectPath,
+        addMessage,
+        loadSessionMessages: isWorkspaceMode ? ctxLoadSessionMessages : undefined,
     });
 
     // Load messages once on mount when a session is already selected (e.g. page
