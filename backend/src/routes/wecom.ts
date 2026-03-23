@@ -184,7 +184,7 @@ router.post('/auth/start', async (req: Request, res: Response) => {
  * generates pigeon callback config.
  */
 router.post('/bind', async (req: Request, res: Response) => {
-  const { project_path, webhook_url } = req.body;
+  const { project_path, webhook_url, binding_name, chat_id, chat_name } = req.body;
 
   if (!project_path || !webhook_url) {
     return res.status(400).json({ error: '缺少必要参数: project_path, webhook_url' });
@@ -287,15 +287,19 @@ router.post('/bind', async (req: Request, res: Response) => {
       `${PIGEON_RELAY}?url=${encodeURIComponent(dispatchCallbackUrl)}` +
       `&env=devcloud&token=${token}&aeskey=${encodingAESKey}&robot_callback_format=json`;
 
-    imBindingService.upsert({
+    const bindingRecord: Parameters<typeof imBindingService.upsert>[0] = {
       platform: 'wecom',
-      name: `${projectName} 企微`,
+      name: binding_name || `${projectName} 企微`,
       project_path,
       project_name: projectName,
       bot_key: botKey,
       a2a_endpoint: a2aEndpoint,
       platform_config: { webhook_url },
-    });
+    };
+    if (chat_id) {
+      bindingRecord.channels = [{ chat_id, chat_name: chat_name || undefined }];
+    }
+    imBindingService.upsert(bindingRecord);
 
     res.json({
       success: true,
