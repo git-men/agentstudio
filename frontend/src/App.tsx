@@ -119,7 +119,8 @@ const AppContent: React.FC = () => {
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={isExtension ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/intro" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
 
           {/* Protected routes */}
