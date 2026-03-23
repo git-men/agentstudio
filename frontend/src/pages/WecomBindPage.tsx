@@ -17,6 +17,7 @@ import { useProjects } from '../hooks/useProjects';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 import { showSuccess, showError } from '../utils/toast';
+import { DashboardShell } from '../components/DashboardShell';
 
 type WizardStep = 'form' | 'auth' | 'processing' | 'result';
 
@@ -241,7 +242,7 @@ export const WecomBindPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-auto">
+    <DashboardShell environmentContext="用户当前所在页面：企业微信绑定向导">
       <div className="flex-1 flex flex-col items-center px-6 py-8">
         {/* Header */}
         <div className="w-full max-w-xl mb-8">
@@ -624,7 +625,7 @@ export const WecomBindPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </DashboardShell>
   );
 };
 

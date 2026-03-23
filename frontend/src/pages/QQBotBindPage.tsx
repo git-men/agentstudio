@@ -13,7 +13,6 @@ import {
   Eye,
   EyeOff,
   Wifi,
-  WifiOff,
   ShieldCheck,
   ExternalLink,
 } from 'lucide-react';
@@ -21,6 +20,7 @@ import { useProjects } from '../hooks/useProjects';
 import { useEnterpriseProfile } from '../hooks/useEnterpriseProfile';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
+import { DashboardShell } from '../components/DashboardShell';
 
 type WizardStep = 'form' | 'auth' | 'processing' | 'result';
 
@@ -40,7 +40,6 @@ interface BindResult {
 interface PreflightData {
   auth: { ready: boolean; name?: string; email?: string };
   tunnel: { connected: boolean; domain: string | null };
-  dispatch: { reachable: boolean; url: string | null };
 }
 
 interface ProcessingStep {
@@ -242,7 +241,7 @@ export const QQBotBindPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-auto">
+    <DashboardShell environmentContext="用户当前所在页面：QQ Bot 绑定向导">
       <div className="flex-1 flex flex-col items-center px-6 py-8">
         {/* Header */}
         <div className="w-full max-w-xl mb-8">
@@ -347,8 +346,8 @@ export const QQBotBindPage: React.FC = () => {
               </div>
             )}
 
-            {/* Dispatch status */}
-            {preflight && preflight.auth.ready && preflight.tunnel.connected && preflight.dispatch.reachable && (
+            {/* Ready status */}
+            {preflight && preflight.auth.ready && preflight.tunnel.connected && (
               <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700/50 rounded-xl">
                 <Wifi className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
@@ -358,24 +357,6 @@ export const QQBotBindPage: React.FC = () => {
                   <p className="text-xs text-green-600 dark:text-green-300 mt-1 font-mono">
                     {preflight.tunnel.domain}.tunnel — {preflight.auth.name || 'Enterprise'}
                   </p>
-                </div>
-              </div>
-            )}
-
-            {preflight && preflight.dispatch.url && !preflight.dispatch.reachable && preflight.auth.ready && (
-              <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700/50 rounded-xl">
-                <WifiOff className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-red-800 dark:text-red-200">
-                    as-dispatch 不可达
-                  </p>
-                  <p className="text-xs text-red-600 dark:text-red-300 mt-1">
-                    无法连接 {preflight.dispatch.url}
-                  </p>
-                  <button onClick={checkPreflight} className="mt-2 flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-800/50 dark:hover:bg-red-700/50 dark:text-red-200 rounded-lg transition-colors">
-                    <RefreshCw className="w-3.5 h-3.5" />
-                    重新检测
-                  </button>
                 </div>
               </div>
             )}
@@ -619,7 +600,7 @@ export const QQBotBindPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </DashboardShell>
   );
 };
 
