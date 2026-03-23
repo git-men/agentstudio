@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '../lib/environment';
+import { closeCurrentWindow } from '../lib/tauriWindows';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAgent, useProjectSessions } from '../hooks/useAgents';
 import { useProjects } from '../hooks/useProjects';
@@ -409,11 +410,11 @@ export const ProjectWorkspacePage: React.FC = () => {
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       {isTauri() && (
         <button
-          onClick={() => navigate('/dashboard')}
+          onClick={() => closeCurrentWindow()}
           className="fixed top-3 left-3 z-50 flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-200/80 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 backdrop-blur-sm transition-colors"
-          title="返回工作台"
+          title="关闭窗口"
         >
-          ← 返回
+          ✕ 关闭
         </button>
       )}
       <WorkspaceLayout

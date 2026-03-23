@@ -80,6 +80,9 @@ extension/sidepanel/
 extension-pure/sidepanel/
 extension-pure/icons/
 
+# Rust build output
+desktop/src-tauri/target/
+
 # Runtime project data
 projects/
 backend/e2e-tests/.argusai/

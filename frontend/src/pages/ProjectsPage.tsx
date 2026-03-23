@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
-import { isTauri } from '../lib/environment';
+import { openProjectWindow } from '../lib/tauriWindows';
 import {
   Plus,
   Search,
@@ -243,17 +243,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   );
 };
 
-const openProjectWindow = (projectPath: string) => {
-  const params = new URLSearchParams();
-  params.set('project', projectPath);
-  const url = `/project-workspace?${params.toString()}`;
-  if (isTauri()) {
-    window.location.href = url;
-  } else {
-    const windowName = `project_${projectPath.replace(/[^a-zA-Z0-9]/g, '_')}`;
-    window.open(url, windowName);
-  }
-};
+// openProjectWindow is imported from tauriWindows.ts
 
 export const ProjectsPage: React.FC = () => {
   const { t } = useTranslation('pages');
