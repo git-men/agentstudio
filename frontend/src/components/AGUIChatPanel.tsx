@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
-import { Clock, Plus, RefreshCw, ChevronDown, MapPin } from 'lucide-react';
+import { Clock, Plus, RefreshCw, ChevronDown, MapPin, Forward, Check, Loader2, AlertCircle } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
 import { useSharedStore } from '../stores/useSharedStore';
 import { SessionStoreContext, useSessionStoreOptional, useIsWorkspaceMode } from '../stores/SessionStoreContext';
@@ -44,6 +44,8 @@ import {
 import useEngine from '../hooks/useEngine';
 import { useRatingTool } from '../hooks/useRatingTool';
 import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
+import { useDispatchIM } from '../hooks/useDispatchIM';
+import { DispatchIMDialog } from './chat/DispatchIMDialog';
 
 
 interface AGUIChatPanelProps {
@@ -149,6 +151,31 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         [rawSetAiTyping, isWorkspaceMode, ctxSetStatus],
     );
     const removePendingFrontendTool = isWorkspaceMode ? ctxRemovePendingFrontendTool : facadeState.removePendingFrontendTool;
+
+    // IM Dispatch state
+    const { dispatchToIM, getStatus: getDispatchStatus, resetStatus: resetDispatchStatus } = useDispatchIM();
+    const [dispatchDialog, setDispatchDialog] = useState<{ messageId: string; content: string } | null>(null);
+
+    const handleForwardClick = useCallback((messageId: string, content: string) => {
+        resetDispatchStatus(messageId);
+        setDispatchDialog({ messageId, content });
+    }, [resetDispatchStatus]);
+
+    const handleDispatchConfirm = useCallback(async (botKey: string, chatId: string) => {
+        if (!dispatchDialog || !currentSessionId) return;
+        await dispatchToIM(dispatchDialog.messageId, {
+            sessionId: currentSessionId,
+            messageContent: dispatchDialog.content,
+            botKey,
+            chatId,
+            projectName: projectPath?.split('/').pop(),
+        });
+        setDispatchDialog(null);
+    }, [dispatchDialog, currentSessionId, projectPath, dispatchToIM]);
+
+    const handleDispatchCancel = useCallback(() => {
+        setDispatchDialog(null);
+    }, []);
 
     // Auto-send ref for initial message
     const shouldAutoSendRef = useRef(false);
@@ -816,8 +843,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 }
             }
 
+            const msgDispatch = message.role === 'assistant' ? getDispatchStatus(message.id) : null;
+            const plainText = message.content || '';
+
             return (
-                <div key={message.id} className="px-4">
+                <div key={message.id} className="px-4 group/msg">
                     {envLabel && (
                         <div className="flex items-center gap-1 mb-1 justify-end">
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
@@ -839,10 +869,36 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             onFrontendToolCancel={handleFrontendToolCancel}
                         />
                     </div>
+
+                    {message.role === 'assistant' && plainText && (
+                        <div className="flex items-center gap-2 mt-1 min-h-[20px]">
+                            {msgDispatch?.status === 'sent' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title={`已转发 (${msgDispatch.shortId})`}>
+                                    <Check size={12} /> 已转发
+                                </span>
+                            ) : msgDispatch?.status === 'sending' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                    <Loader2 size={12} className="animate-spin" /> 发送中…
+                                </span>
+                            ) : msgDispatch?.status === 'error' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-red-500" title={msgDispatch.error}>
+                                    <AlertCircle size={12} /> 转发失败
+                                </span>
+                            ) : null}
+
+                            <button
+                                onClick={() => handleForwardClick(message.id, plainText)}
+                                className="opacity-0 group-hover/msg:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400"
+                                title="转发到企业微信"
+                            >
+                                <Forward size={13} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             );
         });
-    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel]);
+    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel, getDispatchStatus, handleForwardClick]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">
@@ -1104,6 +1160,17 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                 // Screen capture support
                 processImageFile={processImageFile}
             />
+
+            {dispatchDialog && (
+                <DispatchIMDialog
+                    isOpen
+                    messagePreview={dispatchDialog.content}
+                    dispatchStatus={getDispatchStatus(dispatchDialog.messageId).status}
+                    error={getDispatchStatus(dispatchDialog.messageId).error}
+                    onConfirm={handleDispatchConfirm}
+                    onCancel={handleDispatchCancel}
+                />
+            )}
         </div>
     );
 };

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
+import { authFetch } from '../lib/authFetch';
 import type { DispatchIMRequest, DispatchIMResponse, DispatchStatus } from '../types/dispatch';
 
 interface MessageDispatchState {
@@ -22,7 +23,7 @@ export function useDispatchIM() {
 
     try {
       abortRef.current = new AbortController();
-      const resp = await fetch('/api/agui/dispatch-im', {
+      const resp = await authFetch('/api/agui/dispatch-im', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),

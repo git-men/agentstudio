@@ -677,7 +677,13 @@ const app: express.Express = express();
   app.use('/api/enterprise', authMiddleware, enterpriseRouter); // Enterprise auth management
   app.use('/api/im-bindings', authMiddleware, imBindingsRouter); // IM binding records
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
-  app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
+  app.use('/api/agui', (req, res, next) => {
+    // Skip auth for session inject — service-to-service calls via tunnel proxy
+    if (req.method === 'POST' && /^\/sessions\/[^/]+\/inject$/.test(req.path)) {
+      return next();
+    }
+    return authMiddleware(req, res, next);
+  }, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service
   app.use('/api/engine', engineRouter); // Engine configuration (public, no auth required)
   app.use('/api/rules', authMiddleware, rulesRouter); // Rules management (both Claude and Cursor)

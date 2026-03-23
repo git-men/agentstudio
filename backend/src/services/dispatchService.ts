@@ -70,7 +70,9 @@ export async function sendToIM(params: DispatchIMParams): Promise<DispatchIMResu
   }
 
   const { baseUrl, headers } = conn;
-  const url = `${baseUrl}/api/im/send`;
+  // Upgrade HTTP to HTTPS to avoid 307 redirect stripping Authorization headers
+  const effectiveBaseUrl = baseUrl.replace(/^http:\/\//, 'https://');
+  const url = `${effectiveBaseUrl}/api/im/send`;
 
   const body = {
     message_content: params.messageContent,
@@ -90,11 +92,8 @@ export async function sendToIM(params: DispatchIMParams): Promise<DispatchIMResu
       headers,
       body: JSON.stringify(body),
       signal: controller.signal,
+      tls: { rejectUnauthorized: false },
     };
-
-    if (url.startsWith('https://')) {
-      fetchOptions.tls = { rejectUnauthorized: false };
-    }
 
     const response = await fetch(url, fetchOptions);
     clearTimeout(timeout);
