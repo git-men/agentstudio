@@ -23,36 +23,53 @@ export interface SessionRef {
  * Supports a subset sufficient for frontend tool parameter definitions:
  * string, number, boolean, array, object, enum.
  */
+function jsonSchemaPropertyToZod(def: Record<string, unknown>): z.ZodTypeAny {
+  switch (def.type) {
+    case 'string':
+      return def.enum
+        ? z.enum(def.enum as [string, ...string[]])
+        : z.string();
+    case 'number':
+    case 'integer':
+      return z.number();
+    case 'boolean':
+      return z.boolean();
+    case 'array': {
+      const items = def.items as Record<string, unknown> | undefined;
+      const itemSchema = items ? jsonSchemaPropertyToZod(items) : z.any();
+      return z.array(itemSchema);
+    }
+    case 'object': {
+      const props = def.properties as Record<string, unknown> | undefined;
+      if (props) {
+        const objShape: Record<string, z.ZodTypeAny> = {};
+        const objRequired = new Set(
+          (def.required as string[] | undefined) || [],
+        );
+        for (const [k, v] of Object.entries(props)) {
+          let propField = jsonSchemaPropertyToZod(v as Record<string, unknown>);
+          const propDef = v as Record<string, unknown>;
+          if (propDef.description)
+            propField = propField.describe(propDef.description as string);
+          if (!objRequired.has(k)) propField = propField.optional();
+          objShape[k] = propField;
+        }
+        return z.object(objShape);
+      }
+      return z.record(z.string(), z.any());
+    }
+    default:
+      return z.any();
+  }
+}
+
 function jsonSchemaToZod(params: FrontendToolDefinition['parameters']): z.ZodTypeAny {
   const shape: Record<string, z.ZodTypeAny> = {};
   const required = new Set(params.required || []);
 
   for (const [key, rawDef] of Object.entries(params.properties)) {
     const def = rawDef as Record<string, unknown>;
-    let field: z.ZodTypeAny;
-
-    switch (def.type) {
-      case 'string':
-        field = def.enum
-          ? z.enum(def.enum as [string, ...string[]])
-          : z.string();
-        break;
-      case 'number':
-      case 'integer':
-        field = z.number();
-        break;
-      case 'boolean':
-        field = z.boolean();
-        break;
-      case 'array':
-        field = z.array(z.any());
-        break;
-      case 'object':
-        field = z.record(z.string(), z.any());
-        break;
-      default:
-        field = z.any();
-    }
+    let field = jsonSchemaPropertyToZod(def);
 
     if (def.description) field = field.describe(def.description as string);
     if (!required.has(key)) field = field.optional();

@@ -1,0 +1,119 @@
+name: 定时任务 CRUD 生命周期
+sequential: true
+
+cases:
+  - name: "获取定时任务列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取调度器状态"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建定时任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-cron-test"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Run test task"
+        schedule:
+          type: "cron"
+          cronExpression: "0 0 * * *"
+        enabled: false
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      task_id: "id"
+
+  - name: "获取已创建的定时任务"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        name: "e2e-cron-test"
+
+  - name: "更新定时任务名称"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-cron-test-updated"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Run test task"
+        schedule:
+          type: "cron"
+          cronExpression: "0 0 * * *"
+        enabled: false
+    expect:
+      status: 200
+
+  - name: "切换定时任务启用状态"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}/toggle"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "删除定时任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取任务执行器统计"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/task-executor/stats"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "获取任务执行器健康状态"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/task-executor/health"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+teardown:
+  - name: "清理定时任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

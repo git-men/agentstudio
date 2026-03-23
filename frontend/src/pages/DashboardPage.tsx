@@ -1,10 +1,10 @@
 import React from 'react';
-import { ClassicDashboard } from './ClassicDashboard';
+import { NewDashboard } from './NewDashboard';
 
 /**
- * Dashboard page — always renders the classic dashboard layout.
- * Meta Agent is now available as a global floating widget via Layout.
+ * Dashboard page — new dashboard with Agent grid + embedded Meta Agent panel.
+ * Classic dashboard preserved as ClassicDashboard.tsx if rollback is needed.
  */
 export const DashboardPage: React.FC = () => {
-  return <ClassicDashboard />;
+  return <NewDashboard />;
 };

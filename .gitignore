@@ -65,6 +65,7 @@ specs/
 # Tauri signing keys (private key must never be committed)
 desktop/.tauri/
 
+.codebuddy/
 # A2A local configurations
 .a2a/
 **/.a2a/
@@ -81,3 +82,4 @@ extension-pure/icons/
 
 # Runtime project data
 projects/
+backend/e2e-tests/.argusai/

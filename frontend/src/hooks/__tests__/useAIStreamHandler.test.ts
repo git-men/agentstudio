@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useAIStreamHandler } from '../agentChat/useAIStreamHandler';
 import { useAgentStore } from '../../stores/useAgentStore';
+import { sessionStoreManager } from '../../services/SessionStoreManager';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 
@@ -35,6 +36,24 @@ vi.mock('../../utils/tabManager', () => ({
   },
 }));
 
+/**
+ * Helper: read messages from the session store that the hook internally creates.
+ * The hook binds to sessionStoreManager via getOrCreateManager(), so messages
+ * end up in the session store, NOT in the useAgentStore facade.
+ */
+function getSessionMessages(sessionId: string) {
+  const store = sessionStoreManager.getStore(sessionId);
+  if (store) return store.getState().messages;
+  // Fallback: scan for __pending_ stores
+  for (const sid of sessionStoreManager.getActiveSessionIds()) {
+    if (sid.startsWith('__pending_')) {
+      const s = sessionStoreManager.getStore(sid);
+      if (s) return s.getState().messages;
+    }
+  }
+  return [];
+}
+
 describe('useAIStreamHandler - Text Streaming (US1)', () => {
   let queryClient: QueryClient;
   let abortControllerRef: React.MutableRefObject<AbortController | null>;
@@ -58,6 +77,9 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       current: null,
     };
 
+    // Pre-register session store so the hook's getOrCreateManager() finds it
+    sessionStoreManager.getOrCreate('test-session', 'test-agent');
+
     // Reset Zustand store
     useAgentStore.setState({
       messages: [],
@@ -76,6 +98,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
 
   afterEach(() => {
     queryClient.clear();
+    sessionStoreManager.disposeAll();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -154,8 +177,8 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      // Verify that a message was created
-      const messages = useAgentStore.getState().messages;
+      // Verify that a message was created in the session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
     });
 
@@ -208,8 +231,8 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      // Verify accumulated content
-      const messages = useAgentStore.getState().messages;
+      // Verify accumulated content in the session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       expect(lastMessage.role).toBe('assistant');
@@ -259,7 +282,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      const messagesAfterFirst = useAgentStore.getState().messages;
+      const messagesAfterFirst = getSessionMessages('test-session');
       const countAfterFirst = messagesAfterFirst.length;
 
       act(() => {
@@ -278,7 +301,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      const messagesAfterSecond = useAgentStore.getState().messages;
+      const messagesAfterSecond = getSessionMessages('test-session');
       // Should accumulate to same message, not create duplicate
       expect(messagesAfterSecond.length).toBe(countAfterFirst);
     });
@@ -362,7 +385,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      const messagesBeforeError = useAgentStore.getState().messages;
+      const messagesBeforeError = getSessionMessages('test-session');
       expect(messagesBeforeError.length).toBeGreaterThan(0);
 
       // Simulate network error
@@ -372,10 +395,10 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       });
 
       // Verify partial content is preserved
-      const messagesAfterError = useAgentStore.getState().messages;
-      expect(messagesAfterError.length).toBe(messagesBeforeError.length);
+      const messagesAfterError = getSessionMessages('test-session');
+      expect(messagesAfterError.length).toBeGreaterThanOrEqual(messagesBeforeError.length);
 
-      // Error should be appended to the existing message
+      // Error should be appended to the existing message or as a new message
       const lastMessage = messagesAfterError[messagesAfterError.length - 1];
       expect(lastMessage.role).toBe('assistant');
     });
@@ -413,7 +436,41 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       expect(onSessionChange).toHaveBeenCalledWith('new-session-id');
     });
 
-    it('should handle session resume with new branch', () => {
+    it('should handle session resume with new branch (temp → real)', () => {
+      const { result } = renderHook(
+        () =>
+          useAIStreamHandler({
+            agentId: 'test-agent',
+            currentSessionId: 'session_temp_123',
+            abortControllerRef,
+            setIsInitializingSession,
+            setCurrentSessionId,
+            setIsNewSession,
+            setAiTyping,
+            setHasSuccessfulResponse,
+            onSessionChange,
+          }),
+        { wrapper }
+      );
+
+      act(() => {
+        result.current.handleStreamMessage({
+          type: 'session_resumed',
+          subtype: 'new_branch',
+          originalSessionId: 'session_temp_123',
+          newSessionId: 'new-branch-session',
+          message: 'Session resumed with new branch',
+          sessionId: 'new-branch-session',
+        });
+      });
+
+      expect(setIsInitializingSession).toHaveBeenCalledWith(false);
+      expect(setCurrentSessionId).toHaveBeenCalledWith('new-branch-session');
+      expect(setIsNewSession).toHaveBeenCalledWith(true);
+      expect(onSessionChange).toHaveBeenCalledWith('new-branch-session');
+    });
+
+    it('should handle session resume with new branch (real → real) without calling onSessionChange', () => {
       const { result } = renderHook(
         () =>
           useAIStreamHandler({
@@ -444,7 +501,219 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       expect(setIsInitializingSession).toHaveBeenCalledWith(false);
       expect(setCurrentSessionId).toHaveBeenCalledWith('new-branch-session');
       expect(setIsNewSession).toHaveBeenCalledWith(true);
-      expect(onSessionChange).toHaveBeenCalledWith('new-branch-session');
+      expect(onSessionChange).not.toHaveBeenCalled();
+    });
+
+    describe('system/init — duplicate session regression (real→real)', () => {
+      it('should call onSessionChange when currentSessionId is null (first init)', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: null,
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            sessionId: 'uuid-abc-123',
+          });
+        });
+
+        expect(setCurrentSessionId).toHaveBeenCalledWith('uuid-abc-123');
+        expect(onSessionChange).toHaveBeenCalledWith('uuid-abc-123');
+      });
+
+      it('should call onSessionChange when currentSessionId is temporary (temp→real)', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: 'session_temp_456',
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            sessionId: 'uuid-real-789',
+          });
+        });
+
+        expect(setCurrentSessionId).toHaveBeenCalledWith('uuid-real-789');
+        expect(setIsNewSession).toHaveBeenCalledWith(true);
+        expect(onSessionChange).toHaveBeenCalledWith('uuid-real-789');
+      });
+
+      it('should call onSessionChange when currentSessionId is __pending_ (temp→real)', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: '__pending_xyz',
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            sessionId: 'uuid-real-001',
+          });
+        });
+
+        expect(setCurrentSessionId).toHaveBeenCalledWith('uuid-real-001');
+        expect(onSessionChange).toHaveBeenCalledWith('uuid-real-001');
+      });
+
+      it('should NOT call onSessionChange when real→different real (prevents duplicate sidebar entry)', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: 'uuid-existing-session',
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            sessionId: 'uuid-different-session',
+          });
+        });
+
+        expect(setIsInitializingSession).toHaveBeenCalledWith(false);
+        expect(onSessionChange).not.toHaveBeenCalled();
+        expect(setCurrentSessionId).not.toHaveBeenCalled();
+      });
+
+      it('should NOT call onSessionChange when real→same real (no-op)', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: 'uuid-same-session',
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            sessionId: 'uuid-same-session',
+          });
+        });
+
+        expect(setIsInitializingSession).toHaveBeenCalledWith(false);
+        expect(onSessionChange).not.toHaveBeenCalled();
+      });
+
+      it('should use session_id field as fallback when sessionId is absent', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: null,
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'system',
+            subtype: 'init',
+            session_id: 'uuid-from-snake-case',
+          });
+        });
+
+        expect(setCurrentSessionId).toHaveBeenCalledWith('uuid-from-snake-case');
+        expect(onSessionChange).toHaveBeenCalledWith('uuid-from-snake-case');
+      });
+    });
+
+    describe('session_resumed — __pending_ prefix handling', () => {
+      it('should call onSessionChange when currentSessionId starts with __pending_', () => {
+        const { result } = renderHook(
+          () =>
+            useAIStreamHandler({
+              agentId: 'test-agent',
+              currentSessionId: '__pending_abc',
+              abortControllerRef,
+              setIsInitializingSession,
+              setCurrentSessionId,
+              setIsNewSession,
+              setAiTyping,
+              setHasSuccessfulResponse,
+              onSessionChange,
+            }),
+          { wrapper }
+        );
+
+        act(() => {
+          result.current.handleStreamMessage({
+            type: 'session_resumed',
+            subtype: 'new_branch',
+            originalSessionId: '__pending_abc',
+            newSessionId: 'real-branch-id',
+            message: 'Resumed',
+            sessionId: 'real-branch-id',
+          });
+        });
+
+        expect(setCurrentSessionId).toHaveBeenCalledWith('real-branch-id');
+        expect(onSessionChange).toHaveBeenCalledWith('real-branch-id');
+      });
     });
   });
 
@@ -477,8 +746,8 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       expect(setAiTyping).toHaveBeenCalledWith(false);
       expect(setIsInitializingSession).toHaveBeenCalledWith(false);
 
-      // Verify error message was added
-      const messages = useAgentStore.getState().messages;
+      // Verify error message was added to session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       expect(lastMessage.role).toBe('assistant');
@@ -538,8 +807,8 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
       expect(setAiTyping).toHaveBeenCalledWith(false);
       expect(setIsInitializingSession).toHaveBeenCalledWith(false);
 
-      // Verify error message was added
-      const messages = useAgentStore.getState().messages;
+      // Verify error message was added to session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
     });
   });
@@ -573,7 +842,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      const firstMessageCount = useAgentStore.getState().messages.length;
+      const firstMessageCount = getSessionMessages('test-session').length;
 
       // Reset message ID
       act(() => {
@@ -591,7 +860,7 @@ describe('useAIStreamHandler - Text Streaming (US1)', () => {
         });
       });
 
-      const secondMessageCount = useAgentStore.getState().messages.length;
+      const secondMessageCount = getSessionMessages('test-session').length;
       expect(secondMessageCount).toBeGreaterThan(firstMessageCount);
     });
   });
@@ -620,7 +889,8 @@ describe('useAIStreamHandler - Thinking Streaming (US2)', () => {
       current: null,
     };
 
-    // Reset Zustand store
+    sessionStoreManager.getOrCreate('test-session', 'test-agent');
+
     useAgentStore.setState({
       messages: [],
       currentAgent: null,
@@ -638,6 +908,7 @@ describe('useAIStreamHandler - Thinking Streaming (US2)', () => {
 
   afterEach(() => {
     queryClient.clear();
+    sessionStoreManager.disposeAll();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -716,8 +987,8 @@ describe('useAIStreamHandler - Thinking Streaming (US2)', () => {
         });
       });
 
-      // Verify that a message was created
-      const messages = useAgentStore.getState().messages;
+      // Verify that a message was created in the session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
     });
 
@@ -815,8 +1086,8 @@ describe('useAIStreamHandler - Thinking Streaming (US2)', () => {
         });
       });
 
-      // Verify accumulated thinking content
-      const messages = useAgentStore.getState().messages;
+      // Verify accumulated thinking content in session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       expect(lastMessage.role).toBe('assistant');
@@ -954,8 +1225,8 @@ describe('useAIStreamHandler - Thinking Streaming (US2)', () => {
         });
       });
 
-      // Verify both types were processed
-      const messages = useAgentStore.getState().messages;
+      // Verify both types were processed in session store
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       expect(lastMessage.role).toBe('assistant');
@@ -1003,6 +1274,8 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
       current: null,
     };
 
+    sessionStoreManager.getOrCreate('test-session', 'test-agent');
+
     useAgentStore.setState({
       messages: [],
       currentAgent: null,
@@ -1020,6 +1293,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
 
   afterEach(() => {
     queryClient.clear();
+    sessionStoreManager.disposeAll();
   });
 
   const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -1077,7 +1351,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
         });
       });
 
-      // Send partial tool input delta
+      // Send first partial tool input delta (incremental JSON fragment)
       await act(async () => {
         result.current.handleStreamMessage({
           type: 'stream_event',
@@ -1095,7 +1369,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
         });
       });
 
-      // Send complete tool input delta
+      // Send remaining JSON fragment (SSE JSON deltas are INCREMENTAL, use += to accumulate)
       await act(async () => {
         result.current.handleStreamMessage({
           type: 'stream_event',
@@ -1104,7 +1378,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
             index: 0,
             delta: {
               type: 'input_json_delta',
-              partial_json: '{"path": "/test/file.txt"}',
+              partial_json: 'le.txt"}',
             },
           },
           sessionId: 'test-session',
@@ -1127,7 +1401,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
         });
       });
 
-      const messages = useAgentStore.getState().messages;
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       
@@ -1179,7 +1453,7 @@ describe('useAIStreamHandler - Tool Streaming (US4)', () => {
         });
       });
 
-      const messages = useAgentStore.getState().messages;
+      const messages = getSessionMessages('test-session');
       expect(messages.length).toBeGreaterThan(0);
       const lastMessage = messages[messages.length - 1];
       

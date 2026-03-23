@@ -10,9 +10,11 @@
  */
 
 import React, { useEffect, useState, useRef } from 'react';
-import { LAVSClient, LAVSManifest, LAVSViewComponent } from '../lavs';
+import { LAVSClient, LAVSViewComponent } from 'lavs-client';
+import type { LAVSManifest } from 'lavs-client';
 import type { AgentConfig } from '../types';
 import { useAgentStore } from '../stores/useAgentStore';
+import { eventBus, EVENTS } from '../utils/eventBus';
 
 interface LAVSViewContainerProps {
   agent: AgentConfig;
@@ -31,6 +33,7 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const lavsClientRef = useRef<LAVSClient | null>(null);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const messageHandlerCleanupRef = useRef<(() => void) | null>(null);
 
   // Subscribe to tool execution notifications from store
   const lastToolExecution = useAgentStore((state) => state.lastToolExecution);
@@ -75,6 +78,14 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
 
     if (!manifest || !manifest.view || !containerRef.current) return;
 
+    // Clear previous content to avoid duplicate iframes on re-runs
+    const container = containerRef.current;
+    container.innerHTML = '';
+    iframeRef.current = null;
+    setComponentLoaded(false);
+
+    let cancelled = false;
+
     const loadComponent = async () => {
       try {
         const { component } = manifest.view!;
@@ -82,8 +93,6 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
 
         switch (component.type) {
           case 'local': {
-            // For local components, we'll load them as iframe
-            // This is a PoC approach - in production, you'd want proper sandboxing
             await loadLocalComponent(component.path);
             break;
           }
@@ -94,15 +103,12 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
           }
 
           case 'npm': {
-            // For npm packages, you'd typically bundle them with your app
-            // or use dynamic import if configured in your build system
             console.warn('[LAVS] NPM component loading not yet implemented');
             setError('NPM component loading not yet implemented');
             break;
           }
 
           case 'inline': {
-            // Create component from inline code
             loadInlineComponent(component.code);
             break;
           }
@@ -111,14 +117,22 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
             throw new Error(`Unknown component type: ${(component as any).type}`);
         }
 
-        setComponentLoaded(true);
+        if (!cancelled) setComponentLoaded(true);
       } catch (err: any) {
         console.error('[LAVS] Failed to load component:', err);
-        setError(err.message || 'Failed to load view component');
+        if (!cancelled) setError(err.message || 'Failed to load view component');
       }
     };
 
     loadComponent();
+
+    return () => {
+      cancelled = true;
+      container.innerHTML = '';
+      iframeRef.current = null;
+      messageHandlerCleanupRef.current?.();
+      messageHandlerCleanupRef.current = null;
+    };
   }, [manifest]);
 
   // Inject LAVS client into component after it's loaded
@@ -155,6 +169,31 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     }
   }, [lastToolExecution, componentLoaded]);
 
+  // Fallback: refresh LAVS view when AI response completes (covers all tool execution paths)
+  useEffect(() => {
+    if (!componentLoaded || !iframeRef.current) return;
+
+    const handleResponseComplete = () => {
+      if (iframeRef.current?.contentWindow) {
+        const message = {
+          type: 'lavs-agent-action',
+          action: {
+            type: 'tool_executed',
+            tool: '__lavs_refresh__',
+            timestamp: Date.now(),
+          }
+        };
+        console.log('[LAVS] AI response complete — sending refresh to iframe');
+        iframeRef.current.contentWindow.postMessage(message, '*');
+      }
+    };
+
+    eventBus.on(EVENTS.AI_RESPONSE_COMPLETE, handleResponseComplete);
+    return () => {
+      eventBus.off(EVENTS.AI_RESPONSE_COMPLETE, handleResponseComplete);
+    };
+  }, [componentLoaded]);
+
   /**
    * Load local component as iframe
    */
@@ -179,47 +218,49 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     iframe.style.border = 'none';
     iframe.setAttribute('data-lavs-component', 'true');
 
+    // Register the postMessage bridge BEFORE appending the iframe to the DOM.
+    // This prevents a race condition: the iframe's module script runs before the
+    // load event fires, so it may call window.parent.postMessage('lavs-call')
+    // while the parent has not yet set up its listener. Moving the listener here
+    // ensures no messages are lost.
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data.type === 'lavs-call') {
+        if (!lavsClientRef.current) return;
+        lavsClientRef.current.call(event.data.endpoint, event.data.input)
+          .then(result => {
+            iframe.contentWindow?.postMessage({
+              type: 'lavs-result',
+              id: event.data.id,
+              result,
+            }, '*');
+          })
+          .catch(error => {
+            iframe.contentWindow?.postMessage({
+              type: 'lavs-error',
+              id: event.data.id,
+              error: error.message,
+            }, '*');
+          });
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    messageHandlerCleanupRef.current = () => window.removeEventListener('message', handleMessage);
+
     console.log('[LAVS] Iframe created, appending to DOM');
 
-    // Set up load handlers BEFORE appending to DOM
     const loadPromise = new Promise<void>((resolve, reject) => {
       iframe.onload = () => {
         console.log('[LAVS] Iframe loaded successfully');
-        // Inject LAVS client into iframe
-        if (iframe.contentWindow && lavsClientRef.current) {
-          // Create a message handler for cross-frame communication
-          const handleMessage = (event: MessageEvent) => {
-            if (event.data.type === 'lavs-call') {
-              // Forward LAVS calls from iframe to client
-              lavsClientRef.current!.call(event.data.endpoint, event.data.input)
-                .then(result => {
-                  iframe.contentWindow!.postMessage({
-                    type: 'lavs-result',
-                    id: event.data.id,
-                    result,
-                  }, '*');
-                })
-                .catch(error => {
-                  iframe.contentWindow!.postMessage({
-                    type: 'lavs-error',
-                    id: event.data.id,
-                    error: error.message,
-                  }, '*');
-                });
-            }
-          };
-
-          window.addEventListener('message', handleMessage);
-          resolve();
-        }
+        resolve();
       };
       iframe.onerror = (err) => {
         console.error('[LAVS] Iframe failed to load', err);
+        window.removeEventListener('message', handleMessage);
         reject(err);
       };
     });
 
-    // Add iframe to DOM FIRST (this triggers loading)
+    // Add iframe to DOM (this triggers loading)
     containerRef.current.appendChild(iframe);
     console.log('[LAVS] Iframe appended to DOM, waiting for load...');
 
@@ -227,7 +268,12 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     iframeRef.current = iframe;
 
     // Wait for iframe to load
-    await loadPromise;
+    try {
+      await loadPromise;
+    } catch (err) {
+      // handleMessage already removed on onerror; re-throw to caller
+      throw err;
+    }
   };
 
   /**

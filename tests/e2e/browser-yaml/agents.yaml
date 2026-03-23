@@ -1,0 +1,139 @@
+name: "Agent 管理界面"
+description: "测试 Agent 列表、搜索和创建功能"
+
+variables:
+  test_agent_id: "e2e-yaml-{{timestamp}}"
+
+setup:
+  - name: "注入认证令牌"
+    browser:
+      action: setLocalStorage
+      storage:
+        auth-storage: '{"state":{"token":"{{config.auth_header}}","authenticated":true},"version":0}'
+  - name: "进入仪表盘"
+    browser:
+      action: goto
+      url: "/dashboard"
+  - name: "等待加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+cases:
+  - name: "Agent 列表页加载"
+    browser:
+      action: goto
+      url: "/agents"
+
+  - name: "等待页面加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "验证 Agent 管理标题可见"
+    browser:
+      action: waitForSelector
+      selector: "h1:has-text('Agent Management')"
+      timeout: "10s"
+
+  - name: "验证搜索框和创建按钮"
+    browser:
+      action: waitForSelector
+      selector: "input[placeholder*='Search'], input[placeholder*='搜索']"
+    expect:
+      page:
+        visible:
+          - "button:has-text('Create Assistant'), button:has-text('创建助手')"
+
+  - name: "搜索不存在的 Agent"
+    browser:
+      action: fill
+      selector: "input[placeholder*='Search'], input[placeholder*='搜索']"
+      value: "nonexistent-agent-xyz-12345"
+
+  - name: "等待搜索结果"
+    delay: "500ms"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+
+  - name: "验证显示无结果提示"
+    browser:
+      action: waitForSelector
+      selector: "text=/No matching|没有找到/i"
+      timeout: "5s"
+
+  - name: "清空搜索恢复列表"
+    browser:
+      action: fill
+      selector: "input[placeholder*='Search'], input[placeholder*='搜索']"
+      value: ""
+
+  - name: "等待列表恢复"
+    delay: "500ms"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+    expect:
+      page:
+        hidden:
+          - "text=/No matching|没有找到/i"
+
+  - name: "打开创建助手对话框"
+    browser:
+      action: click
+      selector: "button:has-text('Create Assistant'), button:has-text('创建助手')"
+
+  - name: "等待创建对话框出现"
+    browser:
+      action: waitForSelector
+      selector: ".fixed.inset-0"
+      timeout: "5s"
+
+  - name: "填写 Agent ID"
+    browser:
+      action: fill
+      selector: ".fixed.inset-0 label:has-text('ID') + div input, .fixed.inset-0 label:has-text('ID') ~ input"
+      value: "{{test_agent_id}}"
+
+  - name: "填写 Agent 名称"
+    browser:
+      action: fill
+      selector: ".fixed.inset-0 label:has-text('名称') + div input, .fixed.inset-0 label:has-text('名称') ~ input"
+      value: "YAML Browser Test Agent"
+
+  - name: "填写 Agent 描述"
+    browser:
+      action: fill
+      selector: ".fixed.inset-0 label:has-text('描述') + div textarea, .fixed.inset-0 label:has-text('描述') ~ textarea"
+      value: "Created by YAML browser test"
+
+  - name: "点击保存"
+    browser:
+      action: click
+      selector: ".fixed.inset-0 button:has-text('保存'), .fixed.inset-0 button:has-text('Save')"
+
+  - name: "等待对话框关闭"
+    delay: "2s"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+    expect:
+      page:
+        hidden:
+          - ".fixed.inset-0"
+
+  - name: "验证新 Agent 出现在列表中"
+    browser:
+      action: waitForSelector
+      selector: "text=YAML Browser Test Agent"
+      timeout: "10s"
+
+teardown:
+  - name: "通过 API 清理测试 Agent"
+    request:
+      method: DELETE
+      path: "/api/agents/{{test_agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

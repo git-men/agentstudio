@@ -1,0 +1,198 @@
+/**
+ * MCP Admin Auto-Bootstrap
+ *
+ * Automatically configures the agentstudio-admin MCP server on startup:
+ * 1. Creates an admin API key if none exists
+ * 2. Adds agentstudio-admin to the native MCP server config
+ *
+ * This ensures the agentstudio-admin MCP is available out-of-the-box
+ * for agents (e.g., meta-agent) that need to manage AgentStudio
+ * configuration programmatically.
+ */
+
+import * as fs from 'fs';
+import * as path from 'path';
+import { generateAdminApiKey, listAdminApiKeys } from './adminApiKeyService.js';
+import { MCP_SERVER_CONFIG_FILE } from '../../config/paths.js';
+import { getMcpAdminServer } from './mcpAdminServer.js';
+
+const SYSTEM_KEY_DESCRIPTION = 'System Auto-Bootstrap (agentstudio-admin)';
+const SERVER_NAME = 'agentstudio-admin';
+
+interface McpServerEntry {
+  type: string;
+  url?: string;
+  headers?: Record<string, string>;
+  source?: string;
+  [key: string]: any;
+}
+
+interface NativeMcpConfig {
+  mcpServers: Record<string, McpServerEntry>;
+}
+
+function readNativeConfig(): { config: NativeMcpConfig; fileExisted: boolean } {
+  if (!fs.existsSync(MCP_SERVER_CONFIG_FILE)) {
+    return { config: { mcpServers: {} }, fileExisted: false };
+  }
+
+  let content: string;
+  try {
+    content = fs.readFileSync(MCP_SERVER_CONFIG_FILE, 'utf-8');
+  } catch (error) {
+    console.error(`[MCP Admin Bootstrap] Failed to read ${MCP_SERVER_CONFIG_FILE}:`, error);
+    return { config: { mcpServers: {} }, fileExisted: true };
+  }
+
+  try {
+    const parsed = JSON.parse(content);
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      parsed.mcpServers !== null &&
+      typeof parsed.mcpServers === 'object' &&
+      !Array.isArray(parsed.mcpServers)
+    ) {
+      return { config: parsed as NativeMcpConfig, fileExisted: true };
+    }
+    console.warn(
+      `[MCP Admin Bootstrap] Config file has unexpected structure (mcpServers type: ${
+        parsed?.mcpServers === null ? 'null' : typeof parsed?.mcpServers
+      }), treating as empty`
+    );
+    return { config: { mcpServers: {} }, fileExisted: true };
+  } catch (error) {
+    console.error(`[MCP Admin Bootstrap] Failed to parse ${MCP_SERVER_CONFIG_FILE}:`, error);
+    return { config: { mcpServers: {} }, fileExisted: true };
+  }
+}
+
+function backupNativeConfig(): void {
+  try {
+    if (fs.existsSync(MCP_SERVER_CONFIG_FILE)) {
+      const backupPath = MCP_SERVER_CONFIG_FILE + '.bak';
+      fs.copyFileSync(MCP_SERVER_CONFIG_FILE, backupPath);
+    }
+  } catch (error) {
+    console.warn('[MCP Admin Bootstrap] Failed to create backup:', error);
+  }
+}
+
+function writeNativeConfig(config: NativeMcpConfig): void {
+  const dir = path.dirname(MCP_SERVER_CONFIG_FILE);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  fs.writeFileSync(MCP_SERVER_CONFIG_FILE, JSON.stringify(config, null, 2));
+}
+
+/**
+ * Ensure at least one active admin API key exists.
+ * Returns the plaintext key (either newly created or decrypted from existing).
+ */
+async function ensureAdminApiKey(): Promise<string | null> {
+  const keys = await listAdminApiKeys();
+  const activeKeys = keys.filter(k => !k.revokedAt && k.enabled !== false);
+
+  if (activeKeys.length > 0) {
+    const decrypted = activeKeys[0].decryptedKey;
+    if (decrypted) {
+      return decrypted;
+    }
+    console.warn('[MCP Admin Bootstrap] Active key exists but could not be decrypted');
+    return null;
+  }
+
+  const { key } = await generateAdminApiKey(SYSTEM_KEY_DESCRIPTION, ['admin:*']);
+  console.info('[MCP Admin Bootstrap] Created initial admin API key');
+  return key;
+}
+
+/**
+ * Auto-bootstrap agentstudio-admin MCP server configuration.
+ *
+ * - Ensures an admin API key exists (creates one if needed)
+ * - Writes agentstudio-admin to ~/.agentstudio/data/mcp-server.json
+ * - Updates URL/key if port changed or key was regenerated
+ *
+ * @param port - The port AgentStudio is running on
+ */
+export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
+  try {
+    const adminKey = await ensureAdminApiKey();
+    if (!adminKey) {
+      console.warn('[MCP Admin Bootstrap] Skipped — no usable admin API key');
+      return;
+    }
+
+    const expectedUrl = `http://localhost:${port}/api/mcp-admin`;
+    const { config, fileExisted } = readNativeConfig();
+    const existing = config.mcpServers[SERVER_NAME];
+
+    const urlMatches = existing?.url === expectedUrl;
+    const hasAuth = !!existing?.headers?.Authorization;
+    const isValidated = existing?.status === 'active' && Array.isArray(existing?.tools) && existing.tools.length > 0;
+
+    if (urlMatches && hasAuth && isValidated) {
+      return;
+    }
+
+    const toolNames = getAdminToolNames();
+
+    // Safety check: if file existed but config is empty (parse failed or bad structure),
+    // only write if we can confirm this won't destroy existing data
+    const existingServerCount = Object.keys(config.mcpServers).length;
+    if (fileExisted && existingServerCount === 0) {
+      console.warn(
+        '[MCP Admin Bootstrap] Config file existed but parsed as empty — backing up before write to prevent data loss'
+      );
+      backupNativeConfig();
+    }
+
+    config.mcpServers[SERVER_NAME] = {
+      type: 'http',
+      url: expectedUrl,
+      headers: {
+        Authorization: `Bearer ${adminKey}`,
+      },
+      source: 'local',
+      status: 'active',
+      tools: toolNames,
+      lastValidated: new Date().toISOString(),
+    };
+
+    writeNativeConfig(config);
+    console.info(`[MCP Admin Bootstrap] Configured ${SERVER_NAME} → ${expectedUrl} (${toolNames.length} tools, preserved ${existingServerCount} existing)`);
+  } catch (error) {
+    console.error('[MCP Admin Bootstrap] Failed:', error);
+  }
+}
+
+/**
+ * Get tool names from the MCP Admin Server singleton.
+ * Falls back to empty array if server isn't ready yet.
+ */
+function getAdminToolNames(): string[] {
+  try {
+    const server = getMcpAdminServer();
+    const result = server.getTools(['admin:*']);
+    return (result.tools || []).map((t: { name: string }) => t.name);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Read system MCP servers from the native config.
+ * Used by readMcpConfig() to merge system servers for read-only engines.
+ */
+export function getSystemMcpServers(): Record<string, McpServerEntry> {
+  const { config } = readNativeConfig();
+  const result: Record<string, McpServerEntry> = {};
+
+  if (config.mcpServers[SERVER_NAME]) {
+    result[SERVER_NAME] = config.mcpServers[SERVER_NAME];
+  }
+
+  return result;
+}

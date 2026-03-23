@@ -82,7 +82,7 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, isUse
           <h3 className={`text-sm font-bold mt-2 mb-1 ${getUserTextStyle('text-gray-900 dark:text-gray-100')}`}>{children}</h3>
         ),
         p: ({ children }) => (
-          <p className={`mb-2 leading-relaxed break-words overflow-wrap-anywhere ${getUserTextStyle('text-gray-800 dark:text-gray-200')}`}>{children}</p>
+          <p className={`mb-2 last:mb-0 leading-relaxed break-words overflow-wrap-anywhere ${getUserTextStyle('text-gray-800 dark:text-gray-200')}`}>{children}</p>
         ),
         ul: ({ children }) => (
           <ul className="list-disc list-inside mb-2 space-y-1">{children}</ul>
@@ -107,7 +107,11 @@ export const MarkdownMessage: React.FC<MarkdownMessageProps> = ({ content, isUse
         a: ({ children, href }) => (
           <a 
             href={href} 
-            className="text-blue-600 hover:text-blue-800 underline" 
+            className={`underline ${
+              isUserMessage
+                ? 'text-blue-200 hover:text-blue-100'
+                : 'text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300'
+            }`}
             target="_blank" 
             rel="noopener noreferrer"
           >

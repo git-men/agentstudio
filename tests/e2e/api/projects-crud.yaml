@@ -1,0 +1,81 @@
+name: 项目 CRUD 生命周期
+sequential: true
+
+cases:
+  - name: "获取项目列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/projects"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "创建测试项目"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/projects/create"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        projectName: "e2e-test-project"
+        agentId: "meta-agent"
+    expect:
+      status: [200, 201]
+      body:
+        success: true
+        project:
+          id: { exists: true }
+    save:
+      project_id: "project.id"
+
+  - name: "项目列表包含新项目"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/projects"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  - name: "更新项目描述"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        description: "E2E test project - updated"
+    expect:
+      status: 200
+
+  - name: "删除项目"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "验证项目已删除"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 404
+
+teardown:
+  - name: "清理测试项目"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

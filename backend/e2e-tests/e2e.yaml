@@ -1,0 +1,65 @@
+version: "1"
+
+project:
+  name: agentstudio-a2a-standard
+  description: "AgentStudio A2A 标准 JSON-RPC 2.0 协议端到端测试"
+
+service:
+  build:
+    dockerfile: Dockerfile
+    context: ../..
+    target: node
+    image: agentstudio:a2a-dev
+
+  container:
+    name: agentstudio-a2a-dev
+    ports:
+      - "4210:4936"
+    environment:
+      NODE_ENV: test
+      NO_AUTH: "true"
+      PORT: "4936"
+      HOST: "0.0.0.0"
+    healthcheck:
+      path: /api/health
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      startPeriod: 60s
+
+  vars:
+    base_url: http://localhost:4210
+    project_path_encoded: "%2Ftmp%2Fe2e-test-project"
+
+history:
+  enabled: true
+  storage: local
+  retention:
+    days: 30
+  flakyWindow: 10
+
+tests:
+  suites:
+    - name: 健康检查
+      id: health
+      file: tests/health.yaml
+
+    - name: A2A 测试环境初始化
+      id: a2a-setup
+      file: tests/a2a-setup.yaml
+
+    - name: A2A 认证错误处理
+      id: a2a-auth
+      file: tests/a2a-auth.yaml
+
+    - name: A2A JSON-RPC 错误场景
+      id: a2a-jsonrpc-errors
+      file: tests/a2a-jsonrpc-errors.yaml
+
+    - name: A2A 标准 JSON-RPC 2.0 协议
+      id: a2a-jsonrpc
+      file: tests/a2a-jsonrpc.yaml
+
+    - name: A2A REST 协议向后兼容
+      id: a2a-rest-compat
+      file: tests/a2a-rest-compat.yaml

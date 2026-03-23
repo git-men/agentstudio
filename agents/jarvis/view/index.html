@@ -32,6 +32,8 @@
       --purple-bg: rgba(168, 85, 247, 0.12);
       --radius: 8px;
       --radius-lg: 12px;
+      --card-hover-bg: #1c1c1f;
+      --overlay-bg: rgba(0, 0, 0, 0.6);
       --shadow: 0 1px 3px rgba(0,0,0,0.4);
       --transition: 150ms ease;
     }
@@ -186,7 +188,7 @@
       transition: all var(--transition);
       position: relative;
     }
-    .todo-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+    .todo-card:hover { border-color: var(--border-light); background: var(--card-hover-bg); }
     .todo-card.overdue { border-left: 3px solid var(--danger); }
     .todo-card.high { border-left: 3px solid var(--danger); }
     .todo-card.medium { border-left: 3px solid var(--warning); }
@@ -267,7 +269,7 @@
     /* ========== Todo Detail Panel ========== */
     .detail-overlay {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.6);
+      background: var(--overlay-bg);
       z-index: 100;
       display: flex; justify-content: flex-end;
     }
@@ -329,7 +331,7 @@
       cursor: pointer;
       transition: all var(--transition);
     }
-    .journal-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+    .journal-card:hover { border-color: var(--border-light); background: var(--card-hover-bg); }
 
     .journal-date { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
     .journal-preview {
@@ -367,7 +369,7 @@
       cursor: pointer;
       transition: all var(--transition);
     }
-    .memory-card:hover { border-color: var(--border-light); background: #1c1c1f; }
+    .memory-card:hover { border-color: var(--border-light); background: var(--card-hover-bg); }
 
     .memory-cat {
       font-size: 10px; font-weight: 600;
@@ -399,7 +401,7 @@
     /* ========== Form / Modal ========== */
     .modal-overlay {
       position: fixed; inset: 0;
-      background: rgba(0,0,0,0.65);
+      background: var(--overlay-bg);
       display: flex; align-items: center; justify-content: center;
       z-index: 200;
     }
@@ -464,8 +466,65 @@
     .error-box {
       padding: 12px 16px; margin: 16px 20px;
       background: var(--danger-bg); border: 1px solid rgba(239,68,68,0.3);
-      border-radius: var(--radius); color: #fca5a5; font-size: 12px;
+      border-radius: var(--radius); color: var(--danger); font-size: 12px;
     }
+
+    /* ========== Light Mode (class-based toggle) ========== */
+    html.light {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f9fafb;
+      --bg-tertiary: #f3f4f6;
+      --bg-hover: #e5e7eb;
+      --text-primary: #111827;
+      --text-secondary: #4b5563;
+      --text-muted: #9ca3af;
+      --border: #e5e7eb;
+      --border-light: #d1d5db;
+      --accent: #6366f1;
+      --accent-hover: #4f46e5;
+      --accent-bg: rgba(99, 102, 241, 0.08);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.06);
+      --warning: #d97706;
+      --warning-bg: rgba(245, 158, 11, 0.06);
+      --success: #059669;
+      --success-bg: rgba(16, 185, 129, 0.06);
+      --blue: #2563eb;
+      --blue-bg: rgba(59, 130, 246, 0.06);
+      --purple: #9333ea;
+      --purple-bg: rgba(168, 85, 247, 0.06);
+      --card-hover-bg: #f3f4f6;
+      --overlay-bg: rgba(0, 0, 0, 0.25);
+      --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+
+    .light .badge-high { color: #dc2626; }
+    .light .badge-medium { color: #d97706; }
+    .light .badge-low { color: #059669; }
+    .light .badge-draft { color: #7c3aed; }
+    .light .badge-pending { color: #d97706; }
+    .light .badge-in_progress { color: #2563eb; }
+    .light .badge-waiting_confirmation { color: #7c3aed; }
+    .light .badge-completed { color: #059669; }
+    .light .badge-cancelled { color: #6b7280; }
+    .light .badge-personal { color: #2563eb; }
+    .light .badge-delegated { color: #4f46e5; }
+    .light .badge-mixed { color: #7c3aed; }
+    .light .badge-overdue { color: #dc2626; }
+
+    .light .content::-webkit-scrollbar-thumb { background: #d1d5db; }
+    .light .content::-webkit-scrollbar-thumb:hover { background: #9ca3af; }
+
+    .light .select option { background: var(--bg-primary); color: var(--text-primary); }
+
+    .theme-toggle {
+      background: none; border: 1px solid var(--border);
+      color: var(--text-secondary); cursor: pointer;
+      width: 32px; height: 32px; border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; transition: all var(--transition);
+    }
+    .theme-toggle:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 
     /* ========== Responsive ========== */
     @media (max-width: 600px) {
@@ -483,10 +542,36 @@
     'use strict';
 
     // ========================================================================
+    // Theme
+    // ========================================================================
+    function getInitialTheme() {
+      const saved = localStorage.getItem('jarvis-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+      return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+
+    let _theme = getInitialTheme();
+
+    function applyTheme(t) {
+      _theme = t;
+      document.documentElement.classList.toggle('light', t === 'light');
+      localStorage.setItem('jarvis-theme', t);
+    }
+
+    function toggleTheme() {
+      applyTheme(_theme === 'dark' ? 'light' : 'dark');
+      render();
+    }
+
+    // Apply immediately (before first render) to avoid flash
+    applyTheme(_theme);
+
+    // ========================================================================
     // State
     // ========================================================================
     const S = {
-      todos: [], journals: [], memoryItems: [], stats: {},
+      todos: [], journals: [], journalTotal: 0, journalLoading2: false, journalAllLoaded: false,
+      memoryItems: [], stats: {},
       tab: 'todos', // todos | journals | memory
       filterStatus: 'active', filterPriority: '', filterType: '', searchQuery: '',
       memoryCat: '',
@@ -495,6 +580,8 @@
       showJournal: false, viewingJournal: null, journalLoading: false,
       showMemory: false, viewingMemory: null, memoryLoading: false,
     };
+
+    const JOURNAL_PAGE_SIZE = 30;
 
     // ========================================================================
     // API
@@ -524,18 +611,47 @@
       if (showLoading) { S.loading = true; render(); }
       S.error = null;
       try {
-        const [todos, stats, journals] = await Promise.all([
+        const [todos, stats, journalRes, memItems] = await Promise.all([
           call('listTodos', {}),
           call('getStats', {}),
-          call('listJournals', { limit: 30 }),
+          call('listJournals', { limit: JOURNAL_PAGE_SIZE, offset: 0 }),
+          call('listMemory', {}).catch(() => []),
         ]);
         S.todos = Array.isArray(todos) ? todos : [];
         S.stats = stats || {};
-        S.journals = Array.isArray(journals) ? journals : [];
+        if (journalRes && typeof journalRes === 'object' && !Array.isArray(journalRes)) {
+          S.journals = journalRes.items || [];
+          S.journalTotal = journalRes.total || 0;
+        } else {
+          S.journals = Array.isArray(journalRes) ? journalRes : [];
+          S.journalTotal = S.journals.length;
+        }
+        S.journalAllLoaded = S.journals.length >= S.journalTotal;
+        S.memoryItems = Array.isArray(memItems) ? memItems : [];
         S.loading = false;
       } catch(e) {
         S.error = e.message; S.loading = false;
       }
+      render();
+    }
+
+    async function loadMoreJournals() {
+      if (S.journalLoading2 || S.journalAllLoaded) return;
+      S.journalLoading2 = true; render();
+      try {
+        const res = await call('listJournals', { limit: JOURNAL_PAGE_SIZE, offset: S.journals.length });
+        if (res && typeof res === 'object' && !Array.isArray(res)) {
+          S.journals = S.journals.concat(res.items || []);
+          S.journalTotal = res.total || S.journalTotal;
+        } else {
+          const items = Array.isArray(res) ? res : [];
+          S.journals = S.journals.concat(items);
+        }
+        S.journalAllLoaded = S.journals.length >= S.journalTotal;
+      } catch(e) {
+        S.error = e.message;
+      }
+      S.journalLoading2 = false;
       render();
     }
 
@@ -755,6 +871,7 @@
       h += '<div class="header-actions">';
       if (S.tab === 'todos') h += '<button class="btn btn-primary" data-act="create">+ 新建</button>';
       h += '<button class="btn btn-ghost" data-act="refresh">↻</button>';
+      h += '<button class="theme-toggle" data-act="toggle-theme" title="切换主题">' + (_theme === 'dark' ? '☀️' : '🌙') + '</button>';
       h += '</div></div>';
 
       // Stats bar
@@ -770,7 +887,7 @@
       // Nav
       h += '<div class="nav">';
       h += navItem('todos', '待办事项', S.todos.length);
-      h += navItem('journals', '日志', S.journals.length);
+      h += navItem('journals', '日志', S.journalTotal || S.journals.length);
       h += navItem('memory', '记忆系统', S.memoryItems.length);
       h += '</div>';
 
@@ -988,10 +1105,10 @@
     // ========================================================================
     function renderJournalsTab() {
       let h = '<div class="pad">';
-      if (S.journals.length === 0) {
+      if (S.journals.length === 0 && !S.journalLoading2) {
         h += '<div class="empty"><div class="empty-icon">📖</div><div class="empty-text">暂无日志</div></div>';
       } else {
-        h += '<div class="journal-list">';
+        h += '<div class="journal-list" id="journal-list">';
         for (const j of S.journals) {
           h += '<div class="journal-card" data-journal="' + esc(j.date) + '">';
           h += '<div class="journal-date">📅 ' + esc(j.date) + '</div>';
@@ -1000,6 +1117,13 @@
           h += '</div>';
         }
         h += '</div>';
+        if (S.journalLoading2) {
+          h += '<div class="loading">加载更多日志...</div>';
+        } else if (!S.journalAllLoaded) {
+          h += '<div style="text-align:center;padding:12px"><button class="btn btn-ghost" data-act="load-more-journals">加载更多 (' + S.journals.length + '/' + S.journalTotal + ')</button></div>';
+        } else if (S.journals.length > 0) {
+          h += '<div style="text-align:center;padding:12px;color:var(--text-muted);font-size:12px">已加载全部 ' + S.journalTotal + ' 篇日志</div>';
+        }
       }
       h += '</div>';
       return h;
@@ -1133,7 +1257,9 @@
           else if (act === 'close-detail') { S.showDetail = false; S.detailTodo = null; render(); }
           else if (act === 'close-journal') { S.showJournal = false; S.viewingJournal = null; render(); }
           else if (act === 'close-memory') { S.showMemory = false; S.viewingMemory = null; render(); }
+          else if (act === 'toggle-theme') { toggleTheme(); }
           else if (act === 'dismiss-error') { S.error = null; render(); }
+          else if (act === 'load-more-journals') { loadMoreJournals(); }
           else if (act === 'delete-todo') { doDeleteTodo(el.getAttribute('data-id')); }
           else if (act === 'archive-todo') { doArchiveTodo(el.getAttribute('data-id')); }
           else if (act === 'set-status') {
@@ -1174,7 +1300,6 @@
         const tabEl = e.target.closest('[data-tab]');
         if (tabEl) {
           S.tab = tabEl.getAttribute('data-tab');
-          if (S.tab === 'memory' && S.memoryItems.length === 0) loadMemory('');
           render();
           return;
         }
@@ -1248,6 +1373,17 @@
           createTodo(data);
         }
       });
+
+      // Scroll: auto-load more journals when reaching bottom
+      document.addEventListener('scroll', function(e) {
+        if (S.tab !== 'journals' || S.journalAllLoaded || S.journalLoading2) return;
+        const el = e.target;
+        if (el.classList && el.classList.contains('content')) {
+          if (el.scrollTop + el.clientHeight >= el.scrollHeight - 100) {
+            loadMoreJournals();
+          }
+        }
+      }, true);
 
       // Keyboard: Escape to close modals/panels
       document.addEventListener('keydown', function(e) {

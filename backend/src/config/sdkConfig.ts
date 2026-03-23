@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
 import { AGENTSTUDIO_HOME } from './paths.js';
 
 /**
@@ -61,27 +62,46 @@ export function getProjectsDir(): string {
 /**
  * Get all projects directories to search for Claude session files.
  *
- * On macOS, the EMFILE workaround in claudeUtils.ts sets CLAUDE_CONFIG_DIR to
- * ~/.agentstudio/claude-sdk-config, causing the Claude CLI to write session files
- * there instead of the default ~/.claude/projects. We need to search BOTH locations
- * to support sessions created before and after the workaround was introduced.
+ * Sessions may be created by different Claude versions (claude-code, claude-internal),
+ * each writing to its own config directory. We search both to find sessions regardless
+ * of which version created them.
  *
- * Returns directories in priority order (most recent first):
- * - macOS: [~/.agentstudio/claude-sdk-config/projects, ~/.claude/projects]
- * - other: [~/.claude/projects]
+ * On macOS, also includes ~/.agentstudio/claude-sdk-config/projects for the EMFILE workaround.
+ *
+ * Returns directories in priority order (existing directories only):
+ * - macOS custom dir (~/.agentstudio/claude-sdk-config/projects)
+ * - Current engine dir (e.g., ~/.claude/projects)
+ * - claude-internal dir (~/.claude-internal/projects)
  */
 export function getAllProjectsDirs(): string[] {
-  const defaultDir = getProjectsDir();
+  const home = os.homedir();
+  const seen = new Set<string>();
+  const dirs: string[] = [];
 
-  if (process.platform === 'darwin') {
-    const customDir = path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects');
-    // Return custom dir first (where new sessions go), then legacy dir
-    if (customDir !== defaultDir) {
-      return [customDir, defaultDir];
+  const addIfExists = (dir: string) => {
+    if (!seen.has(dir)) {
+      seen.add(dir);
+      if (fs.existsSync(dir)) {
+        dirs.push(dir);
+      }
     }
+  };
+
+  // 1. macOS custom dir (EMFILE workaround, where new sessions may go)
+  if (process.platform === 'darwin') {
+    addIfExists(path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects'));
   }
 
-  return [defaultDir];
+  // 2. Current engine's directory (highest priority)
+  addIfExists(getProjectsDir());
+
+  // 3. claude-internal directory (sessions created with claude-internal provider)
+  addIfExists(path.join(home, SDK_DIR_MAP['claude-internal'], 'projects'));
+
+  // 4. claude-code directory (in case current engine is claude-internal)
+  addIfExists(path.join(home, SDK_DIR_MAP['claude-code'], 'projects'));
+
+  return dirs;
 }
 
 /**

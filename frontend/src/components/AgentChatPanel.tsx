@@ -39,9 +39,11 @@ interface AgentChatPanelProps {
   projectPath?: string;
   onSessionChange?: (sessionId: string | null) => void;
   initialMessage?: string;
+  /** External handler for creating a new session (workspace mode). */
+  onNewSession?: () => void;
 }
 
-export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage }) => {
+export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage, onNewSession: externalNewSession }) => {
   const { t } = useTranslation('components');
   const { isCompactMode } = useResponsiveSettings();
 
@@ -147,7 +149,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     handleDragLeave,
     handleDrop,
     clearImages,
-    setPreviewImage
+    setPreviewImage,
+    processImageFile
   } = useImageUpload({
     textareaRef,
     inputMessage,
@@ -352,7 +355,11 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
   };
 
   const handleNewSessionWithUI = () => {
-    handleNewSession();
+    if (externalNewSession) {
+      externalNewSession();
+    } else {
+      handleNewSession();
+    }
     setShowSessions(false);
     setSearchTerm('');
   };
@@ -605,7 +612,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+      textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
     }
   };
 
@@ -613,10 +620,46 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     adjustTextareaHeight();
   }, [inputMessage]);
 
-  // Load session messages into the store when query data arrives.
-  // The query is disabled during streaming (paused=isAiTyping), so
-  // sessionMessagesData only changes from explicit user actions.
+  // Guard: when streaming starts, mark that subsequent sessionMessagesData
+  // changes are likely stale cached data from query re-enabling, not user actions.
+  // The flag is ONLY cleared by the timer in Effect 1 — never consumed by Effect 2.
+  // This prevents a race condition where currentSessionId changing during streaming
+  // (from system init) would prematurely consume the guard.
+  const skipSessionLoadRef = useRef(false);
+
   useEffect(() => {
+    if (isAiTyping) {
+      skipSessionLoadRef.current = true;
+    } else if (skipSessionLoadRef.current) {
+      const timer = setTimeout(() => {
+        skipSessionLoadRef.current = false;
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAiTyping]);
+
+  // Auto-focus textarea when AI finishes responding
+  const prevIsAiTypingRef = useRef(false);
+  useEffect(() => {
+    const wasTyping = prevIsAiTypingRef.current;
+    prevIsAiTypingRef.current = isAiTyping;
+    if (wasTyping && !isAiTyping) {
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 0);
+    }
+  }, [isAiTyping]);
+
+  // Load session messages into the store when query data arrives.
+  // The query is disabled during streaming (paused=isAiTyping).
+  // When streaming ends, the query re-enables and may return stale cached
+  // data that would overwrite live streaming content — the guard prevents this.
+  useEffect(() => {
+    if (skipSessionLoadRef.current) {
+      console.log('📋 [SESSION] Skipping session message load — streaming guard active');
+      return;
+    }
+
     if (sessionMessagesData?.messages && currentSessionId) {
       loadSessionMessages(sessionMessagesData.messages);
 
@@ -934,6 +977,12 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
         // Voice Input
         onVoiceTranscribed={handleVoiceTranscribed}
         onOpenVoiceSettings={handleOpenVoiceSettings}
+
+        // New session
+        onNewSession={handleNewSessionWithUI}
+
+        // Screen capture support
+        processImageFile={processImageFile}
       />
     </div>
   );

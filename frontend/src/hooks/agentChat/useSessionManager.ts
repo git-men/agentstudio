@@ -2,6 +2,9 @@ import { useState, useCallback } from 'react';
 import { useAgentStore } from '../../stores/useAgentStore';
 import { authFetch } from '../../lib/authFetch';
 import { API_BASE } from '../../lib/config';
+import { sessionStoreManager } from '../../services/SessionStoreManager';
+import type { StoreApi } from 'zustand';
+import type { SessionState, SessionActions } from '../../stores/createSessionStore';
 
 export interface UseSessionManagerProps {
   agentId: string;
@@ -9,6 +12,12 @@ export interface UseSessionManagerProps {
   projectPath?: string;
   onSessionChange?: (sessionId: string | null) => void;
   textareaRef?: React.RefObject<HTMLTextAreaElement | null>;
+  /**
+   * Optional: target session store for workspace mode.
+   * When provided, messages are loaded into this store instead of
+   * the global useAgentStore facade.
+   */
+  sessionStore?: StoreApi<SessionState & SessionActions>;
 }
 
 export interface UseSessionManagerReturn {
@@ -28,82 +37,154 @@ export interface UseSessionManagerReturn {
 /**
  * Hook for managing session-related state and operations.
  *
- * Message loading is fully imperative (no react-query) to avoid race
- * conditions between automatic refetches and live-streamed store data.
+ * In **legacy mode** (no sessionStore prop), behavior is identical to the
+ * original: actions delegate to the useAgentStore facade.
+ *
+ * In **workspace mode** (sessionStore prop provided), session stores are
+ * initialized via sessionStoreManager.getOrCreate() and messages are loaded
+ * into the target session's store directly.
  */
 export const useSessionManager = ({
   agentId,
   currentSessionId,
   projectPath,
   onSessionChange,
-  textareaRef
+  textareaRef,
+  sessionStore,
 }: UseSessionManagerProps): UseSessionManagerReturn => {
-  const { setCurrentSessionId, clearMessages, loadSessionMessages } = useAgentStore();
+  const { setCurrentSessionId: facadeSetSessionId, clearMessages: facadeClearMessages, loadSessionMessages: facadeLoadMessages } = useAgentStore();
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
   const [isNewSession, setIsNewSession] = useState(false);
   const [hasSuccessfulResponse, setHasSuccessfulResponse] = useState(false);
 
-  /**
-   * Imperatively fetch messages for a session and load them into the store.
-   * This is the ONLY path that calls loadSessionMessages, ensuring no
-   * react-query background refetch can overwrite live-streamed data.
-   */
-  const loadMessagesForSession = useCallback(async (sessionId: string) => {
-    try {
-      const url = new URL(`${API_BASE}/sessions/${agentId}/${sessionId}/messages`);
-      if (projectPath) {
-        url.searchParams.set('projectPath', projectPath);
+  // Decide where to load messages: target session store or facade.
+  // Workspace mode: write into the exact store from SessionStoreContext.
+  // Legacy mode: write into the useAgentStore facade so the UI sees them immediately.
+  const loadIntoStore = useCallback(
+    (messages: any[]) => {
+      if (sessionStore) {
+        sessionStore.getState().loadSessionMessages(messages);
+      } else {
+        facadeLoadMessages(messages);
       }
-      const response = await authFetch(url.toString());
-      if (!response.ok) {
-        console.warn(`[SessionManager] Failed to fetch messages for ${sessionId}: ${response.status}`);
-        return;
-      }
-      const data = await response.json();
-      const converted = (data.messages || []).map((msg: any) => ({
-        ...msg,
-        timestamp: new Date(msg.timestamp),
-      }));
-      loadSessionMessages(converted);
-    } catch (err) {
-      console.warn('[SessionManager] Error fetching messages:', err);
-    }
-  }, [agentId, projectPath, loadSessionMessages]);
+    },
+    [sessionStore, facadeLoadMessages],
+  );
 
-  const handleSwitchSession = useCallback(async (sessionId: string) => {
-    console.log(`[SessionManager] Switching to session ${sessionId}`);
-    setCurrentSessionId(sessionId);
-    setIsLoadingMessages(true);
-    setIsNewSession(false);
-    setHasSuccessfulResponse(false);
-    if (onSessionChange) {
-      onSessionChange(sessionId);
-    }
-    await loadMessagesForSession(sessionId);
-    setIsLoadingMessages(false);
-  }, [onSessionChange, setCurrentSessionId, loadMessagesForSession]);
+  const setCurrentSessionId = useCallback(
+    (id: string | null) => {
+      if (!sessionStore) {
+        facadeSetSessionId(id);
+      }
+    },
+    [sessionStore, facadeSetSessionId],
+  );
+
+  /**
+   * Imperatively fetch messages for a session and load them into the appropriate store.
+   *
+   * After the async fetch completes, re-check `isAiTyping` from the store:
+   * if streaming started while the request was in flight, discard the
+   * response to avoid overwriting live-streamed data.
+   */
+  const loadMessagesForSession = useCallback(
+    async (sessionId: string) => {
+      sessionStoreManager.getOrCreate(sessionId, agentId);
+
+      try {
+        const url = new URL(`${API_BASE}/sessions/${agentId}/${sessionId}/messages`);
+        if (projectPath) {
+          url.searchParams.set('projectPath', projectPath);
+        }
+        const response = await authFetch(url.toString());
+        if (!response.ok) {
+          console.warn(`[SessionManager] Failed to fetch messages for ${sessionId}: ${response.status}`);
+          return;
+        }
+        const data = await response.json();
+
+        // Stale-check: if streaming started while the fetch was in flight,
+        // discard the result — the store already has live-streamed data.
+        const isTargetStreaming = sessionStore
+          ? sessionStore.getState().isAiTyping
+          : useAgentStore.getState().isAiTyping;
+        if (isTargetStreaming) {
+          console.log(`[SessionManager] Discarding fetched messages — streaming is active for ${sessionId}`);
+          return;
+        }
+
+        const converted = (data.messages || []).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        loadIntoStore(converted);
+      } catch (err) {
+        console.warn('[SessionManager] Error fetching messages:', err);
+      }
+    },
+    [agentId, projectPath, loadIntoStore, sessionStore],
+  );
+
+  const handleSwitchSession = useCallback(
+    async (sessionId: string) => {
+      // In workspace mode, multiple sessions can stream independently, so only
+      // block switching for legacy (single-session) mode.
+      if (!sessionStore) {
+        const { isAiTyping } = useAgentStore.getState();
+        if (isAiTyping) {
+          console.warn(`[SessionManager] Ignoring session switch to ${sessionId} — AI is still streaming`);
+          return;
+        }
+      }
+
+      console.log(`[SessionManager] Switching to session ${sessionId}`);
+      setCurrentSessionId(sessionId);
+      setIsLoadingMessages(true);
+      setIsNewSession(false);
+      setHasSuccessfulResponse(false);
+      onSessionChange?.(sessionId);
+      await loadMessagesForSession(sessionId);
+      setIsLoadingMessages(false);
+      setTimeout(() => {
+        textareaRef?.current?.focus();
+      }, 0);
+    },
+    [onSessionChange, setCurrentSessionId, loadMessagesForSession, textareaRef],
+  );
 
   const handleNewSession = useCallback(() => {
     setCurrentSessionId(null);
-    clearMessages();
+    if (sessionStore) {
+      sessionStore.getState().clearMessages();
+    } else {
+      facadeClearMessages();
+    }
     setIsNewSession(true);
     setHasSuccessfulResponse(false);
-    if (onSessionChange) {
-      onSessionChange(null);
-    }
+    onSessionChange?.(null);
     setTimeout(() => {
       textareaRef?.current?.focus();
     }, 0);
-  }, [onSessionChange, setCurrentSessionId, clearMessages, textareaRef]);
+  }, [onSessionChange, setCurrentSessionId, sessionStore, facadeClearMessages, textareaRef]);
 
   const handleRefreshMessages = useCallback(async () => {
+    // Guard: don't refresh while the target session is streaming
+    if (currentSessionId) {
+      const isStreaming = sessionStore
+        ? sessionStore.getState().isAiTyping
+        : useAgentStore.getState().isAiTyping;
+      if (isStreaming) {
+        console.warn('[SessionManager] Ignoring refresh — AI is still streaming');
+        return;
+      }
+    }
     if (currentSessionId) {
       setIsLoadingMessages(true);
       await loadMessagesForSession(currentSessionId);
       setIsLoadingMessages(false);
     }
-  }, [currentSessionId, loadMessagesForSession]);
+  }, [currentSessionId, loadMessagesForSession, sessionStore]);
 
   return {
     isLoadingMessages,

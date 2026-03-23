@@ -129,6 +129,9 @@ export function isExemptDomain(hostname: string): boolean {
  * @returns true if HTTPS should not be enforced
  */
 export function shouldBypassHttps(hostname: string): boolean {
+  if (!hostname) return false;
+  const hostOnly = hostname.split(':')[0].toLowerCase();
+  if (hostOnly === 'localhost') return true;
   return isIPAddress(hostname) || hasTrustedSuffix(hostname) || isExemptDomain(hostname);
 }
 

@@ -20,7 +20,11 @@ import {
   Puzzle,
   Mic,
   FileCode,
-  Webhook
+  Webhook,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Building2,
+  LogOut,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -29,6 +33,7 @@ import { UpdateNotification } from './UpdateNotification';
 import { useMobileContext } from '../contexts/MobileContext';
 import useEngine from '../hooks/useEngine';
 import useProduct from '../hooks/useProduct';
+import { useEnterpriseProfile } from '../hooks/useEnterpriseProfile';
 import type { EngineFeatureKey, ConfigCapabilityKey } from '../types/engine';
 
 // Navigation item type with optional engine and product requirements
@@ -177,9 +182,11 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
 
 interface SidebarProps {
   onClose?: () => void; // For mobile sidebar auto-close
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, onToggleCollapse }) => {
   const { t } = useTranslation('pages');
   const location = useLocation();
   const navigate = useNavigate();
@@ -189,6 +196,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     return location.pathname.startsWith('/settings') ? [t('nav.settings')] : [];
   });
   const [showServiceManagement, setShowServiceManagement] = useState(false);
+  const [showEnterpriseMenu, setShowEnterpriseMenu] = useState(false);
+  const { profile: enterpriseProfile, isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin, logout: enterpriseLogout } = useEnterpriseProfile();
 
   // Get engine capabilities for filtering navigation items
   const { isFeatureSupported, isConfigSupported, engineType, isLoading: isEngineLoading } = useEngine();
@@ -271,6 +280,55 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
     const isExpanded = isMenuExpanded(item.name);
     const isActive = isItemActive(item);
 
+    if (collapsed) {
+      // Collapsed mode: icon only, no submenu
+      const handleClick = () => {
+        if (hasSubmenu) {
+          // Navigate to the first submenu item
+          navigate(item.submenu[0].href);
+        }
+        if (isMobile && onClose) onClose();
+      };
+      const icon = (
+        <item.icon className="w-5 h-5 flex-shrink-0" />
+      );
+      if (hasSubmenu) {
+        return (
+          <li key={item.name}>
+            <button
+              onClick={handleClick}
+              title={item.name}
+              className={`w-full flex items-center justify-center p-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+              }`}
+            >
+              {icon}
+            </button>
+          </li>
+        );
+      }
+      return (
+        <li key={item.name}>
+          <NavLink
+            to={item.href}
+            onClick={() => { if (isMobile && onClose) onClose(); }}
+            title={item.name}
+            className={({ isActive }) =>
+              `flex items-center justify-center p-3 rounded-lg transition-colors ${
+                isActive
+                  ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+              }`
+            }
+          >
+            {icon}
+          </NavLink>
+        </li>
+      );
+    }
+
     if (hasSubmenu) {
       return (
         <li key={item.nameKey}>
@@ -301,7 +359,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
                     <NavLink
                       to={subItem.href}
                       onClick={() => {
-                        // Auto-close sidebar on mobile after navigation
                         if (isMobile && onClose) {
                           onClose();
                         }
@@ -331,7 +388,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
         <NavLink
           to={item.href}
           onClick={() => {
-            // Auto-close sidebar on mobile after navigation
             if (isMobile && onClose) {
               onClose();
             }
@@ -352,38 +408,160 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40">
+    <div className={`${collapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40 transition-all duration-200`}>
       {/* Logo */}
-      <div className="px-6 py-8 flex-shrink-0">
+      <div className={`${collapsed ? 'px-2 py-4' : 'px-6 py-8'} flex-shrink-0`}>
         <button
           onClick={() => navigate('/')}
-          className="flex items-center space-x-3 w-full text-left hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded-lg p-2"
+          title="ClawStudio"
+          className={`flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-lg ${collapsed ? 'justify-center w-full p-1' : 'w-full p-2'}`}
         >
-          <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-            <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="Agent Studio" className="w-10 h-10" />
-          </div>
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">Agent Studio</h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
-          </div>
+          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg flex-shrink-0 object-contain" />
+          {!collapsed && (
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
+              <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
+            </div>
+          )}
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-4 pb-4">
-        <ul className="space-y-2">
+      <nav className={`flex-1 overflow-y-auto ${collapsed ? 'px-2' : 'px-4'} pb-4`}>
+        <ul className="space-y-1">
           {navigationItems.map(renderNavItem)}
         </ul>
       </nav>
 
       {/* Footer */}
-      <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
-        <div className="space-y-3">
-          {/* Update Notification */}
-          <UpdateNotification compact />
-          {/* Service Status Indicator */}
-          <ServiceStatusIndicator onManageServices={() => setShowServiceManagement(true)} />
-        </div>
+      <div className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-4'}`}>
+        {collapsed ? (
+          <div className="space-y-2">
+            {/* Enterprise identity (collapsed) */}
+            {isEnterpriseAuth ? (
+              <div
+                title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                className="w-full flex items-center justify-center p-2"
+              >
+                {enterpriseProfile?.avatarUrl ? (
+                  <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                    {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                onClick={() => enterpriseLogin()}
+                title="连接企业版"
+                className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <Building2 className="w-5 h-5" />
+              </button>
+            )}
+            {onToggleCollapse && (
+              <button
+                onClick={onToggleCollapse}
+                title="展开侧边栏"
+                className="w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <PanelLeftOpen className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <UpdateNotification compact />
+
+            {/* Enterprise identity */}
+            <div className="relative">
+              {isEnterpriseAuth ? (
+                <>
+                  <button
+                    onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
+                  >
+                    {enterpriseProfile?.avatarUrl ? (
+                      <img src={enterpriseProfile.avatarUrl} alt="" className="flex-shrink-0 w-7 h-7 rounded-full object-cover" />
+                    ) : (
+                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                        {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0 text-left">
+                      <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
+                        {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                      </div>
+                      {enterpriseProfile?.email && enterpriseProfile?.name && enterpriseProfile.email !== enterpriseProfile.name && (
+                        <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
+                          {enterpriseProfile.email}
+                        </div>
+                      )}
+                    </div>
+                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showEnterpriseMenu ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {showEnterpriseMenu && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setShowEnterpriseMenu(false)} />
+                      <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                        <button
+                          onClick={() => {
+                            setShowEnterpriseMenu(false);
+                            enterpriseLogin();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        >
+                          <Building2 className="w-3.5 h-3.5" />
+                          重新登录
+                        </button>
+                        <button
+                          onClick={() => {
+                            setShowEnterpriseMenu(false);
+                            enterpriseLogout();
+                          }}
+                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <LogOut className="w-3.5 h-3.5" />
+                          退出企业版
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={() => enterpriseLogin()}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group"
+                >
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 transition-colors">
+                    <Building2 className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                  </div>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                    连接企业版
+                  </span>
+                </button>
+              )}
+            </div>
+
+            {/* Service status + collapse toggle in same row */}
+            <div className="flex items-center gap-1">
+              <div className="flex-1 min-w-0">
+                <ServiceStatusIndicator onManageServices={() => setShowServiceManagement(true)} />
+              </div>
+              {onToggleCollapse && (
+                <button
+                  onClick={onToggleCollapse}
+                  title="收起侧边栏"
+                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <PanelLeftClose className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Service Management Modal */}

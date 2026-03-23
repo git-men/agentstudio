@@ -5,14 +5,8 @@ import {
   Folder,
   Calendar,
   User,
-  Brain,
-  Command,
-  Bot,
   Trash2,
   ChevronDown,
-  Shield,
-  Settings,
-  GitBranch,
 } from 'lucide-react';
 import { formatRelativeTime } from '../utils';
 import { API_BASE } from '../lib/config';
@@ -50,12 +44,6 @@ interface ProjectTableProps {
   projects: Project[];
   agents: Agent[];
   onOpenProject: (project: Project) => void;
-  onMemoryManagement: (project: Project) => void;
-  onCommandManagement: (project: Project) => void;
-  onSubAgentManagement: (project: Project) => void;
-  onA2AManagement: (project: Project) => void;
-  onVersionManagement: (project: Project) => void;
-  onSettings: (project: Project) => void;
   onDeleteProject: (project: Project) => void;
   onAgentChanged?: (projectId: string, newAgent: Agent) => void;
   className?: string;
@@ -65,12 +53,6 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   projects,
   agents,
   onOpenProject,
-  onMemoryManagement,
-  onCommandManagement,
-  onSubAgentManagement,
-  onA2AManagement,
-  onVersionManagement,
-  onSettings,
   onDeleteProject,
   onAgentChanged,
   className = '',
@@ -181,51 +163,8 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
     </div>
   );
 
-  // 渲染操作按钮
   const renderActions = (project: Project) => (
-    <div className="flex items-center justify-end space-x-1">
-      <button
-        onClick={() => onMemoryManagement(project)}
-        className="p-1.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title={t('components:projectMemory.title')}
-      >
-        <Brain className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onCommandManagement(project)}
-        className="p-1.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title={t('components:projectCommands.title')}
-      >
-        <Command className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onSubAgentManagement(project)}
-        className="p-1.5 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-        title={t('components:projectSubAgents.title')}
-      >
-        <Bot className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onA2AManagement(project)}
-        className="p-1.5 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-md transition-colors"
-        title="A2A Protocol 管理"
-      >
-        <Shield className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onVersionManagement(project)}
-        className="p-1.5 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-md transition-colors"
-        title="版本管理"
-      >
-        <GitBranch className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onSettings(project)}
-        className="p-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-md transition-colors"
-        title="项目设置"
-      >
-        <Settings className="w-3.5 h-3.5" />
-      </button>
+    <div className="flex items-center justify-end">
       <button
         onClick={() => onDeleteProject(project)}
         className="p-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md transition-colors"
@@ -282,61 +221,15 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
               </div>
             </div>
 
-            {/* 直接显示操作按钮 */}
             <div className="border-t border-gray-200 dark:border-gray-700 p-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-gray-500 dark:text-gray-400">{t('projects.table.actions')}</span>
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => onMemoryManagement(project)}
-                    className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-                    title={t('components:projectMemory.title')}
-                  >
-                    <Brain className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onCommandManagement(project)}
-                    className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-                    title={t('components:projectCommands.title')}
-                  >
-                    <Command className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onSubAgentManagement(project)}
-                    className="p-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-                    title={t('components:projectSubAgents.title')}
-                  >
-                    <Bot className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onA2AManagement(project)}
-                    className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/50 rounded-md transition-colors"
-                    title="A2A Protocol 管理"
-                  >
-                    <Shield className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onVersionManagement(project)}
-                    className="p-2 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/50 rounded-md transition-colors"
-                    title="版本管理"
-                  >
-                    <GitBranch className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onSettings(project)}
-                    className="p-2 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/50 rounded-md transition-colors"
-                    title="项目设置"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => onDeleteProject(project)}
-                    className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md transition-colors"
-                    title={t('projects.actions.delete')}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
+              <div className="flex items-center justify-end">
+                <button
+                  onClick={() => onDeleteProject(project)}
+                  className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/50 rounded-md transition-colors"
+                  title={t('projects.actions.delete')}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>

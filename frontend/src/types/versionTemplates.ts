@@ -229,41 +229,41 @@ export const VERSION_TEMPLATES: VersionTemplate[] = [
       },
       {
         key: 'ANTHROPIC_MODEL',
-        value: 'MiniMax-M2',
+        value: 'MiniMax-M2.5',
         isRequired: false,
         description: '使用的MiniMax模型名称'
       },
       {
         key: 'ANTHROPIC_SMALL_FAST_MODEL',
-        value: 'MiniMax-M2',
+        value: 'MiniMax-M2.5',
         isRequired: false,
         description: '快速轻量级模型名称'
       },
       {
         key: 'ANTHROPIC_DEFAULT_SONNET_MODEL',
-        value: 'MiniMax-M2',
+        value: 'MiniMax-M2.5',
         isRequired: false,
         description: '默认Sonnet模型名称'
       },
       {
         key: 'ANTHROPIC_DEFAULT_OPUS_MODEL',
-        value: 'MiniMax-M2',
+        value: 'MiniMax-M2.5',
         isRequired: false,
         description: '默认Opus模型名称'
       },
       {
         key: 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
-        value: 'MiniMax-M2',
+        value: 'MiniMax-M2.5',
         isRequired: false,
         description: '默认Haiku模型名称'
       }
     ],
     models: [
       {
-        id: 'MiniMax-M2',
-        name: 'MiniMax M2',
+        id: 'MiniMax-M2.5',
+        name: 'MiniMax M2.5',
         isVision: false,
-        description: 'MiniMax M2 最新模型'
+        description: 'MiniMax M2.5 最新模型'
       }
     ]
   }

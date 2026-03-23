@@ -104,7 +104,9 @@
     "noProject": "No Project Selected",
     "selectProjectFirst": "Please select a project first to browse files",
     "collapsePanel": "Collapse directory panel",
-    "expandPanel": "Expand directory panel"
+    "expandPanel": "Expand directory panel",
+    "sourceCode": "Source",
+    "preview": "Preview"
   },
   "sessionDropdown": {
     "title": "Session Management",
@@ -233,6 +235,15 @@
     "fileBrowser": {
       "title": "Select File - {{projectPath}}",
       "currentProject": "Current Project"
+    },
+    "attachment": {
+      "title": "Add Attachment",
+      "image": "Image",
+      "file": "Project File",
+      "selectFile": "Select Project File"
+    },
+    "screenCapture": {
+      "title": "Capture Screen (or paste a screenshot with system shortcut)"
     },
     "maxTurnsReached": "⏱️ **Maximum turns reached**",
     "permissionDenials": "⚠️ **Permission Denied Operations:**",
@@ -1328,5 +1339,24 @@
     "permissionDenied": "Please allow microphone access",
     "noDevice": "No microphone device found",
     "tooShort": "Recording too short"
+  },
+  "workspace": {
+    "newSession": "New Session",
+    "searchSessions": "Search sessions…",
+    "noSessions": "No sessions yet",
+    "noMatchingSessions": "No matching sessions",
+    "createFirst": "Click \"New Session\" to start",
+    "removeSession": "Remove session",
+    "removeConfirm": "Click again to confirm",
+    "sessionRemoved": "Session removed",
+    "status": {
+      "idle": "Idle",
+      "running": "Running",
+      "completed": "Done",
+      "error": "Error"
+    },
+    "defaultTitle": "New Session",
+    "sidebarToggle": "Toggle sidebar",
+    "loadingMessages": "Loading messages…"
   }
 }

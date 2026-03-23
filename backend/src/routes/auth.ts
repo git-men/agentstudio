@@ -1,6 +1,11 @@
 import express, { Request, Response, Router } from 'express';
 import { generateToken, verifyToken, shouldRefreshToken } from '../utils/jwt';
 import { loadConfig, isPasswordConfigured } from '../config/index';
+import {
+  resolvePendingAuth,
+  storeEnterpriseToken,
+} from '../services/mcpAdmin/tools/enterpriseAuthTools.js';
+import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 
 const router: Router = express.Router();
 
@@ -147,5 +152,116 @@ router.post('/logout', (req: Request, res: Response) => {
     message: 'Logout successful',
   });
 });
+
+/**
+ * GET /api/auth/enterprise/callback
+ * OAuth callback from AS Enterprise.
+ * Receives the token from the redirect, stores it for tunnel/wecom use,
+ * and shows a success page to the user.
+ */
+router.get('/enterprise/callback', async (req: Request, res: Response) => {
+  const token = req.query.token as string | undefined;
+  const state = req.query.state as string | undefined;
+  const error = req.query.error as string | undefined;
+  const userName = req.query.user_name as string | undefined;
+  const userEmail = req.query.user_email as string | undefined;
+  const userAvatar = req.query.user_avatar as string | undefined;
+
+  if (error) {
+    res.status(400).send(renderCallbackPage(false, `登录失败: ${error}`));
+    return;
+  }
+
+  if (!token) {
+    res.status(400).send(renderCallbackPage(false, '回调中缺少 token 参数'));
+    return;
+  }
+
+  let enterpriseUrl = '';
+
+  if (state) {
+    const pending = resolvePendingAuth(state);
+    if (pending) {
+      enterpriseUrl = pending.enterpriseUrl;
+    }
+  }
+
+  // Fallback: extract enterprise URL from Referer header
+  if (!enterpriseUrl && req.headers.referer) {
+    try {
+      const refUrl = new URL(req.headers.referer);
+      enterpriseUrl = `${refUrl.protocol}//${refUrl.host}`;
+    } catch {
+      // ignore
+    }
+  }
+
+  if (!enterpriseUrl) {
+    enterpriseUrl = 'https://tas.woa.com';
+  }
+
+  try {
+    // Store in both systems for backward compatibility
+    await storeEnterpriseToken(enterpriseUrl, token);
+
+    const userInfo = (userName || userEmail)
+      ? { name: userName, email: userEmail, avatarUrl: userAvatar }
+      : undefined;
+    await enterpriseAuthService.login(enterpriseUrl, token, userInfo);
+
+    const displayName = userName || userEmail || '';
+    res.send(
+      renderCallbackPage(
+        true,
+        `ClawStudio 企业版登录成功！${displayName ? `欢迎，${displayName}。` : ''}令牌已自动保存到 ClawStudio。`,
+      ),
+    );
+  } catch (err) {
+    console.error('[Enterprise Auth Callback] Error storing token:', err);
+    res.status(500).send(
+      renderCallbackPage(false, `保存令牌失败: ${err instanceof Error ? err.message : String(err)}`),
+    );
+  }
+});
+
+function renderCallbackPage(success: boolean, message: string): string {
+  const color = success ? '#10b981' : '#ef4444';
+  const icon = success ? '✓' : '✕';
+  const autoCloseScript = success
+    ? `<script>
+  let sec = 10;
+  const el = document.getElementById('countdown');
+  const t = setInterval(() => {
+    sec--;
+    if (el) el.textContent = sec;
+    if (sec <= 0) { clearInterval(t); window.close(); }
+  }, 1000);
+</script>`
+    : '';
+  const hint = success
+    ? '此页面将在 <span id="countdown">10</span> 秒后自动关闭'
+    : '请返回 ClawStudio 重试';
+  const closeBtn = '';
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>ClawStudio 企业版认证</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+         display: flex; align-items: center; justify-content: center;
+         min-height: 100vh; margin: 0; background: #0f172a; color: #e2e8f0; }
+  .card { text-align: center; padding: 3rem; border-radius: 1rem;
+          background: #1e293b; box-shadow: 0 4px 24px rgba(0,0,0,.3); max-width: 420px; }
+  .icon { font-size: 3rem; color: ${color}; margin-bottom: 1rem; }
+  .msg  { font-size: 1.1rem; line-height: 1.6; }
+  .hint { margin-top: 1.5rem; font-size: .85rem; color: #94a3b8; }
+  #countdown { display: inline-block; min-width: 1.2em; font-weight: 700;
+               color: #f59e0b; font-size: 1.2rem; }
+</style></head>
+<body><div class="card">
+  <div class="icon">${icon}</div>
+  <div class="msg">${message}</div>
+  <div class="hint">${hint}</div>
+  ${closeBtn}
+</div>${autoCloseScript}</body></html>`;
+}
 
 export default router;

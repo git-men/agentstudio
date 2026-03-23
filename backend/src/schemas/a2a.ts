@@ -147,27 +147,40 @@ export const A2ATaskSchema = z.object({
 // ============================================================================
 
 /**
+ * Protocol type for external agent communication
+ */
+export const A2AProtocolTypeSchema = z.enum(['custom', 'a2a-jsonrpc']);
+
+/**
  * Allowed agent validation
  */
 export const AllowedAgentSchema = z.object({
   name: z.string().min(1, 'Agent name cannot be empty'),
   url: z.string().url('Invalid agent URL').refine(
     (url) => {
-      // In production, require HTTPS
       if (process.env.NODE_ENV === 'production') {
         return url.startsWith('https://');
       }
-      // In development, allow HTTP
       return url.startsWith('http://') || url.startsWith('https://');
     },
     {
       message: 'Agent URL must use HTTPS in production environment',
     }
   ),
-  apiKey: z.string().min(1, 'API key cannot be empty'),
+  apiKey: z.string(),
   description: z.string().optional(),
   enabled: z.boolean(),
-});
+  protocolType: A2AProtocolTypeSchema.optional(),
+  customHeaders: z.record(z.string(), z.string()).optional(),
+  agentCardUrl: z.string().url('Invalid Agent Card URL').optional(),
+}).refine(
+  (agent) => {
+    const proto = agent.protocolType || 'custom';
+    if (proto === 'custom') return agent.apiKey.length > 0;
+    return true;
+  },
+  { message: 'API key is required for Custom REST protocol', path: ['apiKey'] }
+);
 
 /**
  * A2A configuration validation

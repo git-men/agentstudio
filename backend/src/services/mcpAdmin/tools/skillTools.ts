@@ -4,10 +4,18 @@
  * MCP tools for managing skills in AgentStudio.
  */
 
+import path from 'path';
 import type { ToolDefinition, McpToolCallResult } from '../types.js';
 import { SkillStorage } from '../../skillStorage.js';
+import { getSdkDirName } from '../../../config/engineConfig.js';
 
-const skillStorage = new SkillStorage();
+const defaultSkillStorage = new SkillStorage();
+
+function getSkillStorage(projectPath?: string): SkillStorage {
+  if (!projectPath) return defaultSkillStorage;
+  const projectSkillsDir = path.join(projectPath, getSdkDirName(), 'skills');
+  return new SkillStorage(undefined, projectSkillsDir);
+}
 
 /**
  * List all skills
@@ -27,6 +35,10 @@ export const listSkillsTool: ToolDefinition = {
           type: 'boolean',
           description: 'Include disabled skills (default: false)',
         },
+        projectPath: {
+          type: 'string',
+          description: 'Absolute path to the project directory (required when scope is "project" or "all")',
+        },
       },
     },
   },
@@ -34,6 +46,8 @@ export const listSkillsTool: ToolDefinition = {
     try {
       const scope = (params.scope as string) || 'all';
       const includeDisabled = (params.includeDisabled as boolean) ?? false;
+      const projectPath = params.projectPath as string | undefined;
+      const skillStorage = getSkillStorage(projectPath);
 
       let skills;
       if (scope === 'user') {
@@ -102,6 +116,10 @@ export const getSkillTool: ToolDefinition = {
           type: 'string',
           description: 'Scope: "user" or "project" (optional, searches both if not specified)',
         },
+        projectPath: {
+          type: 'string',
+          description: 'Absolute path to the project directory (required when scope is "project")',
+        },
       },
       required: ['skillId'],
     },
@@ -110,6 +128,8 @@ export const getSkillTool: ToolDefinition = {
     try {
       const skillId = params.skillId as string;
       const scope = params.scope as 'user' | 'project' | undefined;
+      const projectPath = params.projectPath as string | undefined;
+      const skillStorage = getSkillStorage(projectPath);
 
       if (!skillId) {
         return {
@@ -174,7 +194,11 @@ export const createSkillTool: ToolDefinition = {
         },
         scope: {
           type: 'string',
-          description: 'Scope: "user" (default) or "project"',
+          description: 'Scope: "user" (default, global ~/.claude/skills/) or "project" (project-level, requires projectPath)',
+        },
+        projectPath: {
+          type: 'string',
+          description: 'Absolute path to the project directory. Required when scope is "project". Skills will be created under <projectPath>/.claude/skills/',
         },
         allowedTools: {
           type: 'array',
@@ -209,8 +233,18 @@ export const createSkillTool: ToolDefinition = {
       const description = params.description as string;
       const content = params.content as string;
       const scope = (params.scope as 'user' | 'project') || 'user';
+      const projectPath = params.projectPath as string | undefined;
       const allowedTools = params.allowedTools as string[] | undefined;
       const additionalFiles = params.additionalFiles as Array<{ relativePath: string; content: string }> | undefined;
+
+      if (scope === 'project' && !projectPath) {
+        return {
+          content: [{ type: 'text', text: 'projectPath is required when scope is "project"' }],
+          isError: true,
+        };
+      }
+
+      const skillStorage = getSkillStorage(projectPath);
 
       if (!name || !description || !content) {
         return {
@@ -301,6 +335,10 @@ export const updateSkillTool: ToolDefinition = {
           type: 'string',
           description: 'Scope: "user" or "project"',
         },
+        projectPath: {
+          type: 'string',
+          description: 'Absolute path to the project directory (required when scope is "project")',
+        },
         name: {
           type: 'string',
           description: 'New skill name',
@@ -344,6 +382,7 @@ export const updateSkillTool: ToolDefinition = {
     try {
       const skillId = params.skillId as string;
       const scope = params.scope as 'user' | 'project';
+      const projectPath = params.projectPath as string | undefined;
 
       if (!skillId || !scope) {
         return {
@@ -351,6 +390,15 @@ export const updateSkillTool: ToolDefinition = {
           isError: true,
         };
       }
+
+      if (scope === 'project' && !projectPath) {
+        return {
+          content: [{ type: 'text', text: 'projectPath is required when scope is "project"' }],
+          isError: true,
+        };
+      }
+
+      const skillStorage = getSkillStorage(projectPath);
 
       const updates: Record<string, unknown> = {};
       if (params.name !== undefined) updates.name = params.name;
@@ -434,6 +482,10 @@ export const deleteSkillTool: ToolDefinition = {
           type: 'string',
           description: 'Scope: "user" or "project" (optional, searches both if not specified)',
         },
+        projectPath: {
+          type: 'string',
+          description: 'Absolute path to the project directory (required when scope is "project")',
+        },
       },
       required: ['skillId'],
     },
@@ -442,6 +494,8 @@ export const deleteSkillTool: ToolDefinition = {
     try {
       const skillId = params.skillId as string;
       const scope = params.scope as 'user' | 'project' | undefined;
+      const projectPath = params.projectPath as string | undefined;
+      const skillStorage = getSkillStorage(projectPath);
 
       if (!skillId) {
         return {

@@ -564,6 +564,41 @@ router.get('/status', (_req, res) => {
 });
 
 // =============================================================================
+// Dispatch IM API (forward message to WeChat Work via as-dispatch)
+// =============================================================================
+
+/**
+ * POST /api/agui/dispatch-im
+ *
+ * Proxy endpoint for the frontend to dispatch a message to an IM channel.
+ * Calls as-dispatch POST /api/im/send with JWT auth.
+ */
+router.post('/dispatch-im', async (req, res) => {
+  try {
+    const { sessionId, messageContent, botKey, chatId, projectName, agentId } = req.body as {
+      sessionId: string;
+      messageContent: string;
+      botKey: string;
+      chatId: string;
+      projectName?: string;
+      agentId?: string;
+    };
+
+    if (!sessionId || !messageContent || !botKey || !chatId) {
+      return res.status(400).json({ error: 'sessionId, messageContent, botKey, and chatId are required' });
+    }
+
+    const { sendToIM } = await import('../services/dispatchService.js');
+    const result = await sendToIM({ sessionId, messageContent, botKey, chatId, projectName, agentId });
+
+    return res.json(result);
+  } catch (error) {
+    console.error('[AGUI] dispatch-im error:', error);
+    return res.status(500).json({ error: 'Failed to dispatch message to IM' });
+  }
+});
+
+// =============================================================================
 // Session Inject API (for Facilitator Agent)
 // =============================================================================
 
@@ -582,10 +617,11 @@ router.get('/status', (_req, res) => {
 router.post('/sessions/:sessionId/inject', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { message, sender = 'facilitator-agent', workspace } = req.body as {
+    const { message, sender = 'facilitator-agent', workspace, fireAndForget } = req.body as {
       message: string;
       sender?: string;
       workspace?: string;
+      fireAndForget?: boolean;
     };
     const engineType = engineManager.getDefaultEngineType();
 
@@ -597,7 +633,7 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
       return res.status(400).json({ error: 'Workspace is required' });
     }
 
-    console.log(`💉 [AGUI] Inject request for session ${sessionId} from ${sender}`);
+    console.log(`💉 [AGUI] Inject request for session ${sessionId} from ${sender} (fireAndForget=${!!fireAndForget})`);
 
     // 1. Broadcast USER_MESSAGE event to all observers
     sessionEventBus.emit(sessionId, {
@@ -607,22 +643,6 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
       timestamp: Date.now(),
       sessionId,
     });
-
-    // 2. Send to engine and collect events
-    const events: AGUIEvent[] = [];
-    let resultSessionId = sessionId;
-
-    const onAguiEvent = (event: AGUIEvent) => {
-      events.push(event);
-
-      // Extract session ID from RUN_STARTED
-      if (event.type === AGUIEventType.RUN_STARTED && 'threadId' in event) {
-        resultSessionId = (event as any).threadId || resultSessionId;
-      }
-
-      // Broadcast AI response events to observers (and store in history for late subscribers)
-      sessionEventBus.emit(sessionId, event);
-    };
 
     // Resolve workspace path
     let resolvedWorkspace = workspace;
@@ -635,25 +655,45 @@ router.post('/sessions/:sessionId/inject', async (req, res) => {
       }
     }
 
-    // 3. Process with engine
-    const result = await engineManager.sendMessage(
-      engineType,
-      message.trim(),
-      {
-        type: engineType,
-        workspace: resolvedWorkspace,
-        sessionId,
-      },
-      onAguiEvent
-    );
+    // Engine processing helper
+    const processWithEngine = async () => {
+      const events: AGUIEvent[] = [];
+      let resultSessionId = sessionId;
 
-    console.log(`✅ [AGUI] Inject completed for session ${sessionId}, events: ${events.length}`);
+      const onAguiEvent = (event: AGUIEvent) => {
+        events.push(event);
+        if (event.type === AGUIEventType.RUN_STARTED && 'threadId' in event) {
+          resultSessionId = (event as any).threadId || resultSessionId;
+        }
+        sessionEventBus.emit(sessionId, event);
+      };
 
-    res.json({
-      success: true,
-      sessionId: resultSessionId,
-      eventsCount: events.length,
-    });
+      await engineManager.sendMessage(
+        engineType,
+        message.trim(),
+        {
+          type: engineType,
+          workspace: resolvedWorkspace,
+          sessionId,
+        },
+        onAguiEvent
+      );
+
+      console.log(`✅ [AGUI] Inject completed for session ${sessionId}, events: ${events.length}`);
+      return { sessionId: resultSessionId, eventsCount: events.length };
+    };
+
+    if (fireAndForget) {
+      // Return immediately, process in background
+      processWithEngine().catch((err) => {
+        console.error(`[AGUI] Background inject failed for session ${sessionId}:`, err);
+      });
+      return res.json({ success: true, sessionId, async: true });
+    }
+
+    // Synchronous mode: wait for engine to finish
+    const result = await processWithEngine();
+    res.json({ success: true, ...result });
 
   } catch (error) {
     console.error('[AGUI] Inject error:', error);

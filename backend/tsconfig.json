@@ -16,6 +16,10 @@
     "noEmit": false,
     "resolveJsonModule": true,
     "baseUrl": ".",
+    "paths": {
+      "@a2a-js/sdk/server": ["./node_modules/@a2a-js/sdk/dist/server/index.d.ts"],
+      "@a2a-js/sdk/client": ["./node_modules/@a2a-js/sdk/dist/client/index.d.ts"]
+    }
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

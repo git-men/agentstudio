@@ -1,7 +1,7 @@
 {
   "name": "agentstudio",
   "version": "0.4.4",
-  "description": "Claude-powered AgentStudio with React frontend and Node.js backend, built on top of Claude Code SDK",
+  "description": "ClawStudio - Multi-model AI Agent workspace with React frontend and Node.js backend, powered by OpenClaw",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -28,6 +28,8 @@
     "test:e2e": "node tests/e2e/run.mjs",
     "test:e2e:hooks": "node tests/e2e/run.mjs --spec hooks",
     "test:e2e:safety": "node tests/e2e/run.mjs --spec safety-check",
+    "storybook": "pnpm --filter @agentstudio/frontend run storybook",
+    "build-storybook": "pnpm --filter @agentstudio/frontend run build-storybook",
     "lint": "pnpm --recursive run lint",
     "type-check": "pnpm --recursive run type-check",
     "clean": "pnpm --recursive run clean --if-present",
@@ -58,6 +60,7 @@
     "url": "https://github.com/okguitar/agentstudio/issues"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "concurrently": "^8.2.2",
     "typescript": "^5.9.2"
   }

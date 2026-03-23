@@ -1,5 +1,8 @@
 import express from 'express';
 import { z } from 'zod';
+import * as path from 'path';
+import * as fs from 'fs';
+
 import type {
   SDKMessage,
   SDKSystemMessage,
@@ -8,6 +11,8 @@ import type {
 } from '@anthropic-ai/claude-agent-sdk';
 import { AgentStorage } from '../services/agentStorage';
 import { AgentConfig } from '../types/agents';
+// getAllProjectsDirs import removed — Claude SDK handles history persistence natively
+import { resolvePath } from '../config/paths.js';
 import { sessionManager } from '../services/sessionManager';
 import { buildQueryOptions } from '../utils/claudeUtils.js';
 import { handleSessionManagement, buildUserMessageContent } from '../utils/sessionUtils.js';
@@ -46,8 +51,6 @@ const router: express.Router = express.Router();
 
 // Storage instances
 const globalAgentStorage = new AgentStorage();
-
-
 
 
 // Validation schemas
@@ -987,7 +990,7 @@ router.post('/chat', async (req, res) => {
           'reuse', // session mode
           configSnapshot
         );
-        let actualSessionId = initialSessionId;
+        const actualSessionId = initialSessionId;
 
         // 📊 输出 Session 初始化后的信息
         console.log('📊 [Chat API] Session 初始化后的信息:');
@@ -1023,7 +1026,7 @@ router.post('/chat', async (req, res) => {
         // 为这个特定请求创建一个独立的query调用，但复用session context
         const currentSessionId = claudeSession.getClaudeSessionId();
 
-        // 使用会话的 sendMessage 方法发送消息
+        // 使用会话の sendMessage 方法发送消息
         let compactMessageBuffer: any[] = []; // 缓存 compact 相关消息
 
         // Initialize AGUI adapter if using AGUI output format
@@ -1034,6 +1037,9 @@ router.post('/chat', async (req, res) => {
           aguiAdapter = new ClaudeAguiAdapter(actualSessionId || currentSessionId || undefined);
         }
 
+        // Note: The Claude SDK natively persists messages to ~/.claude/projects/<path>/<session>.jsonl.
+        // A SessionHistoryWriter is NO LONGER used here to avoid writing each message twice,
+        // which previously caused duplicate messages when loading session history.
         const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
           if (isSDKSystemMessage(sdkMessage) && sdkMessage.subtype === "init") {
             // 📊 打印完整的 system.init 消息体，用于调试模型使用情况
@@ -1266,6 +1272,15 @@ router.post('/chat', async (req, res) => {
               sessionManager.confirmSessionId(claudeSession, responseSessionId, configSnapshot);
               console.log(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
 
+              // When the frontend sent an existing session ID (actualSessionId) but
+              // the SDK issued a different ID (responseSessionId), also register an
+              // alias so that subsequent requests using the original session ID can
+              // still find this session in memory.
+              if (actualSessionId && actualSessionId !== responseSessionId) {
+                sessionManager.registerSessionAlias(actualSessionId, claudeSession);
+                console.log(`🔗 Aliased frontend session ${actualSessionId} → SDK session ${responseSessionId}`);
+              }
+
               if (tempSessionId !== responseSessionId) {
                 notificationChannelManager.updateChannelSession(sseChannelId, responseSessionId);
                 frontendToolBridge.updateSessionId(tempSessionId, responseSessionId);
@@ -1341,6 +1356,9 @@ router.post('/chat', async (req, res) => {
           if (actualSessionId || currentSessionId) {
             eventData.session_id = actualSessionId || currentSessionId;
           }
+
+          // Note: SDK message persistence is handled natively by the Claude SDK.
+          // Do NOT append here — it would duplicate every message in the JSONL file.
 
           // Frontend tool calls are handled via FrontendToolBridge:
           // 1. MCP tool calls frontendToolBridge.waitForResult() → blocks

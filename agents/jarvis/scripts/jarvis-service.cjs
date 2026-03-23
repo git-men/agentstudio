@@ -379,34 +379,44 @@ async function listJournals(input) {
     return;
   }
   
-  function findFiles(dir) {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      const fullPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        findFiles(fullPath);
-      } else if (entry.name.endsWith('.md')) {
-        const date = entry.name.replace('.md', '');
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        const stat = fs.statSync(fullPath);
-        journals.push({
-          date,
-          path: fullPath,
-          preview: content.slice(0, 200) + (content.length > 200 ? '...' : ''),
-          size: stat.size,
-        });
+  // Only scan standard structure: journal/YYYY/MM-MonthName/YYYY-MM-DD.md
+  const yearEntries = fs.readdirSync(journalDir, { withFileTypes: true });
+  for (const yearEntry of yearEntries) {
+    if (!yearEntry.isDirectory() || !/^\d{4}$/.test(yearEntry.name)) continue;
+    const yearDir = path.join(journalDir, yearEntry.name);
+    const monthEntries = fs.readdirSync(yearDir, { withFileTypes: true });
+    for (const monthEntry of monthEntries) {
+      if (!monthEntry.isDirectory()) continue;
+      const monthDir = path.join(yearDir, monthEntry.name);
+      const fileEntries = fs.readdirSync(monthDir, { withFileTypes: true });
+      for (const fileEntry of fileEntries) {
+        if (!fileEntry.name.endsWith('.md')) continue;
+        const fullPath = path.join(monthDir, fileEntry.name);
+        const date = fileEntry.name.replace('.md', '');
+        try {
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const stat = fs.statSync(fullPath);
+          journals.push({
+            date,
+            path: fullPath,
+            preview: content.slice(0, 200) + (content.length > 200 ? '...' : ''),
+            size: stat.size,
+          });
+        } catch (e) {
+          console.error(`[Jarvis] Error reading journal: ${fullPath}`);
+        }
       }
     }
   }
   
-  findFiles(journalDir);
-  
   journals.sort((a, b) => b.date.localeCompare(a.date));
   
-  const limit = input.limit || 30;
-  const limited = journals.slice(0, limit);
+  const offset = input.offset || 0;
+  const limit = input.limit || 0;
+  const sliced = offset > 0 ? journals.slice(offset) : journals;
+  const result = limit > 0 ? sliced.slice(0, limit) : sliced;
   
-  console.log(JSON.stringify(limited, null, 2));
+  console.log(JSON.stringify({ total: journals.length, items: result }, null, 2));
 }
 
 async function getJournal(input) {

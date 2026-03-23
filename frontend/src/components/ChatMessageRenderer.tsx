@@ -3,7 +3,73 @@ import { MarkdownMessage } from './MarkdownMessage';
 import { ToolUsage } from './ToolUsage';
 import { ImagePreview } from './ImagePreview';
 import { CompactSummary } from './CompactSummary';
+import { A2UIRenderer } from './a2ui';
 import type { ChatMessage } from '../types/index';
+
+type TextSegment = { kind: 'text'; content: string } | { kind: 'thinking'; content: string };
+
+/**
+ * Split a text string on `<think>…</think>` boundaries.
+ *
+ * Handles three cases:
+ *  1. Fully closed tags  → `<think>content</think>`
+ *  2. Unclosed tag (still streaming) → `<think>partial…`
+ *  3. No tags at all → returns the whole string as a text segment
+ */
+function parseThinkTags(raw: string): TextSegment[] {
+  const segments: TextSegment[] = [];
+  const regex = /<think>([\s\S]*?)<\/think>/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(raw)) !== null) {
+    if (match.index > lastIndex) {
+      const before = raw.slice(lastIndex, match.index).trim();
+      if (before) segments.push({ kind: 'text', content: before });
+    }
+    const inner = match[1].trim();
+    if (inner) segments.push({ kind: 'thinking', content: inner });
+    lastIndex = match.index + match[0].length;
+  }
+
+  const tail = raw.slice(lastIndex);
+
+  // Unclosed <think> — treat remainder as in-progress thinking
+  const openIdx = tail.indexOf('<think>');
+  if (openIdx !== -1) {
+    const before = tail.slice(0, openIdx).trim();
+    if (before) segments.push({ kind: 'text', content: before });
+    const inner = tail.slice(openIdx + '<think>'.length).trim();
+    if (inner) segments.push({ kind: 'thinking', content: inner });
+  } else {
+    // Handle orphaned </think> (SDK sometimes strips opening <think> in stored messages)
+    const closeIdx = tail.indexOf('</think>');
+    if (closeIdx !== -1) {
+      const thinkingContent = tail.slice(0, closeIdx).trim();
+      const afterClose = tail.slice(closeIdx + '</think>'.length).trim();
+      if (thinkingContent) segments.push({ kind: 'thinking', content: thinkingContent });
+      if (afterClose) segments.push({ kind: 'text', content: afterClose });
+    } else {
+      const trimmed = tail.trim();
+      if (trimmed) segments.push({ kind: 'text', content: trimmed });
+    }
+  }
+
+  return segments;
+}
+
+const ThinkingBlock: React.FC<{ content: string }> = ({ content }) => (
+  <details className="my-2" open>
+    <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
+      💭 思考过程...
+    </summary>
+    <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
+      <div className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap break-words leading-relaxed italic">
+        {content}
+      </div>
+    </div>
+  </details>
+);
 
 interface ChatMessageRendererProps {
   message: ChatMessage;
@@ -126,18 +192,7 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                 console.warn('Failed to parse thinking content:', e);
               }
 
-              return (
-                <details key={part.id} className="my-2" open>
-                  <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
-                    💭 思考过程... (历史消息)
-                  </summary>
-                  <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                    <div className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap break-words leading-relaxed italic">
-                      {thinkingText}
-                    </div>
-                  </div>
-                </details>
-              );
+              return <ThinkingBlock key={part.id} content={thinkingText} />;
             } else {
               // For other unknown types, render as text
               return (
@@ -147,24 +202,26 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
               );
             }
           } else if (part.type === 'text' && part.content) {
+            const segments = parseThinkTags(part.content);
+            const hasThinkSegments = segments.some(s => s.kind === 'thinking');
+            if (hasThinkSegments) {
+              return (
+                <div key={part.id}>
+                  {segments.map((seg, idx) =>
+                    seg.kind === 'thinking'
+                      ? <ThinkingBlock key={`${part.id}-seg-${idx}`} content={seg.content} />
+                      : <MarkdownMessage key={`${part.id}-seg-${idx}`} content={seg.content} isUserMessage={message.role === 'user'} />
+                  )}
+                </div>
+              );
+            }
             return (
               <div key={part.id}>
                 <MarkdownMessage content={part.content} isUserMessage={message.role === 'user'} />
               </div>
             );
           } else if (part.type === 'thinking' && part.content) {
-            return (
-              <details key={part.id} className="my-2" open>
-                <summary className="cursor-pointer text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-300 transition-colors select-none">
-                  💭 思考过程...
-                </summary>
-                <div className="mt-2 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                  <div className="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap break-words leading-relaxed italic">
-                    {part.content}
-                  </div>
-                </div>
-              </details>
-            );
+            return <ThinkingBlock key={part.id} content={part.content} />;
           } else if (part.type === 'tool' && part.toolData) {
             return (
               <ToolUsage
@@ -190,6 +247,15 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
                   className="max-w-32 max-h-32 object-cover rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:opacity-80 transition-opacity"
                   onClick={() => openImagePreview(imageUrl)}
                   title={part.imageData.filename || 'Click to preview'}
+                />
+              </div>
+            );
+          } else if (part.type === 'a2ui' && part.a2uiData) {
+            return (
+              <div key={part.id} className="a2ui-message-part my-2">
+                <A2UIRenderer
+                  messages={part.a2uiData.messages}
+                  className="rounded-lg"
                 />
               </div>
             );

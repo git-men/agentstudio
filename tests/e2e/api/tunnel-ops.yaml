@@ -1,0 +1,183 @@
+name: 隧道连接与批量操作
+sequential: true
+
+setup:
+  - name: "创建测试隧道 A"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/add"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        label: "Ops 测试隧道 A"
+        serverUrl: "https://ops-a.example.com"
+        token: "tun_ops_a_token"
+        tunnelName: "ops-a"
+        protocol: "https"
+        domainSuffix: ".test.example.com"
+        enabled: false
+    expect:
+      status: 200
+    save:
+      tunnel_a_id: "config.id"
+
+  - name: "创建测试隧道 B"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/add"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        label: "Ops 测试隧道 B"
+        serverUrl: "https://ops-b.example.com"
+        token: "tun_ops_b_token"
+        tunnelName: "ops-b"
+        protocol: "https"
+        domainSuffix: ".test.example.com"
+        enabled: false
+    expect:
+      status: 200
+    save:
+      tunnel_b_id: "config.id"
+
+cases:
+  # --- 连接与断开 ---
+
+  - name: "获取隧道 A 状态 - 初始为断开"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        id: "{{runtime.tunnel_a_id}}"
+        connected: false
+
+  - name: "断开已断开的隧道 - 幂等操作"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/disconnect"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+        status:
+          connected: false
+
+  - name: "连接到不可达服务器 - API 返回 200（异步连接）"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/connect"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "确认隧道未连接成功（服务器不可达）"
+    delay: 2s
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/status"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        connected: false
+
+  - name: "连接不存在的隧道 - 返回 500"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/non-existent-id/connect"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+    expect:
+      status: 500
+
+  - name: "断开不存在的隧道 - 幂等返回 200"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/non-existent-id/disconnect"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+
+  # --- 批量操作 ---
+
+  - name: "批量断开所有隧道"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/disconnect-all"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+        statuses: { exists: true, type: array }
+
+  - name: "验证存在多个隧道"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/list"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        tunnels:
+          length: { gte: 2 }
+
+  - name: "批量连接所有隧道 - 返回结果"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/tunnel/connect-all"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        success: true
+        results: { exists: true, type: array }
+
+  - name: "所有隧道仍为断开状态（因服务器不可达）"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/tunnel/list"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        tunnels:
+          every:
+            status:
+              connected: false
+
+teardown:
+  - name: "清理隧道 A"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
+
+  - name: "清理隧道 B"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_b_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true

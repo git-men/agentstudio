@@ -72,7 +72,7 @@
     "enterSystem": "进入系统"
   },
   "landing": {
-    "pageTitle": "AgentStudio - Agent 工作台 | Claude Agent SDK 驱动",
+    "pageTitle": "ClawStudio - Agent 工作台 | 多模型 AI Agent 协作工作台",
     "metaDescription": "Agent for Work - 本地的 Agent 工作台，由 Claude Agent SDK 强力驱动。数据完全私有，支持定时任务、A2A 协议、自定义 Agent。",
     "nav": {
       "enterWorkspace": "进入工作台",
@@ -175,7 +175,7 @@
       "example4": "代码审查 Agent"
     },
     "comparison": {
-      "title": "AgentStudio vs Claude Code",
+      "title": "ClawStudio vs Claude Code",
       "subtitle": "同样的 Claude Agent SDK，更友好的使用体验",
       "dimension": "对比维度",
       "interface": "交互形态",
@@ -201,7 +201,7 @@
     },
     "footer": {
       "description": "Agent for Work - 本地的 Agent 工作台，由 Claude Agent SDK 强力驱动。",
-      "copyright": "© 2026 AgentStudio. GPL v3 License.",
+      "copyright": "© 2026 ClawStudio. GPL v3 License.",
       "product": "产品",
       "workspace": "工作台",
       "sourceCode": "源码",
@@ -367,6 +367,11 @@
       "error": "❌ 发生错误"
     }
   },
+  "workspace": {
+    "emptyTitle": "欢迎使用工作台",
+    "emptyDescription": "创建一个新会话开始与你的 Agent 对话。",
+    "newSession": "新建会话"
+  },
   "dashboard": {
     "title": "首页",
     "welcome": "欢迎回到Claude Code工作台",
@@ -394,6 +399,13 @@
       "modelSettings": "模型供应商",
       "scheduledTasks": "定时任务",
       "customAgents": "自定义 Agent"
+    },
+    "providerCheck": {
+      "title": "模型供应商尚未配置",
+      "description": "当前默认模型供应商不可用，请在供应商设置中配置 API 密钥。",
+      "configure": "前往配置",
+      "later": "稍后配置",
+      "checking": "正在检查模型供应商可用性..."
     },
     "sessions": {
       "title": "活跃会话",
@@ -672,7 +684,7 @@
     },
     "mcpAdmin": {
       "title": "MCP Admin Server",
-      "subtitle": "配置 MCP Admin API，允许外部 AI 工具管理您的 AgentStudio",
+      "subtitle": "配置 MCP Admin API，允许外部 AI 工具管理您的 ClawStudio",
       "refresh": "刷新",
       "serverStatus": "服务器状态",
       "status": {
@@ -747,7 +759,7 @@
         "button": "使用帮助",
         "title": "MCP Admin Server 使用帮助",
         "whatIs": "什么是 MCP Admin Server？",
-        "whatIsDesc": "MCP Admin Server 是一个标准的 MCP（Model Context Protocol）服务器，允许其他 AI 工具（如 Cursor、Claude Desktop）通过 MCP 协议远程管理您的 AgentStudio。通过这个接口，您可以在其他 AI 工具中直接查询和管理 AgentStudio 的项目、智能体、MCP 服务器等。",
+        "whatIsDesc": "MCP Admin Server 是一个标准的 MCP（Model Context Protocol）服务器，允许其他 AI 工具（如 Cursor、Claude Desktop）通过 MCP 协议远程管理您的 ClawStudio。通过这个接口，您可以在其他 AI 工具中直接查询和管理 ClawStudio 的项目、智能体、MCP 服务器等。",
         "howToUse": "如何使用？",
         "step1": "在本页面创建一个 Admin API 密钥",
         "step2": "点击「查看配置」获取配置代码片段",
@@ -794,8 +806,8 @@
       "title": "遥测与分析",
       "description": "管理匿名使用数据收集",
       "enableTelemetry": "启用匿名遥测",
-      "enableDescription": "分享匿名使用数据，帮助我们改进 AgentStudio",
-      "statusEnabled": "遥测已启用。感谢您帮助改进 AgentStudio！",
+      "enableDescription": "分享匿名使用数据，帮助我们改进 ClawStudio",
+      "statusEnabled": "遥测已启用。感谢您帮助改进 ClawStudio！",
       "statusDisabled": "遥测已禁用。不会收集任何数据。",
       "whatWeCollect": "我们收集的数据",
       "whatWeNeverCollect": "我们绝不收集的数据",
@@ -818,9 +830,9 @@
       "privacyNote": "隐私优先",
       "privacyNoteDesc": "所有遥测数据都是匿名和聚合的。我们无法识别个人用户。您可以随时禁用遥测。",
       "consent": {
-        "title": "帮助改进 AgentStudio",
+        "title": "帮助改进 ClawStudio",
         "subtitle": "匿名使用数据",
-        "description": "我们收集匿名使用数据，以了解 AgentStudio 的使用方式并改善用户体验。不会收集任何个人信息。",
+        "description": "我们收集匿名使用数据，以了解 ClawStudio 的使用方式并改善用户体验。不会收集任何个人信息。",
         "whatWeCollect": "我们收集的数据",
         "item1": "匿名安装 ID",
         "item2": "应用版本和操作系统类型",
@@ -951,7 +963,23 @@
       "saveFailed": "保存配置失败",
       "copyFailed": "复制失败"
     },
-    "commandCopied": "命令已复制到剪贴板"
+    "commandCopied": "命令已复制到剪贴板",
+    "tabs": {
+      "myServers": "我的 MCP",
+      "marketplace": "推荐 MCP"
+    },
+    "presets": {
+      "loading": "加载推荐 MCP 中...",
+      "searchPlaceholder": "搜索 MCP 服务...",
+      "noResults": "未找到匹配的 MCP 服务",
+      "install": "安装",
+      "installed": "已安装",
+      "installSuccess": "{{name}} 安装成功",
+      "installFailed": "安装失败",
+      "missingEnvVars": "请填写所有必填项",
+      "configureTitle": "配置 {{name}}",
+      "configureDescription": "请填写所需配置以安装此 MCP 服务。"
+    }
   },
   "commands": {
     "title": "自定义命令",

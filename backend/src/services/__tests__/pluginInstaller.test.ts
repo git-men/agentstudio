@@ -303,7 +303,13 @@ describe('PluginInstaller', () => {
         pluginName: 'test-plugin'
       };
 
+      vi.mocked(fs.lstatSync).mockImplementation(() => ({ isSymbolicLink: () => true } as any));
+      vi.mocked(fs.unlinkSync).mockReturnValue(undefined);
       vi.mocked(fs.existsSync).mockReturnValue(true);
+      if (fs.promises) {
+        vi.mocked(fs.promises.readFile).mockResolvedValue('{"hooks":[]}');
+        vi.mocked(fs.promises.readdir).mockResolvedValue([]);
+      }
 
       const { pluginPaths } = await import('../pluginPaths');
       vi.mocked(pluginPaths.getPluginPath).mockReturnValue('/test/path');

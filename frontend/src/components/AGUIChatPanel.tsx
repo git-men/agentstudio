@@ -6,9 +6,13 @@
  * and tool call display.
  */
 
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Clock, Plus, RefreshCw, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
+import { Clock, Plus, RefreshCw, ChevronDown, MapPin, Forward, Check, Loader2, AlertCircle } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
+import { useSharedStore } from '../stores/useSharedStore';
+import { SessionStoreContext, useSessionStoreOptional, useIsWorkspaceMode } from '../stores/SessionStoreContext';
+import { sessionStoreManager } from '../services/SessionStoreManager';
+import { SessionStreamManager } from '../services/SessionStreamManager';
 import { useAgentSessions, useInterruptSession } from '../hooks/useAgents';
 import { useSessions } from '../hooks/useSessions';
 import { useSessionHeartbeatOnSuccess } from '../hooks/useSessionHeartbeatOnSuccess';
@@ -40,6 +44,9 @@ import {
 import useEngine from '../hooks/useEngine';
 import { useRatingTool } from '../hooks/useRatingTool';
 import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
+import { useDispatchIM } from '../hooks/useDispatchIM';
+import { DispatchIMDialog } from './chat/DispatchIMDialog';
+import { useInjectObserver } from '../hooks/useInjectObserver';
 
 
 interface AGUIChatPanelProps {
@@ -48,6 +55,16 @@ interface AGUIChatPanelProps {
     onSessionChange?: (sessionId: string | null) => void;
     initialMessage?: string;
     environmentContext?: string;
+    /** When true, the top header bar (agent info, new session, history, refresh) is hidden. */
+    hideHeader?: boolean;
+    /** External handler for creating a new session (workspace mode). */
+    onNewSession?: () => void;
+    /**
+     * When set, pre-fills the input box with this text WITHOUT auto-sending.
+     * Useful for "guided" flows where the user reviews and confirms the message.
+     * Changes to this value after mount will update the input (it's reactive).
+     */
+    draftMessage?: string;
 }
 
 /**
@@ -58,7 +75,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     projectPath: rawProjectPath,
     onSessionChange,
     initialMessage,
-    environmentContext
+    environmentContext,
+    hideHeader = false,
+    onNewSession: externalNewSession,
+    draftMessage,
 }) => {
     const { t } = useTranslation('components');
     const { isCompactMode } = useResponsiveSettings();
@@ -87,24 +107,97 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     const [projectDefaultProvider, setProjectDefaultProvider] = useState<string | undefined>(undefined);
     const [projectDefaultModel, setProjectDefaultModel] = useState<string | undefined>(undefined);
 
-    // Agent store state
-    const {
-        messages,
-        isAiTyping,
-        currentSessionId,
-        mcpStatus,
-        pendingFrontendTools,
-        selectedEngine,
-        engineUICapabilities,
-        engineModels,
-        addMessage,
-        interruptAllExecutingTools,
-        setAiTyping,
-        removePendingFrontendTool,
-    } = useAgentStore();
+    // ---- Dual-mode state: workspace (Context) vs legacy (facade) ----
+    const isWorkspaceMode = useIsWorkspaceMode();
+    const ctxStoreInstance = useContext(SessionStoreContext);
+
+    // Session-scoped state — from SessionStoreContext when in workspace
+    // mode, from useAgentStore facade when in legacy ChatPage mode.
+    // Both hooks are always called (hook-rule safe); we pick values below.
+    const ctxMessages = useSessionStoreOptional((s) => s.messages);
+    const ctxIsAiTyping = useSessionStoreOptional((s) => s.isAiTyping);
+    const ctxMcpStatus = useSessionStoreOptional((s) => s.mcpStatus);
+    const ctxPendingFrontendTools = useSessionStoreOptional((s) => s.pendingFrontendTools);
+    const ctxAddMessage = useSessionStoreOptional((s) => s.addMessage);
+    const ctxInterruptAllExecutingTools = useSessionStoreOptional((s) => s.interruptAllExecutingTools);
+    const ctxSetAiTyping = useSessionStoreOptional((s) => s.setAiTyping);
+    const ctxRemovePendingFrontendTool = useSessionStoreOptional((s) => s.removePendingFrontendTool);
+    const ctxSessionId = useSessionStoreOptional((s) => s.sessionId);
+    const ctxLoadSessionMessages = useSessionStoreOptional((s) => s.loadSessionMessages);
+
+    // Shared state — always from the shared singleton
+    const selectedEngine = useSharedStore((s) => s.selectedEngine);
+    const engineUICapabilities = useSharedStore((s) => s.engineUICapabilities);
+    const engineModels = useSharedStore((s) => s.engineModels);
+
+    // Legacy facade state (always called to satisfy hook rules)
+    const facadeState = useAgentStore();
+
+    // Pick session-scoped values based on mode
+    const messages = isWorkspaceMode ? ctxMessages : facadeState.messages;
+    const isAiTyping = isWorkspaceMode ? ctxIsAiTyping : facadeState.isAiTyping;
+    const currentSessionId = isWorkspaceMode ? ctxSessionId : facadeState.currentSessionId;
+    const mcpStatus = isWorkspaceMode ? ctxMcpStatus : facadeState.mcpStatus;
+    const pendingFrontendTools = isWorkspaceMode ? ctxPendingFrontendTools : facadeState.pendingFrontendTools;
+    const addMessage = isWorkspaceMode ? ctxAddMessage : facadeState.addMessage;
+    const interruptAllExecutingTools = isWorkspaceMode ? ctxInterruptAllExecutingTools : facadeState.interruptAllExecutingTools;
+    const ctxSetStatus = useSessionStoreOptional((s) => s.setStatus);
+    const rawSetAiTyping = isWorkspaceMode ? ctxSetAiTyping : facadeState.setAiTyping;
+    const setAiTyping = useCallback(
+        (typing: boolean) => {
+            rawSetAiTyping(typing);
+            if (isWorkspaceMode) {
+                ctxSetStatus(typing ? 'running' : 'completed');
+            }
+        },
+        [rawSetAiTyping, isWorkspaceMode, ctxSetStatus],
+    );
+    const removePendingFrontendTool = isWorkspaceMode ? ctxRemovePendingFrontendTool : facadeState.removePendingFrontendTool;
+
+    // IM Dispatch state
+    const { dispatchToIM, getStatus: getDispatchStatus, resetStatus: resetDispatchStatus } = useDispatchIM();
+    const [dispatchDialog, setDispatchDialog] = useState<{ messageId: string; content: string } | null>(null);
+
+    const handleForwardClick = useCallback((messageId: string, content: string) => {
+        resetDispatchStatus(messageId);
+        setDispatchDialog({ messageId, content });
+    }, [resetDispatchStatus]);
+
+    const handleDispatchConfirm = useCallback(async (botKey: string, chatId: string) => {
+        if (!dispatchDialog || !currentSessionId) return;
+        await dispatchToIM(dispatchDialog.messageId, {
+            sessionId: currentSessionId,
+            messageContent: dispatchDialog.content,
+            botKey,
+            chatId,
+            projectName: projectPath?.split('/').pop(),
+        });
+        setDispatchDialog(null);
+    }, [dispatchDialog, currentSessionId, projectPath, dispatchToIM]);
+
+    const handleDispatchCancel = useCallback(() => {
+        setDispatchDialog(null);
+    }, []);
 
     // Auto-send ref for initial message
     const shouldAutoSendRef = useRef(false);
+
+    // Auto-focus textarea on mount (covers session switching in workspace mode)
+    useEffect(() => {
+        setTimeout(() => {
+            textareaRef.current?.focus();
+        }, 0);
+    }, []);
+
+    // Reactive draft message — pre-fills input WITHOUT auto-sending (user must confirm)
+    const prevDraftRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (draftMessage && draftMessage !== prevDraftRef.current) {
+            prevDraftRef.current = draftMessage;
+            setInputMessage(draftMessage);
+            setTimeout(() => textareaRef.current?.focus(), 50);
+        }
+    }, [draftMessage]);
 
     // Process initial message
     useEffect(() => {
@@ -114,6 +207,29 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             shouldAutoSendRef.current = true;
         }
     }, [initialMessage, hasProcessedInitialMessage]);
+
+    // T021: Auto-derive session title from first user message (workspace mode)
+    const ctxTitle = useSessionStoreOptional((s) => s.title);
+    const ctxSetTitle = useSessionStoreOptional((s) => s.setTitle);
+    const titleDerivedRef = useRef(false);
+    useEffect(() => {
+        if (!isWorkspaceMode || titleDerivedRef.current || ctxTitle) return;
+        const firstUserMsg = messages.find((m) => m.role === 'user');
+        if (!firstUserMsg) return;
+        const text = (firstUserMsg.content || '').trim();
+        if (!text) return;
+        const derived =
+            text.length <= 50
+                ? text
+                : text.slice(0, 50).replace(/\s+\S*$/, '') + '…';
+        ctxSetTitle(derived);
+        titleDerivedRef.current = true;
+    }, [isWorkspaceMode, messages, ctxTitle, ctxSetTitle]);
+
+    // Reset title derivation flag when session changes
+    useEffect(() => {
+        titleDerivedRef.current = false;
+    }, [currentSessionId]);
 
     // UI state management
     const uiState = useUIState();
@@ -145,7 +261,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         currentSessionId,
         projectPath,
         onSessionChange,
-        textareaRef
+        textareaRef,
+        sessionStore: ctxStoreInstance ?? undefined,
     });
     const {
         isLoadingMessages,
@@ -174,7 +291,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         handleDragLeave,
         handleDrop,
         clearImages,
-        setPreviewImage
+        setPreviewImage,
+        processImageFile
     } = useImageUpload({
         textareaRef,
         inputMessage,
@@ -342,19 +460,58 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         hasSuccessfulResponse
     });
 
+    // Observe externally injected messages (e.g. WeChat Work replies)
+    useInjectObserver({
+        sessionId: currentSessionId,
+        agentId: agent.id,
+        projectPath,
+        addMessage,
+        loadSessionMessages: isWorkspaceMode ? ctxLoadSessionMessages : undefined,
+    });
+
     // Load messages once on mount when a session is already selected (e.g. page
     // refreshed with ?session=xxx in the URL). Subsequent session switches go
     // through handleSwitchSession which loads messages imperatively.
-    const initialLoadDoneRef = useRef(false);
+    //
+    // State machine ref to prevent the load effect from overwriting live-streamed
+    // data after streaming ends (the most common cause of "last text disappears"):
+    //   'idle'      → no load attempted yet, waiting for conditions
+    //   'streaming' → session was created during streaming; skip backend load
+    //   'done'      → initial load completed or intentionally skipped
+    const initialLoadStateRef = useRef<'idle' | 'streaming' | 'done'>('idle');
+
     useEffect(() => {
-        if (currentSessionId && !initialLoadDoneRef.current && !isAiTyping) {
-            initialLoadDoneRef.current = true;
+        if (initialLoadStateRef.current === 'done') return;
+
+        if (isAiTyping && currentSessionId) {
+            initialLoadStateRef.current = 'streaming';
+            return;
+        }
+
+        if (!isAiTyping && currentSessionId) {
+            if (initialLoadStateRef.current === 'streaming') {
+                initialLoadStateRef.current = 'done';
+                return;
+            }
+            initialLoadStateRef.current = 'done';
             setIsLoadingMessages(true);
             loadMessagesForSession(currentSessionId).then(() => {
                 setIsLoadingMessages(false);
             });
         }
     }, [currentSessionId, isAiTyping, loadMessagesForSession, setIsLoadingMessages]);
+
+    // Auto-focus textarea when AI finishes responding
+    const prevIsAiTypingRef = useRef(false);
+    useEffect(() => {
+        const wasTyping = prevIsAiTypingRef.current;
+        prevIsAiTypingRef.current = isAiTyping;
+        if (wasTyping && !isAiTyping) {
+            setTimeout(() => {
+                textareaRef.current?.focus();
+            }, 0);
+        }
+    }, [isAiTyping]);
 
     // Restore model/provider from active session when page refreshes
     useEffect(() => {
@@ -400,6 +557,27 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // Check if commands failed to load
     const hasCommandsLoadError = !!(userCommandsError || projectCommandsError);
 
+    // Workspace mode: get the raw StoreApi and a SessionStreamManager for the
+    // active session so that SSE events write directly to the session store.
+    const sessionStoreApi = useContext(SessionStoreContext);
+    const workspaceStreamManagerRef = useRef<SessionStreamManager | null>(null);
+
+    const workspaceStreamManager = useMemo(() => {
+        if (!isWorkspaceMode || !sessionStoreApi) return undefined;
+        if (
+            workspaceStreamManagerRef.current &&
+            workspaceStreamManagerRef.current.getStore() === sessionStoreApi
+        ) {
+            return workspaceStreamManagerRef.current;
+        }
+        const mgr = new SessionStreamManager(sessionStoreApi);
+        workspaceStreamManagerRef.current = mgr;
+
+        const sid = sessionStoreApi.getState().sessionId;
+        sessionStoreManager.attachStream(sid, mgr);
+        return mgr;
+    }, [isWorkspaceMode, sessionStoreApi]);
+
     // Message sender hook
     const { isSendDisabled, handleSendMessage } = useMessageSender({
         agent,
@@ -441,6 +619,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
         getAllAvailableCommands,
         envVars,
         environmentContext,
+        sessionStore: isWorkspaceMode ? sessionStoreApi ?? undefined : undefined,
+        externalStreamManager: workspaceStreamManager,
     });
 
     // Auto-send initial message when conditions are met
@@ -581,7 +761,11 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     };
 
     const handleNewSessionWithUI = () => {
-        handleNewSession();
+        if (externalNewSession) {
+            externalNewSession();
+        } else {
+            handleNewSession();
+        }
         setShowSessions(false);
         setSearchTerm('');
     };
@@ -639,28 +823,98 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
 
     // Render messages using existing renderer - matching original chat style
+    const envContextRe = /^<environment_context>\n([\s\S]*?)\n<\/environment_context>\n\n/;
     const renderedMessages = useMemo(() => {
-        return messages.map((message) => (
-            <div key={message.id} className="px-4">
-                <div
-                    className={`text-sm leading-relaxed break-words overflow-hidden ${message.role === 'user'
-                        ? 'text-white p-3 rounded-lg bg-gray-800 dark:bg-gray-700'
-                        : 'text-gray-800 dark:text-gray-200'
-                        }`}
-                >
-                    <ChatMessageRenderer
-                        message={message as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
-                        onFrontendToolSubmit={handleFrontendToolSubmit}
-                        onFrontendToolCancel={handleFrontendToolCancel}
-                    />
+        return messages.map((message) => {
+            let displayMessage = message;
+            let envLabel: string | null = null;
+
+            if (message.role === 'user') {
+                if (message.content) {
+                    const match = message.content.match(envContextRe);
+                    if (match) {
+                        envLabel = match[1];
+                        displayMessage = { ...message, content: message.content.replace(envContextRe, '') };
+                    }
+                }
+                if ((message as any).messageParts?.length) {
+                    const firstText = (message as any).messageParts.find((p: any) => p.type === 'text' && p.content);
+                    if (firstText) {
+                        const match = firstText.content.match(envContextRe);
+                        if (match) {
+                            if (!envLabel) envLabel = match[1];
+                            displayMessage = {
+                                ...displayMessage,
+                                messageParts: (message as any).messageParts.map((p: any) =>
+                                    p === firstText ? { ...p, content: firstText.content.replace(envContextRe, '') } : p
+                                ),
+                            } as any;
+                        }
+                    }
+                }
+            }
+
+            const msgDispatch = message.role === 'assistant' ? getDispatchStatus(message.id) : null;
+            const plainText = message.content || '';
+
+            return (
+                <div key={message.id} className="px-4 group/msg">
+                    {envLabel && (
+                        <div className="flex items-center gap-1 mb-1 justify-end">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300">
+                                <MapPin className="w-3 h-3" />
+                                {envLabel}
+                            </span>
+                        </div>
+                    )}
+                    <div
+                        className={`text-sm leading-relaxed break-words overflow-hidden ${message.role === 'user'
+                            ? 'text-white p-3 rounded-lg'
+                            : 'text-gray-800 dark:text-gray-200'
+                            }`}
+                        style={message.role === 'user' ? { backgroundColor: 'hsl(var(--primary))', color: 'white' } : {}}
+                    >
+                        <ChatMessageRenderer
+                            message={displayMessage as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
+                            onFrontendToolSubmit={handleFrontendToolSubmit}
+                            onFrontendToolCancel={handleFrontendToolCancel}
+                        />
+                    </div>
+
+                    {message.role === 'assistant' && plainText && (
+                        <div className="flex items-center gap-2 mt-1 min-h-[20px]">
+                            {msgDispatch?.status === 'sent' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400" title={`已转发 (${msgDispatch.shortId})`}>
+                                    <Check size={12} /> 已转发
+                                </span>
+                            ) : msgDispatch?.status === 'sending' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-gray-400">
+                                    <Loader2 size={12} className="animate-spin" /> 发送中…
+                                </span>
+                            ) : msgDispatch?.status === 'error' ? (
+                                <span className="inline-flex items-center gap-1 text-xs text-red-500" title={msgDispatch.error}>
+                                    <AlertCircle size={12} /> 转发失败
+                                </span>
+                            ) : null}
+
+                            <button
+                                onClick={() => handleForwardClick(message.id, plainText)}
+                                className="opacity-0 group-hover/msg:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400"
+                                title="转发到企业微信"
+                            >
+                                <Forward size={13} />
+                            </button>
+                        </div>
+                    )}
                 </div>
-            </div>
-        ));
-    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel]);
+            );
+        });
+    }, [messages, handleFrontendToolSubmit, handleFrontendToolCancel, getDispatchStatus, handleForwardClick]);
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-gray-900">
-            {/* Header */}
+            {/* Header — hidden when embedded in ProjectWorkspacePage */}
+            {!hideHeader && (
             <div className="flex-shrink-0 h-12 px-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-800 flex items-center">
                 <div className="flex items-center justify-between w-full">
                     {/* Title with AGUI badge */}
@@ -713,7 +967,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             </div>
                             <button
                                 onClick={handleRefreshMessages}
-                                disabled={!currentSessionId || isLoadingMessages}
+                                disabled={!currentSessionId || isLoadingMessages || isAiTyping}
                                 className="p-1.5 hover:bg-white/50 dark:hover:bg-gray-700 rounded-md transition-colors text-gray-600 dark:text-gray-300 disabled:opacity-50"
                                 title={t('agentChat.refreshMessages')}
                             >
@@ -723,6 +977,10 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                     </div>
                 </div>
             </div>
+            )}
+
+            {/* EngineSelector must always mount (headless sync) even when header is hidden */}
+            {hideHeader && <EngineSelector disabled={isAiTyping} />}
 
             {/* Messages Area */}
             <div className="flex-1 relative min-h-0">
@@ -740,8 +998,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                         </div>
                     </div>
 
-                    {/* Loading state */}
-                    {isLoadingMessages && (
+                    {/* Loading state — only show spinner when there are no cached messages */}
+                    {isLoadingMessages && messages.length === 0 && (
                         <div className="flex flex-col items-center justify-center py-12 space-y-3">
                             <div className="flex space-x-2">
                                 <div className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"></div>
@@ -752,8 +1010,8 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                         </div>
                     )}
 
-                    {/* Messages */}
-                    {!isLoadingMessages && renderedMessages}
+                    {/* Messages — show immediately if cached, even during background refresh */}
+                    {renderedMessages}
 
                     {/* Typing indicator */}
                     {(isInitializingSession || isAiTyping || isStopping) && (
@@ -906,7 +1164,24 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
                 // Engine UI capabilities
                 engineUICapabilities={engineUICapabilities}
+
+                // New session
+                onNewSession={handleNewSessionWithUI}
+
+                // Screen capture support
+                processImageFile={processImageFile}
             />
+
+            {dispatchDialog && (
+                <DispatchIMDialog
+                    isOpen
+                    messagePreview={dispatchDialog.content}
+                    dispatchStatus={getDispatchStatus(dispatchDialog.messageId).status}
+                    error={getDispatchStatus(dispatchDialog.messageId).error}
+                    onConfirm={handleDispatchConfirm}
+                    onCancel={handleDispatchCancel}
+                />
+            )}
         </div>
     );
 };

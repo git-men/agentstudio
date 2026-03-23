@@ -21,7 +21,7 @@
  */
 
 /// <reference lib="dom" />
-import type { CallExternalAgentInput, CallExternalAgentOutput } from '../../types/a2a.js';
+import type { CallExternalAgentInput, CallExternalAgentOutput, A2AProtocolType } from '../../types/a2a.js';
 import { loadA2AConfig } from './a2aConfigService.js';
 import { a2aHistoryService } from './a2aHistoryService.js';
 import {
@@ -29,12 +29,28 @@ import {
   type TaskState,
 } from './a2aStreamEvents.js';
 import { v4 as uuidv4 } from 'uuid';
-// Import A2A SDK types from main module
 import type { MessageSendParams } from '@a2a-js/sdk';
-// Note: A2AClient is from @a2a-js/sdk/client but requires agent card discovery
-// We implement direct fetch-based calls for more control over authentication
 
 declare const process: any;
+
+/**
+ * Upgrade http:// to https:// for non-local URLs.
+ * HTTP→HTTPS redirects strip the Authorization header (RFC 7235),
+ * so we must use HTTPS directly to preserve auth credentials.
+ */
+function ensureHttps(url: string): string {
+  if (!url.startsWith('http://')) return url;
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host.endsWith('.local')) {
+      return url;
+    }
+    return url.replace(/^http:\/\//, 'https://');
+  } catch {
+    return url;
+  }
+}
 
 /**
  * MCP Tool Definition for call_external_agent
@@ -91,13 +107,10 @@ export async function callExternalAgent(
   input: CallExternalAgentInput,
   projectId: string
 ): Promise<CallExternalAgentOutput> {
-  // Default stream to false - streaming is only useful for web frontend real-time updates
-  // When called via MCP SDK tool, the caller should explicitly set stream based on channel context
   const { agentUrl, message, useTask = false, stream = false, timeout: inputTimeout } = input;
-  const timeout = inputTimeout || 600000; // Use provided timeout or default to 10 minutes
+  const timeout = inputTimeout || 600000;
 
   try {
-    // Step 1: Validate agent URL against project allowlist
     const validationResult = await validateAgentUrl(agentUrl, projectId);
 
     if (!validationResult.allowed) {
@@ -107,37 +120,34 @@ export async function callExternalAgent(
       };
     }
 
-    // Step 2: Get API key for external agent from allowlist
     const apiKey = validationResult.apiKey;
+    const protocolType = validationResult.protocolType || 'custom';
+    const customHeaders = validationResult.customHeaders;
 
-    if (!apiKey) {
+    if (!apiKey && protocolType === 'custom') {
       return {
         success: false,
         error: 'API key not found for allowed agent',
       };
     }
 
-    // Step 3: Make HTTP call to external agent using A2A SDK
+    // Route to standard A2A JSON-RPC or legacy custom REST protocol
+    if (protocolType === 'a2a-jsonrpc') {
+      return await callExternalAgentJsonRpc(
+        agentUrl, message, apiKey || '', timeout, stream,
+        projectId, customHeaders, input.contextId, input.taskId
+      );
+    }
+
+    // Legacy custom REST protocol
     if (useTask) {
-      // Async task mode - uses tasks endpoint
-      const taskResult = await callExternalAgentTask(agentUrl, message, apiKey, timeout);
+      const taskResult = await callExternalAgentTask(agentUrl, message, apiKey!, timeout);
       return taskResult;
     } else {
-      // Message mode (Sync or Streaming)
-      // Generate a unique session ID for tracking this interaction
       const sessionId = uuidv4();
-
-      // Use A2A standard streaming if requested
       const messageResult = await callExternalAgentMessage(
-        agentUrl,
-        message,
-        apiKey,
-        timeout,
-        sessionId,
-        stream,
-        projectId,
-        input.contextId,
-        input.taskId
+        agentUrl, message, apiKey!, timeout, sessionId,
+        stream, projectId, input.contextId, input.taskId
       );
       return messageResult;
     }
@@ -152,19 +162,22 @@ export async function callExternalAgent(
   }
 }
 
+interface AgentValidationResult {
+  allowed: boolean;
+  apiKey?: string;
+  protocolType?: A2AProtocolType;
+  customHeaders?: Record<string, string>;
+  error?: string;
+}
+
 /**
  * Validate agent URL against project's allowlist
- *
- * @param agentUrl - Target agent URL
- * @param projectId - Project ID for config lookup
- * @returns Validation result with API key if allowed
  */
 async function validateAgentUrl(
   agentUrl: string,
   projectId: string
-): Promise<{ allowed: boolean; apiKey?: string; error?: string }> {
+): Promise<AgentValidationResult> {
   try {
-    // Load project A2A configuration
     const config = await loadA2AConfig(projectId);
 
     if (!config) {
@@ -174,23 +187,21 @@ async function validateAgentUrl(
       };
     }
 
-    // Normalize URL for comparison (remove trailing slash)
     const normalizedTargetUrl = agentUrl.replace(/\/$/, '');
 
-    // Check if agent URL is in allowlist
     for (const allowedAgent of config.allowedAgents) {
       const normalizedAllowedUrl = allowedAgent.url.replace(/\/$/, '');
 
-      // Check if target URL starts with allowed URL (allows subpaths)
       if (normalizedTargetUrl.startsWith(normalizedAllowedUrl) && allowedAgent.enabled) {
         return {
           allowed: true,
           apiKey: allowedAgent.apiKey,
+          protocolType: allowedAgent.protocolType || 'custom',
+          customHeaders: allowedAgent.customHeaders,
         };
       }
     }
 
-    // Not found in allowlist
     return {
       allowed: false,
       error: `Agent URL '${agentUrl}' not found in project's allowed agents list. Please add it in project A2A settings.`,
@@ -343,9 +354,19 @@ async function callExternalAgentStreamFetch(
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+      redirect: 'manual',
     });
 
     clearTimeout(timeoutId);
+
+    // Detect redirect (auth gateway redirecting to login page)
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      const errMsg = `Agent server returned redirect (${response.status}). This usually means the API key is invalid or expired. Redirect: ${location.substring(0, 200)}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -586,9 +607,15 @@ async function callExternalAgentSyncFetch(
       },
       body: JSON.stringify(requestBody),
       signal: controller.signal,
+      redirect: 'manual',
     });
 
     clearTimeout(timeoutId);
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      return { success: false, error: `Agent server returned redirect (${response.status}). API key may be invalid or expired. Redirect: ${location.substring(0, 200)}` };
+    }
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: response.statusText }));
@@ -720,4 +747,457 @@ async function callExternalAgentTask(
       error: `Network error creating external agent task: ${errorMessage}`,
     };
   }
+}
+
+// ============================================================================
+// Standard A2A JSON-RPC 2.0 Protocol Client
+// ============================================================================
+
+/**
+ * Build HTTP headers for a standard A2A JSON-RPC call.
+ */
+function buildJsonRpcHeaders(
+  apiKey: string,
+  customHeaders?: Record<string, string>,
+  acceptSse = false
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (acceptSse) {
+    headers['Accept'] = 'text/event-stream';
+  }
+  if (apiKey) {
+    headers['Authorization'] = `Bearer ${apiKey}`;
+  }
+  if (customHeaders) {
+    Object.assign(headers, customHeaders);
+  }
+  return headers;
+}
+
+/**
+ * Build a JSON-RPC 2.0 request body for A2A message/send or message/stream.
+ */
+function buildJsonRpcBody(
+  method: 'message/send' | 'message/stream',
+  message: string,
+  requestId: string,
+  contextId?: string,
+  taskId?: string,
+  customHeaders?: Record<string, string>
+): string {
+  const params: any = {
+    message: {
+      messageId: uuidv4(),
+      role: 'user',
+      parts: [{ type: 'text', text: message }],
+    },
+    configuration: {
+      acceptedOutputModes: ['text'],
+    },
+  };
+
+  if (contextId) {
+    params.message.contextId = contextId;
+  }
+  if (taskId) {
+    params.message.taskId = taskId;
+  }
+  // Pass userId from X-User-Id header into configuration for servers that read it there
+  const userId = customHeaders?.['X-User-Id'];
+  if (userId) {
+    params.configuration.userId = userId;
+  }
+
+  return JSON.stringify({
+    jsonrpc: '2.0',
+    id: requestId,
+    method,
+    params,
+  });
+}
+
+/**
+ * Top-level dispatcher for standard A2A JSON-RPC calls.
+ */
+async function callExternalAgentJsonRpc(
+  agentUrl: string,
+  message: string,
+  apiKey: string,
+  timeout: number,
+  stream: boolean,
+  projectId: string,
+  customHeaders?: Record<string, string>,
+  contextId?: string,
+  taskId?: string,
+): Promise<CallExternalAgentOutput> {
+  const workingDirectory = projectId.startsWith('/') ? projectId : process.cwd();
+  const sessionId = uuidv4();
+  const requestId = uuidv4();
+
+  if (stream) {
+    return callJsonRpcStream(
+      agentUrl, message, apiKey, timeout, sessionId, requestId,
+      workingDirectory, customHeaders, contextId, taskId
+    );
+  }
+  return callJsonRpcSync(
+    agentUrl, message, apiKey, timeout, sessionId, requestId,
+    workingDirectory, customHeaders, contextId, taskId
+  );
+}
+
+/**
+ * Standard A2A JSON-RPC synchronous message/send.
+ */
+async function callJsonRpcSync(
+  agentUrl: string,
+  message: string,
+  apiKey: string,
+  timeout: number,
+  sessionId: string,
+  requestId: string,
+  workingDirectory: string,
+  customHeaders?: Record<string, string>,
+  contextId?: string,
+  taskId?: string,
+): Promise<CallExternalAgentOutput> {
+  const safeUrl = ensureHttps(agentUrl);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const response = await fetch(safeUrl, {
+      method: 'POST',
+      headers: buildJsonRpcHeaders(apiKey, customHeaders),
+      body: buildJsonRpcBody('message/send', message, requestId, contextId, taskId, customHeaders),
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    clearTimeout(timeoutId);
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      return { success: false, error: `Agent server returned redirect (${response.status}). API key may be invalid or expired. Redirect: ${location.substring(0, 200)}` };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      return { success: false, error: `HTTP ${response.status}: ${errorText}` };
+    }
+
+    const rpcResponse = await response.json() as any;
+
+    if (rpcResponse.error) {
+      return {
+        success: false,
+        error: `JSON-RPC error ${rpcResponse.error.code}: ${rpcResponse.error.message}`,
+      };
+    }
+
+    const result = rpcResponse.result;
+    if (!result) {
+      return { success: false, error: 'Empty result from JSON-RPC response' };
+    }
+
+    // Extract text from the result (could be Message or Task)
+    const responseText = extractTextFromA2AResult(result);
+
+    await a2aHistoryService.appendEvent(workingDirectory, sessionId, result);
+
+    return {
+      success: true,
+      data: responseText || 'Message processed',
+      sessionId,
+      contextId: result.contextId,
+      taskId: result.taskId || result.id,
+    };
+  } catch (error) {
+    clearTimeout(timeoutId);
+    if (error instanceof Error && error.name === 'AbortError') {
+      return { success: false, error: `Timed out after ${timeout}ms` };
+    }
+    return { success: false, error: `Network error: ${error instanceof Error ? error.message : String(error)}` };
+  }
+}
+
+/**
+ * Standard A2A JSON-RPC streaming message/stream with SSE.
+ */
+async function callJsonRpcStream(
+  agentUrl: string,
+  message: string,
+  apiKey: string,
+  timeout: number,
+  sessionId: string,
+  requestId: string,
+  workingDirectory: string,
+  customHeaders?: Record<string, string>,
+  contextId?: string,
+  taskId?: string,
+): Promise<CallExternalAgentOutput> {
+  const safeUrl = ensureHttps(agentUrl);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  a2aStreamEventEmitter.emitStreamStart({
+    sessionId,
+    projectId: workingDirectory,
+    agentUrl: safeUrl,
+    message,
+    contextId,
+    taskId,
+  });
+
+  try {
+    const response = await fetch(safeUrl, {
+      method: 'POST',
+      headers: buildJsonRpcHeaders(apiKey, customHeaders, true),
+      body: buildJsonRpcBody('message/stream', message, requestId, contextId, taskId, customHeaders),
+      signal: controller.signal,
+      redirect: 'manual',
+    });
+    clearTimeout(timeoutId);
+
+    // Detect redirect (auth gateway redirecting to login page)
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('location') || '';
+      const errMsg = `Agent server returned redirect (${response.status}). This usually means the API key is invalid or expired. Redirect: ${location.substring(0, 200)}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => response.statusText);
+      const errMsg = `HTTP ${response.status}: ${errorText}`;
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
+
+    // Server may return JSON error (not SSE) even with 200 status
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const jsonResp = await response.json() as any;
+      if (jsonResp.error) {
+        const errMsg = `JSON-RPC error ${jsonResp.error.code}: ${jsonResp.error.message}`;
+        a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+        return { success: false, error: errMsg };
+      }
+      const result = jsonResp.result;
+      if (result) {
+        const responseText = extractTextFromA2AResult(result);
+        return {
+          success: true,
+          data: responseText || 'Message processed (non-streaming response)',
+          sessionId,
+          contextId: result.contextId,
+          taskId: result.taskId || result.id,
+        };
+      }
+    }
+
+    // Reject non-SSE responses (e.g. HTML login pages after auth failure)
+    if (!contentType.includes('text/event-stream') && !contentType.includes('application/json')) {
+      const bodyPreview = await response.text().catch(() => '').then(t => t.substring(0, 300));
+      const errMsg = `Unexpected response content-type: ${contentType || 'none'}. Expected text/event-stream. Body preview: ${bodyPreview}`;
+      console.error(`[A2A Client] ${errMsg}`);
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
+
+    if (!response.body) {
+      const errMsg = 'No response body from external agent';
+      a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+      return { success: false, error: errMsg };
+    }
+
+    return await parseA2AStandardSseStream(
+      response, sessionId, workingDirectory, agentUrl
+    );
+  } catch (error) {
+    clearTimeout(timeoutId);
+    const errMsg = error instanceof Error && error.name === 'AbortError'
+      ? `Timed out after ${timeout}ms`
+      : `Network error: ${error instanceof Error ? error.message : String(error)}`;
+    a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+    return { success: false, error: errMsg };
+  }
+}
+
+/**
+ * Parse a standard A2A SSE stream.
+ *
+ * Expected event kinds:
+ * - status-update: { kind, taskId, contextId, status: { state }, final }
+ * - artifact-update: { kind, taskId, contextId, artifact: { parts: [{ kind, text }] } }
+ * - message: { kind, role, parts: [{ kind, text }], taskId, contextId, messageId }
+ */
+async function parseA2AStandardSseStream(
+  response: Response,
+  sessionId: string,
+  workingDirectory: string,
+  agentUrl: string,
+): Promise<CallExternalAgentOutput> {
+  const reader = response.body!.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let collectedText = '';
+  let finalContextId: string | undefined;
+  let finalTaskId: string | undefined;
+  let finalState: TaskState | undefined;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const dataStr = line.slice(6).trim();
+        if (!dataStr || dataStr === '[DONE]') continue;
+
+        let event: any;
+        try {
+          event = JSON.parse(dataStr);
+        } catch {
+          console.warn('[A2A Client] Failed to parse SSE data:', dataStr.substring(0, 100));
+          continue;
+        }
+
+        // Handle JSON-RPC wrapped events (result field contains the actual A2A event)
+        const a2aEvent = event.result || event;
+
+        await a2aHistoryService.appendEvent(workingDirectory, sessionId, a2aEvent);
+        a2aStreamEventEmitter.emitStreamData({
+          sessionId,
+          projectId: workingDirectory,
+          agentUrl,
+          event: a2aEvent,
+        });
+
+        if (a2aEvent.contextId) finalContextId = a2aEvent.contextId;
+        if (a2aEvent.taskId) finalTaskId = a2aEvent.taskId;
+
+        // A2A standard events use `kind`, SDK-style events use `type`
+        const eventKind = a2aEvent.kind;
+        const eventType = a2aEvent.type;
+
+        if (eventKind) {
+          // A2A standard protocol events
+          switch (eventKind) {
+            case 'status-update': {
+              const state = a2aEvent.status?.state;
+              if (a2aEvent.final && state) {
+                finalState = state as TaskState;
+              }
+              break;
+            }
+            case 'artifact-update': {
+              const parts = a2aEvent.artifact?.parts || [];
+              for (const part of parts) {
+                if (part.kind === 'text' || part.type === 'text') {
+                  collectedText += part.text || '';
+                }
+              }
+              break;
+            }
+            case 'message': {
+              const parts = a2aEvent.parts || [];
+              let msgText = '';
+              for (const part of parts) {
+                if (part.kind === 'text' || part.type === 'text') {
+                  msgText += part.text || '';
+                }
+              }
+              if (msgText) {
+                collectedText = msgText;
+              }
+              break;
+            }
+          }
+        } else if (eventType) {
+          // SDK-style events (backward compatibility with servers that use `type` instead of `kind`)
+          switch (eventType) {
+            case 'assistant': {
+              if (a2aEvent.message?.content) {
+                for (const block of a2aEvent.message.content) {
+                  if (block.type === 'text') {
+                    collectedText += block.text || '';
+                  }
+                }
+              }
+              break;
+            }
+            case 'result': {
+              const isError = a2aEvent.subtype === 'error' || a2aEvent.is_error;
+              finalState = isError ? 'failed' : 'completed';
+              break;
+            }
+            case 'system': {
+              if (a2aEvent.sessionId) {
+                finalContextId = a2aEvent.sessionId;
+              }
+              break;
+            }
+          }
+        }
+
+        // Also handle JSON-RPC error responses in the stream
+        if (event.error) {
+          const errMsg = `JSON-RPC stream error ${event.error.code}: ${event.error.message}`;
+          a2aStreamEventEmitter.emitStreamEnd({ sessionId, projectId: workingDirectory, success: false, error: errMsg });
+          return { success: false, error: errMsg };
+        }
+      }
+    }
+  } catch (streamError) {
+    const errMsg = streamError instanceof Error ? streamError.message : String(streamError);
+    a2aStreamEventEmitter.emitStreamEnd({
+      sessionId, projectId: workingDirectory, success: false, error: errMsg, finalState,
+    });
+    return { success: false, error: `Stream error: ${errMsg}` };
+  }
+
+  a2aStreamEventEmitter.emitStreamEnd({
+    sessionId, projectId: workingDirectory, success: true, finalState: finalState || 'completed',
+  });
+
+  return {
+    success: true,
+    data: collectedText || 'Streaming completed',
+    sessionId,
+    contextId: finalContextId,
+    taskId: finalTaskId,
+  };
+}
+
+/**
+ * Extract text from a standard A2A result (Message or Task).
+ */
+function extractTextFromA2AResult(result: any): string {
+  // Direct Message response: { kind: "message", parts: [...] }
+  if (result.parts) {
+    return result.parts
+      .filter((p: any) => p.kind === 'text' || p.type === 'text')
+      .map((p: any) => p.text || '')
+      .join('');
+  }
+  // Task response with history: { id, status, history: [{ parts: [...] }] }
+  if (result.history && Array.isArray(result.history)) {
+    const agentMessages = result.history.filter((m: any) => m.role === 'agent');
+    const lastAgent = agentMessages[agentMessages.length - 1];
+    if (lastAgent?.parts) {
+      return lastAgent.parts
+        .filter((p: any) => p.kind === 'text' || p.type === 'text')
+        .map((p: any) => p.text || '')
+        .join('');
+    }
+  }
+  return '';
 }

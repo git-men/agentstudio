@@ -141,7 +141,6 @@ describe('PRODUCT_EDITION=chat-only', () => {
       ['post',   '/api/marketplace-skills/batch'],
       ['get',    '/api/projects/proj-1/versions'],
       ['post',   '/api/projects/proj-1/versions/tag'],
-      ['get',    '/api/a2a/history/proj/sess'],
     ] as [string, string][])(
       '%s %s → 200',
       async (method, path) => {
@@ -152,29 +151,6 @@ describe('PRODUCT_EDITION=chat-only', () => {
   });
 
   describe('readonly modules — GET allowed, mutations blocked', () => {
-    it('GET /api/agents → 200', async () => {
-      const app = createApp();
-      await expects200(app, 'get', '/api/agents');
-    });
-
-    it('POST /api/agents → 403 Readonly access', async () => {
-      const app = createApp();
-      const res = await expects403(app, 'post', '/api/agents');
-      expect(res.body.error).toBe('Readonly access');
-      expect(res.body.module).toBe('manage.agents');
-      expect(res.body.edition).toBe('chat-only');
-    });
-
-    it('PUT /api/agents/agent-1 → 403', async () => {
-      const app = createApp();
-      await expects403(app, 'put', '/api/agents/agent-1');
-    });
-
-    it('DELETE /api/agents/agent-1 → 403', async () => {
-      const app = createApp();
-      await expects403(app, 'delete', '/api/agents/agent-1');
-    });
-
     it('GET /api/projects → 200', async () => {
       const app = createApp();
       await expects200(app, 'get', '/api/projects');
@@ -187,6 +163,8 @@ describe('PRODUCT_EDITION=chat-only', () => {
       expect(res.body.module).toBe('manage.projects');
     });
   });
+
+
 
   describe('infrastructure / unmatched routes — always pass through', () => {
     it.each([
@@ -214,12 +192,12 @@ describe('PRODUCT_EDITION=chat-only', () => {
 
     it('readonly violation has error + message + module + edition', async () => {
       const app = createApp();
-      const res = await request(app).post('/api/agents');
+      const res = await request(app).post('/api/projects');
       expect(res.status).toBe(403);
       expect(res.body).toMatchObject({
         error:   'Readonly access',
-        message: expect.stringContaining('manage.agents'),
-        module:  'manage.agents',
+        message: expect.stringContaining('manage.projects'),
+        module:  'manage.projects',
         edition: 'chat-only',
       });
     });

@@ -522,5 +522,144 @@ describe('a2aConfigService - Configuration Validation', () => {
       expect(validation.valid).toBe(true);
       expect(validation.errors).toBeUndefined();
     });
+
+    // ========== protocolType / customHeaders Tests ==========
+
+    it('should validate agent with protocolType custom', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'REST Agent',
+            url: 'https://agent.example.com',
+            apiKey: 'key123',
+            enabled: true,
+            protocolType: 'custom',
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should validate agent with protocolType a2a-jsonrpc', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'Standard A2A Agent',
+            url: 'https://agenthub.example.com/a2a/group123',
+            apiKey: '',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should reject invalid protocolType', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'Agent',
+            url: 'https://agent.example.com',
+            apiKey: 'key',
+            enabled: true,
+            protocolType: 'grpc' as any,
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors?.some(e => e.includes('protocolType'))).toBe(true);
+    });
+
+    it('should allow empty apiKey for a2a-jsonrpc protocol', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'No-Auth Agent',
+            url: 'https://public.example.com/a2a',
+            apiKey: '',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should still require apiKey for custom protocol', () => {
+      const config = {
+        allowedAgents: [
+          {
+            name: 'Agent',
+            url: 'https://agent.example.com',
+            enabled: true,
+            protocolType: 'custom',
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      } as any;
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors?.some(e => e.includes('apiKey'))).toBe(true);
+    });
+
+    it('should validate agent with customHeaders', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'AgentHub',
+            url: 'https://agenthub.example.com/a2a/group',
+            apiKey: 'token123',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+            customHeaders: { 'X-User-Id': 'kongjie', 'X-Group-Id': 'grp123' },
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(true);
+    });
+
+    it('should reject non-object customHeaders', () => {
+      const config: A2AConfig = {
+        allowedAgents: [
+          {
+            name: 'Agent',
+            url: 'https://agent.example.com',
+            apiKey: 'key',
+            enabled: true,
+            protocolType: 'a2a-jsonrpc',
+            customHeaders: 'invalid' as any,
+          },
+        ],
+        taskTimeout: 60000,
+        maxConcurrentTasks: 5,
+      };
+
+      const validation = validateA2AConfig(config);
+      expect(validation.valid).toBe(false);
+      expect(validation.errors?.some(e => e.includes('customHeaders'))).toBe(true);
+    });
   });
 });

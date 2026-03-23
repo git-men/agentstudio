@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { ChevronDown, Settings, Zap, Cpu, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EnvVarsConfig } from './EnvVarsConfig';
@@ -41,7 +41,28 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
   const { t } = useTranslation('components');
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  // Keep popup within viewport bounds
+  useLayoutEffect(() => {
+    if (!isOpen || !popupRef.current) return;
+
+    const popup = popupRef.current;
+    popup.style.transform = '';
+
+    const rect = popup.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const padding = 12;
+
+    if (rect.right > viewportWidth - padding) {
+      const shift = rect.right - viewportWidth + padding;
+      popup.style.transform = `translateX(-${shift}px)`;
+    } else if (rect.left < padding) {
+      const shift = padding - rect.left;
+      popup.style.transform = `translateX(${shift}px)`;
+    }
+  }, [isOpen]);
+
   // Default capabilities if not provided (Claude engine defaults)
   const uiCaps = engineUICapabilities || {
     showMcpToolSelector: true,
@@ -101,9 +122,9 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center space-x-2 px-3 py-2 text-sm rounded-lg transition-colors border ${isOpen
-          ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
-          : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800'
+        className={`flex items-center space-x-2 px-2 py-1.5 text-sm rounded-md transition-colors ${isOpen
+          ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
+          : 'hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
         disabled={isAiTyping}
         title={t('agentChat.settings.title')}
@@ -126,7 +147,7 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
       </button>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 w-[400px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50 flex flex-col max-h-[80vh]">
+        <div ref={popupRef} className="absolute bottom-full left-0 mb-2 w-[400px] max-w-[calc(100vw-24px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl z-50 flex flex-col max-h-[80vh]">
 
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">

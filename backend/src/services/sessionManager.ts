@@ -126,17 +126,22 @@ export class SessionManager {
    * 复用sessions.ts中的逻辑
    */
   private convertProjectPathToClaudeFormat(projectPath: string): string {
-    // First, resolve symlinks to get the real path
-    // This is important because Claude CLI stores sessions using the real path
+    // Expand ~ to home directory before any filesystem operations
     let resolvedPath = projectPath;
+    if (resolvedPath.startsWith('~')) {
+      resolvedPath = path.join(os.homedir(), resolvedPath.slice(1));
+    }
+
+    // Resolve symlinks to get the real path
+    // This is important because Claude CLI stores sessions using the real path
     try {
-      resolvedPath = fs.realpathSync(projectPath);
-      if (resolvedPath !== projectPath) {
-        console.log(`🔗 [SessionManager] Resolved symlink: ${projectPath} -> ${resolvedPath}`);
+      const realPath = fs.realpathSync(resolvedPath);
+      if (realPath !== resolvedPath) {
+        console.log(`🔗 [SessionManager] Resolved symlink: ${resolvedPath} -> ${realPath}`);
       }
+      resolvedPath = realPath;
     } catch (error) {
-      // If the path doesn't exist or can't be resolved, use the original path
-      console.log(`⚠️ [SessionManager] Could not resolve path: ${projectPath}, using original`);
+      console.log(`⚠️ [SessionManager] Could not resolve path: ${resolvedPath}, using as-is`);
     }
     
     // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
@@ -281,6 +286,28 @@ export class SessionManager {
     } else {
       console.warn(`⚠️  Session not found in temp sessions when confirming sessionId: ${sessionId}`);
     }
+  }
+
+  /**
+   * Register an alias so that getSession(aliasId) returns the same session
+   * already registered under its primary (SDK-issued) sessionId.
+   *
+   * Used when the frontend sends an old session ID (e.g. from history) and the
+   * backend resumes it under a new SDK-issued UUID. The alias ensures subsequent
+   * requests from the frontend (using the old ID) still find the active session.
+   */
+  registerSessionAlias(aliasId: string, session: ClaudeSession): void {
+    if (this.sessions.has(aliasId)) return; // already mapped
+    this.sessions.set(aliasId, session);
+    this.sessionHeartbeats.set(aliasId, Date.now());
+
+    const agentId = session.getAgentId();
+    if (!this.agentSessions.has(agentId)) {
+      this.agentSessions.set(agentId, new Set());
+    }
+    this.agentSessions.get(agentId)!.add(aliasId);
+
+    console.log(`🔗 Registered session alias: ${aliasId} → same ClaudeSession for agent: ${agentId}`);
   }
 
   /**

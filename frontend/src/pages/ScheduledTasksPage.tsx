@@ -50,7 +50,7 @@ import { useConfirm } from '../hooks/useConfirm';
 export const ScheduledTasksPage: React.FC = () => {
   const queryClient = useQueryClient();
   const confirm = useConfirm();
-  
+
   const { data: tasks = [], isLoading } = useScheduledTasks();
   const { data: agentsData } = useAgents(true);
   const { data: schedulerStatus } = useSchedulerStatus();
@@ -67,7 +67,7 @@ export const ScheduledTasksPage: React.FC = () => {
   const [showHistory, setShowHistory] = useState<string | null>(null);
   const [showConfigModal, setShowConfigModal] = useState(false);
   const [configMaxConcurrent, setConfigMaxConcurrent] = useState(2);
-  
+
   // Task executor monitoring
   const { data: executorStats } = useTaskExecutorStats();
   const { data: executorConfig } = useTaskExecutorConfig();
@@ -131,7 +131,7 @@ export const ScheduledTasksPage: React.FC = () => {
       cancelText: '取消',
       variant: 'danger'
     });
-    
+
     if (!confirmed) {
       return;
     }
@@ -286,13 +286,11 @@ export const ScheduledTasksPage: React.FC = () => {
               <button
                 onClick={handleToggleScheduler}
                 disabled={enableScheduler.isPending || disableScheduler.isPending}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${
-                  schedulerStatus.enabled
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg transition-colors ${schedulerStatus.enabled
                     ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-900/30'
                     : 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/30'
-                } ${
-                  enableScheduler.isPending || disableScheduler.isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
-                }`}
+                  } ${enableScheduler.isPending || disableScheduler.isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
                 title={schedulerStatus.enabled ? '点击禁用调度器' : '点击启用调度器'}
               >
                 <Clock className={`w-4 h-4 ${enableScheduler.isPending || disableScheduler.isPending ? 'animate-pulse' : ''}`} />
@@ -388,11 +386,10 @@ export const ScheduledTasksPage: React.FC = () => {
                   <TableCell className="px-6 py-4 whitespace-nowrap">
                     <button
                       onClick={() => handleToggle(task)}
-                      className={`p-1 rounded-full transition-colors ${
-                        task.enabled
+                      className={`p-1 rounded-full transition-colors ${task.enabled
                           ? 'text-green-600 hover:bg-green-100 dark:hover:bg-green-900'
                           : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                      }`}
+                        }`}
                       title={task.enabled ? '点击暂停' : '点击启用'}
                     >
                       {task.enabled ? (

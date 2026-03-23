@@ -4,7 +4,6 @@
  * and automatically configures it for seamless startup
  */
 
-import { BackendService } from '../types/backendServices';
 import { setBackendOnboardingCompleted } from './onboardingStorage';
 import {
   loadBackendServices,
@@ -82,7 +81,7 @@ export async function detectAndConfigureSameOriginBackend(): Promise<boolean> {
   // Load current backend services
   const state = loadBackendServices();
 
-  // Check if service already exists
+  // Check if service already exists at the detected URL
   const existingService = state.services.find(s => s.url === detectedUrl);
 
   if (existingService) {
@@ -92,22 +91,20 @@ export async function detectAndConfigureSameOriginBackend(): Promise<boolean> {
       saveBackendServices(newState);
     }
   } else {
-    // Add new service
-    const serviceName = isSameOrigin ? 'Same-Origin Backend' : 'Local Backend';
-    const newService: BackendService = {
-      id: `auto-detected-${Date.now()}`,
-      name: serviceName,
-      url: detectedUrl,
-      isDefault: false
-    };
-
-    const newState = {
-      ...state,
-      services: [...state.services, newService],
-      currentServiceId: newService.id
-    };
-
-    saveBackendServices(newState);
+    // Update the default service instead of creating a new one
+    const defaultService = state.services.find(s => s.isDefault);
+    if (defaultService) {
+      const newState = {
+        ...state,
+        services: state.services.map(s =>
+          s.id === defaultService.id
+            ? { ...s, url: detectedUrl }
+            : s
+        ),
+        currentServiceId: defaultService.id
+      };
+      saveBackendServices(newState);
+    }
   }
 
   // Mark onboarding as completed (not skipped)

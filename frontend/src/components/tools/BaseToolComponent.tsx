@@ -125,6 +125,12 @@ export const BaseToolComponent: React.FC<BaseToolProps> = ({
   const { t } = useTranslation();
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
+  React.useEffect(() => {
+    if (defaultExpanded) {
+      setIsExpanded(true);
+    }
+  }, [defaultExpanded]);
+
   // 为MCP工具使用不同的图标和颜色
   const Icon = isMcpTool
     ? Plug

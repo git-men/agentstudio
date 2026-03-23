@@ -1,4 +1,5 @@
 import express from 'express';
+import path from 'path';
 import { z } from 'zod';
 import { SkillStorage } from '../services/skillStorage';
 import type { 
@@ -7,14 +8,20 @@ import type {
   UpdateSkillRequest,
   SkillValidationResult
 } from '../types/skills';
-import { getEngineType, isCodebuddyEngine, isCodexEngine, isCursorEngine } from '../config/engineConfig.js';
+import { getEngineType, getSdkDirName, isCodebuddyEngine, isCodexEngine, isCursorEngine } from '../config/engineConfig.js';
 
 const router: express.Router = express.Router();
 export const isSkillsReadOnlyEngine = (): boolean => isCursorEngine() || isCodebuddyEngine() || isCodexEngine();
 
-// Initialize skill storage
-const skillStorage = new SkillStorage();
-skillStorage.initialize().catch(console.error);
+// Default skill storage (user-level only, no project dir)
+const defaultSkillStorage = new SkillStorage();
+defaultSkillStorage.initialize().catch(console.error);
+
+function getSkillStorage(projectPath?: string): SkillStorage {
+  if (!projectPath) return defaultSkillStorage;
+  const projectSkillsDir = path.join(projectPath, getSdkDirName(), 'skills');
+  return new SkillStorage(undefined, projectSkillsDir);
+}
 
 // Validation schemas
 const CreateSkillSchema = z.object({
@@ -37,7 +44,8 @@ const UpdateSkillSchema = CreateSkillSchema.partial().omit({ scope: true });
 // Get all skills
 router.get('/', (req, res) => {
   try {
-    const { scope, includeDisabled } = req.query;
+    const { scope, includeDisabled, projectPath } = req.query;
+    const skillStorage = getSkillStorage(projectPath as string | undefined);
     
     let skillsPromise;
     if (scope === 'user') {
@@ -68,7 +76,8 @@ router.get('/', (req, res) => {
 router.get('/:skillId', async (req, res) => {
   try {
     const { skillId } = req.params;
-    const { scope } = req.query;
+    const { scope, projectPath } = req.query;
+    const skillStorage = getSkillStorage(projectPath as string | undefined);
     
     const skill = await skillStorage.getSkill(
       skillId, 
@@ -105,6 +114,15 @@ router.post('/', async (req, res) => {
     }
 
     const skillData = validation.data;
+    const projectPath = req.body.projectPath as string | undefined;
+
+    if (skillData.scope === 'project' && !projectPath) {
+      return res.status(400).json({
+        error: 'projectPath is required when scope is "project"',
+      });
+    }
+
+    const skillStorage = getSkillStorage(projectPath);
     
     // Validate skill manifest content
     const manifestValidation = await skillStorage.validateSkillManifest(skillData.content);
@@ -148,6 +166,8 @@ router.put('/:skillId', async (req, res) => {
     }
 
     const { skillId } = req.params;
+    const projectPath = req.body.projectPath as string | undefined;
+    const skillStorage = getSkillStorage(projectPath);
     const validation = UpdateSkillSchema.safeParse(req.body);
     
     if (!validation.success) {
@@ -208,7 +228,8 @@ router.delete('/:skillId', async (req, res) => {
     }
 
     const { skillId } = req.params;
-    const { scope } = req.query;
+    const { scope, projectPath } = req.query;
+    const skillStorage = getSkillStorage(projectPath as string | undefined);
     
     const deleted = await skillStorage.deleteSkill(
       skillId, 
@@ -230,6 +251,8 @@ router.delete('/:skillId', async (req, res) => {
 router.get('/:skillId/directory', async (req, res) => {
   try {
     const { skillId } = req.params;
+    const { projectPath } = req.query;
+    const skillStorage = getSkillStorage(projectPath as string | undefined);
     
     const directoryInfo = await skillStorage.getSkillDirectoryInfo(skillId);
     
@@ -255,7 +278,7 @@ router.post('/validate', async (req, res) => {
       });
     }
 
-    const result = await skillStorage.validateSkillManifest(content);
+    const result = await defaultSkillStorage.validateSkillManifest(content);
     
     res.json({ 
       valid: result.valid,
@@ -272,6 +295,8 @@ router.get('/:skillId/files/*', async (req, res, next) => {
   try {
     const { skillId } = req.params;
     const filePath = (req.params as any)[0] || ''; // Get the wildcard part
+    const projectPath = req.query.projectPath as string | undefined;
+    const skillStorage = getSkillStorage(projectPath);
     
     const skill = await skillStorage.getSkill(skillId);
     if (!skill) {
@@ -313,7 +338,9 @@ router.put('/:skillId/files/*', async (req, res, next) => {
 
     const { skillId } = req.params;
     const filePath = (req.params as any)[0] || ''; // Get the wildcard part
-    const { content } = req.body;
+    const { content, projectPath: bodyProjectPath } = req.body;
+    const projectPath = (bodyProjectPath || req.query.projectPath) as string | undefined;
+    const skillStorage = getSkillStorage(projectPath);
     
     if (typeof content !== 'string') {
       return res.status(400).json({ error: 'Content must be a string' });

@@ -526,3 +526,23 @@ export async function generateAgentCardByEngine(
   }
   return generateAgentCard(agentConfig, projectContext);
 }
+
+/**
+ * Enrich an AgentCard with standard A2A protocol fields.
+ * Used by the JSON-RPC route to serve /.well-known/agent.json.
+ */
+export function enrichWithStandardFields(card: AgentCard, baseUrl: string, a2aAgentId: string): Record<string, any> {
+  return {
+    ...card,
+    protocolVersion: '0.2.0',
+    preferredTransport: 'JSONRPC',
+    capabilities: {
+      streaming: true,
+      pushNotifications: false,
+      stateTransitionHistory: false,
+    },
+    defaultInputModes: ['text'],
+    defaultOutputModes: ['text'],
+    url: `${baseUrl}/a2a/${a2aAgentId}`,
+  };
+}

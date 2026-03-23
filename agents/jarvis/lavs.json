@@ -190,12 +190,16 @@
         "input": {
           "type": "object",
           "properties": {
-            "limit": { "type": "number", "description": "返回数量限制" }
+            "limit": { "type": "number", "description": "返回数量限制" },
+            "offset": { "type": "number", "description": "分页偏移量" }
           }
         },
         "output": {
-          "type": "array",
-          "items": { "$ref": "#/types/Journal" }
+          "type": "object",
+          "properties": {
+            "total": { "type": "number" },
+            "items": { "type": "array", "items": { "$ref": "#/types/Journal" } }
+          }
         }
       }
     },

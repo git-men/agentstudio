@@ -26,9 +26,13 @@ const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
 
 // 懒加载页面组件
 const DashboardPage = lazy(() => import('./pages/DashboardPage').then(module => ({ default: module.DashboardPage })));
+const NewDashboard = lazy(() => import('./pages/NewDashboard').then(module => ({ default: module.NewDashboard })));
 const AgentsPage = lazy(() => import('./pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(module => ({ default: module.ProjectsPage })));
 const McpPage = lazy(() => import('./pages/McpPage').then(module => ({ default: module.McpPage })));
+const WecomBindPage = lazy(() => import('./pages/WecomBindPage').then(module => ({ default: module.WecomBindPage })));
+const QQBotBindPage = lazy(() => import('./pages/QQBotBindPage').then(module => ({ default: module.QQBotBindPage })));
+const WechatBindPage = lazy(() => import('./pages/WechatBindPage').then(module => ({ default: module.WechatBindPage })));
 const SettingsLayout = lazy(() => import('./components/SettingsLayout').then(module => ({ default: module.SettingsLayout })));
 const GeneralSettingsPage = lazy(() => import('./pages/settings/GeneralSettingsPage').then(module => ({ default: module.GeneralSettingsPage })));
 const SupplierSettingsPage = lazy(() => import('./pages/settings/VersionSettingsPage').then(module => ({ default: module.VersionSettingsPage })));
@@ -47,6 +51,8 @@ const SkillsPage = lazy(() => import('./pages/SkillsPage').then(module => ({ def
 const PluginsPage = lazy(() => import('./pages/PluginsPage').then(module => ({ default: module.PluginsPage })));
 const ScheduledTasksPage = lazy(() => import('./pages/ScheduledTasksPage').then(module => ({ default: module.ScheduledTasksPage })));
 const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })));
+const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })));
+const ProjectWorkspacePage = lazy(() => import('./pages/ProjectWorkspacePage').then(module => ({ default: module.ProjectWorkspacePage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(module => ({ default: module.default })));
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.default })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
@@ -127,12 +133,30 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           } />
 
+          <Route path="/workspace/:agentId" element={
+            <ProtectedRoute>
+              <WorkspacePage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/project-workspace" element={
+            <ProtectedRoute>
+              <ProjectWorkspacePage />
+            </ProtectedRoute>
+          } />
+
           {/* Admin pages with layout (protected + product gated) */}
           <Route path="/dashboard" element={
             <ProtectedRoute>
               <PageGate module="manage.dashboard">
                 <Layout><DashboardPage /></Layout>
               </PageGate>
+            </ProtectedRoute>
+          } />
+          {/* [WIP] New Dashboard — for testing, will replace /dashboard once confirmed */}
+          <Route path="/dashboard-new" element={
+            <ProtectedRoute>
+              <Layout><NewDashboard /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/agents" element={
@@ -154,6 +178,21 @@ const AppContent: React.FC = () => {
               <PageGate module="manage.mcp">
                 <Layout><McpPage /></Layout>
               </PageGate>
+            </ProtectedRoute>
+          } />
+          <Route path="/wecom-bind" element={
+            <ProtectedRoute>
+              <Layout><WecomBindPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/qqbot-bind" element={
+            <ProtectedRoute>
+              <Layout><QQBotBindPage /></Layout>
+            </ProtectedRoute>
+          } />
+          <Route path="/wechat-bind" element={
+            <ProtectedRoute>
+              <Layout><WechatBindPage /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/rules" element={

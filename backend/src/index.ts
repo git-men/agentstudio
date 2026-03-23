@@ -25,13 +25,20 @@ import skillsRouter from './routes/skills';
 import pluginsRouter from './routes/plugins';
 import marketplaceSkillsRouter from './routes/marketplaceSkills';
 import a2aRouter from './routes/a2a';
+import a2aJsonRpcRouter from './routes/a2aJsonRpc';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
+import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
 import taskExecutorRouter from './routes/taskExecutor';
 import versionRouter from './routes/version';
 import tunnelRouter from './routes/tunnel';
+import wecomRouter from './routes/wecom';
+import qqbotRouter from './routes/qqbot';
+import wechatRouter from './routes/wechat';
+import enterpriseRouter from './routes/enterprise';
+import imBindingsRouter from './routes/imBindings';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
@@ -51,6 +58,7 @@ import { initializeScheduler, shutdownScheduler } from './services/schedulerServ
 import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
+import { enterpriseAuthService } from './services/enterpriseAuthService.js';
 import { logSdkConfig } from './config/sdkConfig.js';
 import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
@@ -357,15 +365,14 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
-      // For embedded mode: Allow same-origin requests from any host/IP
-      // This allows the frontend (served from the same server) to access the API
-      // Extract protocol, host, and port from origin
+      // For embedded/network mode: Allow requests from IP-based origins
+      // when the server is bound to all interfaces (0.0.0.0 / ::).
+      // This covers tunnel/proxy scenarios (e.g. as-dispatch on a different port)
+      // where the browser's origin IP+port differs from the server's own port.
       try {
         const originUrl = new URL(origin);
         const serverHost = `${originUrl.protocol}//${originUrl.host}`;
 
-        // Check if origin matches the server's actual address
-        // In embedded mode, origin should be the same as the server address
         const serverPort = PORT;
         const possibleServerUrls = [
           `http://${HOST}:${serverPort}`,
@@ -376,11 +383,10 @@ const app: express.Express = express();
           `https://127.0.0.1:${serverPort}`,
         ];
 
-        // Also check if origin matches any of the server's network interfaces
-        // For 0.0.0.0, allow any IP:port combination that matches the server port
         if (HOST === '0.0.0.0' || HOST === '::') {
-          if (originUrl.port === serverPort.toString()) {
-            // Same port = likely same-origin request in embedded mode
+          const hostname = originUrl.hostname;
+          const isIPOrigin = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+          if (isIPOrigin) {
             return callback(null, true);
           }
         }
@@ -460,13 +466,42 @@ const app: express.Express = express();
     console.error('[Scheduler] Error initializing scheduler:', error);
   }
 
-  // 4. Tunnel Service: Initialize WebSocket tunnel for external access
+  // 4. Enterprise Auth + Tunnel Service
+  console.info('[EnterpriseAuth] Initializing enterprise auth service...');
+  try {
+    await enterpriseAuthService.initialize();
+    console.info('[EnterpriseAuth] Enterprise auth service initialized');
+  } catch (error) {
+    console.error('[EnterpriseAuth] Error:', error);
+  }
+
   console.info('[Tunnel] Initializing tunnel service...');
   try {
     await tunnelService.initialize(PORT);
     console.info('[Tunnel] Tunnel service initialized');
+
+    // Backward compatibility: migrate enterpriseToken from tunnel config
+    if (!enterpriseAuthService.isAuthenticated()) {
+      const rawConfigs = (tunnelService as any).configs as Map<string, any>;
+      if (rawConfigs?.size > 0) {
+        const tunnelConfigArray = Array.from(rawConfigs.values());
+        const migrated = await enterpriseAuthService.migrateFromTunnelConfig(tunnelConfigArray);
+        if (migrated) {
+          console.info('[EnterpriseAuth] Migrated token from tunnel config');
+        }
+      }
+    }
   } catch (error) {
     console.error('[Tunnel] Error initializing tunnel service:', error);
+  }
+
+  // 4b. MCP Admin Auto-Bootstrap: Ensure agentstudio-admin MCP is available out-of-the-box
+  console.info('[MCP Admin Bootstrap] Ensuring agentstudio-admin MCP is configured...');
+  try {
+    await autoBootstrapMcpAdmin(PORT);
+    console.info('[MCP Admin Bootstrap] agentstudio-admin MCP ready');
+  } catch (error) {
+    console.error('[MCP Admin Bootstrap] Error:', error);
   }
 
   // 5. Platform Hook System
@@ -553,7 +588,13 @@ const app: express.Express = express();
         return next();
       }
 
-      // Serve index.html for all other routes
+      // Skip static asset requests (let them 404 naturally instead of returning HTML)
+      if (/\.(js|css|ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|eot|map)$/i.test(req.path)) {
+        return next();
+      }
+
+      // Serve index.html for all SPA routes, with no-cache to prevent stale asset references
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(join(frontendDistPath, 'index.html'));
     });
 
@@ -580,6 +621,9 @@ const app: express.Express = express();
   );
 
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
+  // JSON-RPC router handles standard A2A protocol; mounted first for priority
+  app.use('/a2a/:a2aAgentId', httpsOnly, a2aJsonRpcRouter);
+  // REST router handles legacy custom protocol
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aRouter);
 
   // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
@@ -667,8 +711,19 @@ const app: express.Express = express();
   app.use('/api/task-executor', authMiddleware, taskExecutorRouter);
   app.use('/api/version', authMiddleware, versionRouter);
   app.use('/api/tunnel', authMiddleware, tunnelRouter); // Tunnel management
+  app.use('/api/wecom', authMiddleware, wecomRouter); // WeCom bot binding wizard
+  app.use('/api/qqbot', authMiddleware, qqbotRouter); // QQ Bot binding wizard
+  app.use('/api/wechat', authMiddleware, wechatRouter); // WeChat personal bot binding wizard
+  app.use('/api/enterprise', authMiddleware, enterpriseRouter); // Enterprise auth management
+  app.use('/api/im-bindings', authMiddleware, imBindingsRouter); // IM binding records
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
-  app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
+  app.use('/api/agui', (req, res, next) => {
+    // Skip auth for session inject — service-to-service calls via tunnel proxy
+    if (req.method === 'POST' && /^\/sessions\/[^/]+\/inject$/.test(req.path)) {
+      return next();
+    }
+    return authMiddleware(req, res, next);
+  }, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service
   app.use('/api/engine', engineRouter); // Engine configuration (public, no auth required)
   app.use('/api/rules', authMiddleware, rulesRouter); // Rules management (both Claude and Cursor)
@@ -739,7 +794,7 @@ const app: express.Express = express();
 
     // 3. Stop tunnel service
     try {
-      tunnelService.disconnect();
+      tunnelService.disconnectAll();
       console.info('[Tunnel] Tunnel service stopped');
     } catch (error) {
       console.error('[Tunnel] Error shutting down tunnel service:', error);

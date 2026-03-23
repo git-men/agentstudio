@@ -53,8 +53,8 @@ const LandingPage: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
-              <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="AgentStudio" className="w-8 h-8" />
-              <span className="text-xl font-semibold text-gray-900 dark:text-white">AgentStudio</span>
+              <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-8 h-8" />
+              <span className="text-xl font-semibold text-gray-900 dark:text-white">ClawStudio</span>
             </div>
             <div className="flex items-center space-x-4">
               <button
@@ -519,8 +519,8 @@ const LandingPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center space-x-3 mb-4">
-                <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="AgentStudio" className="w-8 h-8" />
-                <span className="text-xl font-semibold text-white">AgentStudio</span>
+                <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-8 h-8" />
+                <span className="text-xl font-semibold text-white">ClawStudio</span>
               </div>
               <p className="text-gray-400 mb-4 max-w-md">
                 {t('landing.footer.description')}

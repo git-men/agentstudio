@@ -137,7 +137,7 @@ export interface AgentMessage {
 
 export interface MessagePart {
   id: string;
-  type: 'text' | 'tool' | 'command' | 'compactSummary' | 'image' | 'thinking';
+  type: 'text' | 'tool' | 'command' | 'compactSummary' | 'image' | 'thinking' | 'a2ui';
   content?: string;
   toolData?: {
     id: string;
@@ -154,6 +154,12 @@ export interface MessagePart {
     data: string;
     mediaType: string;
     filename?: string;
+  };
+  /** A2UI surface data for rich interactive UI rendering */
+  a2uiData?: {
+    surfaceId: string;
+    messages: any[]; // A2UIServerMessage[]
+    isComplete: boolean;
   };
   order: number;
   originalContent?: string; // For commands that need to preserve original content
