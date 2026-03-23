@@ -127,12 +127,18 @@ export class AgentStorage {
             this.copyDirectory(srcDir, destDir);
           }
           
-          // Also create the agent.json config file if it exists in source
-          const sourceAgentConfig = path.join(srcDir, 'agent.json');
+          // Also create the agent config file if it exists in source
+          // Priority: agent.md (preferred) > agent.json (legacy)
+          const sourceAgentMd = path.join(srcDir, 'agent.md');
+          const sourceAgentJson = path.join(srcDir, 'agent.json');
           const destAgentJsonConfig = path.join(this.agentsDir, `${agentId}.json`);
-          
-          if (fs.existsSync(sourceAgentConfig) && !fs.existsSync(destAgentJsonConfig)) {
-            const agentConfig = JSON.parse(fs.readFileSync(sourceAgentConfig, 'utf-8'));
+          const destAgentMdConfig = path.join(this.agentsDir, `${agentId}.md`);
+
+          if (fs.existsSync(sourceAgentMd) && !fs.existsSync(destAgentMdConfig) && !fs.existsSync(destAgentJsonConfig)) {
+            fs.copyFileSync(sourceAgentMd, destAgentMdConfig);
+            console.log(`[AgentStorage] Copied agent config: ${agentId}.md`);
+          } else if (fs.existsSync(sourceAgentJson) && !fs.existsSync(destAgentJsonConfig)) {
+            const agentConfig = JSON.parse(fs.readFileSync(sourceAgentJson, 'utf-8'));
             const now = new Date().toISOString();
             const fullAgent: AgentConfig = {
               version: '1.0.0',
