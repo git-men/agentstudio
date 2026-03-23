@@ -505,7 +505,7 @@ export async function buildQueryOptions(
     // Use require() instead of dynamic import() for compatibility with Worker threads
     // running under tsx/cjs loader. Dynamic import() bypasses the CJS tsx loader and
     // uses ESM resolution which cannot resolve .js -> .ts file mappings.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { integrateLAVSMcpServer } = require('../lavs/lavs-integration') as typeof import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }

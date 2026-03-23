@@ -14,23 +14,54 @@ import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 import { tunnelService } from '../services/tunnelService.js';
 import { getOrCreateA2AId } from '../services/a2a/agentMappingService.js';
 import { generateApiKey } from '../services/a2a/apiKeyService.js';
+import { imBindingService } from '../services/imBindingService.js';
 
 const router: RouterType = Router();
 
+/**
+ * Direct as-dispatch URL (bypasses NGINX reverse proxy which applies SSO to /admin/* paths).
+ * Port 8083 is the FastAPI application port; port 80 is NGINX.
+ */
+const DEFAULT_DISPATCH_DIRECT = 'http://21.6.243.90:8083';
+
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
-  const token = enterpriseAuthService.getToken();
   const configs = tunnelService.getAllConfigs();
   const config = configs[0];
   const serverUrl = config?.serverUrl;
-
   if (!serverUrl) return null;
 
-  const baseUrl = serverUrl.replace(/\/+$/, '');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Force HTTPS to prevent HTTP→HTTPS 307 redirect which strips Authorization header
+  const baseUrl = serverUrl.replace(/\/+$/, '').replace(/^http:\/\//i, 'https://');
+  const headers = enterpriseAuthService.getAuthHeaders();
+
+  return { baseUrl, headers };
+}
+
+/**
+ * For /admin/* routes, use direct as-dispatch URL to bypass NGINX SSO.
+ * Derives from websocketUrl (port != 80/443) or falls back to DEFAULT_DISPATCH_DIRECT.
+ */
+function getDispatchAdminClient(): { baseUrl: string; headers: Record<string, string> } | null {
+  const configs = tunnelService.getAllConfigs();
+  const config = configs[0];
+  const wsUrl = config?.websocketUrl;
+
+  let baseUrl = DEFAULT_DISPATCH_DIRECT;
+
+  if (wsUrl) {
+    try {
+      const url = new URL(wsUrl);
+      const port = url.port;
+      if (port && port !== '80' && port !== '443') {
+        const httpProto = url.protocol === 'wss:' ? 'https:' : 'http:';
+        baseUrl = `${httpProto}//${url.hostname}:${port}`;
+      }
+    } catch {
+      // use default
+    }
   }
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   return { baseUrl, headers };
 }
 
@@ -55,21 +86,6 @@ router.get('/preflight', async (_req: Request, res: Response) => {
     const isAuth = enterpriseAuthService.isAuthenticated();
     const profile = enterpriseAuthService.getProfile();
     const tunnel = getConnectedTunnel();
-    const client = getDispatchClient();
-
-    let dispatchReachable = false;
-    if (client) {
-      try {
-        const resp = await fetch(`${client.baseUrl}/api/bots`, {
-          method: 'GET',
-          headers: client.headers,
-          signal: AbortSignal.timeout(3000),
-        });
-        dispatchReachable = resp.ok;
-      } catch {
-        // not reachable
-      }
-    }
 
     res.json({
       auth: {
@@ -80,10 +96,6 @@ router.get('/preflight', async (_req: Request, res: Response) => {
       tunnel: {
         connected: !!tunnel,
         domain: tunnel?.domain || null,
-      },
-      dispatch: {
-        reachable: dispatchReachable,
-        url: client?.baseUrl || null,
       },
     });
   } catch (error) {
@@ -182,11 +194,26 @@ router.post('/bind', async (req: Request, res: Response) => {
 
     if (!botResp.ok) {
       const err = await botResp.json().catch(() => ({}));
+      console.error(`[WeChat Bind] as-dispatch Bot ${botExists ? '更新' : '注册'}失败`, {
+        status: botResp.status,
+        url: botExists ? `${dispatchUrl}/api/bots/${botKey}` : `${dispatchUrl}/api/bots`,
+        response: err,
+      });
       return res.status(502).json({
-        error: `as-dispatch Bot ${botExists ? '更新' : '注册'}失败`,
+        error: `as-dispatch Bot ${botExists ? '更新' : '注册'}失败 (${botResp.status})`,
+        message: err.detail || err.error || err.message || JSON.stringify(err),
         details: err,
       });
     }
+
+    imBindingService.upsert({
+      platform: 'weixin',
+      name: `${projectName} 微信`,
+      project_path,
+      project_name: projectName,
+      bot_key: botKey,
+      a2a_endpoint: a2aEndpoint,
+    });
 
     res.json({
       success: true,
@@ -212,20 +239,19 @@ router.post('/qr-login', async (req: Request, res: Response) => {
     return res.status(400).json({ error: '缺少 bot_key 参数' });
   }
 
-  const client = getDispatchClient();
+  const client = getDispatchAdminClient();
   if (!client) {
     return res.status(400).json({ error: '未配置 as-dispatch 服务器' });
   }
 
   try {
     const { baseUrl, headers } = client;
-    const tlsOpt = baseUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
     const resp = await fetch(`${baseUrl}/admin/weixin/${bot_key}/qr-login`, {
       method: 'POST',
       headers,
-      ...tlsOpt,
-    } as any);
+      body: JSON.stringify({}),
+    });
 
     const data = await resp.json();
 
@@ -258,20 +284,18 @@ router.get('/qr-status', async (req: Request, res: Response) => {
     return res.status(400).json({ error: '缺少 bot_key 参数' });
   }
 
-  const client = getDispatchClient();
+  const client = getDispatchAdminClient();
   if (!client) {
     return res.status(400).json({ error: '未配置 as-dispatch 服务器' });
   }
 
   try {
     const { baseUrl, headers } = client;
-    const tlsOpt = baseUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
     const resp = await fetch(`${baseUrl}/admin/weixin/${botKey}/qr-status`, {
       method: 'GET',
       headers,
-      ...tlsOpt,
-    } as any);
+    });
 
     const data = await resp.json();
     res.json(data);
@@ -291,20 +315,19 @@ router.post('/start', async (req: Request, res: Response) => {
     return res.status(400).json({ error: '缺少 bot_key 参数' });
   }
 
-  const client = getDispatchClient();
+  const client = getDispatchAdminClient();
   if (!client) {
     return res.status(400).json({ error: '未配置 as-dispatch 服务器' });
   }
 
   try {
     const { baseUrl, headers } = client;
-    const tlsOpt = baseUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
     const resp = await fetch(`${baseUrl}/admin/weixin/${bot_key}/start`, {
       method: 'POST',
       headers,
-      ...tlsOpt,
-    } as any);
+      body: JSON.stringify({}),
+    });
 
     const data = await resp.json();
     res.json(data);
@@ -324,20 +347,18 @@ router.get('/status', async (req: Request, res: Response) => {
     return res.status(400).json({ error: '缺少 bot_key 参数' });
   }
 
-  const client = getDispatchClient();
+  const client = getDispatchAdminClient();
   if (!client) {
     return res.status(400).json({ error: '未配置 as-dispatch 服务器' });
   }
 
   try {
     const { baseUrl, headers } = client;
-    const tlsOpt = baseUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
     const resp = await fetch(`${baseUrl}/admin/weixin/${botKey}/status`, {
       method: 'GET',
       headers,
-      ...tlsOpt,
-    } as any);
+    });
 
     const data = await resp.json();
     res.json(data);

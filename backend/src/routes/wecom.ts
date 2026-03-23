@@ -13,6 +13,7 @@ import { tunnelService } from '../services/tunnelService.js';
 import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 import { getOrCreateA2AId } from '../services/a2a/agentMappingService.js';
 import { generateApiKey } from '../services/a2a/apiKeyService.js';
+import { imBindingService } from '../services/imBindingService.js';
 
 const router: RouterType = Router();
 
@@ -27,7 +28,8 @@ function getDispatchClient(): { baseUrl: string; headers: Record<string, string>
   const serverUrl = config?.serverUrl;
   if (!serverUrl) return null;
 
-  const baseUrl = serverUrl.replace(/\/+$/, '');
+  // Force HTTPS to prevent HTTP→HTTPS 307 redirect which strips Authorization header
+  const baseUrl = serverUrl.replace(/\/+$/, '').replace(/^http:\/\//i, 'https://');
   const headers = enterpriseAuthService.getAuthHeaders();
 
   return { baseUrl, headers };
@@ -284,6 +286,16 @@ router.post('/bind', async (req: Request, res: Response) => {
     const callbackUrl =
       `${PIGEON_RELAY}?url=${encodeURIComponent(dispatchCallbackUrl)}` +
       `&env=devcloud&token=${token}&aeskey=${encodingAESKey}&robot_callback_format=json`;
+
+    imBindingService.upsert({
+      platform: 'wecom',
+      name: `${projectName} 企微`,
+      project_path,
+      project_name: projectName,
+      bot_key: botKey,
+      a2a_endpoint: a2aEndpoint,
+      platform_config: { webhook_url },
+    });
 
     res.json({
       success: true,

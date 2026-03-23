@@ -37,6 +37,7 @@ import wecomRouter from './routes/wecom';
 import qqbotRouter from './routes/qqbot';
 import wechatRouter from './routes/wechat';
 import enterpriseRouter from './routes/enterprise';
+import imBindingsRouter from './routes/imBindings';
 import networkRouter from './routes/network';
 import aguiRouter from './routes/agui';
 import speechToTextRouter from './routes/speechToText';
@@ -674,6 +675,7 @@ const app: express.Express = express();
   app.use('/api/qqbot', authMiddleware, qqbotRouter); // QQ Bot binding wizard
   app.use('/api/wechat', authMiddleware, wechatRouter); // WeChat personal bot binding wizard
   app.use('/api/enterprise', authMiddleware, enterpriseRouter); // Enterprise auth management
+  app.use('/api/im-bindings', authMiddleware, imBindingsRouter); // IM binding records
   app.use('/api/network-info', authMiddleware, networkRouter); // Network information
   app.use('/api/agui', authMiddleware, aguiRouter); // AGUI unified engine routes
   app.use('/api/speech-to-text', authMiddleware, speechToTextRouter); // Speech-to-text service

@@ -17,23 +17,49 @@ import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 import { tunnelService } from '../services/tunnelService.js';
 import { getOrCreateA2AId } from '../services/a2a/agentMappingService.js';
 import { generateApiKey } from '../services/a2a/apiKeyService.js';
+import { imBindingService } from '../services/imBindingService.js';
 
 const router: RouterType = Router();
 
+const DEFAULT_DISPATCH_DIRECT = 'http://21.6.243.90:8083';
+
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
-  const token = enterpriseAuthService.getToken();
   const configs = tunnelService.getAllConfigs();
   const config = configs[0];
   const serverUrl = config?.serverUrl;
-
   if (!serverUrl) return null;
 
-  const baseUrl = serverUrl.replace(/\/+$/, '');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  // Force HTTPS to prevent HTTP→HTTPS 307 redirect which strips Authorization header
+  const baseUrl = serverUrl.replace(/\/+$/, '').replace(/^http:\/\//i, 'https://');
+  const headers = enterpriseAuthService.getAuthHeaders();
+
+  return { baseUrl, headers };
+}
+
+/**
+ * For /admin/* routes, use direct as-dispatch URL to bypass NGINX SSO.
+ */
+function getDispatchAdminClient(): { baseUrl: string; headers: Record<string, string> } | null {
+  const configs = tunnelService.getAllConfigs();
+  const config = configs[0];
+  const wsUrl = config?.websocketUrl;
+
+  let baseUrl = DEFAULT_DISPATCH_DIRECT;
+
+  if (wsUrl) {
+    try {
+      const url = new URL(wsUrl);
+      const port = url.port;
+      if (port && port !== '80' && port !== '443') {
+        const httpProto = url.protocol === 'wss:' ? 'https:' : 'http:';
+        baseUrl = `${httpProto}//${url.hostname}:${port}`;
+      }
+    } catch {
+      // use default
+    }
   }
 
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   return { baseUrl, headers };
 }
 
@@ -58,21 +84,6 @@ router.get('/preflight', async (_req: Request, res: Response) => {
     const isAuth = enterpriseAuthService.isAuthenticated();
     const profile = enterpriseAuthService.getProfile();
     const tunnel = getConnectedTunnel();
-    const client = getDispatchClient();
-
-    let dispatchReachable = false;
-    if (client) {
-      try {
-        const resp = await fetch(`${client.baseUrl}/api/bots`, {
-          method: 'GET',
-          headers: client.headers,
-          signal: AbortSignal.timeout(3000),
-        });
-        dispatchReachable = resp.ok;
-      } catch {
-        // not reachable
-      }
-    }
 
     res.json({
       auth: {
@@ -83,10 +94,6 @@ router.get('/preflight', async (_req: Request, res: Response) => {
       tunnel: {
         connected: !!tunnel,
         domain: tunnel?.domain || null,
-      },
-      dispatch: {
-        reachable: dispatchReachable,
-        url: client?.baseUrl || null,
       },
     });
   } catch (error) {
@@ -191,8 +198,14 @@ router.post('/bind', async (req: Request, res: Response) => {
 
     if (!botResp.ok) {
       const err = await botResp.json().catch(() => ({}));
+      console.error(`[QQBot Bind] as-dispatch Bot ${botExists ? '更新' : '注册'}失败`, {
+        status: botResp.status,
+        url: botExists ? `${dispatchUrl}/api/bots/${botKey}` : `${dispatchUrl}/api/bots`,
+        response: err,
+      });
       return res.status(502).json({
-        error: `as-dispatch Bot ${botExists ? '更新' : '注册'}失败`,
+        error: `as-dispatch Bot ${botExists ? '更新' : '注册'}失败 (${botResp.status})`,
+        message: err.detail || err.error || err.message || JSON.stringify(err),
         details: err,
       });
     }
@@ -201,9 +214,12 @@ router.post('/bind', async (req: Request, res: Response) => {
     // Use /admin endpoint for qqbot start (this is a server-side control action)
     let connectionStatus: any = { connected: false };
     try {
-      const startResp = await fetch(`${dispatchUrl}/admin/qqbot/${botKey}/start`, {
+      const adminClient = getDispatchAdminClient();
+      const adminUrl = adminClient?.baseUrl || dispatchUrl;
+      const startResp = await fetch(`${adminUrl}/admin/qqbot/${botKey}/start`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: adminClient?.headers || { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
       });
       if (startResp.ok) {
         connectionStatus = await startResp.json();
@@ -211,6 +227,16 @@ router.post('/bind', async (req: Request, res: Response) => {
     } catch (e) {
       connectionStatus = { connected: false, error: String(e) };
     }
+
+    imBindingService.upsert({
+      platform: 'qqbot',
+      name: bot_name || name,
+      project_path,
+      project_name: projectName,
+      bot_key: botKey,
+      a2a_endpoint: a2aEndpoint,
+      platform_config: { app_id },
+    });
 
     res.json({
       success: true,
