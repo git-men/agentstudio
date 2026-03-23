@@ -12,44 +12,46 @@ export interface BackendReadyState {
 }
 
 /**
+ * In Tauri dev mode, Vite proxy handles API routing so we skip the IPC
+ * port-discovery dance (which would cause CORS issues). The env var
+ * VITE_TAURI is explicitly set only when the Vite proxy is disabled.
+ */
+function shouldUseIpcPortDiscovery(): boolean {
+  return isTauri() && import.meta.env.VITE_TAURI === 'true';
+}
+
+/**
  * Resolves the backend base URL and caches it in the config module so that
  * all synchronous API callers (`getApiBase()`, etc.) can access it.
  *
  * In Web mode: resolves immediately (synchronous-like).
- * In Tauri mode: polls the `get_backend_port` IPC command until the sidecar
- * reports its port or the 30-second timeout expires.
- *
- * Usage:
- * ```tsx
- * const { isReady, error, baseUrl } = useBackendReady();
- * if (!isReady) return <LoadingSpinner />;
- * if (error) return <ErrorView message={error} />;
- * return <App />;
- * ```
+ * In Tauri prod mode (VITE_TAURI=true): polls the `get_backend_port` IPC
+ * command until the sidecar reports its port or the 30-second timeout expires.
+ * In Tauri dev mode (VITE_TAURI unset): treats as Web mode since Vite proxy
+ * forwards API requests, avoiding cross-origin issues.
  */
 export function useBackendReady(): BackendReadyState {
+  const needsIpc = shouldUseIpcPortDiscovery();
+
   const [state, setState] = useState<BackendReadyState>({
-    isReady: !isTauri(), // In Web mode, considered ready immediately
+    isReady: !needsIpc,
     error: null,
     baseUrl: null,
   });
 
   useEffect(() => {
-    if (!isTauri()) {
-      // Web mode: resolve synchronously to ensure config module is seeded
+    if (!needsIpc) {
       getBackendBaseUrl()
         .then((url) => {
           setTauriBackendBaseUrl(url);
           setState({ isReady: true, error: null, baseUrl: url });
         })
         .catch(() => {
-          // Web mode resolution should never fail; if it does, allow through
           setState({ isReady: true, error: null, baseUrl: null });
         });
       return;
     }
 
-    // Tauri mode: async port discovery
     let cancelled = false;
 
     getBackendBaseUrl()

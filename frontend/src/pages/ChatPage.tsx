@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { isTauri } from '../lib/environment';
 import { AgentChatPanel } from '../components/AgentChatPanel';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
 import { SplitLayout } from '../components/SplitLayout';
@@ -238,10 +239,10 @@ export const ChatPage: React.FC = () => {
             {t('chat.agentNotFoundDesc')}
           </p>
           <button
-            onClick={() => window.close()}
+            onClick={() => isTauri() ? navigate('/dashboard') : window.close()}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            {t('chat.closePage')}
+            {isTauri() ? '返回工作台' : t('chat.closePage')}
           </button>
         </div>
       </div>
@@ -259,10 +260,10 @@ export const ChatPage: React.FC = () => {
           </p>
           <div className="flex space-x-4 justify-center">
             <button
-              onClick={() => window.close()}
+              onClick={() => isTauri() ? navigate('/dashboard') : window.close()}
               className="px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
             >
-              {t('chat.closePage')}
+              {isTauri() ? '返回工作台' : t('chat.closePage')}
             </button>
 
           </div>
@@ -319,9 +320,17 @@ export const ChatPage: React.FC = () => {
 
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
+      {isTauri() && (
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="fixed top-3 left-3 z-50 flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-200/80 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 backdrop-blur-sm transition-colors"
+          title="返回工作台"
+        >
+          ← 返回
+        </button>
+      )}
       {renderLayout()}
 
-      {/* Project Selection Modal - Only show when no project is selected */}
       {showProjectSelector && agent && (
         <ProjectSelector
           agent={agent}

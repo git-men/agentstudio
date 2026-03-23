@@ -1,12 +1,12 @@
 {
-  "productName": "AgentStudio",
+  "productName": "ClawStudio",
   "version": "0.1.0",
-  "identifier": "com.agentstudio.desktop",
+  "identifier": "com.clawstudio.desktop",
   "build": {
     "frontendDist": "../frontend/dist",
-    "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "pnpm --filter frontend dev",
-    "beforeBuildCommand": "pnpm --filter frontend build"
+    "devUrl": "http://localhost:3100",
+    "beforeDevCommand": "PORT=3100 pnpm --filter frontend dev",
+    "beforeBuildCommand": "VITE_TAURI=true pnpm --filter frontend build"
   },
   "bundle": {
     "active": true,
@@ -41,7 +41,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "AgentStudio",
+        "title": "ClawStudio",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
@@ -52,7 +52,7 @@
       },
       {
         "label": "splashscreen",
-        "title": "AgentStudio",
+        "title": "ClawStudio",
         "width": 400,
         "height": 300,
         "visible": true,

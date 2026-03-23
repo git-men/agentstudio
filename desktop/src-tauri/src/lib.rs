@@ -6,6 +6,7 @@ use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState}
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::UpdaterExt;
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -289,7 +290,7 @@ fn notify_start_failed(app: &AppHandle, reason: &str) {
 
 /// Build and register the system tray icon with menu.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let open_item = MenuItem::with_id(app, "open", "打开 AgentStudio", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, "open", "打开 ClawStudio", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { BaseToolComponent, ToolInput } from './BaseToolComponent';
 import type { BaseToolExecution } from './sdk-types';
 import { parseMcpToolName } from './mcpUtils';
+import { openExternalUrl } from '../../utils/navigation';
 
 interface McpToolProps {
   execution: BaseToolExecution;
@@ -56,7 +57,7 @@ const AuthRedirectContent: React.FC<{ redirect: RedirectAction }> = ({ redirect 
   useEffect(() => {
     if (!openedRef.current) {
       openedRef.current = true;
-      window.open(redirect.auth_url, '_blank', 'noopener,noreferrer');
+      openExternalUrl(redirect.auth_url);
     }
   }, [redirect.auth_url]);
 

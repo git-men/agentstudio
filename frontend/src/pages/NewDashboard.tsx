@@ -1,5 +1,6 @@
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { isTauri } from '../lib/environment';
 import {
   Bot,
   FolderOpen,
@@ -404,7 +405,12 @@ export const NewDashboard: React.FC = () => {
   const openProjectWindow = (projectPath: string) => {
     const params = new URLSearchParams();
     params.set('project', projectPath);
-    window.open(`/project-workspace?${params.toString()}`, `project_${projectPath.replace(/[^a-zA-Z0-9]/g, '_')}`);
+    const url = `/project-workspace?${params.toString()}`;
+    if (isTauri()) {
+      navigate(url);
+    } else {
+      window.open(url, `project_${projectPath.replace(/[^a-zA-Z0-9]/g, '_')}`);
+    }
   };
 
   const handleCreateProject = async (e: React.FormEvent) => {
