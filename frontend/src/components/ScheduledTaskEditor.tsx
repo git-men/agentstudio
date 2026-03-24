@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown } from 'lucide-react';
+import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown, Bell } from 'lucide-react';
 import { useCreateScheduledTask, useUpdateScheduledTask, useRunScheduledTask } from '../hooks/useScheduledTasks';
 import { useProjects } from '../hooks/useProjects';
 import { useClaudeVersions } from '../hooks/useClaudeVersions';
@@ -8,6 +8,8 @@ import type {
   CreateScheduledTaskRequest,
   TaskSchedule,
   ModelOverride,
+  NotificationConfig,
+  NotificationStrategy,
 } from '../types/scheduledTasks';
 import type { AgentConfig } from '../types/index';
 import { CRON_PRESETS } from '../types/scheduledTasks';
@@ -76,6 +78,12 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
   const [overrideModel, setOverrideModel] = useState(!!task?.modelOverride?.modelId);
   const [selectedVersionId, setSelectedVersionId] = useState(task?.modelOverride?.versionId || '');
   const [selectedModelId, setSelectedModelId] = useState(task?.modelOverride?.modelId || '');
+
+  // Notification config state
+  const [notifyEnabled, setNotifyEnabled] = useState(task?.notification?.enabled ?? false);
+  const [notifyStrategy, setNotifyStrategy] = useState<NotificationStrategy>(
+    task?.notification?.strategy ?? 'always'
+  );
 
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -156,6 +164,17 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     };
   };
 
+  // Build notification config
+  const buildNotification = (): NotificationConfig | undefined => {
+    if (!notifyEnabled) {
+      return undefined;
+    }
+    return {
+      enabled: true,
+      strategy: notifyStrategy,
+    };
+  };
+
   // Handle save
   const handleSave = async () => {
     // Validation
@@ -210,6 +229,7 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            notification: buildNotification(),
           },
         });
         showSuccess('任务已更新');
@@ -223,6 +243,7 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          notification: buildNotification(),
         };
         await createTask.mutateAsync(data);
         showSuccess('任务已创建');
@@ -272,6 +293,7 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            notification: buildNotification(),
           },
         });
         taskId = task.id;
@@ -286,6 +308,7 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          notification: buildNotification(),
         };
         const newTask = await createTask.mutateAsync(data);
         taskId = newTask.id;
@@ -652,6 +675,75 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               定时触发时，这条消息会发送给选定的 Agent
             </p>
+          </div>
+        </div>
+
+        {/* Notification Config */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            IM 通知
+          </h3>
+
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  执行完成后通知
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  任务执行完成后将结果推送到 IM 群
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotifyEnabled(!notifyEnabled)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  notifyEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    notifyEnabled ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {notifyEnabled && (
+              <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    通知策略
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: 'always' as const, label: '始终通知', desc: '每次执行完成都通知' },
+                      { value: 'on_success' as const, label: '成功时通知', desc: '仅执行成功时通知' },
+                      { value: 'on_error' as const, label: '失败时通知', desc: '仅执行失败时通知' },
+                      { value: 'agent_decided' as const, label: 'Agent 决定', desc: 'Agent 判断是否需要通知' },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNotifyStrategy(opt.value)}
+                        className={`flex flex-col items-start px-3 py-2 text-sm rounded-lg border transition-all ${
+                          notifyStrategy === opt.value
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-sm'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <span className="font-medium">{opt.label}</span>
+                        <span className="text-xs opacity-70 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  通知渠道将自动从项目的 IM 绑定中获取，也可在任务配置的 channels 字段中显式指定
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

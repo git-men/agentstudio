@@ -15,9 +15,9 @@ function createMockResponse() {
 }
 
 describe('SSENotificationChannel', () => {
-  describe('sendToolInvocation — standard TOOL_CALL events', () => {
-    it('should emit TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END in order', async () => {
-      const { res, chunks } = createMockResponse();
+  describe('sendToolInvocation — no-op (frontend reads from main event stream)', () => {
+    it('should return true for active channel without writing SSE events', async () => {
+      const { res } = createMockResponse();
       const channel = new SSENotificationChannel('ch-1', 'sess-1', 'agent-1', res);
 
       const request: FrontendToolRequest = {
@@ -31,22 +31,7 @@ describe('SSENotificationChannel', () => {
 
       const ok = await channel.sendToolInvocation(request);
       expect(ok).toBe(true);
-      expect(res.write).toHaveBeenCalledTimes(3);
-
-      const events = chunks.map(chunk => JSON.parse(chunk.replace('data: ', '').trim()));
-
-      expect(events[0].type).toBe('TOOL_CALL_START');
-      expect(events[0].toolCallId).toBe('ft_abc123');
-      expect(events[0].toolCallName).toBe('rate_response');
-      expect(events[0].timestamp).toBeTypeOf('number');
-
-      expect(events[1].type).toBe('TOOL_CALL_ARGS');
-      expect(events[1].toolCallId).toBe('ft_abc123');
-      const parsedArgs = JSON.parse(events[1].delta);
-      expect(parsedArgs).toEqual({ question: 'How was the answer?', maxRating: 5 });
-
-      expect(events[2].type).toBe('TOOL_CALL_END');
-      expect(events[2].toolCallId).toBe('ft_abc123');
+      expect(res.write).not.toHaveBeenCalled();
     });
 
     it('should return false when channel is closed', async () => {
@@ -66,7 +51,7 @@ describe('SSENotificationChannel', () => {
       expect(res.write).not.toHaveBeenCalled();
     });
 
-    it('should return false when res.write throws', async () => {
+    it('should return true even when res.write would throw (no write occurs)', async () => {
       const { res } = createMockResponse();
       res.write.mockImplementation(() => { throw new Error('connection gone'); });
       const channel = new SSENotificationChannel('ch-3', 'sess-1', 'agent-1', res);
@@ -79,26 +64,7 @@ describe('SSENotificationChannel', () => {
         args: { key: 'value' },
         createdAt: Date.now(),
       });
-      expect(ok).toBe(false);
-    });
-
-    it('should use consistent timestamps across all three events', async () => {
-      const { res, chunks } = createMockResponse();
-      const channel = new SSENotificationChannel('ch-4', 'sess-1', 'agent-1', res);
-
-      await channel.sendToolInvocation({
-        toolCallId: 'ft_ts',
-        toolName: 'tool',
-        sessionId: 'sess-1',
-        agentId: 'agent-1',
-        args: {},
-        createdAt: Date.now(),
-      });
-
-      const events = chunks.map(c => JSON.parse(c.replace('data: ', '').trim()));
-      const ts = events[0].timestamp;
-      expect(events[1].timestamp).toBe(ts);
-      expect(events[2].timestamp).toBe(ts);
+      expect(ok).toBe(true);
     });
   });
 

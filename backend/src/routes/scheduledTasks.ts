@@ -108,6 +108,18 @@ const ModelOverrideSchema = z.object({
   modelId: z.string().optional(),
 }).optional();
 
+const NotificationChannelSchema = z.object({
+  bot_key: z.string().min(1),
+  chat_id: z.string().min(1),
+  chat_name: z.string().optional(),
+});
+
+const NotificationConfigSchema = z.object({
+  enabled: z.boolean(),
+  strategy: z.enum(['always', 'on_success', 'on_error', 'agent_decided']),
+  channels: z.array(NotificationChannelSchema).optional(),
+}).optional();
+
 const CreateTaskSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
@@ -117,6 +129,7 @@ const CreateTaskSchema = z.object({
   triggerMessage: z.string().min(1).max(10000),
   enabled: z.boolean().optional(),
   modelOverride: ModelOverrideSchema,
+  notification: NotificationConfigSchema,
 });
 
 const UpdateTaskSchema = z.object({
@@ -128,6 +141,7 @@ const UpdateTaskSchema = z.object({
   triggerMessage: z.string().min(1).max(10000).optional(),
   enabled: z.boolean().optional(),
   modelOverride: ModelOverrideSchema,
+  notification: NotificationConfigSchema,
 });
 
 // ============================================================================

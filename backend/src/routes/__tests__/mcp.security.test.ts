@@ -13,7 +13,10 @@ vi.mock('../../config/sdkConfig.js', () => ({
 
 vi.mock('../../config/engineConfig.js', () => ({
   isCursorEngine: vi.fn(() => false),
+  isCodebuddyEngine: vi.fn(() => false),
+  isCodexEngine: vi.fn(() => false),
   getEnginePaths: vi.fn(() => ({})),
+  getEngineType: vi.fn(() => 'claude'),
 }));
 
 import { validateMcpCommand, validateMcpArgs } from '../mcp';

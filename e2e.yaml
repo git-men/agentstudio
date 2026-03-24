@@ -98,6 +98,10 @@ tests:
       id: scheduler-crud
       file: tests/e2e/api/scheduler-crud.yaml
 
+    - name: "定时任务 IM 通知配置"
+      id: scheduler-notification
+      file: tests/e2e/api/scheduler-notification.yaml
+
     - name: "插件与市场"
       id: plugins-marketplace
       file: tests/e2e/api/plugins-marketplace.yaml

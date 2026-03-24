@@ -21,6 +21,29 @@ export interface TaskSchedule {
 export type TaskRunStatus = 'running' | 'success' | 'error' | 'stopped';
 
 /**
+ * Notification strategy for scheduled task completion
+ */
+export type NotificationStrategy = 'always' | 'on_success' | 'on_error' | 'agent_decided';
+
+/**
+ * Notification delivery channel
+ */
+export interface NotificationChannel {
+  bot_key: string;
+  chat_id: string;
+  chat_name?: string;
+}
+
+/**
+ * Notification configuration embedded in a scheduled task
+ */
+export interface NotificationConfig {
+  enabled: boolean;
+  strategy: NotificationStrategy;
+  channels?: NotificationChannel[];
+}
+
+/**
  * Model override configuration for scheduled tasks
  */
 export interface ModelOverride {
@@ -44,6 +67,8 @@ export interface ScheduledTask {
   enabled: boolean;
   /** Model override configuration (optional) */
   modelOverride?: ModelOverride;
+  /** Optional notification configuration */
+  notification?: NotificationConfig;
   lastRunAt?: string;
   lastRunStatus?: TaskRunStatus;
   lastRunError?: string;
@@ -95,6 +120,7 @@ export interface CreateScheduledTaskRequest {
   triggerMessage: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
 }
 
 /**
@@ -109,6 +135,7 @@ export interface UpdateScheduledTaskRequest {
   triggerMessage?: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
 }
 
 /**

@@ -537,6 +537,21 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
         // This updates runningTaskCount and runningExecutions tracking
         // Pass executionId (task.id) because that's what's tracked in runningExecutions
         onScheduledTaskComplete(executionId);
+
+        // Fire-and-forget: send IM notification if configured (P6: non-blocking)
+        const { getScheduledTask: getTask } = await import('../scheduledTaskStorage.js');
+        const fullTask = getTask(scheduledTaskId);
+        if (fullTask?.notification?.enabled) {
+          const { sendNotification } = await import('../notificationService.js');
+          void sendNotification(fullTask, result).catch(err => {
+            console.warn('[TaskExecutor] Notification failed (non-blocking):', {
+              service: 'notification',
+              operation: 'sendNotification',
+              taskId: scheduledTaskId,
+              error: err,
+            });
+          });
+        }
       }
     } catch (error) {
       console.error(`[TaskExecutor] Error storing result:`, error);

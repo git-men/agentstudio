@@ -90,7 +90,8 @@ export function createScheduledTask(request: CreateScheduledTaskRequest): Schedu
     schedule: request.schedule,
     triggerMessage: request.triggerMessage,
     enabled: request.enabled ?? true,
-    modelOverride: request.modelOverride,  // 保存模型覆盖配置
+    modelOverride: request.modelOverride,
+    notification: request.notification,
     createdAt: now,
     updatedAt: now,
   };

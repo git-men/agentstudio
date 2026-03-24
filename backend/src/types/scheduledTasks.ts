@@ -43,6 +43,38 @@ export interface TaskSchedule {
 export type TaskRunStatus = 'running' | 'success' | 'error' | 'stopped';
 
 /**
+ * Notification strategy for scheduled task completion
+ */
+export type NotificationStrategy = 'always' | 'on_success' | 'on_error' | 'agent_decided';
+
+/**
+ * Notification delivery channel
+ */
+export interface NotificationChannel {
+  /** Bot key for IM delivery (identifies the bot/webhook) */
+  bot_key: string;
+  /** Target chat ID */
+  chat_id: string;
+  /** Optional human-readable chat name for display */
+  chat_name?: string;
+}
+
+/**
+ * Notification configuration embedded in a scheduled task
+ */
+export interface NotificationConfig {
+  /** Whether notification is enabled */
+  enabled: boolean;
+  /** Notification strategy */
+  strategy: NotificationStrategy;
+  /**
+   * Optional explicit channels.
+   * If empty/undefined, channels are resolved from project IMBinding.
+   */
+  channels?: NotificationChannel[];
+}
+
+/**
  * Model override configuration for scheduled tasks
  */
 export interface ModelOverride {
@@ -104,6 +136,8 @@ export interface ScheduledTask {
   /** Maximum number of turns for agent execution (optional) */
   maxTurns?: number;
 
+  /** Optional notification configuration */
+  notification?: NotificationConfig;
 
   /** ISO 8601 timestamp of last update */
   updatedAt: string;
@@ -182,6 +216,7 @@ export interface CreateScheduledTaskRequest {
   triggerMessage: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
 }
 
 /**
@@ -196,6 +231,7 @@ export interface UpdateScheduledTaskRequest {
   triggerMessage?: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
 }
 
 /**

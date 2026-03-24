@@ -1,0 +1,229 @@
+name: 定时任务 IM 通知配置
+sequential: true
+
+cases:
+  - name: "创建带通知配置的定时任务（always 策略）"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-notify-always"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Run notify test"
+        schedule:
+          type: "cron"
+          cronExpression: "0 0 * * *"
+        enabled: false
+        notification:
+          enabled: true
+          strategy: "always"
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      task_always_id: "id"
+
+  - name: "验证通知配置已持久化（always 策略）"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        name: "e2e-notify-always"
+        notification:
+          enabled: true
+          strategy: "always"
+
+  - name: "创建带 agent_decided 策略的定时任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-notify-agent-decided"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Check system status"
+        schedule:
+          type: "cron"
+          cronExpression: "*/30 * * * *"
+        enabled: false
+        notification:
+          enabled: true
+          strategy: "agent_decided"
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      task_agent_id: "id"
+
+  - name: "验证 agent_decided 策略已持久化"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        notification:
+          enabled: true
+          strategy: "agent_decided"
+
+  - name: "更新通知策略为 on_error"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-notify-always"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Run notify test"
+        schedule:
+          type: "cron"
+          cronExpression: "0 0 * * *"
+        enabled: false
+        notification:
+          enabled: true
+          strategy: "on_error"
+    expect:
+      status: 200
+
+  - name: "验证更新后的通知策略"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        notification:
+          enabled: true
+          strategy: "on_error"
+
+  - name: "创建带自定义渠道的定时任务"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-notify-custom-channel"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "Custom channel test"
+        schedule:
+          type: "cron"
+          cronExpression: "0 12 * * *"
+        enabled: false
+        notification:
+          enabled: true
+          strategy: "on_success"
+          channels:
+            - bot_key: "test-bot-key-123"
+              chat_id: "test-chat-id-456"
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      task_channel_id: "id"
+
+  - name: "验证自定义渠道已持久化"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_channel_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        notification:
+          enabled: true
+          strategy: "on_success"
+          channels:
+            - bot_key: "test-bot-key-123"
+              chat_id: "test-chat-id-456"
+
+  - name: "创建不带通知配置的任务（默认行为）"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/scheduled-tasks"
+      headers:
+        Authorization: "{{config.auth_header}}"
+        Content-Type: application/json
+      body:
+        name: "e2e-no-notify"
+        agentId: "meta-agent"
+        projectPath: "/tmp"
+        triggerMessage: "No notification"
+        schedule:
+          type: "cron"
+          cronExpression: "0 0 * * *"
+        enabled: false
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+    save:
+      task_no_notify_id: "id"
+
+  - name: "验证无通知配置的任务"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_no_notify_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    expect:
+      status: 200
+      body:
+        name: "e2e-no-notify"
+
+teardown:
+  - name: "清理 always 策略任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
+
+  - name: "清理 agent_decided 策略任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_agent_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
+
+  - name: "清理自定义渠道任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_channel_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
+
+  - name: "清理无通知任务"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_no_notify_id}}"
+      headers:
+        Authorization: "{{config.auth_header}}"
+    ignoreError: true
