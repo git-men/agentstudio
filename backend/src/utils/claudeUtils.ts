@@ -17,6 +17,9 @@ import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
 import { integrateA2UIMcpServer } from '../services/a2ui/a2uiIntegration.js';
 import { resolveConfig } from './configResolver.js';
+import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
+
+const projectStorage = new ProjectMetadataStorage();
 
 export type { SessionRef };
 import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME, resolvePath } from '../config/paths.js';
@@ -379,10 +382,24 @@ export async function buildQueryOptions(
     queryOptions.pathToClaudeCodeExecutable = executablePath;
   }
 
+  // Load project-specific environment variables if we're in a project context
+  let projectEnv: Record<string, string> = {};
+  if (projectPath) {
+    try {
+      const dirName = path.basename(projectPath);
+      const projectMeta = projectStorage.getProjectMetadata(dirName);
+      if (projectMeta && projectMeta.env) {
+        projectEnv = projectMeta.env;
+      }
+    } catch (e) {
+      console.warn(`⚠️ Failed to load project environment variables for ${projectPath}:`, e);
+    }
+  }
+
   // Always merge environment variables with process.env
   // This ensures critical variables like PATH, etc. are available
-  // Priority: userEnv > environmentVariables (from version/default) > process.env
-  queryOptions.env = { ...process.env, ...environmentVariables, ...userEnv };
+  // Priority: userEnv > projectEnv > environmentVariables (from version/default) > process.env
+  queryOptions.env = { ...process.env, ...environmentVariables, ...projectEnv, ...userEnv };
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
   // This ensures proxy settings work regardless of which form the client library checks first

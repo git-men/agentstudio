@@ -32,6 +32,7 @@ export interface ProjectMetadata {
   // Model/Provider configuration
   defaultProviderId?: string;  // Default Claude version/provider for this project
   defaultModel?: string;       // Default model for this project
+  env?: Record<string, string>; // Project-specific environment variables
   
   // Simplified metadata
   tags: string[];
@@ -57,6 +58,7 @@ export interface ProjectWithAgentInfo {
   // Model/Provider configuration
   defaultProviderId?: string;  // Default Claude version/provider for this project
   defaultModel?: string;       // Default model for this project
+  env?: Record<string, string>; // Project-specific environment variables
   
   // Metadata
   tags: string[];

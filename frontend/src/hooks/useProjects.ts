@@ -14,6 +14,7 @@ export interface Project {
   createdAt: string;
   lastAccessed?: string;
   metadata?: Record<string, any>;
+  env?: Record<string, string>;
 }
 
 interface ProjectsResponse {

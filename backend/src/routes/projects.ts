@@ -251,7 +251,7 @@ router.post('/', async (req, res) => {
 router.put('/:dirName', async (req, res) => {
   try {
     const { dirName } = req.params;
-    const { name, description, tags, metadata, defaultProviderId, defaultModel } = req.body;
+    const { name, description, tags, metadata, defaultProviderId, defaultModel, env } = req.body;
     
     const project = projectStorage.getProject(dirName);
     if (!project) {
@@ -273,8 +273,8 @@ router.put('/:dirName', async (req, res) => {
       projectStorage.updateProjectMetadata(dirName, metadata);
     }
     
-    // Update default provider and model
-    if (defaultProviderId !== undefined || defaultModel !== undefined) {
+    // Update default provider, model, and env
+    if (defaultProviderId !== undefined || defaultModel !== undefined || env !== undefined) {
       const projectMeta = projectStorage.getProjectMetadata(dirName);
       if (projectMeta) {
         if (defaultProviderId !== undefined) {
@@ -284,6 +284,9 @@ router.put('/:dirName', async (req, res) => {
         if (defaultModel !== undefined) {
           // Empty string clears the value
           projectMeta.defaultModel = defaultModel || undefined;
+        }
+        if (env !== undefined) {
+          projectMeta.env = env;
         }
         projectMeta.lastAccessed = new Date().toISOString();
         projectStorage.saveProjectMetadata(dirName, projectMeta);

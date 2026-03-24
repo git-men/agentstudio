@@ -502,6 +502,7 @@ export const ProjectWorkspacePage: React.FC = () => {
         isOpen={!!settingsProject}
         project={settingsProject}
         onClose={() => setSettingsProject(null)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['projects'] })}
       />
 
       <ProjectVersionModal
