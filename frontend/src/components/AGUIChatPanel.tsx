@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo, useCallback, useContext } from 'react';
-import { Clock, Plus, RefreshCw, ChevronDown, MapPin, Forward, Check, Loader2, AlertCircle } from 'lucide-react';
+import { Clock, Plus, RefreshCw, ChevronDown, MapPin, Forward, Check, Loader2, AlertCircle, Copy } from 'lucide-react';
 import { useAgentStore } from '../stores/useAgentStore';
 import { useSharedStore } from '../stores/useSharedStore';
 import { SessionStoreContext, useSessionStoreOptional, useIsWorkspaceMode } from '../stores/SessionStoreContext';
@@ -825,7 +825,16 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
     // Render messages using existing renderer - matching original chat style
     const envContextRe = /^<environment_context>\n([\s\S]*?)\n<\/environment_context>\n\n/;
     const renderedMessages = useMemo(() => {
-        return messages.map((message) => {
+        let lastAssistantMessageIndex = -1;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i].role === 'assistant') {
+                lastAssistantMessageIndex = i;
+                break;
+            }
+        }
+
+        return messages.map((message, index) => {
+            const isLastAssistantMessage = index === lastAssistantMessageIndex;
             let displayMessage = message;
             let envLabel: string | null = null;
 
@@ -897,13 +906,30 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                                 </span>
                             ) : null}
 
-                            <button
-                                onClick={() => handleForwardClick(message.id, plainText)}
-                                className="opacity-0 group-hover/msg:opacity-100 transition-opacity inline-flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 dark:hover:text-blue-400"
-                                title="转发到企业微信"
-                            >
-                                <Forward size={13} />
-                            </button>
+                            <div className="flex items-center gap-3 ml-2 border-l border-gray-200 dark:border-gray-700 pl-3">
+                                {isLastAssistantMessage && (
+                                    <button
+                                        onClick={() => handleForwardClick(message.id, plainText)}
+                                        className="inline-flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 transition-colors font-medium"
+                                        title="转发到 IM"
+                                    >
+                                        <Forward size={14} /> 转发
+                                    </button>
+                                )}
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            await navigator.clipboard.writeText(plainText);
+                                        } catch (e) {
+                                            console.error('Failed to copy', e);
+                                        }
+                                    }}
+                                    className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+                                    title="复制消息"
+                                >
+                                    <Copy size={13} /> 复制
+                                </button>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -1175,6 +1201,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
             {dispatchDialog && (
                 <DispatchIMDialog
                     isOpen
+                    projectPath={projectPath}
                     messagePreview={dispatchDialog.content}
                     dispatchStatus={getDispatchStatus(dispatchDialog.messageId).status}
                     error={getDispatchStatus(dispatchDialog.messageId).error}
