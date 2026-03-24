@@ -111,6 +111,7 @@ export async function executeA2AQuery(
     let sessionId: string | null = null;
     let fullResponse = '';
     let tokensUsed = 0;
+    const messageTypes: string[] = [];
 
     console.log(`🚀 [A2A Query] Starting one-shot query with resume=${queryOptions.resume || 'none'}`);
 
@@ -122,6 +123,8 @@ export async function executeA2AQuery(
 
     // Process responses
     for await (const sdkMessage of queryResult) {
+      messageTypes.push(sdkMessage.type);
+
       // Capture session ID from system init message
       if (sdkMessage.type === 'system' && sdkMessage.subtype === 'init' && sdkMessage.session_id) {
         sessionId = sdkMessage.session_id;
@@ -152,14 +155,34 @@ export async function executeA2AQuery(
       await onMessage(sdkMessage);
     }
 
-    console.log(`✅ [A2A Query] Query completed, sessionId=${sessionId}, responseLength=${fullResponse.length}`);
+    if (fullResponse.length === 0) {
+      console.warn(`⚠️ [A2A Query] Empty fullResponse! SDK message types received: [${messageTypes.join(', ')}], sessionId=${sessionId}, tokensUsed=${tokensUsed}`);
+    } else {
+      console.log(`✅ [A2A Query] Query completed, sessionId=${sessionId}, responseLength=${fullResponse.length}`);
+    }
 
     return { sessionId, fullResponse, tokensUsed };
   }
 
+  const MAX_EMPTY_RESPONSE_RETRIES = 1;
+
   // Try with resume first, if it fails due to invalid session, retry without resume
   try {
-    return await executeQuery(options);
+    const result = await executeQuery(options);
+
+    // Retry once if response is empty (model may have only returned thinking blocks)
+    if (result.fullResponse.length === 0 && result.sessionId) {
+      console.warn(`⚠️ [A2A Query] Empty response on first attempt, retrying (1/${MAX_EMPTY_RESPONSE_RETRIES})...`);
+      const retryResult = await executeQuery({ ...options, resume: result.sessionId });
+      if (retryResult.fullResponse.length > 0) {
+        console.log(`✅ [A2A Query] Retry succeeded, got response of length ${retryResult.fullResponse.length}`);
+        return retryResult;
+      }
+      console.warn(`⚠️ [A2A Query] Retry also returned empty response, returning as-is`);
+      return retryResult;
+    }
+
+    return result;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     

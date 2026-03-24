@@ -776,9 +776,18 @@ const app: express.Express = express();
 
   // Check if this file is being run directly (CommonJS way)
   if (require.main === module) {
-    app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, () => {
       console.log(`AI PPT Editor backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
       console.log(`Serving slides from: ${slidesDir}`);
+    });
+
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`[Fatal] Port ${PORT} is already in use. Cleaning up and exiting...`);
+        gracefulShutdown();
+      } else {
+        console.error('[Fatal] Server error:', error);
+      }
     });
   }
 })();
