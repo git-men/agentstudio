@@ -383,6 +383,29 @@ program
       checks.push({ name: 'API Key', status: 'warn', message: 'No API key found in environment' });
     }
 
+    // Desktop development dependencies (optional)
+    const tryExec = (cmd: string): string | null => {
+      try {
+        return execSync(cmd, { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      } catch {
+        return null;
+      }
+    };
+
+    const cargoVersion = tryExec('cargo --version');
+    if (cargoVersion) {
+      checks.push({ name: 'Rust (cargo)', status: 'ok', message: cargoVersion });
+    } else {
+      checks.push({ name: 'Rust (cargo)', status: 'warn', message: 'Not found (required for desktop dev). Install: curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh' });
+    }
+
+    const bunVersion = tryExec('bun --version');
+    if (bunVersion) {
+      checks.push({ name: 'Bun', status: 'ok', message: `v${bunVersion}` });
+    } else {
+      checks.push({ name: 'Bun', status: 'warn', message: 'Not found (required for desktop sidecar build). Install: curl -fsSL https://bun.sh/install | bash' });
+    }
+
     // Print results
     let hasErrors = false;
     for (const check of checks) {

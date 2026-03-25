@@ -158,6 +158,55 @@ cp backend/.env.example backend/.env
 pnpm run dev
 ```
 
+### 桌面端开发
+
+桌面端基于 [Tauri v2](https://v2.tauri.app/) 构建，需要额外的系统依赖。
+
+#### 前置依赖
+
+| 依赖 | 版本要求 | 安装方式 |
+|------|---------|---------|
+| **Rust 工具链** | stable (≥ 1.77) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| **Bun** | ≥ 1.0 | `curl -fsSL https://bun.sh/install \| bash` |
+| **Node.js** | ≥ 20.0 | 主项目已要求 |
+| **pnpm** | ≥ 10.0 | 主项目已要求 |
+
+**macOS 额外依赖：**
+```bash
+xcode-select --install   # Xcode 命令行工具
+```
+
+**Linux 额外依赖（Debian/Ubuntu）：**
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+**Windows 额外依赖：**
+- [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)（Windows 11 已内置）
+
+#### 验证依赖
+
+```bash
+agentstudio doctor    # 如果已全局安装 agentstudio
+```
+
+`dev:desktop` 脚本在启动前也会自动检测 Rust 是否安装，缺失时会给出安装提示。
+
+#### 启动
+
+```bash
+# 开发模式（自动启动后端 + 前端 + Tauri 壳）
+pnpm run dev:desktop
+
+# 构建生产版本
+pnpm run build:desktop
+```
+
+> **提示：** 首次运行时，Cargo 会下载并编译 Rust 依赖，这可能需要几分钟。
+
 ## 🔧 引擎配置
 
 AgentStudio 支持两种 AI 引擎，选择适合你工作流程的引擎。

@@ -194,6 +194,55 @@ cp backend/.env.example backend/.env
 pnpm run dev
 ```
 
+### Desktop App Development
+
+The desktop app is built with [Tauri v2](https://v2.tauri.app/), which requires additional system dependencies.
+
+#### Prerequisites
+
+| Dependency | Required Version | Install |
+|-----------|-----------------|---------|
+| **Rust toolchain** | stable (≥ 1.77) | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| **Bun** | ≥ 1.0 | `curl -fsSL https://bun.sh/install \| bash` |
+| **Node.js** | ≥ 20.0 | Already required for the main project |
+| **pnpm** | ≥ 10.0 | Already required for the main project |
+
+**macOS additional:**
+```bash
+xcode-select --install   # Xcode Command Line Tools
+```
+
+**Linux additional (Debian/Ubuntu):**
+```bash
+sudo apt update
+sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file \
+  libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+```
+
+**Windows additional:**
+- [Microsoft C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/)
+- [WebView2](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) (included in Windows 11)
+
+#### Verify Dependencies
+
+```bash
+agentstudio doctor    # if agentstudio is installed globally
+```
+
+The `dev:desktop` script will also check for Rust before starting and show install instructions if missing.
+
+#### Running
+
+```bash
+# Development mode (auto-starts backend + frontend + Tauri shell)
+pnpm run dev:desktop
+
+# Build production binary
+pnpm run build:desktop
+```
+
+> **Note:** On first run, Cargo will download and compile Rust dependencies, which may take several minutes.
+
 ## 🔧 Engine Configuration
 
 AgentStudio supports two AI engines. Choose the one that fits your workflow.
