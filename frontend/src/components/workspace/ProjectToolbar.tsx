@@ -12,6 +12,7 @@ import {
   CheckCircle,
   XCircle,
   MessageSquare,
+  MessageCircle,
   Radio,
 } from 'lucide-react';
 import { getApiBase } from '../../lib/config';
@@ -25,6 +26,8 @@ interface ProjectToolbarProps {
   hasLAVS: boolean;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  chatVisible?: boolean;
+  onToggleChat?: () => void;
   onSetRightPanelView: (view: RightPanelView | null) => void;
   onMemoryManagement: () => void;
   onCommandManagement: () => void;
@@ -132,6 +135,8 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   hasLAVS,
   sidebarCollapsed,
   onToggleSidebar,
+  chatVisible,
+  onToggleChat,
   onSetRightPanelView,
   onMemoryManagement,
   onCommandManagement,
@@ -202,6 +207,15 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         onClick={onToggleSidebar}
         active={!sidebarCollapsed}
       />
+
+      {onToggleChat && (
+        <ToolbarButton
+          icon={<MessageCircle className="w-3.5 h-3.5" />}
+          label="聊天框"
+          onClick={onToggleChat}
+          active={chatVisible}
+        />
+      )}
 
       <ToolbarButton
         icon={<FolderTree className="w-3.5 h-3.5" />}

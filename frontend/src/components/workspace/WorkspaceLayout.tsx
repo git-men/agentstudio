@@ -15,6 +15,8 @@ interface WorkspaceLayoutProps {
   defaultRightRatio?: number;
   /** When true, the floating right-panel toggle button is hidden (use toolbar toggle instead). */
   hideRightToggle?: boolean;
+  /** When false, the main panel (center children) is hidden, allowing right panel to fill available space. */
+  mainPanelVisible?: boolean;
 }
 
 const MIN_WIDTH = 200;
@@ -40,6 +42,7 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   defaultRightWidth = RIGHT_DEFAULT,
   defaultRightRatio,
   hideRightToggle = false,
+  mainPanelVisible = true,
 }) => {
   const sidebarWidth = useSharedStore((s) => s.workspaceSidebarWidth);
   const setSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
@@ -146,12 +149,14 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
         {/* Inner wrapper for Main and Right panels */}
         <div className="flex-1 min-w-0 flex">
           {/* Main panel */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            {children}
-          </div>
+          {mainPanelVisible && (
+            <div className="flex-1 min-w-0 flex flex-col">
+              {children}
+            </div>
+          )}
 
           {/* Right drag handle */}
-          {showRight && (
+          {showRight && mainPanelVisible && (
             <div
               className={`
                 flex-shrink-0 w-1 cursor-col-resize group relative
@@ -167,8 +172,10 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
           {/* Right panel */}
           {showRight && (
             <div
-              className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 relative"
-              style={{ width: rightWidth }}
+              className={`flex-col bg-white dark:bg-gray-800 relative flex ${
+                !mainPanelVisible ? 'flex-1' : 'flex-shrink-0 border-l border-gray-200 dark:border-gray-700'
+              }`}
+              style={!mainPanelVisible ? undefined : { width: rightWidth }}
             >
               {rightPanel}
               {/* Transparent overlay to prevent iframe from consuming mouse events during drag */}
