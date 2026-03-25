@@ -11,6 +11,11 @@ import { IM_BINDINGS_FILE } from '../config/paths.js';
 
 export type IMPlatform = 'wecom' | 'qqbot' | 'weixin';
 
+export interface IMChannel {
+  chat_id: string;
+  chat_name?: string;
+}
+
 export interface IMBinding {
   id: string;
   platform: IMPlatform;
@@ -26,6 +31,8 @@ export interface IMBinding {
   a2a_endpoint: string;
   /** Platform-specific metadata */
   platform_config?: Record<string, unknown>;
+  /** WeChat Work only: associated group chats */
+  channels?: IMChannel[];
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +100,53 @@ export const imBindingService = {
     store.bindings.push(newBinding);
     save(store);
     return newBinding;
+  },
+
+  update(botKey: string, updates: Record<string, unknown>): IMBinding | null {
+    const store = load();
+    const binding = store.bindings.find(b => b.bot_key === botKey);
+    if (!binding) return null;
+
+    const allowed = ['name', 'channels'] as const;
+    for (const key of allowed) {
+      if (key in updates) {
+        (binding as any)[key] = updates[key];
+      }
+    }
+    binding.updated_at = new Date().toISOString();
+    save(store);
+    return binding;
+  },
+
+  addChannel(botKey: string, channel: IMChannel): IMBinding | null {
+    const store = load();
+    const binding = store.bindings.find(b => b.bot_key === botKey);
+    if (!binding) return null;
+
+    if (!binding.channels) binding.channels = [];
+    const existing = binding.channels.find(c => c.chat_id === channel.chat_id);
+    if (existing) {
+      if (channel.chat_name !== undefined) existing.chat_name = channel.chat_name;
+    } else {
+      binding.channels.push(channel);
+    }
+    binding.updated_at = new Date().toISOString();
+    save(store);
+    return binding;
+  },
+
+  removeChannel(botKey: string, chatId: string): IMBinding | null {
+    const store = load();
+    const binding = store.bindings.find(b => b.bot_key === botKey);
+    if (!binding || !binding.channels) return null;
+
+    const idx = binding.channels.findIndex(c => c.chat_id === chatId);
+    if (idx < 0) return null;
+
+    binding.channels.splice(idx, 1);
+    binding.updated_at = new Date().toISOString();
+    save(store);
+    return binding;
   },
 
   remove(botKey: string): boolean {

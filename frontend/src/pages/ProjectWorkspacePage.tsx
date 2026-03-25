@@ -23,6 +23,7 @@ import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
 import { ProjectA2AModal } from '../components/ProjectA2AModal';
 import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
 import { ProjectVersionModal } from '../components/ProjectVersionModal';
+import { ProjectIMChannelsModal } from '../components/ProjectIMChannelsModal';
 import { MessageSquarePlus, FolderOpen, Search, Clock } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
 import { formatRelativeTime } from '../utils/dateFormat';
@@ -184,6 +185,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [a2aProject, setA2aProject] = useState<any>(null);
   const [settingsProject, setSettingsProject] = useState<any>(null);
   const [versionProject, setVersionProject] = useState<any>(null);
+  const [showIMChannels, setShowIMChannels] = useState(false);
 
   // ---------- Derived state ----------
   const activeAgentId = useMemo(() => {
@@ -461,6 +463,7 @@ export const ProjectWorkspacePage: React.FC = () => {
             onSubAgentManagement={() => setSubAgentsProject(project)}
             onA2AManagement={() => setA2aProject(project)}
             onVersionManagement={() => setVersionProject(project)}
+            onIMChannels={() => setShowIMChannels(true)}
             onSettings={() => setSettingsProject(project)}
           />
         }
@@ -513,12 +516,20 @@ export const ProjectWorkspacePage: React.FC = () => {
         isOpen={!!settingsProject}
         project={settingsProject}
         onClose={() => setSettingsProject(null)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['projects'] })}
       />
 
       <ProjectVersionModal
         isOpen={!!versionProject}
         project={versionProject}
         onClose={() => setVersionProject(null)}
+      />
+
+      <ProjectIMChannelsModal
+        projectPath={projectPath}
+        projectName={project?.name || project?.dirName}
+        isOpen={showIMChannels}
+        onClose={() => setShowIMChannels(false)}
       />
     </div>
   );

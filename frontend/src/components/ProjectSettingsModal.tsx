@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Settings, Server, Bot } from 'lucide-react';
+import { X, Settings, Server, Bot, Terminal, Plus } from 'lucide-react';
 import { useClaudeVersions } from '../hooks/useClaudeVersions';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
@@ -11,13 +11,14 @@ interface Project {
   path: string;
   defaultProviderId?: string;
   defaultModel?: string;
+  env?: Record<string, string>;
 }
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
   project: Project | null;
   onClose: () => void;
-  onSaved: () => void;
+  onSaved?: () => void;
 }
 
 export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
@@ -30,6 +31,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [envVars, setEnvVars] = useState<Array<{key: string, value: string}>>([]);
   const [isSaving, setIsSaving] = useState(false);
 
   // Reset form when project changes
@@ -37,6 +39,14 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     if (project) {
       setSelectedProviderId(project.defaultProviderId || '');
       setSelectedModel(project.defaultModel || '');
+      
+      const envArr = [];
+      if (project.env) {
+        for (const [key, value] of Object.entries(project.env)) {
+          envArr.push({ key, value });
+        }
+      }
+      setEnvVars(envArr);
     }
   }, [project]);
 
@@ -71,6 +81,13 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
 
     setIsSaving(true);
     try {
+      const envRecord: Record<string, string> = {};
+      envVars.forEach(({key, value}) => {
+        if (key.trim()) {
+          envRecord[key.trim()] = value;
+        }
+      });
+
       const response = await authFetch(`${API_BASE}/projects/${encodeURIComponent(project.path)}`, {
         method: 'PUT',
         headers: {
@@ -79,6 +96,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         body: JSON.stringify({
           defaultProviderId: selectedProviderId || '',
           defaultModel: selectedModel || '',
+          env: envRecord,
         }),
       });
 
@@ -88,7 +106,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       }
 
       showSuccess('项目设置已保存');
-      onSaved();
+      onSaved?.();
       onClose();
     } catch (error) {
       console.error('Failed to save project settings:', error);
@@ -171,6 +189,71 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             </select>
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               设置此项目的默认 AI 模型（可在聊天时覆盖）
+            </p>
+          </div>
+
+          {/* Environment Variables */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                <Terminal className="w-4 h-4" />
+                环境变量
+              </label>
+              <button
+                type="button"
+                onClick={() => setEnvVars([...envVars, { key: '', value: '' }])}
+                className="text-xs flex items-center gap-1 text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 dark:hover:text-indigo-300"
+              >
+                <Plus className="w-3 h-3" /> 添加变量
+              </button>
+            </div>
+            
+            <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+              {envVars.map((env, index) => (
+                <div key={index} className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Key (如: API_KEY)"
+                    value={env.key}
+                    onChange={(e) => {
+                      const newEnvVars = [...envVars];
+                      newEnvVars[index].key = e.target.value;
+                      setEnvVars(newEnvVars);
+                    }}
+                    className="flex-1 min-w-0 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Value"
+                    value={env.value}
+                    onChange={(e) => {
+                      const newEnvVars = [...envVars];
+                      newEnvVars[index].value = e.target.value;
+                      setEnvVars(newEnvVars);
+                    }}
+                    className="flex-1 min-w-0 px-3 py-2 text-sm bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const newEnvVars = envVars.filter((_, i) => i !== index);
+                      setEnvVars(newEnvVars);
+                    }}
+                    className="p-2 shrink-0 text-gray-400 hover:text-red-500 dark:hover:text-red-400 rounded-lg transition-colors"
+                    title="删除"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+              {envVars.length === 0 && (
+                <div className="text-center py-4 text-xs text-gray-500 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                  暂无环境变量
+                </div>
+              )}
+            </div>
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              设置注入到对话与代理进程中的项目级环境变量
             </p>
           </div>
 

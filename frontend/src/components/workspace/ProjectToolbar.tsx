@@ -12,6 +12,7 @@ import {
   CheckCircle,
   XCircle,
   MessageSquare,
+  Radio,
 } from 'lucide-react';
 import { getApiBase } from '../../lib/config';
 import { loadBackendServices, getCurrentService } from '../../utils/backendServiceStorage';
@@ -31,6 +32,7 @@ interface ProjectToolbarProps {
   onA2AManagement: () => void;
   onVersionManagement: () => void;
   onSettings: () => void;
+  onIMChannels?: () => void;
 }
 
 const ToolbarButton: React.FC<{
@@ -137,6 +139,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   onA2AManagement,
   onVersionManagement,
   onSettings,
+  onIMChannels,
 }) => {
   const toggleView = (view: RightPanelView) => {
     onSetRightPanelView(rightPanelView === view ? null : view);
@@ -240,6 +243,13 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         label="A2A"
         onClick={onA2AManagement}
       />
+      {onIMChannels && (
+        <ToolbarButton
+          icon={<Radio className="w-3.5 h-3.5" />}
+          label="IM渠道"
+          onClick={onIMChannels}
+        />
+      )}
       <ToolbarButton
         icon={<GitBranch className="w-3.5 h-3.5" />}
         label="版本"

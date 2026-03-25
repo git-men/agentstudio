@@ -14,6 +14,7 @@
     "mcp": "MCP Services",
     "commands": "Commands",
     "subagents": "Subagents",
+    "imChannels": "IM Channels",
     "settings": "Settings",
     "settingsSubmenu": {
       "general": "General",

@@ -30,6 +30,7 @@ const NewDashboard = lazy(() => import('./pages/NewDashboard').then(module => ({
 const AgentsPage = lazy(() => import('./pages/AgentsPage').then(module => ({ default: module.AgentsPage })));
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage').then(module => ({ default: module.ProjectsPage })));
 const McpPage = lazy(() => import('./pages/McpPage').then(module => ({ default: module.McpPage })));
+const IMChannelsPage = lazy(() => import('./pages/IMChannelsPage').then(module => ({ default: module.IMChannelsPage })));
 const WecomBindPage = lazy(() => import('./pages/WecomBindPage').then(module => ({ default: module.WecomBindPage })));
 const QQBotBindPage = lazy(() => import('./pages/QQBotBindPage').then(module => ({ default: module.QQBotBindPage })));
 const WechatBindPage = lazy(() => import('./pages/WechatBindPage').then(module => ({ default: module.WechatBindPage })));
@@ -123,7 +124,8 @@ const AppContent: React.FC = () => {
       <Suspense fallback={<LoadingFallback />}>
         <Routes>
           {/* Public routes */}
-          <Route path="/" element={isExtension ? <Navigate to="/dashboard" replace /> : <LandingPage />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/intro" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
 
           {/* Protected routes */}
@@ -178,6 +180,11 @@ const AppContent: React.FC = () => {
               <PageGate module="manage.mcp">
                 <Layout><McpPage /></Layout>
               </PageGate>
+            </ProtectedRoute>
+          } />
+          <Route path="/im-channels" element={
+            <ProtectedRoute>
+              <Layout><IMChannelsPage /></Layout>
             </ProtectedRoute>
           } />
           <Route path="/wecom-bind" element={

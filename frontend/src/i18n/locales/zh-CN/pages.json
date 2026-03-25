@@ -14,6 +14,7 @@
     "mcp": "MCP服务",
     "commands": "自定义命令",
     "subagents": "Subagent管理",
+    "imChannels": "消息渠道",
     "settings": "系统管理",
     "settingsSubmenu": {
       "general": "通用设置",

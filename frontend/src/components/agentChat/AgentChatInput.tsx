@@ -160,7 +160,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             : t('agentChat.inputPlaceholder')
         }
         rows={1}
-        className="w-full resize-none bg-transparent px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none transition-all duration-200 disabled:text-gray-500 dark:disabled:text-gray-400 chat-textarea-clean"
+        className="w-full resize-none bg-transparent px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none outline-none border-none ring-0 shadow-none focus:ring-0 focus:border-transparent focus:shadow-none focus-visible:outline-none focus-visible:ring-0 transition-all duration-200 disabled:text-gray-500 dark:disabled:text-gray-400 chat-textarea-clean"
         style={{
           minHeight: '44px',
           maxHeight: '150px'

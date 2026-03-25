@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -25,6 +26,7 @@ import {
   PanelLeftOpen,
   Building2,
   LogOut,
+  MessageSquare,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -83,6 +85,11 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     href: '/scheduled-tasks',
     icon: Clock,
     requireModule: 'system.scheduler',
+  },
+  {
+    name: t('nav.imChannels'),
+    href: '/im-channels',
+    icon: MessageSquare,
   },
   {
     name: t('nav.extensions'),
@@ -195,9 +202,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
     // Auto-expand the settings menu if we're on a settings page
     return location.pathname.startsWith('/settings') ? [t('nav.settings')] : [];
   });
+  const [activeFloatingMenu, setActiveFloatingMenu] = useState<{name: string, rect: DOMRect, submenu: any[]} | null>(null);
   const [showServiceManagement, setShowServiceManagement] = useState(false);
   const [showEnterpriseMenu, setShowEnterpriseMenu] = useState(false);
   const { profile: enterpriseProfile, isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin, logout: enterpriseLogout } = useEnterpriseProfile();
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Close if click is outside the floating menu and not on an icon button
+      if (!target.closest('.floating-submenu') && !target.closest('.sidebar-menu-btn')) {
+        setActiveFloatingMenu(null);
+      }
+    };
+    
+    // Auto-close on scroll
+    const handleScroll = () => setActiveFloatingMenu(null);
+
+    if (activeFloatingMenu) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      window.addEventListener('resize', handleScroll);
+      window.addEventListener('scroll', handleScroll, true); // true for capturing phase to catch sidebar scroll
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      window.removeEventListener('resize', handleScroll);
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [activeFloatingMenu]);
 
   // Get engine capabilities for filtering navigation items
   const { isFeatureSupported, isConfigSupported, engineType, isLoading: isEngineLoading } = useEngine();
@@ -281,13 +314,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
     const isActive = isItemActive(item);
 
     if (collapsed) {
-      // Collapsed mode: icon only, no submenu
-      const handleClick = () => {
+      // Collapsed mode: icon only, clicking shows floating submenu if it has one
+      const handleClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         if (hasSubmenu) {
-          // Navigate to the first submenu item
-          navigate(item.submenu[0].href);
+          e.preventDefault();
+          e.stopPropagation();
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (activeFloatingMenu?.name === item.name) {
+             setActiveFloatingMenu(null);
+          } else {
+             setActiveFloatingMenu({
+               name: item.name,
+               rect,
+               submenu: item.submenu,
+             });
+          }
+        } else {
+          setActiveFloatingMenu(null);
+          if (isMobile && onClose) onClose();
         }
-        if (isMobile && onClose) onClose();
       };
       const icon = (
         <item.icon className="w-5 h-5 flex-shrink-0" />
@@ -301,8 +346,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               className={`w-full flex items-center justify-center p-3 rounded-lg transition-colors ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
-              }`}
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+              } sidebar-menu-btn`}
             >
               {icon}
             </button>
@@ -319,7 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               `flex items-center justify-center p-3 rounded-lg transition-colors ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
               }`
             }
           >
@@ -339,7 +384,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                 isActive
                   ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
               }`}
             >
               <item.icon className="w-5 h-5" />
@@ -367,7 +412,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                         `flex items-center space-x-3 px-4 py-2 rounded-lg transition-colors text-sm ${
                           isActive
                             ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
-                            : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
                         }`
                       }
                     >
@@ -396,7 +441,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
             `flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               isActive
                 ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+                : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
             }`
           }
         >
@@ -408,19 +453,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
   };
 
   return (
-    <div className={`${collapsed ? 'w-16' : 'w-64'} bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40 transition-all duration-200`}>
+    <div className={`${collapsed ? 'w-16' : 'w-56'} bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 flex flex-col h-full z-40 transition-all duration-200`}>
       {/* Logo */}
-      <div className={`${collapsed ? 'px-2 py-4' : 'px-6 py-8'} flex-shrink-0`}>
+      <div className={`${collapsed ? 'px-2 py-4' : 'px-4 py-5'} flex-shrink-0`}>
         <button
           onClick={() => navigate('/')}
           title="ClawStudio"
           className={`flex items-center gap-3 hover:opacity-80 transition-opacity focus:outline-none rounded-lg ${collapsed ? 'justify-center w-full p-1' : 'w-full p-2'}`}
         >
-          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-10 h-10 rounded-lg flex-shrink-0 object-contain" />
+          <img src={`${import.meta.env.BASE_URL}cc-studio.png`} alt="ClawStudio" className="w-8 h-8 rounded-lg flex-shrink-0 object-contain" />
           {!collapsed && (
             <div className="flex flex-col min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white whitespace-nowrap">ClawStudio</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap">Your Agent Workspace</p>
             </div>
           )}
         </button>
@@ -439,16 +484,47 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
           <div className="space-y-2">
             {/* Enterprise identity (collapsed) */}
             {isEnterpriseAuth ? (
-              <div
-                title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
-                className="w-full flex items-center justify-center p-2"
-              >
-                {enterpriseProfile?.avatarUrl ? (
-                  <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
-                ) : (
-                  <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
-                    {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
-                  </div>
+              <div className="relative">
+                <button
+                  onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
+                  title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                  className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  {enterpriseProfile?.avatarUrl ? (
+                    <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                      {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </button>
+
+                {showEnterpriseMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setShowEnterpriseMenu(false)} />
+                    <div className="absolute bottom-full left-0 mb-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                      <button
+                        onClick={() => {
+                          setShowEnterpriseMenu(false);
+                          enterpriseLogin();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        <Building2 className="w-3.5 h-3.5" />
+                        重新登录
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowEnterpriseMenu(false);
+                          enterpriseLogout();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <LogOut className="w-3.5 h-3.5" />
+                        退出
+                      </button>
+                    </div>
+                  </>
                 )}
               </div>
             ) : (
@@ -569,6 +645,46 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
         isOpen={showServiceManagement}
         onClose={() => setShowServiceManagement(false)}
       />
+
+      {/* Floating Menu Portal for Collapsed Sidebar */}
+      {activeFloatingMenu && createPortal(
+        <div 
+          className="floating-submenu fixed z-50 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-2 top-0 left-0"
+          style={{
+            top: `${activeFloatingMenu.rect.top}px`,
+            left: `${activeFloatingMenu.rect.right + 12}px`,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="px-4 py-2 text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+            {activeFloatingMenu.name}
+          </div>
+          <ul className="space-y-1">
+            {activeFloatingMenu.submenu.map((subItem: any) => (
+              <li key={subItem.name}>
+                <NavLink
+                  to={subItem.href}
+                  onClick={() => {
+                    setActiveFloatingMenu(null);
+                    if (isMobile && onClose) onClose();
+                  }}
+                  className={({ isActive }) =>
+                    `flex items-center space-x-3 px-4 py-2 text-sm transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
+                        : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
+                    }`
+                  }
+                >
+                  <subItem.icon className="w-4 h-4 flex-shrink-0 opacity-80" />
+                  <span className="truncate">{subItem.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };

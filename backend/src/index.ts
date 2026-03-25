@@ -816,12 +816,21 @@ const app: express.Express = express();
 
   // Check if this file is being run directly (CommonJS way)
   if (require.main === module) {
-    app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, () => {
       // BACKEND_PORT signal MUST be first on stdout so Tauri sidecar manager can parse it.
       // All other diagnostic output goes to stderr to avoid polluting the signal channel.
       process.stdout.write(`BACKEND_PORT=${PORT}\n`);
       process.stderr.write(`[System] Backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
       process.stderr.write(`[System] Serving slides from: ${slidesDir}\n`);
+    });
+
+    server.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EADDRINUSE') {
+        console.error(`[Fatal] Port ${PORT} is already in use. Cleaning up and exiting...`);
+        gracefulShutdown();
+      } else {
+        console.error('[Fatal] Server error:', error);
+      }
     });
   }
 })();
