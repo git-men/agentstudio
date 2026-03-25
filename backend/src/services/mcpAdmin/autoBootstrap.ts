@@ -225,22 +225,22 @@ export function bootstrapAdminCli(port: number): void {
     // Resolve the compiled CLI entry: dist/bin/agentstudio.js relative to backend root
     const cliEntryPoint = path.resolve(__dirname, '../../bin/agentstudio.js');
 
-    // In dev mode (tsx), the compiled JS may not exist; fall back to tsx + .ts source
     let wrapperContent: string;
     if (fs.existsSync(cliEntryPoint)) {
+      // Production mode: run compiled JS with node
       wrapperContent = [
         '#!/bin/sh',
         `exec "${nodePath}" "${cliEntryPoint}" "$@"`,
         '',
       ].join('\n');
     } else {
-      // Dev mode: use tsx to run TypeScript source directly
+      // Dev mode: use tsx (shell script) to run TypeScript source directly
       const tsSource = path.resolve(__dirname, '../../bin/agentstudio.ts');
       const tsxBin = path.resolve(__dirname, '../../../node_modules/.bin/tsx');
       if (fs.existsSync(tsxBin) && fs.existsSync(tsSource)) {
         wrapperContent = [
           '#!/bin/sh',
-          `exec "${nodePath}" "${tsxBin}" "${tsSource}" "$@"`,
+          `exec "${tsxBin}" "${tsSource}" "$@"`,
           '',
         ].join('\n');
       } else {
