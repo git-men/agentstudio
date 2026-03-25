@@ -368,6 +368,81 @@ describe('resolveChannels', () => {
     expect(result.source).toBe('task_config');
     expect(result.channels[0].bot_key).toBe('bot_task');
   });
+
+  it('ignores non-wecom bindings (weixin, qqbot) since they lack outbound API', () => {
+    mockedImBindingList.mockReturnValue([{
+      id: 'im_wx',
+      platform: 'weixin',
+      name: 'jarvis 微信',
+      project_path: '/projects/my-project',
+      project_name: 'my-project',
+      bot_key: 'weixin-proj_abc',
+      a2a_endpoint: 'https://example.com/a2a',
+      created_at: '',
+      updated_at: '',
+    }]);
+
+    const task = makeTask({ notification: makeConfig() });
+    const result = resolveChannels(task);
+    expect(result.source).toBe('none');
+    expect(result.channels).toHaveLength(0);
+  });
+
+  it('prefers wecom binding with channels over weixin binding', () => {
+    mockedImBindingList.mockReturnValue([
+      {
+        id: 'im_wx',
+        platform: 'weixin',
+        name: 'jarvis 微信',
+        project_path: '/projects/my-project',
+        project_name: 'my-project',
+        bot_key: 'weixin-proj_abc',
+        a2a_endpoint: '',
+        created_at: '',
+        updated_at: '',
+      },
+      {
+        id: 'im_wc',
+        platform: 'wecom',
+        name: 'jarvis 企微',
+        project_path: '/projects/my-project',
+        project_name: 'my-project',
+        bot_key: 'wecom-key-123',
+        a2a_endpoint: '',
+        channels: [{ chat_id: 'wecom_chat_1', chat_name: '企微群' }],
+        created_at: '',
+        updated_at: '',
+      },
+    ]);
+
+    const task = makeTask({ notification: makeConfig() });
+    const result = resolveChannels(task);
+    expect(result.source).toBe('im_binding');
+    expect(result.channels).toHaveLength(1);
+    expect(result.channels[0].bot_key).toBe('wecom-key-123');
+    expect(result.channels[0].chat_id).toBe('wecom_chat_1');
+  });
+
+  it('uses wecom bot_key as fallback channel when no explicit channels', () => {
+    mockedImBindingList.mockReturnValue([{
+      id: 'im_wc',
+      platform: 'wecom',
+      name: 'jarvis 企微',
+      project_path: '/projects/my-project',
+      project_name: 'my-project',
+      bot_key: 'wecom-key-456',
+      a2a_endpoint: '',
+      created_at: '',
+      updated_at: '',
+    }]);
+
+    const task = makeTask({ notification: makeConfig() });
+    const result = resolveChannels(task);
+    expect(result.source).toBe('im_binding');
+    expect(result.channels).toHaveLength(1);
+    expect(result.channels[0].bot_key).toBe('wecom-key-456');
+    expect(result.channels[0].chat_id).toBe('wecom-key-456');
+  });
 });
 
 // ============================================================================

@@ -17,7 +17,7 @@ import type {
 } from '../types/scheduledTasks.js';
 import type { TaskResult } from './taskExecutor/types.js';
 import { sendToIM } from './dispatchService.js';
-import { imBindingService } from './imBindingService.js';
+import { imBindingService, type IMBinding } from './imBindingService.js';
 
 // ============================================================================
 // Internal Types
@@ -99,24 +99,57 @@ export function resolveChannels(task: ScheduledTask): ChannelResolutionResult {
   }
 
   // Tier 2: project IMBinding
+  // Only wecom platform supports proactive outbound via /api/im/send.
+  // weixin/qqbot use polling-based channels without a REST send API.
   const bindings = imBindingService.list();
-  const binding = bindings.find(b => b.project_path === task.projectPath);
-  if (binding && binding.channels && binding.channels.length > 0) {
-    return {
-      channels: binding.channels.map(ch => ({
-        bot_key: binding.bot_key,
-        chat_id: ch.chat_id,
-        chat_name: ch.chat_name,
-        source: 'im_binding' as const,
-      })),
-      source: 'im_binding',
-    };
+  const projectBindings = bindings.filter(b => b.project_path === task.projectPath);
+  const wecomBindings = projectBindings.filter(b => b.platform === 'wecom');
+  const otherBindings = projectBindings.filter(b => b.platform !== 'wecom');
+
+  // Tier 2a: wecom binding with explicit channels (preferred)
+  for (const binding of wecomBindings) {
+    if (binding.channels && binding.channels.length > 0) {
+      return {
+        channels: binding.channels.map(ch => ({
+          bot_key: binding.bot_key,
+          chat_id: ch.chat_id,
+          chat_name: ch.chat_name,
+          source: 'im_binding' as const,
+        })),
+        source: 'im_binding',
+      };
+    }
   }
 
-  // Tier 3: no channels found
-  console.warn(
-    `[NotificationService] No channels resolved for task "${task.name}" (id=${task.id}, project=${task.projectPath})`
-  );
+  // Tier 2b: wecom binding without explicit channels — use bot_key as default webhook target
+  for (const binding of wecomBindings) {
+    if (binding.bot_key) {
+      return {
+        channels: [{
+          bot_key: binding.bot_key,
+          chat_id: binding.bot_key,
+          chat_name: binding.name,
+          source: 'im_binding' as const,
+        }],
+        source: 'im_binding',
+      };
+    }
+  }
+
+  // Tier 3: no wecom binding — log why
+  if (otherBindings.length > 0) {
+    const platforms = [...new Set(otherBindings.map(b => b.platform))].join(', ');
+    console.warn(
+      `[NotificationService] Project "${task.projectPath}" has IM bindings (${platforms}) but none support outbound notifications. ` +
+      `Only wecom (企微) platform supports proactive IM delivery. ` +
+      `Add a wecom binding with channels to enable notifications for task "${task.name}".`
+    );
+  } else {
+    console.warn(
+      `[NotificationService] No IM bindings found for project "${task.projectPath}". ` +
+      `Add a wecom binding to enable notifications for task "${task.name}".`
+    );
+  }
   return { channels: [], source: 'none' };
 }
 
