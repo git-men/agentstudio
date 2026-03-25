@@ -13,17 +13,27 @@ import type { AgentConfig } from '../types/index';
 import { CRON_PRESETS } from '../types/scheduledTasks';
 import { showSuccess, showError } from '../utils/toast';
 
-// Helper function to format date for datetime-local input
+// Helper function to format date for datetime-local input (uses LOCAL time, not UTC)
 const formatDateTimeLocal = (isoString?: string): string => {
+  const date = isoString ? new Date(isoString) : new Date();
   if (!isoString) {
-    // Default to 1 hour from now
-    const date = new Date();
     date.setHours(date.getHours() + 1);
     date.setMinutes(0);
     date.setSeconds(0);
-    return date.toISOString().slice(0, 16);
+    date.setMilliseconds(0);
   }
-  return new Date(isoString).toISOString().slice(0, 16);
+  // Build YYYY-MM-DDTHH:MM string in LOCAL timezone (not UTC)
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+// Helper function to get current datetime as local string for the "min" attribute
+const getLocalNow = (): string => {
+  return formatDateTimeLocal();
 };
 
 // Helper function to parse datetime-local input to ISO string
@@ -76,6 +86,12 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
   const [overrideModel, setOverrideModel] = useState(!!task?.modelOverride?.modelId);
   const [selectedVersionId, setSelectedVersionId] = useState(task?.modelOverride?.versionId || '');
   const [selectedModelId, setSelectedModelId] = useState(task?.modelOverride?.modelId || '');
+
+  // Advanced config state
+  const [timeoutMinutes, setTimeoutMinutes] = useState(
+    task?.timeoutMs ? Math.round(task.timeoutMs / 60000) : 30
+  );
+  const [maxTurns, setMaxTurns] = useState(task?.maxTurns || 0); // 0 = use agent default
 
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -198,6 +214,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     setIsSaving(true);
 
     try {
+      const timeoutMs = timeoutMinutes > 0 ? timeoutMinutes * 60000 : undefined;
+      const maxTurnsValue = maxTurns > 0 ? maxTurns : undefined;
+
       if (isEditing) {
         await updateTask.mutateAsync({
           taskId: task.id,
@@ -210,6 +229,8 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            timeoutMs,
+            maxTurns: maxTurnsValue,
           },
         });
         showSuccess('任务已更新');
@@ -223,6 +244,8 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          timeoutMs,
+          maxTurns: maxTurnsValue,
         };
         await createTask.mutateAsync(data);
         showSuccess('任务已创建');
@@ -260,6 +283,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     try {
       let taskId: string;
 
+      const timeoutMs = timeoutMinutes > 0 ? timeoutMinutes * 60000 : undefined;
+      const maxTurnsValue = maxTurns > 0 ? maxTurns : undefined;
+
       if (isEditing) {
         await updateTask.mutateAsync({
           taskId: task.id,
@@ -272,6 +298,8 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            timeoutMs,
+            maxTurns: maxTurnsValue,
           },
         });
         taskId = task.id;
@@ -286,6 +314,8 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          timeoutMs,
+          maxTurns: maxTurnsValue,
         };
         const newTask = await createTask.mutateAsync(data);
         taskId = newTask.id;
@@ -615,19 +645,26 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                执行时间
+                执行时间（本地时区）
               </label>
               <input
                 type="datetime-local"
                 value={executeAt}
                 onChange={(e) => setExecuteAt(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
+                min={getLocalNow()}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                任务将在指定时间执行一次后自动禁用
+                任务将在指定时间（本地时间）执行一次后自动禁用
               </p>
             </div>
+          )}
+
+          {/* Timezone hint for cron */}
+          {scheduleType === 'cron' && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg">
+              Cron 表达式使用服务器本地时区执行
+            </p>
           )}
         </div>
 
@@ -652,6 +689,48 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               定时触发时，这条消息会发送给选定的 Agent
             </p>
+          </div>
+        </div>
+
+        {/* Advanced Config */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Cpu className="w-5 h-5" />
+            高级配置
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                超时时间（分钟）
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={timeoutMinutes}
+                onChange={(e) => setTimeoutMinutes(parseInt(e.target.value) || 30)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                超过此时间强制终止（1~120 分钟，默认 30 分钟）
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                最大轮次
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={200}
+                value={maxTurns}
+                onChange={(e) => setMaxTurns(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                0 = 使用 Agent 默认值
+              </p>
+            </div>
           </div>
         </div>
 
