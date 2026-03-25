@@ -12,9 +12,13 @@
  */
 
 import { execSync, spawn } from 'child_process';
-import { homedir, platform } from 'os';
-import { existsSync } from 'fs';
-import { join } from 'path';
+import { homedir, platform, arch } from 'os';
+import { existsSync, mkdirSync, writeFileSync, chmodSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 const BOLD = '\x1b[1m';
 const RED = '\x1b[31m';
@@ -133,6 +137,39 @@ function ensureLinuxLibs() {
   }
 }
 
+// ── Sidecar placeholder ─────────────────────────────────────────────────────
+
+function ensureSidecarBinary() {
+  const currentTriple = (() => {
+    const a = arch();
+    const p = platform();
+    if (p === 'darwin') return a === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
+    if (p === 'win32') return 'x86_64-pc-windows-msvc';
+    return 'x86_64-unknown-linux-gnu';
+  })();
+
+  const isWindows = currentTriple.includes('windows');
+  const binaryName = `agentstudio-backend-${currentTriple}${isWindows ? '.exe' : ''}`;
+  const binariesDir = join(__dirname, '..', 'src-tauri', 'binaries');
+  const binaryPath = join(binariesDir, binaryName);
+
+  if (existsSync(binaryPath)) {
+    console.log(`  ${GREEN}✓${RESET} Sidecar binary: ${binaryName}`);
+    return;
+  }
+
+  console.log(`  ${YELLOW}→${RESET} Sidecar binary missing, creating placeholder: ${binaryName}`);
+  if (!existsSync(binariesDir)) {
+    mkdirSync(binariesDir, { recursive: true });
+  }
+
+  writeFileSync(binaryPath, '#!/bin/sh\necho "placeholder sidecar — run sidecar:build for real binary"\nexit 1\n');
+  if (!isWindows) {
+    chmodSync(binaryPath, 0o755);
+  }
+  console.log(`  ${GREEN}✓${RESET} Sidecar placeholder created (dev mode only)`);
+}
+
 // ── Main ────────────────────────────────────────────────────────────────────
 
 console.log(`\n${BOLD}${CYAN}Tauri Desktop — Dependency Check${RESET}\n`);
@@ -140,6 +177,7 @@ console.log(`\n${BOLD}${CYAN}Tauri Desktop — Dependency Check${RESET}\n`);
 ensureXcode();
 ensureRust();
 ensureLinuxLibs();
+ensureSidecarBinary();
 
 console.log(`\n${GREEN}${BOLD}All checks passed.${RESET}\n`);
 
