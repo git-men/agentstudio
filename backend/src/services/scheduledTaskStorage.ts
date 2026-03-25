@@ -92,6 +92,8 @@ export function createScheduledTask(request: CreateScheduledTaskRequest): Schedu
     enabled: request.enabled ?? true,
     modelOverride: request.modelOverride,
     notification: request.notification,
+    timeoutMs: request.timeoutMs,
+    maxTurns: request.maxTurns,
     createdAt: now,
     updatedAt: now,
   };

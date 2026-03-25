@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -70,6 +70,8 @@ function CopyField({ label, value }: { label: string; value: string }) {
 
 export const WechatBindPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const backTo = searchParams.get('from') || '/dashboard';
   const { data: projectsData, isLoading: isLoadingProjects } = useProjects();
   const projects = projectsData?.projects || [];
   const { isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin } = useEnterpriseProfile();
@@ -347,7 +349,7 @@ export const WechatBindPage: React.FC = () => {
         {/* Header */}
         <div className="w-full max-w-xl mb-8">
           <button
-            onClick={() => { qrPollingRef.current = false; navigate('/dashboard'); }}
+            onClick={() => { qrPollingRef.current = false; navigate(backTo); }}
             className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -716,7 +718,7 @@ export const WechatBindPage: React.FC = () => {
               </div>
 
               <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
+                <button onClick={() => navigate(backTo)} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors">
                   <ArrowLeft className="w-4 h-4" /> 返回首页
                 </button>
                 <button onClick={handleReset} className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-900/20 rounded-lg transition-colors">

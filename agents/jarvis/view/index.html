@@ -3,6 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>Jarvis Dashboard</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -92,26 +95,24 @@
     .btn-danger:hover { opacity: 0.9; }
     .btn-sm { padding: 4px 10px; font-size: 11px; }
 
-    /* ========== Stats Bar ========== */
+    /* ========== Stats Bar (compact inline) ========== */
     .stats-bar {
-      padding: 12px 20px;
-      display: flex; gap: 10px;
+      padding: 8px 20px;
+      display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
-      overflow-x: auto;
     }
-    .stats-bar::-webkit-scrollbar { display: none; }
 
     .stat {
-      padding: 10px 14px;
+      padding: 4px 12px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      min-width: 100px;
+      border-radius: 99px;
+      display: inline-flex; align-items: center; gap: 6px;
       flex-shrink: 0;
     }
-    .stat-value { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; }
-    .stat-label { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+    .stat-value { font-size: 13px; font-weight: 700; }
+    .stat-label { font-size: 11px; color: var(--text-muted); }
 
     /* ========== Tabs ========== */
     .nav {
@@ -180,7 +181,7 @@
     .todo-list { display: flex; flex-direction: column; gap: 6px; }
 
     .todo-card {
-      padding: 14px 16px;
+      padding: 10px 14px;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       border-radius: var(--radius);
@@ -254,7 +255,7 @@
     }
 
     .todo-meta-row {
-      display: flex; gap: 12px; margin-top: 8px;
+      display: flex; gap: 8px; margin-top: 5px;
       font-size: 11px; color: var(--text-muted);
       flex-wrap: wrap; align-items: center;
     }
@@ -874,14 +875,17 @@
       h += '<button class="theme-toggle" data-act="toggle-theme" title="切换主题">' + (_theme === 'dark' ? '☀️' : '🌙') + '</button>';
       h += '</div></div>';
 
-      // Stats bar
+      // Stats bar (compact, hide zero items except total)
       h += '<div class="stats-bar">';
-      h += statCard(S.stats.total || 0, '总计', 'var(--text-primary)');
-      h += statCard(S.stats.pending || 0, '待处理', 'var(--warning)');
-      h += statCard(S.stats.in_progress || 0, '进行中', 'var(--blue)');
-      h += statCard(S.stats.draft || 0, '草稿', 'var(--purple)');
-      h += statCard(S.stats.overdue || 0, '已过期', 'var(--danger)');
-      h += statCard(S.stats.completed || 0, '已完成', 'var(--success)');
+      h += statCard(S.stats.total || 0, '总计', 'var(--text-primary)', true);
+      const statItems = [
+        [S.stats.pending, '待处理', 'var(--warning)'],
+        [S.stats.in_progress, '进行中', 'var(--blue)'],
+        [S.stats.draft, '草稿', 'var(--purple)'],
+        [S.stats.overdue, '已过期', 'var(--danger)'],
+        [S.stats.completed, '已完成', 'var(--success)'],
+      ];
+      for (const [v, l, c] of statItems) { if (v) h += statCard(v, l, c, false); }
       h += '</div>';
 
       // Nav
@@ -919,8 +923,9 @@
       bindEvents();
     }
 
-    function statCard(val, label, color) {
-      return '<div class="stat"><div class="stat-value" style="color:' + color + '">' + val + '</div><div class="stat-label">' + label + '</div></div>';
+    function statCard(val, label, color, always) {
+      if (!always && !val) return '';
+      return '<div class="stat"><span class="stat-value" style="color:' + color + '">' + val + '</span><span class="stat-label">' + label + '</span></div>';
     }
 
     function navItem(id, label, count) {
@@ -964,35 +969,30 @@
       const pClass = t.priority || 'medium';
       let h = '<div class="todo-card ' + (od ? 'overdue' : pClass) + '" data-todo="' + esc(t.id) + '">';
       h += '<div class="todo-row">';
-      // Checkbox for quick complete toggle
+      // Checkbox
       h += '<div class="todo-check" data-act="toggle-complete" data-id="' + esc(t.id) + '" title="' + (t.status === 'completed' ? '标记为未完成' : '标记为已完成') + '">';
       h += t.status === 'completed' ? '☑' : '☐';
       h += '</div>';
       h += '<div class="todo-body">';
+      // Title row: title + status badge only (priority shown via left border)
       h += '<div class="todo-title-row">';
       h += '<span class="todo-title' + (t.status === 'completed' ? ' done' : '') + '">' + esc(t.title) + '</span>';
-      h += '<span class="todo-id">' + esc(t.id) + '</span>';
       h += '<div class="todo-badges">';
-      if (od) h += '<span class="badge badge-overdue">已过期</span>';
-      h += '<span class="badge badge-' + t.priority + '">' + (t.priority === 'high' ? '高' : t.priority === 'medium' ? '中' : '低') + '</span>';
+      if (od) h += '<span class="badge badge-overdue">⚠️ 过期</span>';
       h += '<span class="badge badge-' + t.status + '">' + statusLabel(t.status) + '</span>';
       h += '</div></div>';
 
-      if (t.description) h += '<div class="todo-desc">' + esc(t.description) + '</div>';
-
-      if (t.tags && t.tags.length) {
-        h += '<div class="todo-tags">';
-        for (const tag of t.tags) h += '<span class="tag">' + esc(tag) + '</span>';
+      // Compact meta: only deadline + tags inline
+      const hasMeta = t.deadline || (t.tags && t.tags.length) || t.assignedAgent;
+      if (hasMeta) {
+        h += '<div class="todo-meta-row">';
+        if (t.deadline) h += '<span>' + (od ? '⚠️' : '📅') + ' ' + formatDate(t.deadline) + '</span>';
+        if (t.assignedAgent) h += '<span>🤖 ' + esc(t.assignedAgent) + '</span>';
+        if (t.tags && t.tags.length) {
+          for (const tag of t.tags) h += '<span class="tag">' + esc(tag) + '</span>';
+        }
         h += '</div>';
       }
-
-      h += '<div class="todo-meta-row">';
-      if (t.deadline) h += '<span>' + (od ? '⚠️' : '📅') + ' ' + formatDate(t.deadline) + '</span>';
-      if (t.assignedAgent) h += '<span>🤖 ' + esc(t.assignedAgent) + '</span>';
-      if (t.updatedAt) h += '<span>更新 ' + relativeTime(t.updatedAt) + '</span>';
-      const logCount = t.notes && t.notes.progressLog ? t.notes.progressLog.length : 0;
-      if (logCount > 0) h += '<span>📝 ' + logCount + '条日志</span>';
-      h += '</div>';
 
       h += '</div></div></div>';
       return h;

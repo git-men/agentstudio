@@ -21,6 +21,7 @@ import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
 import { ProjectA2AModal } from '../components/ProjectA2AModal';
 import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
 import { ProjectVersionModal } from '../components/ProjectVersionModal';
+import { ProjectIMChannelsModal } from '../components/ProjectIMChannelsModal';
 import { MessageSquarePlus, FolderOpen, Search, Clock } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
 import { formatRelativeTime } from '../utils/dateFormat';
@@ -173,8 +174,15 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
+  const setWorkspaceSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
+
+  // Ensure sidebar is minimum width on mount
+  useEffect(() => {
+    setWorkspaceSidebarWidth(200);
+  }, [setWorkspaceSidebarWidth]);
 
   // ---------- Panel & modal state ----------
+  const [chatVisible, setChatVisible] = useState(true);
   const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>('files');
   const [memoryProject, setMemoryProject] = useState<any>(null);
   const [commandsProject, setCommandsProject] = useState<any>(null);
@@ -182,6 +190,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [a2aProject, setA2aProject] = useState<any>(null);
   const [settingsProject, setSettingsProject] = useState<any>(null);
   const [versionProject, setVersionProject] = useState<any>(null);
+  const [showIMChannels, setShowIMChannels] = useState(false);
 
   // ---------- Derived state ----------
   const activeAgentId = useMemo(() => {
@@ -407,7 +416,8 @@ export const ProjectWorkspacePage: React.FC = () => {
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
-        defaultRightWidth={600}
+        defaultRightRatio={0.7}
+        mainPanelVisible={chatVisible}
         hideRightToggle
         sidebar={
           <ProjectSessionListPanel
@@ -444,12 +454,15 @@ export const ProjectWorkspacePage: React.FC = () => {
             hasLAVS={hasLAVSView}
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            chatVisible={chatVisible}
+            onToggleChat={() => setChatVisible((v) => !v)}
             onSetRightPanelView={setRightPanelView}
             onMemoryManagement={() => setMemoryProject(project)}
             onCommandManagement={() => setCommandsProject(project)}
             onSubAgentManagement={() => setSubAgentsProject(project)}
             onA2AManagement={() => setA2aProject(project)}
             onVersionManagement={() => setVersionProject(project)}
+            onIMChannels={() => setShowIMChannels(true)}
             onSettings={() => setSettingsProject(project)}
           />
         }
@@ -509,6 +522,13 @@ export const ProjectWorkspacePage: React.FC = () => {
         isOpen={!!versionProject}
         project={versionProject}
         onClose={() => setVersionProject(null)}
+      />
+
+      <ProjectIMChannelsModal
+        projectPath={projectPath}
+        projectName={project?.name || project?.dirName}
+        isOpen={showIMChannels}
+        onClose={() => setShowIMChannels(false)}
       />
     </div>
   );

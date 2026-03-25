@@ -1,50 +1,53 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  X,
+  MessageSquare,
   Plus,
   Trash2,
   Pencil,
   Check,
-  MessageSquare,
   Loader2,
   AlertCircle,
   Hash,
+  X,
+  ChevronDown,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 import { showSuccess, showError } from '../utils/toast';
 import { useConfirm } from '../hooks/useConfirm';
-import type { IMBinding } from '../types/im';
+import type { IMBinding, IMChannel } from '../types/im';
+import { PLATFORM_LABELS, PLATFORM_BIND_ROUTES } from '../types/im';
 
-const PLATFORM_LABELS: Record<string, string> = {
-  wecom: '企业微信',
-  qqbot: 'QQ Bot',
-  weixin: '微信',
-};
-
-interface IMBindingModalProps {
-  platform: 'wecom' | 'qqbot' | 'weixin';
-  isOpen: boolean;
-  onClose: () => void;
-  onNewBind: () => void;
-}
+const PLATFORMS: IMBinding['platform'][] = ['wecom', 'qqbot', 'weixin'];
 
 function truncateKey(key: string, len = 8): string {
   if (key.length <= len * 2) return key;
   return `${key.slice(0, len)}...${key.slice(-len)}`;
 }
 
-export const IMBindingModal: React.FC<IMBindingModalProps> = ({
-  platform,
-  isOpen,
-  onClose,
-  onNewBind,
-}) => {
+// ──────────────────────────────────────────────────────────────
+// Single platform section
+// ──────────────────────────────────────────────────────────────
+
+interface PlatformSectionProps {
+  platform: IMBinding['platform'];
+  onNavigateNewBind: (platform: IMBinding['platform']) => void;
+}
+
+const PlatformSection: React.FC<PlatformSectionProps> = ({ platform, onNavigateNewBind }) => {
   const confirm = useConfirm();
   const [bindings, setBindings] = useState<IMBinding[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(true);
+
+  // inline edit state
   const [editingName, setEditingName] = useState<string | null>(null);
   const [nameInput, setNameInput] = useState('');
+
+  // add channel state
   const [addingChannel, setAddingChannel] = useState<string | null>(null);
   const [channelChatId, setChannelChatId] = useState('');
   const [channelChatName, setChannelChatName] = useState('');
@@ -63,8 +66,8 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
   }, [platform]);
 
   useEffect(() => {
-    if (isOpen) fetchBindings();
-  }, [isOpen, fetchBindings]);
+    fetchBindings();
+  }, [fetchBindings]);
 
   const handleDelete = async (binding: IMBinding) => {
     const confirmed = await confirm({
@@ -75,7 +78,6 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
       variant: 'danger',
     });
     if (!confirmed) return;
-
     try {
       const resp = await authFetch(`${API_BASE}/im-bindings/${encodeURIComponent(binding.bot_key)}`, {
         method: 'DELETE',
@@ -152,45 +154,53 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  const label = PLATFORM_LABELS[platform];
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-            {PLATFORM_LABELS[platform]} 绑定管理
-          </h2>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onNewBind}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
-            >
-              <Plus className="w-4 h-4" />
-              新绑定
-            </button>
-            <button
-              onClick={onClose}
-              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+      {/* Section header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700">
+        <button
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-2 text-base font-semibold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+        >
+          {expanded ? (
+            <ChevronDown className="w-4 h-4 text-gray-400" />
+          ) : (
+            <ChevronRight className="w-4 h-4 text-gray-400" />
+          )}
+          <MessageSquare className="w-4 h-4" />
+          {label}
+          {!loading && (
+            <span className="ml-1 text-xs font-normal text-gray-400 dark:text-gray-500">
+              ({bindings.length})
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => onNavigateNewBind(platform)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+        >
+          <Plus className="w-4 h-4" />
+          新绑定
+        </button>
+      </div>
 
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+      {/* Bindings list */}
+      {expanded && (
+        <div className="px-5 py-4">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
             </div>
           ) : bindings.length === 0 ? (
-            <div className="text-center py-12">
-              <MessageSquare className="w-10 h-10 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">暂无绑定记录</p>
+            <div className="flex flex-col items-center py-10 text-center">
+              <MessageSquare className="w-9 h-9 text-gray-300 dark:text-gray-600 mb-3" />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                暂无 {label} 绑定
+              </p>
               <button
-                onClick={onNewBind}
+                onClick={() => onNavigateNewBind(platform)}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -204,7 +214,7 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
                   key={binding.id}
                   className="bg-gray-50 dark:bg-gray-900/50 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
                 >
-                  {/* Bot info header */}
+                  {/* Bot info */}
                   <div className="px-4 py-3">
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
@@ -274,7 +284,7 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
 
                   {/* Channels section (WeChat Work only) */}
                   {platform === 'wecom' && (
-                    <div className="px-4 pb-3">
+                    <div className="px-4 pb-3 border-t border-gray-100 dark:border-gray-700 pt-3">
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
                           关联群
@@ -296,7 +306,7 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
 
                       {binding.channels && binding.channels.length > 0 ? (
                         <div className="space-y-1.5">
-                          {binding.channels.map((ch) => (
+                          {binding.channels.map((ch: IMChannel) => (
                             <div
                               key={ch.chat_id}
                               className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700"
@@ -328,7 +338,6 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
                         </div>
                       )}
 
-                      {/* Add channel inline form */}
                       {addingChannel === binding.bot_key && (
                         <div className="mt-2 p-3 bg-white dark:bg-gray-800 rounded-lg border border-blue-200 dark:border-blue-700">
                           <div className="space-y-2">
@@ -372,6 +381,52 @@ export const IMBindingModal: React.FC<IMBindingModalProps> = ({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+};
+
+// ──────────────────────────────────────────────────────────────
+// Main page
+// ──────────────────────────────────────────────────────────────
+
+export const IMChannelsPage: React.FC = () => {
+  const navigate = useNavigate();
+
+  const handleNavigateNewBind = (platform: IMBinding['platform']) => {
+    navigate(`${PLATFORM_BIND_ROUTES[platform]}?from=/im-channels`);
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 md:p-8">
+      {/* Page header */}
+      <div className="mb-6">
+        <div className="flex items-center gap-3 mb-1">
+          <MessageSquare className="w-6 h-6 text-blue-500" />
+          <h1 className="text-xl font-bold text-gray-900 dark:text-white">消息渠道</h1>
+        </div>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          管理已接入的 IM 渠道绑定。点击「新绑定」可前往对应平台的接入向导。
+        </p>
+      </div>
+
+      {/* Platform sections */}
+      <div className="space-y-4">
+        {PLATFORMS.map((platform) => (
+          <PlatformSection
+            key={platform}
+            platform={platform}
+            onNavigateNewBind={handleNavigateNewBind}
+          />
+        ))}
+      </div>
+
+      {/* Tip */}
+      <div className="mt-6 flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-100 dark:border-blue-800">
+        <ExternalLink className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-600 dark:text-blue-400">
+          「新绑定」会引导你完成接入配置（填写 Bot Webhook、授权企业微信回调等），完成后绑定记录会出现在对应平台区域。
+        </p>
       </div>
     </div>
   );

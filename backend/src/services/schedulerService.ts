@@ -453,7 +453,7 @@ export async function executeTask(taskId: string): Promise<void> {
       agentId: task.agentId,
       projectPath: task.projectPath,
       message,
-      timeoutMs: task.timeoutMs || 300000,
+      timeoutMs: task.timeoutMs || 1800000,
       maxTurns: task.maxTurns,
       modelId: task.modelOverride?.modelId,
       claudeVersionId: task.modelOverride?.versionId,

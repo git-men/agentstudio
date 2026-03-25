@@ -217,6 +217,10 @@ export interface CreateScheduledTaskRequest {
   enabled?: boolean;
   modelOverride?: ModelOverride;
   notification?: NotificationConfig;
+  /** Task execution timeout in milliseconds (10s ~ 2h). Defaults to 30 minutes if not set. */
+  timeoutMs?: number;
+  /** Maximum number of agent turns. Defaults to agent config if not set. */
+  maxTurns?: number;
 }
 
 /**
@@ -232,6 +236,10 @@ export interface UpdateScheduledTaskRequest {
   enabled?: boolean;
   modelOverride?: ModelOverride;
   notification?: NotificationConfig;
+  /** Task execution timeout in milliseconds (10s ~ 2h). Defaults to 30 minutes if not set. */
+  timeoutMs?: number;
+  /** Maximum number of agent turns. Defaults to agent config if not set. */
+  maxTurns?: number;
 }
 
 /**

@@ -9,10 +9,14 @@ interface WorkspaceLayoutProps {
   rightPanelVisible?: boolean;
   onToggleRightPanel?: () => void;
   footer?: React.ReactNode;
-  /** Initial width for the right panel (default 360px) */
+  /** Initial width for the right panel (default 360px). Ignored when defaultRightRatio is set. */
   defaultRightWidth?: number;
+  /** Initial ratio for the right panel relative to (container - sidebar) width, e.g. 0.6 means 60%. */
+  defaultRightRatio?: number;
   /** When true, the floating right-panel toggle button is hidden (use toolbar toggle instead). */
   hideRightToggle?: boolean;
+  /** When false, the main panel (center children) is hidden, allowing right panel to fill available space. */
+  mainPanelVisible?: boolean;
 }
 
 const MIN_WIDTH = 200;
@@ -36,7 +40,9 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
   onToggleRightPanel,
   footer,
   defaultRightWidth = RIGHT_DEFAULT,
+  defaultRightRatio,
   hideRightToggle = false,
+  mainPanelVisible = true,
 }) => {
   const sidebarWidth = useSharedStore((s) => s.workspaceSidebarWidth);
   const setSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
@@ -44,8 +50,20 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
 
   const [isDraggingLeft, setIsDraggingLeft] = useState(false);
   const [isDraggingRight, setIsDraggingRight] = useState(false);
-  const [rightWidth, setRightWidth] = useState(defaultRightWidth);
+  const [rightWidth, setRightWidth] = useState<number | string>(defaultRightWidth);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // When defaultRightRatio is provided, recalculate right panel width on first layout
+  useEffect(() => {
+    if (defaultRightRatio == null || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const currentLeft = sidebarCollapsed ? 0 : sidebarWidth;
+    const available = rect.width - currentLeft;
+    const computed = Math.round(available * defaultRightRatio);
+    setRightWidth(Math.max(RIGHT_MIN, Math.min(available - CENTER_MIN, computed)));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleLeftMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -128,38 +146,45 @@ export const WorkspaceLayout: React.FC<WorkspaceLayoutProps> = ({
           </div>
         )}
 
-        {/* Main panel */}
-        <div className="flex-1 min-w-0 flex flex-col">
-          {children}
+        {/* Inner wrapper for Main and Right panels */}
+        <div className="flex-1 min-w-0 flex">
+          {/* Main panel */}
+          {mainPanelVisible && (
+            <div className="flex-1 min-w-0 flex flex-col">
+              {children}
+            </div>
+          )}
+
+          {/* Right drag handle */}
+          {showRight && mainPanelVisible && (
+            <div
+              className={`
+                flex-shrink-0 w-1 cursor-col-resize group relative
+                ${isDraggingRight ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500'}
+                transition-colors
+              `}
+              onMouseDown={handleRightMouseDown}
+            >
+              <div className="absolute inset-y-0 -left-1 -right-1" />
+            </div>
+          )}
+
+          {/* Right panel */}
+          {showRight && (
+            <div
+              className={`flex-col bg-white dark:bg-gray-800 relative flex ${
+                !mainPanelVisible ? 'flex-1' : 'flex-shrink-0 border-l border-gray-200 dark:border-gray-700'
+              }`}
+              style={!mainPanelVisible ? undefined : { width: rightWidth }}
+            >
+              {rightPanel}
+              {/* Transparent overlay to prevent iframe from consuming mouse events during drag */}
+              {isDraggingRight && (
+                <div className="absolute inset-0 z-50" style={{ cursor: 'col-resize' }} />
+              )}
+            </div>
+          )}
         </div>
-
-        {/* Right drag handle */}
-        {showRight && (
-          <div
-            className={`
-              flex-shrink-0 w-1 cursor-col-resize group relative
-              ${isDraggingRight ? 'bg-blue-500' : 'bg-gray-200 dark:bg-gray-700 hover:bg-blue-400 dark:hover:bg-blue-500'}
-              transition-colors
-            `}
-            onMouseDown={handleRightMouseDown}
-          >
-            <div className="absolute inset-y-0 -left-1 -right-1" />
-          </div>
-        )}
-
-        {/* Right panel */}
-        {showRight && (
-          <div
-            className="flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 relative"
-            style={{ width: rightWidth }}
-          >
-            {rightPanel}
-            {/* Transparent overlay to prevent iframe from consuming mouse events during drag */}
-            {isDraggingRight && (
-              <div className="absolute inset-0 z-50" style={{ cursor: 'col-resize' }} />
-            )}
-          </div>
-        )}
 
         {/* Right panel toggle (hidden when toolbar provides its own toggle) */}
         {onToggleRightPanel && !hideRightToggle && (

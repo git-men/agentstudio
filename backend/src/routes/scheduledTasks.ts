@@ -130,6 +130,10 @@ const CreateTaskSchema = z.object({
   enabled: z.boolean().optional(),
   modelOverride: ModelOverrideSchema,
   notification: NotificationConfigSchema,
+  /** Task execution timeout in milliseconds (10s ~ 2h), defaults to 30 minutes */
+  timeoutMs: z.number().min(10000).max(7200000).optional(),
+  /** Maximum number of agent turns, defaults to agent config */
+  maxTurns: z.number().min(1).max(200).optional(),
 });
 
 const UpdateTaskSchema = z.object({
@@ -142,6 +146,10 @@ const UpdateTaskSchema = z.object({
   enabled: z.boolean().optional(),
   modelOverride: ModelOverrideSchema,
   notification: NotificationConfigSchema,
+  /** Task execution timeout in milliseconds (10s ~ 2h), defaults to 30 minutes */
+  timeoutMs: z.number().min(10000).max(7200000).optional(),
+  /** Maximum number of agent turns, defaults to agent config */
+  maxTurns: z.number().min(1).max(200).optional(),
 });
 
 // ============================================================================
