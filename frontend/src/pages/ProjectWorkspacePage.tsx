@@ -174,6 +174,12 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
+  const setWorkspaceSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
+
+  // Ensure sidebar is minimum width on mount
+  useEffect(() => {
+    setWorkspaceSidebarWidth(200);
+  }, [setWorkspaceSidebarWidth]);
 
   // ---------- Panel & modal state ----------
   const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>('files');
@@ -409,7 +415,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
-        defaultRightWidth={600}
+        defaultRightRatio={0.6}
         hideRightToggle
         sidebar={
           <ProjectSessionListPanel
