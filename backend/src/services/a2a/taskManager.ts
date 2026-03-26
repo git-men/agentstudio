@@ -22,7 +22,7 @@ import { getProjectTasksDir } from '../../config/paths.js';
 // Constants
 // ============================================================================
 
-const DEFAULT_TIMEOUT_MS = 300000; // 5 minutes
+const DEFAULT_TIMEOUT_MS = 1800000; // 30 minutes
 const LOCK_OPTIONS = {
   retries: {
     retries: 5,

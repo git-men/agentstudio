@@ -212,7 +212,7 @@ export interface A2AConfig {
  */
 export const DEFAULT_A2A_CONFIG: A2AConfig = {
     allowedAgents: [],
-    taskTimeout: 300000, // 5 minutes
+    taskTimeout: 1800000, // 30 minutes
     maxConcurrentTasks: 5,
 };
 

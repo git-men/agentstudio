@@ -62,8 +62,8 @@ function validateCreateRequest(body: Record<string, unknown>): string | null {
   }
   if (body.timeout !== undefined) {
     const t = Number(body.timeout);
-    if (isNaN(t) || t < 1000 || t > 300000) {
-      return 'timeout must be between 1000 and 300000 (1s-5min)';
+    if (isNaN(t) || t < 1000 || t > 1800000) {
+      return 'timeout must be between 1000 and 1800000 (1s-30min)';
     }
   }
   if (body.priority !== undefined) {
@@ -90,8 +90,8 @@ function validateUpdateRequest(body: Record<string, unknown>): string | null {
   }
   if (body.timeout !== undefined) {
     const t = Number(body.timeout);
-    if (isNaN(t) || t < 1000 || t > 300000) {
-      return 'timeout must be between 1000 and 300000';
+    if (isNaN(t) || t < 1000 || t > 1800000) {
+      return 'timeout must be between 1000 and 1800000 (1s-30min)';
     }
   }
   if (body.priority !== undefined) {
