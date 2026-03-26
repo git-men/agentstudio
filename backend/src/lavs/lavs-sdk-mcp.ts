@@ -10,13 +10,13 @@ import { z } from 'zod';
 import { LAVSToolGenerator } from 'lavs-runtime';
 import type { GeneratedTool } from 'lavs-runtime';
 import path from 'path';
+import fs from 'fs';
 import { AGENTS_DIR } from '../config/paths.js';
 
 /**
  * Get agent directory path
  */
 function getAgentDirectory(agentId: string): string {
-  const fs = require('fs');
   const cwd = process.cwd();
 
   // Check project agents directory (one level up from backend if cwd is backend/)
@@ -42,8 +42,69 @@ function getAgentDirectory(agentId: string): string {
 }
 
 /**
- * Convert JSON Schema to Zod shape
- * This is a simplified converter - only handles basic types
+ * Resolve $ref references in a JSON Schema object.
+ * Handles references like "#/types/ContentEntryInput" by inlining the type definition.
+ */
+function resolveSchemaRefs(schema: any, types: Record<string, any>): any {
+  if (!schema || typeof schema !== 'object') return schema;
+
+  if (schema.$ref && typeof schema.$ref === 'string') {
+    const match = schema.$ref.match(/^#\/types\/(.+)$/);
+    if (match && types[match[1]]) {
+      return resolveSchemaRefs({ ...types[match[1]] }, types);
+    }
+    return schema;
+  }
+
+  if (Array.isArray(schema)) {
+    return schema.map((item) => resolveSchemaRefs(item, types));
+  }
+
+  const resolved: any = {};
+  for (const [key, value] of Object.entries(schema)) {
+    resolved[key] = resolveSchemaRefs(value, types);
+  }
+  return resolved;
+}
+
+/**
+ * Convert a single JSON Schema property to a Zod type
+ */
+function jsonSchemaPropertyToZod(propSchema: any): z.ZodTypeAny {
+  switch (propSchema.type) {
+    case 'string':
+      if (propSchema.enum) {
+        return z.enum(propSchema.enum as [string, ...string[]]);
+      }
+      return z.string();
+    case 'number':
+      return z.number();
+    case 'integer':
+      return z.number().int();
+    case 'boolean':
+      return z.boolean();
+    case 'array': {
+      const itemSchema = propSchema.items;
+      if (itemSchema && itemSchema.type === 'object' && itemSchema.properties) {
+        return z.array(z.object(jsonSchemaToZodShape(itemSchema)).passthrough());
+      } else if (itemSchema?.type) {
+        return z.array(jsonSchemaPropertyToZod(itemSchema));
+      }
+      return z.array(z.any());
+    }
+    case 'object':
+      if (propSchema.additionalProperties || !propSchema.properties) {
+        return z.record(z.string(), z.any());
+      }
+      return z.object(jsonSchemaToZodShape(propSchema)).passthrough();
+    default:
+      return z.any();
+  }
+}
+
+/**
+ * Convert JSON Schema to Zod shape.
+ * Expects $ref references to already be resolved via resolveSchemaRefs.
  */
 function jsonSchemaToZodShape(schema: any): z.ZodRawShape {
   if (!schema || !schema.properties) {
@@ -54,41 +115,12 @@ function jsonSchemaToZodShape(schema: any): z.ZodRawShape {
 
   for (const [key, prop] of Object.entries(schema.properties)) {
     const propSchema = prop as any;
-    let zodType: z.ZodTypeAny;
+    let zodType = jsonSchemaPropertyToZod(propSchema);
 
-    switch (propSchema.type) {
-      case 'string':
-        zodType = z.string();
-        break;
-      case 'number':
-        zodType = z.number();
-        break;
-      case 'integer':
-        zodType = z.number().int();
-        break;
-      case 'boolean':
-        zodType = z.boolean();
-        break;
-      case 'array':
-        zodType = z.array(z.any());
-        break;
-      case 'object':
-        if (propSchema.additionalProperties || !propSchema.properties) {
-          zodType = z.record(z.string(), z.any());
-        } else {
-          zodType = z.object(jsonSchemaToZodShape(propSchema)).passthrough();
-        }
-        break;
-      default:
-        zodType = z.any();
-    }
-
-    // Add description if available
     if (propSchema.description) {
       zodType = zodType.describe(propSchema.description);
     }
 
-    // Handle optional vs required
     const isRequired = schema.required && schema.required.includes(key);
     if (!isRequired) {
       zodType = zodType.optional();
@@ -134,12 +166,26 @@ export async function createLAVSSdkMcpServer(agentId: string, projectPath?: stri
 
     console.log(`[LAVS SDK MCP] Generating ${generatedTools.length} LAVS tools for agent ${agentId}`);
 
+    // Load manifest types for $ref resolution
+    let manifestTypes: Record<string, any> = {};
+    try {
+      const lavsPath = path.join(agentDir, 'lavs.json');
+      const manifest = JSON.parse(fs.readFileSync(lavsPath, 'utf-8'));
+      manifestTypes = manifest.types || {};
+    } catch {
+      // Continue without types - $ref won't be resolved but basic schemas still work
+    }
+
     // Convert generated tools to SDK tools
     const sdkTools = generatedTools.map((genTool: GeneratedTool) => {
       const { tool: toolDef, execute } = genTool;
 
-      // Convert tool input schema to Zod shape
-      const zodShape = jsonSchemaToZodShape(toolDef.input_schema);
+      // Resolve $ref references before converting to Zod
+      const resolvedSchema = Object.keys(manifestTypes).length > 0
+        ? resolveSchemaRefs(toolDef.input_schema, manifestTypes)
+        : toolDef.input_schema;
+
+      const zodShape = jsonSchemaToZodShape(resolvedSchema);
 
       // Create SDK tool
       return tool(

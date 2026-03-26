@@ -215,16 +215,23 @@
       "properties": {
         "id": { "type": "string" },
         "cid": { "type": "string" },
-        "showName": { "type": "string" },
+        "coverName": { "type": "string" },
         "title": { "type": "string" },
-        "section": { "type": "string" },
         "updateTime": { "type": "string" },
         "shortHighlight": { "type": "string" },
         "longHighlight": { "type": "string" },
         "pcAutoPlay": { "type": "string" },
         "images": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "description": "图片字典，key 为标准类型名，value 为 URL。映射规则：纯净/1280净→1280_pure，独播/首播→1280_mark，ott/ott1704→ott，动图/gif→gif",
+          "properties": {
+            "1920": { "type": "string", "description": "1920尺寸图" },
+            "1280_pure": { "type": "string", "description": "1280净图（原文：纯净、1280净、净图等）" },
+            "1280_mark": { "type": "string", "description": "1280硬压图（原文：独播、首播、1280独播等）" },
+            "ott": { "type": "string", "description": "OTT图（原文：ott、ott1704、OTT等）" },
+            "gif": { "type": "string", "description": "GIF动图（原文：gif、动图等）" }
+          },
+          "additionalProperties": false
         },
         "contentCheck": {
           "type": "object",
@@ -234,25 +241,32 @@
         "cidOrder": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "cid", "showName", "title"]
+      "required": ["id", "cid", "coverName", "title"]
     },
     "ContentEntryInput": {
       "type": "object",
       "properties": {
         "cid": { "type": "string" },
-        "showName": { "type": "string" },
+        "coverName": { "type": "string" },
         "title": { "type": "string" },
-        "section": { "type": "string" },
         "updateTime": { "type": "string" },
         "shortHighlight": { "type": "string" },
         "longHighlight": { "type": "string" },
         "pcAutoPlay": { "type": "string" },
         "images": {
           "type": "object",
-          "additionalProperties": { "type": "string" }
+          "description": "图片字典，key 为标准类型名，value 为 URL。映射规则：纯净/1280净→1280_pure，独播/首播→1280_mark，ott/ott1704→ott，动图/gif→gif",
+          "properties": {
+            "1920": { "type": "string", "description": "1920尺寸图" },
+            "1280_pure": { "type": "string", "description": "1280净图（原文：纯净、1280净、净图等）" },
+            "1280_mark": { "type": "string", "description": "1280硬压图（原文：独播、首播、1280独播等）" },
+            "ott": { "type": "string", "description": "OTT图（原文：ott、ott1704、OTT等）" },
+            "gif": { "type": "string", "description": "GIF动图（原文：gif、动图等）" }
+          },
+          "additionalProperties": false
         }
       },
-      "required": ["cid", "showName", "title"]
+      "required": ["cid", "coverName", "title"]
     },
     "ContentIssue": {
       "type": "object",

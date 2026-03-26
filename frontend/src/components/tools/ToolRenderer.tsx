@@ -35,6 +35,7 @@ import { CursorToolRenderer, isCursorTool } from './cursor';
 import { CodexSdkToolRenderer, isCodexSdkTool } from './codex-sdk';
 import { getToolRender, type FrontendToolSubmitResult, type FrontendToolStatus } from '../../services/frontendToolRegistry';
 import { useAgentStore } from '../../stores/useAgentStore';
+import { useSessionStoreOptional, useIsWorkspaceMode } from '../../stores/SessionStoreContext';
 
 interface ToolRendererProps {
   execution: BaseToolExecution;
@@ -47,7 +48,10 @@ interface ToolRendererProps {
  */
 export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFrontendToolSubmit, onFrontendToolCancel }) => {
   const { t } = useTranslation('components');
-  const pendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
+  const isWorkspaceMode = useIsWorkspaceMode();
+  const ctxPendingFrontendTools = useSessionStoreOptional(s => s.pendingFrontendTools);
+  const facadePendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
+  const pendingFrontendTools = isWorkspaceMode ? ctxPendingFrontendTools : facadePendingFrontendTools;
 
   const [submitStatuses, setSubmitStatuses] = React.useState<Record<string, FrontendToolStatus>>({});
 

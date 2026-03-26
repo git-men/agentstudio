@@ -16,7 +16,7 @@
     html, body, #root { height: 100%; overflow: hidden; }
     .drag-over { outline: 2px solid #1677ff; outline-offset: -2px; border-radius: 8px; }
     .drag-ghost { opacity: 0.35; }
-    .img-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+    .img-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
     .img-cell { display: flex; flex-direction: column; align-items: center; }
     .img-cell span { font-size: 9px; color: #999; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; width: 100%; text-align: center; margin-top: 1px; }
     .ant-table-cell { vertical-align: top !important; }
@@ -24,6 +24,14 @@
     .ant-collapse-content-box { padding: 0 !important; }
     .ant-card { border-radius: 10px; overflow: hidden; }
     .ant-typography-edit-content { margin: 0 !important; left: 0 !important; }
+    @media (prefers-color-scheme: dark) {
+      .ant-table-cell-fix-left, .ant-table-cell-fix-right { background: #1f1f1f !important; }
+      .ant-table-thead .ant-table-cell-fix-left, .ant-table-thead .ant-table-cell-fix-right { background: #1d1d1d !important; }
+    }
+    @media (prefers-color-scheme: light) {
+      .ant-table-cell-fix-left, .ant-table-cell-fix-right { background: #fff !important; }
+      .ant-table-thead .ant-table-cell-fix-left, .ant-table-thead .ant-table-cell-fix-right { background: #fafafa !important; }
+    }
     .highlight-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
   </style>
 </head>
@@ -34,7 +42,7 @@ const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const {
   ConfigProvider, theme, Layout, Space, Button, Typography, Tag, Table,
   Card, Collapse, Modal, Input, Dropdown, Image, Tooltip, Spin, Empty, Popconfirm,
-  message, Flex, Badge, Divider,
+  message, Flex, Badge, Divider, Checkbox,
 } = antd;
 const { Content } = Layout;
 const { Text, Paragraph } = Typography;
@@ -43,13 +51,13 @@ const icons = window.icons || window.AntDesignIcons || {};
 const {
   PlusOutlined, SearchOutlined, DownloadOutlined, CopyOutlined, FileExcelOutlined,
   MenuOutlined, DeleteOutlined, CheckCircleOutlined, ExclamationCircleOutlined,
-  LoadingOutlined,
+  LoadingOutlined, EditOutlined,
 } = icons;
 
 const AGENT_ID = window.LAVS_AGENT_ID || '';
 const PROJECT_PATH = window.LAVS_PROJECT_PATH || '';
-const SHORT_LIMIT = 15;
-const LONG_LIMIT = 30;
+const SHORT_LIMIT = 12;
+const LONG_LIMIT = 15;
 
 const IMG_TYPES = [
   { key: '1920', label: '1920' },
@@ -112,7 +120,7 @@ ${lines}`;
 function groupByCid(entries) {
   const map = new Map();
   for (const e of entries) {
-    if (!map.has(e.cid)) map.set(e.cid, { cid: e.cid, showName: e.showName, cidOrder: e.cidOrder || 0, updateTime: '', entries: [] });
+    if (!map.has(e.cid)) map.set(e.cid, { cid: e.cid, coverName: e.coverName, cidOrder: e.cidOrder || 0, updateTime: '', entries: [] });
     const g = map.get(e.cid);
     g.entries.push(e);
     if (e.updateTime && !g.updateTime) g.updateTime = e.updateTime;
@@ -162,9 +170,8 @@ async function exportExcel(entries, date, onProgress) {
 
   const baseColumns = [
     { header: 'cid', key: 'cid', width: 20 },
-    { header: 'showName', key: 'showName', width: 12 },
+    { header: 'coverName', key: 'coverName', width: 12 },
     { header: 'title', key: 'title', width: 14 },
-    { header: 'section', key: 'section', width: 10 },
     { header: 'updateTime', key: 'updateTime', width: 12 },
     { header: 'shortHighlight', key: 'shortHighlight', width: 22 },
     { header: 'shortHighlightLen', key: 'shortHighlightLen', width: 6 },
@@ -190,7 +197,7 @@ async function exportExcel(entries, date, onProgress) {
     if (onProgress) onProgress(ei + 1, entries.length);
     const rowNum = ei + 2;
     const rowData = {
-      cid: e.cid, showName: e.showName, title: e.title, section: e.section || '',
+      cid: e.cid, coverName: e.coverName, title: e.title,
       updateTime: e.updateTime || '',
       shortHighlight: e.shortHighlight || '', shortHighlightLen: (e.shortHighlight||'').length,
       longHighlight: e.longHighlight || '', longHighlightLen: (e.longHighlight||'').length,
@@ -245,10 +252,115 @@ async function exportExcel(entries, date, onProgress) {
   URL.revokeObjectURL(a.href);
 }
 
+async function exportCMSExcel(entries, date, onProgress) {
+  await loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(date);
+
+  const baseColumns = [
+    { header: 'cid', key: 'cid', width: 20 },
+    { header: 'coverName', key: 'coverName', width: 12 },
+    { header: 'title', key: 'title', width: 14 },
+    { header: 'updateTime', key: 'updateTime', width: 12 },
+    { header: 'shortHighlight', key: 'shortHighlight', width: 22 },
+    { header: 'shortHighlightLen', key: 'shortHighlightLen', width: 6 },
+    { header: 'longHighlight', key: 'longHighlight', width: 28 },
+    { header: 'longHighlightLen', key: 'longHighlightLen', width: 6 },
+    { header: 'pcAutoPlay', key: 'pcAutoPlay', width: 16 },
+    { header: 'peoplePackage', key: 'peoplePackage', width: 16 },
+  ];
+
+  const imgColumns = [];
+  for (const { key } of IMG_TYPES) {
+    imgColumns.push({ header: `img_${key}`, key: `img_${key}`, width: 22 });
+    imgColumns.push({ header: `url_${key}`, key: `url_${key}`, width: 40 });
+  }
+
+  ws.columns = [...baseColumns, ...imgColumns, { header: 'package_name', key: 'package_name', width: 18 }];
+
+  ws.getRow(1).font = { bold: true };
+  ws.getRow(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE8E8E8' } };
+
+  // Build row list: entries with gif produce two rows
+  const rowItems = [];
+  for (const e of entries) {
+    rowItems.push({ entry: e, pureOnly: false });
+    if (e.images?.gif) {
+      rowItems.push({ entry: e, pureOnly: true });
+    }
+  }
+
+  for (let ri = 0; ri < rowItems.length; ri++) {
+    const { entry: e, pureOnly } = rowItems[ri];
+    if (onProgress) onProgress(ri + 1, rowItems.length);
+    const rowNum = ri + 2;
+    const rowData = {
+      cid: e.cid, coverName: e.coverName, title: e.title,
+      updateTime: e.updateTime || '',
+      shortHighlight: e.shortHighlight || '', shortHighlightLen: (e.shortHighlight||'').length,
+      longHighlight: e.longHighlight || '', longHighlightLen: (e.longHighlight||'').length,
+      pcAutoPlay: e.pcAutoPlay || '', peoplePackage: e.peoplePackage || '',
+      package_name: '',
+    };
+
+    for (const { key } of IMG_TYPES) {
+      if (pureOnly && key !== '1280_pure') {
+        rowData[`url_${key}`] = '';
+      } else {
+        rowData[`url_${key}`] = e.images?.[key] || '';
+      }
+    }
+
+    const row = ws.addRow(rowData);
+    row.height = 80;
+
+    for (const { key } of IMG_TYPES) {
+      if (pureOnly && key !== '1280_pure') continue;
+      const url = e.images?.[key];
+      if (!url) continue;
+
+      const urlColKey = `url_${key}`;
+      const urlCol = ws.getColumn(urlColKey);
+      if (urlCol) {
+        const cell = row.getCell(urlColKey);
+        cell.value = { text: url, hyperlink: url };
+        cell.font = { color: { argb: 'FF1677FF' }, underline: true, size: 9 };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+      }
+
+      const imgColKey = `img_${key}`;
+      const imgCol = ws.getColumn(imgColKey);
+      if (imgCol) {
+        const b64 = await fetchImageBase64(url);
+        if (b64) {
+          try {
+            const imgId = wb.addImage({ base64: b64, extension: getImageExt(url) });
+            const colIdx = imgCol.number - 1;
+            ws.addImage(imgId, {
+              tl: { col: colIdx + 0.1, row: rowNum - 1 + 0.1 },
+              ext: { width: 140, height: 80 },
+            });
+          } catch (imgErr) { console.warn('Image insert failed:', key, imgErr.message); }
+        }
+      }
+    }
+  }
+
+  const buf = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `CMS配置_${date}.xlsx`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 const ISSUE_LABELS = { typo: '错别字', political: '政治', sentiment: '舆情', other: '其他' };
 const SEV_COLORS = { high: '#ff4d4f', medium: '#faad14', low: '#1677ff' };
 
 // ─── Components ──────────────────────────────────────────────────────────────
+
+const FIELD_PLACEHOLDER = { shortHighlight: '输入短看点', longHighlight: '输入长看点', title: '输入标题' };
 
 function HighlightCell({ entry, field, limit, checkingIds, onRefresh }) {
   const value = entry[field] || '';
@@ -268,9 +380,9 @@ function HighlightCell({ entry, field, limit, checkingIds, onRefresh }) {
   return (
     <div style={{ minWidth: 0 }}>
       <Paragraph
-        editable={{ onChange: handleSave, triggerType: ['text'], autoSize: true }}
-        style={{ marginBottom: 0, fontSize: 13, lineHeight: 1.6 }}>
-        {value || '-'}
+        editable={{ onChange: handleSave, text: value, triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
+        style={{ marginBottom: 0, fontSize: 13, lineHeight: 1.6, color: value ? undefined : '#999', fontStyle: value ? undefined : 'italic' }}>
+        {value || FIELD_PLACEHOLDER[field] || '输入内容'}
       </Paragraph>
       <div className="highlight-tags">
         <Tag color={over ? 'error' : 'success'} bordered={false} style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>
@@ -331,34 +443,58 @@ function ImagesCell({ images }) {
   );
 }
 
-function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandlers }) {
-  const { cid, showName, updateTime, entries } = group;
+function EditableText({ value, field, entryId, onRefresh, strong, style, placeholder }) {
+  const handleSave = async (newVal) => {
+    if (newVal === (value || '')) return;
+    try {
+      await lavsCall('updateEntry', { id: entryId, updates: { [field]: newVal } });
+      if (onRefresh) await onRefresh();
+    } catch (e) { message.error('保存失败'); }
+  };
+  const ph = placeholder || FIELD_PLACEHOLDER[field] || '输入内容';
+  return (
+    <Paragraph
+      editable={{ onChange: handleSave, text: value || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
+      style={{ marginBottom: 0, fontSize: 13, lineHeight: 1.6, fontWeight: strong ? 600 : 400, color: value ? undefined : '#999', fontStyle: value ? undefined : 'italic', ...style }}>
+      {value || ph}
+    </Paragraph>
+  );
+}
+
+function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandlers, selectedIds, onToggleEntry, onToggleGroup }) {
+  const { cid, coverName, updateTime, entries } = group;
+  const allSelected = entries.length > 0 && entries.every(e => selectedIds.has(e.id));
+  const someSelected = entries.some(e => selectedIds.has(e.id));
 
   const columns = [
     {
-      title: '标题', dataIndex: 'title', width: 140,
+      title: <Checkbox checked={allSelected} indeterminate={someSelected && !allSelected}
+        onChange={() => onToggleGroup(entries.map(e => e.id), !allSelected)} />,
+      width: 40, fixed: 'left', align: 'center',
+      render: (_, e) => <Checkbox checked={selectedIds.has(e.id)} onChange={() => onToggleEntry(e.id)} />,
+    },
+    {
+      title: '标题', dataIndex: 'title', width: 160, fixed: 'left',
       render: (_, e) => (
         <div>
-          <Text strong style={{ fontSize: 13 }}>{e.title}</Text>
-          {e.section && <div><Tag bordered={false} style={{ fontSize: 10, padding: '0 4px', lineHeight: '16px' }}>{e.section}</Tag></div>}
-          {e.pcAutoPlay && <div><Text type="secondary" style={{ fontSize: 10 }}>VID: {e.pcAutoPlay}</Text></div>}
+          <EditableText value={e.title} field="title" entryId={e.id} onRefresh={onRefresh} strong />
         </div>
       ),
     },
     {
-      title: '短看点', dataIndex: 'shortHighlight',
+      title: '短看点', dataIndex: 'shortHighlight', width: 200,
       render: (_, e) => <HighlightCell entry={e} field="shortHighlight" limit={SHORT_LIMIT} checkingIds={checkingIds} onRefresh={onRefresh} />,
     },
     {
-      title: '长看点', dataIndex: 'longHighlight',
+      title: '长看点', dataIndex: 'longHighlight', width: 260,
       render: (_, e) => <HighlightCell entry={e} field="longHighlight" limit={LONG_LIMIT} checkingIds={checkingIds} onRefresh={onRefresh} />,
     },
     {
-      title: '图片', dataIndex: 'images', width: 220,
+      title: '图片', dataIndex: 'images', width: 280,
       render: (_, e) => <ImagesCell images={e.images} />,
     },
     {
-      title: '', width: 56, align: 'center',
+      title: '', width: 56, align: 'center', fixed: 'right',
       render: (_, e) => (
         <Space direction="vertical" size={2}>
           <Tooltip title="审核">
@@ -372,14 +508,48 @@ function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandle
     },
   ];
 
+  const handleShowNameSave = async (newVal) => {
+    if (newVal === coverName || !newVal) return;
+    try {
+      for (const e of entries) {
+        await lavsCall('updateEntry', { id: e.id, updates: { coverName: newVal } });
+      }
+      if (onRefresh) await onRefresh();
+    } catch (e) { message.error('保存失败'); }
+  };
+
+  const handleUpdateTimeSave = async (newVal) => {
+    if (newVal === (updateTime || '')) return;
+    try {
+      for (const e of entries) {
+        await lavsCall('updateEntry', { id: e.id, updates: { updateTime: newVal } });
+      }
+      if (onRefresh) await onRefresh();
+    } catch (e) { message.error('保存失败'); }
+  };
+
+  const handleCidSave = async (newVal) => {
+    if (newVal === cid || !newVal) return;
+    try {
+      for (const e of entries) {
+        await lavsCall('updateEntry', { id: e.id, updates: { cid: newVal } });
+      }
+      if (onRefresh) await onRefresh();
+    } catch (e) { message.error('保存失败'); }
+  };
+
   const label = (
     <Flex align="center" gap={6} style={{ width: '100%', minHeight: 28 }} {...dragHandlers} draggable>
       <MenuOutlined style={{ color: '#aaa', cursor: 'grab', fontSize: 12, flexShrink: 0 }} />
-      <Text strong style={{ fontSize: 14 }}>{showName}</Text>
-      {updateTime && <Tag color="blue" bordered={false} style={{ fontSize: 11, lineHeight: '18px', padding: '0 6px' }}>{updateTime}</Tag>}
-      <Text type="secondary" copyable={{ text: cid, tooltips: ['复制 CID', '已复制'] }}
-        style={{ fontSize: 11, fontFamily: 'monospace' }}>{cid}</Text>
-      <Badge count={entries.length} color="#1677ff" size="small" style={{ marginLeft: 'auto' }} />
+      <Paragraph editable={{ onChange: handleShowNameSave, text: coverName || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
+        strong style={{ fontSize: 16, marginBottom: 0, color: coverName ? undefined : '#999', fontStyle: coverName ? undefined : 'italic' }}>{coverName || '输入剧名'}</Paragraph>
+      <Paragraph editable={{ onChange: handleCidSave, text: cid || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 10, color: '#999' }} />, autoSize: true }}
+        copyable={cid ? { tooltips: ['复制 CID', '已复制'] } : false}
+        type="secondary" style={{ fontSize: 11, marginBottom: 0, fontFamily: 'monospace', fontStyle: cid ? undefined : 'italic' }}>{cid || '输入 CID'}</Paragraph>
+      <Badge count={entries.length} color="#1677ff" size="small" />
+      <div style={{ flex: 1 }} />
+      <Paragraph editable={{ onChange: handleUpdateTimeSave, text: updateTime || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
+        type="secondary" style={{ fontSize: 11, marginBottom: 0, fontStyle: updateTime ? undefined : 'italic' }}>{updateTime || '更新时间'}</Paragraph>
     </Flex>
   );
 
@@ -388,7 +558,8 @@ function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandle
       <Collapse ghost defaultActiveKey={['c']} expandIconPosition="start"
         items={[{ key: 'c', label, children: (
           <Table dataSource={entries} columns={columns} rowKey="id"
-            pagination={false} size="small" bordered={false} />
+            pagination={false} size="small" bordered={false}
+            scroll={{ x: 960 }} />
         )}]} />
     </Card>
   );
@@ -406,6 +577,7 @@ function App() {
   const [exportOpen, setExportOpen] = useState(false);
   const [exportText, setExportText] = useState('');
   const [exportLoading, setExportLoading] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
   const [messageApi, contextHolder] = message.useMessage();
   const dragCidRef = useRef(null);
 
@@ -416,6 +588,7 @@ function App() {
       setEntries(result.entries || []);
       setCheckingAll(false);
       setCheckingIds(new Set());
+      setSelectedIds(new Set());
     } catch (e) { messageApi.error('加载失败: ' + e.message); }
     finally { setLoading(false); }
   }, [date]);
@@ -431,6 +604,67 @@ function App() {
 
   const groups = useMemo(() => groupByCid(entries), [entries]);
   const cidCount = useMemo(() => new Set(entries.map(e => e.cid)).size, [entries]);
+
+  const handleToggleEntry = useCallback((id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleToggleGroup = useCallback((ids, select) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      for (const id of ids) { select ? next.add(id) : next.delete(id); }
+      return next;
+    });
+  }, []);
+
+  const handleToggleAll = useCallback(() => {
+    setSelectedIds(prev => {
+      if (prev.size === entries.length && entries.length > 0) return new Set();
+      return new Set(entries.map(e => e.id));
+    });
+  }, [entries]);
+
+  const selectedEntries = useMemo(() => entries.filter(e => selectedIds.has(e.id)), [entries, selectedIds]);
+
+  const handleExportSelectedExcel = async () => {
+    if (selectedEntries.length === 0) { messageApi.warning('请先选择条目'); return; }
+    try {
+      messageApi.loading({ content: '正在加载 ExcelJS...', key: 'xl', duration: 0 });
+      await exportExcel(selectedEntries, date, (cur, total) => {
+        messageApi.loading({ content: `导出中 ${cur}/${total}（含图片下载）...`, key: 'xl', duration: 0 });
+      });
+      messageApi.success({ content: 'Excel 已下载', key: 'xl' });
+    } catch (e) { messageApi.error({ content: '导出失败: ' + e.message, key: 'xl' }); }
+  };
+
+  const handleExportSelectedCMS = async () => {
+    if (selectedEntries.length === 0) { messageApi.warning('请先选择条目'); return; }
+    try {
+      messageApi.loading({ content: '正在加载 ExcelJS...', key: 'cms', duration: 0 });
+      await exportCMSExcel(selectedEntries, date, (cur, total) => {
+        messageApi.loading({ content: `CMS 导出中 ${cur}/${total}（含图片下载）...`, key: 'cms', duration: 0 });
+      });
+      messageApi.success({ content: 'CMS 配置已下载', key: 'cms' });
+    } catch (e) { messageApi.error({ content: '导出失败: ' + e.message, key: 'cms' }); }
+  };
+
+  const handleExportSelectedText = async () => {
+    if (selectedEntries.length === 0) { messageApi.warning('请先选择条目'); return; }
+    setExportLoading(true);
+    setExportOpen(true);
+    setExportText('');
+    try {
+      const result = await lavsCall('exportEntries', { date, format: 'text', ids: selectedEntries.map(e => e.id) });
+      setExportText(result.content || '');
+    } catch (e) {
+      messageApi.error('导出失败: ' + e.message);
+      setExportOpen(false);
+    } finally { setExportLoading(false); }
+  };
 
   const handlePasteAdd = () => {
     if (!pasteText.trim()) { messageApi.warning('请粘贴文本'); return; }
@@ -467,35 +701,12 @@ function App() {
     } catch (e) { messageApi.error('删除失败: ' + e.message); }
   };
 
-  const handleExportText = async () => {
-    setExportLoading(true);
-    setExportOpen(true);
-    setExportText('');
-    try {
-      const result = await lavsCall('exportEntries', { date, format: 'text' });
-      setExportText(result.content || '');
-    } catch (e) {
-      messageApi.error('导出失败: ' + e.message);
-      setExportOpen(false);
-    } finally { setExportLoading(false); }
-  };
-
   const handleCopyExportText = async () => {
     try {
       await navigator.clipboard.writeText(exportText);
       messageApi.success('已复制到剪贴板');
       setExportOpen(false);
     } catch (e) { messageApi.error('复制失败: ' + e.message); }
-  };
-
-  const handleExportExcel = async () => {
-    try {
-      messageApi.loading({ content: '正在加载 ExcelJS...', key: 'xl', duration: 0 });
-      await exportExcel(entries, date, (cur, total) => {
-        messageApi.loading({ content: `导出中 ${cur}/${total}（含图片下载）...`, key: 'xl', duration: 0 });
-      });
-      messageApi.success({ content: 'Excel 已下载', key: 'xl' });
-    } catch (e) { messageApi.error({ content: '导出失败: ' + e.message, key: 'xl' }); }
   };
 
   const makeDragHandlers = (cid) => ({
@@ -544,15 +755,27 @@ function App() {
           <Text type="secondary" style={{ fontSize: 12 }}>
             {entries.length} 条 · {cidCount} CID
           </Text>
+          {entries.length > 0 && (
+            <Checkbox
+              checked={selectedIds.size === entries.length && entries.length > 0}
+              indeterminate={selectedIds.size > 0 && selectedIds.size < entries.length}
+              onChange={handleToggleAll}
+              style={{ fontSize: 12 }}>
+              <Text type="secondary" style={{ fontSize: 12 }}>
+                {selectedIds.size > 0 ? `已选 ${selectedIds.size}` : '全选'}
+              </Text>
+            </Checkbox>
+          )}
           <div style={{ flex: 1 }} />
           <Space size={6}>
             <Button type="primary" size="small" icon={<PlusOutlined />} onClick={() => setPasteOpen(true)}>粘贴添加</Button>
             <Button size="small" icon={<SearchOutlined />} loading={checkingAll} onClick={handleCheckAll}>全部检测</Button>
             <Dropdown menu={{ items: [
-              { key: 'text', icon: <CopyOutlined />, label: '复制为文本', onClick: handleExportText },
-              { key: 'excel', icon: <FileExcelOutlined />, label: '导出 Excel', onClick: handleExportExcel },
+              { key: 'sel-text', icon: <CopyOutlined />, label: selectedIds.size > 0 ? `复制文本 (${selectedIds.size})` : '复制文本', onClick: handleExportSelectedText },
+              { key: 'sel-cms', icon: <FileExcelOutlined />, label: selectedIds.size > 0 ? `导出CMS上传格式Excel (${selectedIds.size})` : '导出CMS上传格式Excel', onClick: handleExportSelectedCMS },
+              { key: 'sel-excel', icon: <FileExcelOutlined />, label: selectedIds.size > 0 ? `导出标准 Excel (${selectedIds.size})` : '导出标准 Excel', onClick: handleExportSelectedExcel },
             ]}} placement="bottomRight">
-              <Button size="small" icon={<DownloadOutlined />}>导出</Button>
+              <Button size="small" icon={<DownloadOutlined />}>{selectedIds.size > 0 ? `导出 (${selectedIds.size})` : '导出'}</Button>
             </Dropdown>
           </Space>
         </div>
@@ -567,7 +790,9 @@ function App() {
               groups.map(g => (
                 <CIDGroup key={g.cid} group={g} checkingIds={checkingIds}
                   onCheck={handleCheckSingle} onDelete={handleDelete}
-                  onRefresh={loadData} dragHandlers={makeDragHandlers(g.cid)} />
+                  onRefresh={loadData} dragHandlers={makeDragHandlers(g.cid)}
+                  selectedIds={selectedIds} onToggleEntry={handleToggleEntry}
+                  onToggleGroup={handleToggleGroup} />
               ))
             )}
           </Spin>

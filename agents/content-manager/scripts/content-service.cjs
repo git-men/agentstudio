@@ -136,9 +136,8 @@ function actionAdd(input) {
     const newEntry = {
       id: crypto.randomUUID(),
       cid: entry.cid || '',
-      showName: entry.showName || '',
+      coverName: entry.coverName || '',
       title: entry.title || '',
-      section: entry.section || entry.category || '',
       updateTime: entry.updateTime || '',
       shortHighlight: entry.shortHighlight || entry.shortTitle || entry.short_highlight || '',
       longHighlight: entry.longHighlight || entry.longTitle || entry.long_highlight || '',
@@ -172,7 +171,6 @@ const UPDATE_FIELD_ALIASES = {
   long_highlight: 'longHighlight',
   pcAutoplay: 'pcAutoPlay',
   autoPlay: 'pcAutoPlay',
-  category: 'section',
 };
 
 function actionUpdate(input) {
@@ -290,7 +288,6 @@ function parseSection(text, updateTime, entries, parseErrors) {
   // Detect show-level header: "ShowName·更新" pattern
   let currentShowName = '';
   let currentCid = '';
-  let currentSection = ''; // 【点映集】、【会员集】 etc.
   let currentEntry = null;
 
   function flushEntry() {
@@ -303,14 +300,12 @@ function parseSection(text, updateTime, entries, parseErrors) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Section tag: 【点映集】、【会员集】
-    const sectionMatch = line.match(/^【(.+?)】$/);
-    if (sectionMatch) {
-      currentSection = sectionMatch[1];
+    // Skip section tags: 【点映集】、【会员集】
+    if (line.match(/^【(.+?)】$/)) {
       continue;
     }
 
-    // Show-level header: "ShowName·更新" (sets showName context, resets section)
+    // Show-level header: "ShowName·更新" (sets coverName context)
     if (line.match(/[·]更新\s*$/)) {
       flushEntry();
       currentShowName = line.replace(/[·]更新\s*$/, '');
@@ -371,14 +366,14 @@ function parseSection(text, updateTime, entries, parseErrors) {
     }
 
     // Entry title line: "ShowName·EntryTitle" or just "EntryTitle" (with context)
-    // This is a title line if it contains a · separator or comes after a showName header
+    // This is a title line if it contains a · separator or comes after a coverName header
     const titleMatch = line.match(/^(.+?)[·](.+)$/);
     if (titleMatch) {
       flushEntry();
       const showPart = titleMatch[1].trim();
       const titlePart = titleMatch[2].trim();
       currentShowName = showPart;
-      currentEntry = createEmptyEntry(showPart, titlePart, currentCid, currentSection, updateTime);
+      currentEntry = createEmptyEntry(showPart, titlePart, currentCid, updateTime);
       continue;
     }
 
@@ -399,7 +394,7 @@ function parseSection(text, updateTime, entries, parseErrors) {
     // Unrecognized line — could be an entry title without · separator
     // If there's no current entry, treat it as a new entry title
     if (!currentEntry && currentShowName) {
-      currentEntry = createEmptyEntry(currentShowName, line, currentCid, currentSection, updateTime);
+      currentEntry = createEmptyEntry(currentShowName, line, currentCid, updateTime);
       continue;
     }
   }
@@ -407,12 +402,11 @@ function parseSection(text, updateTime, entries, parseErrors) {
   flushEntry();
 }
 
-function createEmptyEntry(showName, title, cid, section, updateTime) {
+function createEmptyEntry(coverName, title, cid, updateTime) {
   return {
     cid: cid || '',
-    showName: showName || '',
+    coverName: coverName || '',
     title: title || '',
-    section: section || '',
     updateTime: updateTime || '',
     shortHighlight: '',
     longHighlight: '',
@@ -425,6 +419,14 @@ function createEmptyEntry(showName, title, cid, section, updateTime) {
 // Export
 // ---------------------------------------------------------------------------
 
+const IMG_KEY_LABELS = {
+  '1920': '1920',
+  '1280_pure': '1280净图',
+  '1280_mark': '1280硬压',
+  'ott': 'OTT',
+  'gif': 'GIF',
+};
+
 function actionExport(input) {
   const date = input.date || todayStr();
   const format = input.format || 'text';
@@ -434,7 +436,6 @@ function actionExport(input) {
     return { content: JSON.stringify(entries, null, 2), format: 'json' };
   }
 
-  // Reconstruct original text format
   const grouped = groupByCid(entries);
   const lines = [];
 
@@ -442,27 +443,30 @@ function actionExport(input) {
     if (group.entries.length === 0) continue;
     const first = group.entries[0];
 
-    if (first.updateTime && lines.length > 0) {
-      lines.push('');
-    }
+    if (lines.length > 0) lines.push('');
 
-    for (const entry of group.entries) {
-      // Title line
-      lines.push(`${entry.showName}·${entry.title}`);
+    lines.push(first.coverName || '');
+    if (first.cid) lines.push(`cid: ${first.cid}`);
+    lines.push(`更新时间：${first.updateTime || ''}`);
+    lines.push('');
 
-      if (entry.cid) lines.push(`cid：${entry.cid}`);
-      if (entry.pcAutoPlay) lines.push(`pc自动播：${entry.pcAutoPlay}`);
+    for (let ei = 0; ei < group.entries.length; ei++) {
+      const entry = group.entries[ei];
+      lines.push(`【第${ei + 1}套】`);
+      lines.push(entry.title);
       if (entry.shortHighlight) lines.push(`短看点：${entry.shortHighlight}`);
       if (entry.longHighlight) lines.push(`长看点：${entry.longHighlight}`);
+      if (entry.pcAutoPlay) lines.push(`pc自动播：${entry.pcAutoPlay}`);
+      if (entry.peoplePackage) lines.push(`人群包：${entry.peoplePackage}`);
 
-      // Images
-      if (entry.images) {
+      if (entry.images && Object.keys(entry.images).length > 0) {
         for (const [type, url] of Object.entries(entry.images)) {
-          lines.push(`${type}：${url}`);
+          const label = IMG_KEY_LABELS[type] || type;
+          lines.push(`${label}：${url}`);
         }
       }
 
-      lines.push(''); // blank line between entries
+      lines.push('');
     }
   }
 
@@ -475,7 +479,7 @@ function groupByCid(entries) {
     if (!cidMap.has(entry.cid)) {
       cidMap.set(entry.cid, {
         cid: entry.cid,
-        showName: entry.showName,
+        coverName: entry.coverName,
         cidOrder: entry.cidOrder || 0,
         entries: [],
       });
