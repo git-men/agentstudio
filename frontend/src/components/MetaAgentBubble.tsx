@@ -1,18 +1,21 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
-import { MessageCircle, X, Minimize2 } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { MessageCircle, X, Minimize2, Maximize2 } from 'lucide-react';
 import { useAgent } from '../hooks/useAgents';
 import { useAgentStore } from '../stores/useAgentStore';
 import { AGUIChatPanel } from './AGUIChatPanel';
 import { useMobileContext } from '../contexts/MobileContext';
+import { API_BASE } from '../lib/config';
+import { authFetch } from '../lib/authFetch';
 import type { AgentConfig } from '../types/index.js';
 
 const MIN_PANEL_WIDTH = 320;
-const DEFAULT_PANEL_WIDTH = 420;
+const DEFAULT_PANEL_WIDTH = 480;
 
 const META_AGENT_ID = 'meta-agent';
 const SESSION_STORAGE_KEY = 'agentstudio:meta-agent-session';
 const OPEN_STATE_KEY = 'agentstudio:meta-agent-open';
+const PANEL_WIDTH_KEY = 'agentstudio:meta-agent-panel-width';
 
 function saveMetaAgentSession(sessionId: string | null) {
   try {
@@ -88,15 +91,23 @@ export const MetaAgentBubble: React.FC = () => {
   const { setCurrentAgentAndSession, currentAgent } = useAgentStore();
   const { isMobile } = useMobileContext();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const [isOpen, setIsOpen] = useState(getSavedOpenState);
   const [hasBeenOpened, setHasBeenOpened] = useState(false);
   const agentRef = useRef<AgentConfig | null>(null);
+  const [resolvedWorkDir, setResolvedWorkDir] = useState<string | null>(null);
+  const currentSessionId = useAgentStore((s) => s.currentSessionId);
 
-  const [panelWidth, setPanelWidth] = useState(DEFAULT_PANEL_WIDTH);
+  const [panelWidth, setPanelWidth] = useState(() => {
+    try {
+      const saved = localStorage.getItem(PANEL_WIDTH_KEY);
+      return saved ? Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)) : DEFAULT_PANEL_WIDTH;
+    } catch { return DEFAULT_PANEL_WIDTH; }
+  });
   const isResizingRef = useRef(false);
   const resizeStartXRef = useRef(0);
-  const resizeStartWidthRef = useRef(DEFAULT_PANEL_WIDTH);
+  const resizeStartWidthRef = useRef(panelWidth);
 
   const handleResizeMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
@@ -125,6 +136,26 @@ export const MetaAgentBubble: React.FC = () => {
     document.addEventListener('mouseup', handleMouseUp);
   }, [panelWidth]);
 
+  const isHiddenOnDashboard = location.pathname === '/dashboard' || location.pathname === '/dashboard-new';
+
+  // When transitioning from dashboard (hidden) to another page (visible),
+  // re-read width from localStorage so changes made on Dashboard are picked up.
+  const prevHiddenRef = useRef(isHiddenOnDashboard);
+  useEffect(() => {
+    if (prevHiddenRef.current && !isHiddenOnDashboard) {
+      try {
+        const saved = localStorage.getItem(PANEL_WIDTH_KEY);
+        if (saved) setPanelWidth(Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10)));
+      } catch { /* ignore */ }
+    }
+    prevHiddenRef.current = isHiddenOnDashboard;
+  }, [isHiddenOnDashboard]);
+
+  useEffect(() => {
+    if (isHiddenOnDashboard) return;
+    try { localStorage.setItem(PANEL_WIDTH_KEY, String(panelWidth)); } catch { /* ignore */ }
+  }, [panelWidth, isHiddenOnDashboard]);
+
   const agent = agentData?.agent;
 
   useEffect(() => {
@@ -132,6 +163,14 @@ export const MetaAgentBubble: React.FC = () => {
       agentRef.current = agent;
     }
   }, [agent]);
+
+  useEffect(() => {
+    if (!agent?.workingDirectory) return;
+    authFetch(`${API_BASE}/files/resolve?path=${encodeURIComponent(agent.workingDirectory)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data?.resolved) setResolvedWorkDir(data.resolved); })
+      .catch(() => {});
+  }, [agent?.workingDirectory]);
 
   const activateMetaAgent = useCallback(() => {
     const metaAgent = agentRef.current;
@@ -175,6 +214,13 @@ export const MetaAgentBubble: React.FC = () => {
   }, []);
 
   if (isLoading || error || !agent || !agent.enabled) {
+    return null;
+  }
+
+  // On pages that embed the Meta Agent panel inline (DashboardShell),
+  // hide the floating overlay entirely to avoid duplication.
+  const inlinePanelPaths = ['/dashboard', '/dashboard-new', '/wecom-bind', '/qqbot-bind', '/wechat-bind'];
+  if (inlinePanelPaths.includes(location.pathname)) {
     return null;
   }
 
@@ -225,13 +271,38 @@ export const MetaAgentBubble: React.FC = () => {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={handleClose}
-                className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                title="收起"
-              >
-                {isMobile ? <X className="w-5 h-5" /> : <Minimize2 className="w-4 h-4" />}
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => {
+                    const params = new URLSearchParams();
+                    params.set('agent', META_AGENT_ID);
+                    if (resolvedWorkDir) {
+                      params.set('project', resolvedWorkDir);
+                    } else if (agent.workingDirectory) {
+                      params.set('project', agent.workingDirectory);
+                    }
+                    const isRealSession = currentSessionId
+                      && !currentSessionId.startsWith('session_')
+                      && !currentSessionId.startsWith('__pending_');
+                    if (isRealSession) {
+                      params.set('session', currentSessionId);
+                    }
+                    navigate(`/project-workspace?${params.toString()}`);
+                    handleClose();
+                  }}
+                  className="p-1.5 rounded-lg text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                  title="全屏沉浸式工作"
+                >
+                  <Maximize2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={handleClose}
+                  className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  title="收起"
+                >
+                  {isMobile ? <X className="w-5 h-5" /> : <Minimize2 className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
 
             {/* Chat panel */}
@@ -240,6 +311,7 @@ export const MetaAgentBubble: React.FC = () => {
                 agent={agent}
                 onSessionChange={handleSessionChange}
                 environmentContext={`用户当前所在页面：${pageContext}`}
+                hideHeader={true}
               />
             </div>
           </div>

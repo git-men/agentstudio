@@ -440,14 +440,20 @@ export async function executeTask(taskId: string): Promise<void> {
     // Get task executor
     const executor = getTaskExecutor();
 
+    // Build trigger message with optional agent_decided prompt injection
+    let message = task.triggerMessage;
+    if (task.notification?.strategy === 'agent_decided') {
+      message += '\n\n---\n[System Instruction] If the result of this task requires user attention or decision, include the marker [SHOULD-NOTIFY-USER] in your response, followed by a brief summary for the notification.';
+    }
+
     // Submit task to executor (runs in worker thread, not main process)
     await executor.submitTask({
       id: executionId, // Use executionId as the task identifier for executor
       type: 'scheduled',
       agentId: task.agentId,
       projectPath: task.projectPath,
-      message: task.triggerMessage,
-      timeoutMs: task.timeoutMs || 300000,
+      message,
+      timeoutMs: task.timeoutMs || 1800000,
       maxTurns: task.maxTurns,
       modelId: task.modelOverride?.modelId,
       claudeVersionId: task.modelOverride?.versionId,

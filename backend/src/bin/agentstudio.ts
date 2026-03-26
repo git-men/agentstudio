@@ -6,6 +6,7 @@ import { execSync, spawn } from 'child_process';
 import { homedir, platform } from 'os';
 import { installService, uninstallService, serviceAction, isServiceInstalled } from './serviceManager.js';
 import { AGENTSTUDIO_HOME } from '../config/paths.js';
+import { createAdminCommand } from '../cli/admin.js';
 
 // Service configuration constants
 const SERVICE_NAME = 'agentstudio';
@@ -458,5 +459,8 @@ program
     }
     serviceAction(action);
   });
+
+// Admin CLI — lightweight alternative to MCP for agent tool access
+program.addCommand(createAdminCommand());
 
 program.parse();

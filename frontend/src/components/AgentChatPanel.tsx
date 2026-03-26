@@ -40,9 +40,11 @@ interface AgentChatPanelProps {
   projectPath?: string;
   onSessionChange?: (sessionId: string | null) => void;
   initialMessage?: string;
+  /** External handler for creating a new session (workspace mode). */
+  onNewSession?: () => void;
 }
 
-export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage }) => {
+export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage, onNewSession: externalNewSession }) => {
   const { t } = useTranslation('components');
   const { isCompactMode } = useResponsiveSettings();
 
@@ -148,7 +150,8 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     handleDragLeave,
     handleDrop,
     clearImages,
-    setPreviewImage
+    setPreviewImage,
+    processImageFile
   } = useImageUpload({
     textareaRef,
     inputMessage,
@@ -353,7 +356,11 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
   };
 
   const handleNewSessionWithUI = () => {
-    handleNewSession();
+    if (externalNewSession) {
+      externalNewSession();
+    } else {
+      handleNewSession();
+    }
     setShowSessions(false);
     setSearchTerm('');
   };
@@ -617,7 +624,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px';
+      textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
     }
   };
 
@@ -982,6 +989,12 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
         // Voice Input
         onVoiceTranscribed={handleVoiceTranscribed}
         onOpenVoiceSettings={handleOpenVoiceSettings}
+
+        // New session
+        onNewSession={handleNewSessionWithUI}
+
+        // Screen capture support
+        processImageFile={processImageFile}
       />
     </div>
   );

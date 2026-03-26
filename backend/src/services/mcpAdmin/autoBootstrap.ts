@@ -4,6 +4,8 @@
  * Automatically configures the agentstudio-admin MCP server on startup:
  * 1. Creates an admin API key if none exists
  * 2. Adds agentstudio-admin to the native MCP server config
+ * 3. Creates CLI wrapper at ~/.agentstudio/bin/agentstudio
+ * 4. Provides env injection helpers for agent sessions (API key + PATH)
  *
  * This ensures the agentstudio-admin MCP is available out-of-the-box
  * for agents (e.g., meta-agent) that need to manage AgentStudio
@@ -13,7 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { generateAdminApiKey, listAdminApiKeys } from './adminApiKeyService.js';
-import { MCP_SERVER_CONFIG_FILE } from '../../config/paths.js';
+import { AGENTSTUDIO_HOME, MCP_SERVER_CONFIG_FILE } from '../../config/paths.js';
 import { getMcpAdminServer } from './mcpAdminServer.js';
 
 const SYSTEM_KEY_DESCRIPTION = 'System Auto-Bootstrap (agentstudio-admin)';
@@ -125,6 +127,12 @@ export async function autoBootstrapMcpAdmin(port: number): Promise<void> {
       return;
     }
 
+    // Cache credentials for env injection into agent sessions
+    cacheAdminCredentials(adminKey, port);
+
+    // Create CLI wrapper at ~/.agentstudio/bin/agentstudio
+    bootstrapAdminCli(port);
+
     const expectedUrl = `http://localhost:${port}/api/mcp-admin`;
     const { config, fileExisted } = readNativeConfig();
     const existing = config.mcpServers[SERVER_NAME];
@@ -195,4 +203,103 @@ export function getSystemMcpServers(): Record<string, McpServerEntry> {
   }
 
   return result;
+}
+
+// ─── Admin CLI Bootstrap ──────────────────────────────────────────────────────
+
+const BIN_DIR = path.join(AGENTSTUDIO_HOME, 'bin');
+const CLI_WRAPPER_PATH = path.join(BIN_DIR, 'agentstudio');
+
+let cachedAdminApiKey: string | null = null;
+let cachedServerPort: number | null = null;
+
+/**
+ * Create a CLI wrapper script at ~/.agentstudio/bin/agentstudio.
+ * The wrapper embeds the current Node.js path and the backend's CLI entry point,
+ * making `agentstudio admin ...` available in agent Bash sessions regardless of
+ * how AgentStudio was installed (npm global, desktop app, dev mode, etc.).
+ */
+export function bootstrapAdminCli(port: number): void {
+  try {
+    const nodePath = process.execPath;
+    // Resolve the compiled CLI entry: dist/bin/agentstudio.js relative to backend root
+    const cliEntryPoint = path.resolve(__dirname, '../../bin/agentstudio.js');
+
+    let wrapperContent: string;
+    if (fs.existsSync(cliEntryPoint)) {
+      // Production mode: run compiled JS with node
+      wrapperContent = [
+        '#!/bin/sh',
+        `exec "${nodePath}" "${cliEntryPoint}" "$@"`,
+        '',
+      ].join('\n');
+    } else {
+      // Dev mode: use tsx (shell script) to run TypeScript source directly
+      const tsSource = path.resolve(__dirname, '../../bin/agentstudio.ts');
+      const tsxBin = path.resolve(__dirname, '../../../node_modules/.bin/tsx');
+      if (fs.existsSync(tsxBin) && fs.existsSync(tsSource)) {
+        wrapperContent = [
+          '#!/bin/sh',
+          `exec "${tsxBin}" "${tsSource}" "$@"`,
+          '',
+        ].join('\n');
+      } else {
+        console.warn('[Admin CLI Bootstrap] Cannot locate CLI entry point, skipping wrapper creation');
+        return;
+      }
+    }
+
+    fs.mkdirSync(BIN_DIR, { recursive: true });
+
+    // Only rewrite if content changed
+    if (fs.existsSync(CLI_WRAPPER_PATH)) {
+      const existing = fs.readFileSync(CLI_WRAPPER_PATH, 'utf-8');
+      if (existing === wrapperContent) {
+        return;
+      }
+    }
+
+    fs.writeFileSync(CLI_WRAPPER_PATH, wrapperContent, { mode: 0o755 });
+    console.info(`[Admin CLI Bootstrap] Created CLI wrapper → ${CLI_WRAPPER_PATH}`);
+  } catch (error) {
+    console.warn('[Admin CLI Bootstrap] Failed to create CLI wrapper:', error);
+  }
+}
+
+/**
+ * Cache the admin API key and server port for later env injection.
+ * Called during autoBootstrapMcpAdmin().
+ */
+function cacheAdminCredentials(apiKey: string, port: number): void {
+  cachedAdminApiKey = apiKey;
+  cachedServerPort = port;
+}
+
+/**
+ * Get environment variables to inject into agent sessions for Admin CLI access.
+ *
+ * Returns:
+ * - AGENTSTUDIO_ADMIN_API_KEY: the bootstrap admin key
+ * - AGENTSTUDIO_SERVER: the local server URL
+ * - PATH: prepended with ~/.agentstudio/bin so `agentstudio` CLI is available
+ */
+export function getAdminCliEnvVars(): Record<string, string> {
+  const vars: Record<string, string> = {};
+
+  if (cachedAdminApiKey) {
+    vars['AGENTSTUDIO_ADMIN_API_KEY'] = cachedAdminApiKey;
+  }
+
+  if (cachedServerPort) {
+    vars['AGENTSTUDIO_SERVER'] = `http://127.0.0.1:${cachedServerPort}`;
+  }
+
+  return vars;
+}
+
+/**
+ * Get the bin directory path for PATH prepending.
+ */
+export function getAdminCliBinDir(): string {
+  return BIN_DIR;
 }

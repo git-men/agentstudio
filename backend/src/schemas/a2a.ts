@@ -328,7 +328,7 @@ export const CallExternalAgentInputSchema = z.object({
   agentUrl: z.string().url('Invalid agent URL'),
   message: z.string().min(1, 'Message cannot be empty').max(10000, 'Message too long'),
   useTask: z.boolean().optional().default(false),
-  timeout: z.number().int().min(1000).max(300000).optional().default(30000),
+  timeout: z.number().int().min(1000).max(1800000).optional().default(30000),
 });
 
 /**

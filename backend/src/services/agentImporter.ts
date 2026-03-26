@@ -148,16 +148,18 @@ class AgentImporter {
   async importAgent(marketplaceName: string, agentDef: MarketplaceAgent): Promise<AgentImportResult> {
     try {
       const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
-      
-      let agentConfig: Partial<AgentConfig>;
 
       // Resolve source path — manifests may use "source" or "path" interchangeably
       const agentSource = agentDef.source || agentDef.path;
+      // Resolved absolute path to the source file (null for inline-config agents)
+      let agentFilePath: string | null = null;
+
+      let agentConfig: Partial<AgentConfig>;
 
       // If source is provided, load from file
       if (agentSource && !agentDef.config) {
-        const agentFilePath = path.resolve(marketplacePath, agentSource);
-        
+        agentFilePath = path.resolve(marketplacePath, agentSource);
+
         if (!fs.existsSync(agentFilePath)) {
           return {
             success: false,
@@ -198,89 +200,91 @@ class AgentImporter {
 
       // Generate agent ID from name if not provided
       const agentId = agentConfig.id || this.generateAgentId(agentDef.name);
-      
-      // Check if agent already exists
-      const existingAgentPath = path.join(AGENTS_DIR, `${agentId}.json`);
-      if (fs.existsSync(existingAgentPath)) {
-        // Check if it's a symlink (plugin-installed) or local
-        try {
-          const stats = fs.lstatSync(existingAgentPath);
-          if (!stats.isSymbolicLink()) {
-            // It's a local agent, don't overwrite
-            return {
-              success: false,
-              agentId,
-              agentName: agentConfig.name || agentDef.name,
-              error: `Agent '${agentId}' already exists as a local agent`,
-            };
+
+      // For .md source files: symlink directly to the .md source (no compilation)
+      // For .json source files: compile to .claude-plugin/agents/{id}.json then symlink
+      const isMdSource = agentFilePath ? agentFilePath.endsWith('.md') : false;
+
+      // Remove any existing symlink for this agent (both .json and .md variants)
+      for (const ext of ['.json', '.md']) {
+        const candidate = path.join(AGENTS_DIR, `${agentId}${ext}`);
+        if (fs.existsSync(candidate) || this.isDeadSymlink(candidate)) {
+          try {
+            const stats = fs.lstatSync(candidate);
+            if (!stats.isSymbolicLink()) {
+              // It's a real local file — don't overwrite
+              return {
+                success: false,
+                agentId,
+                agentName: agentConfig.name || agentDef.name,
+                error: `Agent '${agentId}' already exists as a local agent`,
+              };
+            }
+            fs.unlinkSync(candidate);
+          } catch {
+            // lstat throws for dead symlinks; try unlinking anyway
+            try { fs.unlinkSync(candidate); } catch { /* ignore */ }
           }
-          // It's a symlink, we can update it
-          fs.unlinkSync(existingAgentPath);
-        } catch (error) {
-          console.warn(`Failed to check existing agent ${agentId}:`, error);
         }
       }
 
-      // Build complete agent config
-      const now = new Date().toISOString();
-      const completeAgent: AgentConfig = {
-        id: agentId,
-        name: agentDef.name,
-        description: agentDef.description || agentConfig.description || '',
-        version: agentDef.version || agentConfig.version || '1.0.0',
-        systemPrompt: agentConfig.systemPrompt || { type: 'preset', preset: 'claude_code' },
-        maxTurns: agentConfig.maxTurns,
-        permissionMode: (agentConfig.permissionMode as any) || 'acceptEdits',
-        allowedTools: agentConfig.allowedTools || [],
-        ui: agentConfig.ui || {
-          icon: '🤖',
-          headerTitle: agentDef.name,
-          headerDescription: agentDef.description || '',
-        },
-        workingDirectory: agentConfig.workingDirectory,
-        dataDirectory: agentConfig.dataDirectory,
-        fileTypes: agentConfig.fileTypes,
-        author: `Marketplace: ${marketplaceName}`,
-        tags: agentConfig.tags || [],
-        hooks: agentConfig.hooks || {},
-        createdAt: now,
-        updatedAt: now,
-        enabled: true,
-        source: 'plugin',
-        installPath: path.resolve(marketplacePath, agentSource || ''),
-      };
+      let symlinkTarget: string;
+      let symlinkDest: string;
 
-      // Save agent JSON to marketplace directory
-      const marketplaceAgentPath = path.join(
-        marketplacePath,
-        '.claude-plugin',
-        'agents',
-        `${agentId}.json`
-      );
-      
-      // Ensure directory exists
-      const agentDir = path.dirname(marketplaceAgentPath);
-      if (!fs.existsSync(agentDir)) {
-        fs.mkdirSync(agentDir, { recursive: true });
+      if (isMdSource && agentFilePath) {
+        // .md source: symlink {AGENTS_DIR}/{id}.md → absolute path of the .md file
+        symlinkTarget = agentFilePath;
+        symlinkDest = path.join(AGENTS_DIR, `${agentId}.md`);
+      } else {
+        // .json source (or inline config): compile to .claude-plugin/agents/{id}.json
+        const now = new Date().toISOString();
+        const completeAgent: AgentConfig = {
+          id: agentId,
+          name: agentDef.name,
+          description: agentDef.description || agentConfig.description || '',
+          version: agentDef.version || agentConfig.version || '1.0.0',
+          systemPrompt: agentConfig.systemPrompt || { type: 'preset', preset: 'claude_code' },
+          maxTurns: agentConfig.maxTurns,
+          permissionMode: (agentConfig.permissionMode as any) || 'acceptEdits',
+          allowedTools: agentConfig.allowedTools || [],
+          ui: agentConfig.ui || {
+            icon: '🤖',
+            headerTitle: agentDef.name,
+            headerDescription: agentDef.description || '',
+          },
+          workingDirectory: agentConfig.workingDirectory,
+          dataDirectory: agentConfig.dataDirectory,
+          fileTypes: agentConfig.fileTypes,
+          author: `Marketplace: ${marketplaceName}`,
+          tags: agentConfig.tags || [],
+          hooks: agentConfig.hooks || {},
+          createdAt: now,
+          updatedAt: now,
+          enabled: true,
+          source: 'plugin',
+          installPath: path.resolve(marketplacePath, agentSource || ''),
+        };
+
+        const compiledPath = path.join(marketplacePath, '.claude-plugin', 'agents', `${agentId}.json`);
+        fs.mkdirSync(path.dirname(compiledPath), { recursive: true });
+        fs.writeFileSync(compiledPath, JSON.stringify(completeAgent, null, 2));
+
+        symlinkTarget = compiledPath;
+        symlinkDest = path.join(AGENTS_DIR, `${agentId}.json`);
       }
 
-      // Write agent config
-      fs.writeFileSync(marketplaceAgentPath, JSON.stringify(completeAgent, null, 2));
-
-      // Create symlink in agents directory
       try {
-        fs.symlinkSync(marketplaceAgentPath, existingAgentPath);
-        console.info(`[AgentImporter] Created symlink for agent '${agentId}' from marketplace '${marketplaceName}'`);
+        fs.symlinkSync(symlinkTarget, symlinkDest);
+        console.info(`[AgentImporter] Created symlink for agent '${agentId}' → ${symlinkTarget}`);
       } catch (error) {
-        // If symlink fails, copy the file instead
         console.warn(`[AgentImporter] Failed to create symlink for agent '${agentId}', copying instead:`, error);
-        fs.copyFileSync(marketplaceAgentPath, existingAgentPath);
+        fs.copyFileSync(symlinkTarget, symlinkDest);
       }
 
       return {
         success: true,
         agentId,
-        agentName: completeAgent.name,
+        agentName: agentConfig.name || agentDef.name,
       };
     } catch (error) {
       return {
@@ -291,32 +295,32 @@ class AgentImporter {
   }
 
   /**
-   * Uninstall an agent (remove symlink)
+   * Uninstall an agent (remove symlink) — checks both .json and .md variants.
    */
   async uninstallAgent(agentId: string): Promise<boolean> {
     try {
-      const agentPath = path.join(AGENTS_DIR, `${agentId}.json`);
-      
-      if (!fs.existsSync(agentPath)) {
-        return false;
-      }
-
       // Check if it's a built-in agent
       if (BUILTIN_AGENTS.some(builtin => builtin.id === agentId)) {
         console.warn(`[AgentImporter] Cannot uninstall built-in agent '${agentId}'`);
         return false;
       }
 
-      // Check if it's a plugin-installed agent (symlink)
-      const stats = fs.lstatSync(agentPath);
-      if (!stats.isSymbolicLink()) {
-        console.warn(`[AgentImporter] Agent '${agentId}' is not a plugin-installed agent`);
-        return false;
-      }
+      let removed = false;
+      for (const ext of ['.json', '.md']) {
+        const agentPath = path.join(AGENTS_DIR, `${agentId}${ext}`);
+        // lstat works on dead symlinks too
+        let stats: fs.Stats | null = null;
+        try { stats = fs.lstatSync(agentPath); } catch { continue; }
 
-      fs.unlinkSync(agentPath);
-      console.info(`[AgentImporter] Uninstalled agent '${agentId}'`);
-      return true;
+        if (!stats.isSymbolicLink()) {
+          console.warn(`[AgentImporter] Agent '${agentId}${ext}' is not a plugin-installed agent`);
+          continue;
+        }
+        fs.unlinkSync(agentPath);
+        console.info(`[AgentImporter] Uninstalled agent '${agentId}${ext}'`);
+        removed = true;
+      }
+      return removed;
     } catch (error) {
       console.error(`[AgentImporter] Failed to uninstall agent '${agentId}':`, error);
       return false;
@@ -354,11 +358,13 @@ class AgentImporter {
   }
 
   /**
-   * Get installed agents from a specific marketplace
+   * Get installed agents from a specific marketplace.
+   * Checks both .json and .md symlinks.
    */
   async getInstalledAgentsFromMarketplace(marketplaceName: string): Promise<string[]> {
     const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
-    const agentFiles = fs.readdirSync(AGENTS_DIR).filter(f => f.endsWith('.json'));
+    const agentFiles = fs.readdirSync(AGENTS_DIR)
+      .filter(f => f.endsWith('.json') || f.endsWith('.md'));
     const installedAgents: string[] = [];
 
     for (const file of agentFiles) {
@@ -367,15 +373,16 @@ class AgentImporter {
         const stats = fs.lstatSync(filePath);
         if (stats.isSymbolicLink()) {
           const linkTarget = fs.readlinkSync(filePath);
-          const realPath = path.isAbsolute(linkTarget) 
-            ? linkTarget 
+          const realPath = path.isAbsolute(linkTarget)
+            ? linkTarget
             : path.resolve(path.dirname(filePath), linkTarget);
-          
+
           if (realPath.startsWith(marketplacePath)) {
-            installedAgents.push(file.replace('.json', ''));
+            const ext = file.endsWith('.json') ? '.json' : '.md';
+            installedAgents.push(file.slice(0, -ext.length));
           }
         }
-      } catch (error) {
+      } catch {
         // Skip files that can't be read
       }
     }
@@ -388,38 +395,85 @@ class AgentImporter {
   // ============================================================================
 
   /**
-   * Scan marketplace directory for agent JSON files.
-   * 
-   * Looks for {marketplacePath}/{subdir}/agent.json files.
+   * Scan marketplace agents/ directory for agent definitions.
+   *
+   * Supports three layouts:
+   *   1. {agents}/{name}.md               — single-file .md agent
+   *   2. {agents}/{name}/agent.json        — directory with agent.json
+   *   3. {agents}/{name}/{name}.md         — directory with <name>.md (new convention)
+   *
    * This is a fallback when the marketplace manifest does not declare agents.
    */
   private scanAgentFiles(marketplaceName: string): MarketplaceAgent[] {
     const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
-    if (!fs.existsSync(marketplacePath)) {
+    const agentsDir = path.join(marketplacePath, 'agents');
+    if (!fs.existsSync(agentsDir)) {
       return [];
     }
 
     const agents: MarketplaceAgent[] = [];
     try {
-      const entries = fs.readdirSync(marketplacePath);
+      const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
       for (const entry of entries) {
-        if (entry.startsWith('.')) continue;
-        const entryPath = path.join(marketplacePath, entry);
-        if (!fs.statSync(entryPath).isDirectory()) continue;
+        if (entry.name.startsWith('.')) continue;
 
+        // Layout 1: single-file .md agent
+        if (!entry.isDirectory() && entry.name.endsWith('.md')) {
+          const mdPath = path.join(agentsDir, entry.name);
+          try {
+            const content = fs.readFileSync(mdPath, 'utf-8');
+            const parsed = parseAgentMd(content);
+            if (parsed) {
+              agents.push({
+                name: (parsed as any).name || entry.name.slice(0, -3),
+                source: `agents/${entry.name}`,
+                description: (parsed as any).description,
+                version: (parsed as any).version,
+              });
+            }
+          } catch (parseError) {
+            console.warn(`[AgentImporter] Failed to parse ${mdPath}:`, parseError);
+          }
+          continue;
+        }
+
+        if (!entry.isDirectory()) continue;
+        const entryPath = path.join(agentsDir, entry.name);
+
+        // Layout 2: {name}/agent.json
         const agentJsonPath = path.join(entryPath, 'agent.json');
         if (fs.existsSync(agentJsonPath)) {
           try {
             const content = fs.readFileSync(agentJsonPath, 'utf-8');
             const agentConfig = JSON.parse(content);
             agents.push({
-              name: agentConfig.name || entry,
-              source: `${entry}/agent.json`,
+              name: agentConfig.name || entry.name,
+              source: `agents/${entry.name}/agent.json`,
               description: agentConfig.description,
               version: agentConfig.version,
             });
           } catch (parseError) {
             console.warn(`[AgentImporter] Failed to parse ${agentJsonPath}:`, parseError);
+          }
+          continue;
+        }
+
+        // Layout 3: {name}/{name}.md
+        const agentMdPath = path.join(entryPath, `${entry.name}.md`);
+        if (fs.existsSync(agentMdPath)) {
+          try {
+            const content = fs.readFileSync(agentMdPath, 'utf-8');
+            const parsed = parseAgentMd(content);
+            if (parsed) {
+              agents.push({
+                name: (parsed as any).name || entry.name,
+                source: `agents/${entry.name}/${entry.name}.md`,
+                description: (parsed as any).description,
+                version: (parsed as any).version,
+              });
+            }
+          } catch (parseError) {
+            console.warn(`[AgentImporter] Failed to parse ${agentMdPath}:`, parseError);
           }
         }
       }
@@ -428,6 +482,21 @@ class AgentImporter {
     }
 
     return agents;
+  }
+
+  /** Check if a path is a dead (dangling) symlink */
+  private isDeadSymlink(filePath: string): boolean {
+    try {
+      fs.lstatSync(filePath); // succeeds for symlinks even if target missing
+      fs.statSync(filePath);  // follows the link; throws if target missing
+      return false;
+    } catch {
+      try {
+        return fs.lstatSync(filePath).isSymbolicLink();
+      } catch {
+        return false;
+      }
+    }
   }
 
   /**

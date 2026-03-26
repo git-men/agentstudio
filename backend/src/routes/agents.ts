@@ -990,7 +990,7 @@ router.post('/chat', async (req, res) => {
           'reuse', // session mode
           configSnapshot
         );
-        let actualSessionId = initialSessionId;
+        const actualSessionId = initialSessionId;
 
         // 📊 输出 Session 初始化后的信息
         console.log('📊 [Chat API] Session 初始化后的信息:');

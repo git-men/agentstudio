@@ -1,0 +1,64 @@
+name: "后端服务自动发现"
+description: "验证同域后端自动发现后，默认服务被就地更新（名称为 Default、状态已连接），而非创建 Same-Origin Backend 新条目"
+
+cases:
+  # --- 走完整的首次访问流程，触发 quickStart 自动发现 ---
+
+  - name: "首次访问触发自动发现"
+    browser:
+      action: goto
+      url: "/"
+
+  - name: "等待自动发现完成"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "进入登录页"
+    browser:
+      action: goto
+      url: "/login"
+
+  - name: "等待登录页加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  - name: "点击进入系统（如有按钮）"
+    browser:
+      action: click
+      selector: "button:has-text('Enter System'), button:has-text('进入系统'), a:has-text('Enter Workspace'), a:has-text('进入工作台')"
+      timeout: "3s"
+    ignoreError: true
+
+  - name: "等待登录完成跳转"
+    delay: "2s"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+      timeout: "15s"
+
+  - name: "导航到仪表盘"
+    browser:
+      action: goto
+      url: "/dashboard"
+
+  - name: "等待仪表盘加载"
+    browser:
+      action: waitForLoadState
+      state: networkidle
+
+  # --- 核心断言：验证自动发现后服务名称和连接状态 ---
+  # 若旧逻辑生效，此处会显示 "Same-Origin Backend" 而非 "Default"
+
+  - name: "侧边栏显示服务名称 Default（非 Same-Origin Backend）"
+    browser:
+      action: waitForSelector
+      selector: "span.font-medium.text-sm:has-text('Default')"
+      timeout: "10s"
+
+  - name: "服务状态为已连接（绿色图标）"
+    browser:
+      action: waitForSelector
+      selector: "svg.text-green-500"
+      timeout: "10s"

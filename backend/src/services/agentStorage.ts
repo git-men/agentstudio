@@ -1,8 +1,36 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import matter from 'gray-matter';
 import { AgentConfig, AgentSession, AgentMessage, BUILTIN_AGENTS } from '../types/agents';
 import { Options, query } from '@anthropic-ai/claude-agent-sdk';
 import { AGENTS_DIR } from '../config/paths.js';
+
+/**
+ * Parse an agent from a .md file with YAML frontmatter.
+ * Returns null if the file has no frontmatter or cannot be parsed.
+ */
+function parseAgentMdFile(filePath: string): AgentConfig | null {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const parsed = matter(content);
+    const fm = parsed.data as Record<string, unknown>;
+    if (!fm || Object.keys(fm).length === 0) return null;
+
+    const markdownBody = parsed.content.trim();
+    const preset = fm.preset as string | undefined;
+    let systemPrompt: unknown;
+    if (preset) {
+      systemPrompt = { type: 'preset', preset, ...(markdownBody ? { append: markdownBody } : {}) };
+    } else {
+      systemPrompt = markdownBody || (fm.systemPrompt as string);
+    }
+
+    const { preset: _preset, ...restFm } = fm;
+    return { ...restFm, systemPrompt } as unknown as AgentConfig;
+  } catch {
+    return null;
+  }
+}
 
 export class AgentStorage {
   private agentsDir: string;
@@ -99,12 +127,18 @@ export class AgentStorage {
             this.copyDirectory(srcDir, destDir);
           }
           
-          // Also create the agent.json config file if it exists in source
-          const sourceAgentConfig = path.join(srcDir, 'agent.json');
+          // Also create the agent config file if it exists in source
+          // Priority: agent.md (preferred) > agent.json (legacy)
+          const sourceAgentMd = path.join(srcDir, 'agent.md');
+          const sourceAgentJson = path.join(srcDir, 'agent.json');
           const destAgentJsonConfig = path.join(this.agentsDir, `${agentId}.json`);
-          
-          if (fs.existsSync(sourceAgentConfig) && !fs.existsSync(destAgentJsonConfig)) {
-            const agentConfig = JSON.parse(fs.readFileSync(sourceAgentConfig, 'utf-8'));
+          const destAgentMdConfig = path.join(this.agentsDir, `${agentId}.md`);
+
+          if (fs.existsSync(sourceAgentMd) && !fs.existsSync(destAgentMdConfig) && !fs.existsSync(destAgentJsonConfig)) {
+            fs.copyFileSync(sourceAgentMd, destAgentMdConfig);
+            console.log(`[AgentStorage] Copied agent config: ${agentId}.md`);
+          } else if (fs.existsSync(sourceAgentJson) && !fs.existsSync(destAgentJsonConfig)) {
+            const agentConfig = JSON.parse(fs.readFileSync(sourceAgentJson, 'utf-8'));
             const now = new Date().toISOString();
             const fullAgent: AgentConfig = {
               version: '1.0.0',
@@ -149,80 +183,100 @@ export class AgentStorage {
 
   // Agent management
   getAllAgents(): AgentConfig[] {
-    const agentFiles = fs.readdirSync(this.agentsDir)
-      .filter(file => file.endsWith('.json'));
-    
-    const agents: AgentConfig[] = [];
-    for (const file of agentFiles) {
+    const allFiles = fs.readdirSync(this.agentsDir)
+      .filter(file => file.endsWith('.json') || file.endsWith('.md'));
+
+    // Collect agents; .json takes precedence over .md for the same id
+    const agentMap = new Map<string, AgentConfig>();
+
+    // Process .md files first (lower priority)
+    for (const file of allFiles.filter(f => f.endsWith('.md'))) {
+      const agentId = file.slice(0, -3);
       try {
         const filePath = path.join(this.agentsDir, file);
-        const agentData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        
-        // Check if this is a symlink (plugin-installed agent)
-        let isSymlink = false;
-        let realPath = filePath;
-        try {
-          const stats = fs.lstatSync(filePath);
-          isSymlink = stats.isSymbolicLink();
-          
-          if (isSymlink) {
-            const linkTarget = fs.readlinkSync(filePath);
-            realPath = path.isAbsolute(linkTarget) ? linkTarget : path.resolve(path.dirname(filePath), linkTarget);
-          }
-        } catch (error) {
-          console.warn(`Failed to check if ${filePath} is symlink:`, error);
+        const agentData = this.readAgentFile(filePath);
+        if (agentData) {
+          agentMap.set(agentId, agentData);
         }
-        
-        // Add source and installPath fields
-        agentData.source = isSymlink ? 'plugin' : 'local';
-        if (isSymlink) {
-          agentData.installPath = realPath;
-        }
-        
-        agents.push(agentData);
       } catch (error) {
         console.error(`Failed to read agent file ${file}:`, error);
       }
     }
-    
-    return agents.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Process .json files (higher priority — overrides .md for same id)
+    for (const file of allFiles.filter(f => f.endsWith('.json'))) {
+      const agentId = file.slice(0, -5);
+      try {
+        const filePath = path.join(this.agentsDir, file);
+        const agentData = this.readAgentFile(filePath);
+        if (agentData) {
+          agentMap.set(agentId, agentData);
+        }
+      } catch (error) {
+        console.error(`Failed to read agent file ${file}:`, error);
+      }
+    }
+
+    return Array.from(agentMap.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
 
   getAgent(agentId: string): AgentConfig | null {
     try {
-      const filePath = path.join(this.agentsDir, `${agentId}.json`);
-      if (!fs.existsSync(filePath)) {
-        return null;
+      // .json takes precedence over .md (allows local overrides)
+      const jsonPath = path.join(this.agentsDir, `${agentId}.json`);
+      if (fs.existsSync(jsonPath)) {
+        return this.readAgentFile(jsonPath);
       }
-      
-      const agentData = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-      
-      // Check if this is a symlink (plugin-installed agent)
-      let isSymlink = false;
-      let realPath = filePath;
-      try {
-        const stats = fs.lstatSync(filePath);
-        isSymlink = stats.isSymbolicLink();
-        
-        if (isSymlink) {
-          const linkTarget = fs.readlinkSync(filePath);
-          realPath = path.isAbsolute(linkTarget) ? linkTarget : path.resolve(path.dirname(filePath), linkTarget);
-        }
-      } catch (error) {
-        console.warn(`Failed to check if ${filePath} is symlink:`, error);
+
+      const mdPath = path.join(this.agentsDir, `${agentId}.md`);
+      if (fs.existsSync(mdPath)) {
+        return this.readAgentFile(mdPath);
       }
-      
-      // Add source and installPath fields
-      agentData.source = isSymlink ? 'plugin' : 'local';
-      if (isSymlink) {
-        agentData.installPath = realPath;
-      }
-      
-      return agentData;
+
+      return null;
     } catch (error) {
       console.error(`Failed to read agent ${agentId}:`, error);
       return null;
     }
+  }
+
+  /**
+   * Read a single agent file (.json or .md) and annotate with source/installPath.
+   */
+  private readAgentFile(filePath: string): AgentConfig | null {
+    const isMd = filePath.endsWith('.md');
+
+    let agentData: AgentConfig | null;
+    if (isMd) {
+      agentData = parseAgentMdFile(filePath);
+    } else {
+      agentData = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as AgentConfig;
+    }
+
+    if (!agentData) return null;
+
+    // Detect symlink to set source / installPath
+    let isSymlink = false;
+    let realPath = filePath;
+    try {
+      const stats = fs.lstatSync(filePath);
+      isSymlink = stats.isSymbolicLink();
+      if (isSymlink) {
+        const linkTarget = fs.readlinkSync(filePath);
+        realPath = path.isAbsolute(linkTarget)
+          ? linkTarget
+          : path.resolve(path.dirname(filePath), linkTarget);
+      }
+    } catch (error) {
+      console.warn(`Failed to check if ${filePath} is symlink:`, error);
+    }
+
+    agentData.source = isSymlink ? 'plugin' : 'local';
+    if (isSymlink) {
+      agentData.installPath = realPath;
+    }
+
+    return agentData;
   }
 
   saveAgent(agent: AgentConfig): void {

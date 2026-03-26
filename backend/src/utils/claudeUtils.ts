@@ -17,10 +17,14 @@ import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
 import { integrateA2UIMcpServer } from '../services/a2ui/a2uiIntegration.js';
 import { resolveConfig } from './configResolver.js';
+import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
+
+const projectStorage = new ProjectMetadataStorage();
 
 export type { SessionRef };
 import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME, resolvePath } from '../config/paths.js';
 import { getEnginePaths } from '../config/engineConfig.js';
+import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/autoBootstrap.js';
 
 const execAsync = promisify(exec);
 
@@ -379,10 +383,40 @@ export async function buildQueryOptions(
     queryOptions.pathToClaudeCodeExecutable = executablePath;
   }
 
+  // Load project-specific environment variables if we're in a project context
+  let projectEnv: Record<string, string> = {};
+  if (projectPath) {
+    try {
+      const dirName = path.basename(projectPath);
+      const projectMeta = projectStorage.getProjectMetadata(dirName);
+      if (projectMeta && projectMeta.env) {
+        projectEnv = projectMeta.env;
+      }
+    } catch (e) {
+      console.warn(`⚠️ Failed to load project environment variables for ${projectPath}:`, e);
+    }
+  }
+
   // Always merge environment variables with process.env
   // This ensures critical variables like PATH, etc. are available
-  // Priority: userEnv > environmentVariables (from version/default) > process.env
-  queryOptions.env = { ...process.env, ...environmentVariables, ...userEnv };
+  // Priority: userEnv > projectEnv > environmentVariables (from version/default) > process.env
+  queryOptions.env = { ...process.env, ...environmentVariables, ...projectEnv, ...userEnv };
+
+  // Inject Admin CLI environment variables (API key + server URL)
+  // so agents can use `agentstudio admin call ...` without manual configuration
+  const adminCliEnv = getAdminCliEnvVars();
+  for (const [key, value] of Object.entries(adminCliEnv)) {
+    if (!queryOptions.env[key]) {
+      queryOptions.env[key] = value;
+    }
+  }
+
+  // Prepend ~/.agentstudio/bin to PATH so the `agentstudio` CLI wrapper is available
+  const adminBinDir = getAdminCliBinDir();
+  const currentPath = queryOptions.env['PATH'] || '';
+  if (!currentPath.includes(adminBinDir)) {
+    queryOptions.env['PATH'] = `${adminBinDir}:${currentPath}`;
+  }
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
   // This ensures proxy settings work regardless of which form the client library checks first
@@ -505,7 +539,7 @@ export async function buildQueryOptions(
     // Use require() instead of dynamic import() for compatibility with Worker threads
     // running under tsx/cjs loader. Dynamic import() bypasses the CJS tsx loader and
     // uses ESM resolution which cannot resolve .js -> .ts file mappings.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const { integrateLAVSMcpServer } = require('../lavs/lavs-integration') as typeof import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }

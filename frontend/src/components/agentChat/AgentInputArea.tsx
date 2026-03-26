@@ -1,13 +1,15 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Image, X } from 'lucide-react';
 import { AgentChatInput } from './AgentChatInput';
 import { AgentChatMobileInput } from './AgentChatMobileInput';
 import { AgentCommandSelector } from './AgentCommandSelector';
 import { UnifiedToolSelector } from '../UnifiedToolSelector';
 import { ImagePreview } from '../ImagePreview';
+import { FileBrowser } from '../FileBrowser';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { McpStatusModal } from '../McpStatusModal';
 import { useTranslation } from 'react-i18next';
+import { useScreenCapture } from '../../hooks/agentChat/useScreenCapture';
 import {
   isCommandTrigger,
   extractCommandSearch,
@@ -122,6 +124,12 @@ export interface AgentInputAreaProps {
   // Voice Input
   onVoiceTranscribed?: (text: string) => void;
   onOpenVoiceSettings?: () => void;
+
+  /** Callback to create a new session */
+  onNewSession?: () => void;
+
+  /** Process an image file (for screen capture) */
+  processImageFile?: (file: File) => void;
 }
 
 export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
@@ -198,7 +206,9 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
     onSetEnvVars,
     engineUICapabilities,
     onVoiceTranscribed,
-    onOpenVoiceSettings
+    onOpenVoiceSettings,
+    onNewSession,
+    processImageFile
   } = props;
   
   // Default capabilities if not provided (Claude engine defaults)
@@ -210,6 +220,47 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
     showModelSelector: true,
     showEnvVars: true,
   };
+
+  // Screen capture
+  const { captureScreen, isSupported: isScreenCaptureSupported } = useScreenCapture({
+    onCapture: (file: File) => processImageFile?.(file),
+  });
+
+  // File reference browser (separate from @ trigger)
+  const [showFileReferenceBrowser, setShowFileReferenceBrowser] = useState(false);
+
+  const handleFileReferenceSelect = useCallback((filePath: string, _isDirectory: boolean) => {
+    let relativePath = filePath.replace(/\\/g, '/');
+    if (projectPath) {
+      const normalizedProjectPath = projectPath.replace(/\\/g, '/');
+      const cleanProjectPath = normalizedProjectPath.endsWith('/')
+        ? normalizedProjectPath.slice(0, -1)
+        : normalizedProjectPath;
+      if (relativePath.startsWith(cleanProjectPath)) {
+        relativePath = relativePath.substring(cleanProjectPath.length + 1);
+      }
+    }
+
+    const currentValue = inputMessage;
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? currentValue.length;
+    const prefix = cursorPos > 0 && currentValue[cursorPos - 1] !== ' ' ? ' ' : '';
+    const newValue =
+      currentValue.substring(0, cursorPos) +
+      prefix + '@' + relativePath + ' ' +
+      currentValue.substring(cursorPos);
+
+    onSetInputMessage(newValue);
+    setShowFileReferenceBrowser(false);
+
+    setTimeout(() => {
+      if (textarea) {
+        const newPos = cursorPos + prefix.length + 1 + relativePath.length + 1;
+        textarea.setSelectionRange(newPos, newPos);
+        textarea.focus();
+      }
+    }, 0);
+  }, [inputMessage, projectPath, textareaRef, onSetInputMessage]);
 
   // Handle input changes with command and file selection logic
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -463,7 +514,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
       >
         {/* Selected Images Preview */}
         {selectedImages.length > 0 && (
-          <div className="p-4 pb-2 border-b border-gray-100 dark:border-gray-700">
+          <div className="px-4 pt-3 pb-1">
             <div className="flex flex-wrap gap-2">
               {selectedImages.map((img) => (
                 <div key={img.id} className="relative group">
@@ -555,8 +606,25 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           engineUICapabilities={uiCaps}
           onVoiceTranscribed={onVoiceTranscribed}
           onOpenVoiceSettings={onOpenVoiceSettings}
+          onNewSession={onNewSession}
+          onScreenCapture={captureScreen}
+          isScreenCaptureSupported={isScreenCaptureSupported}
+          onFileReference={() => setShowFileReferenceBrowser(true)}
         />
       </div>
+
+      {/* File Reference Browser (from attachment menu) */}
+      {showFileReferenceBrowser && (
+        <FileBrowser
+          title={t('agentChat.attachment.selectFile')}
+          initialPath={projectPath}
+          allowFiles={true}
+          allowDirectories={false}
+          restrictToProject={true}
+          onSelect={handleFileReferenceSelect}
+          onClose={() => setShowFileReferenceBrowser(false)}
+        />
+      )}
 
       {/* Command Selector and other shared components */}
       <AgentCommandSelector

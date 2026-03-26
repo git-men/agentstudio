@@ -1,0 +1,96 @@
+# AgentStudio Admin CLI 使用指南
+
+当你需要管理 AgentStudio 资源（项目、Agent、MCP 服务器、Provider、定时任务、Skills、Rules 等），**优先使用 Admin CLI** 而非 MCP 工具。CLI 方式比 MCP 减少约 94% 的 token 消耗。
+
+## 前置条件
+
+确保环境变量已设置：
+```bash
+export AGENTSTUDIO_ADMIN_API_KEY="<your-key>"
+# 可选：export AGENTSTUDIO_SERVER="http://127.0.0.1:4936"
+```
+
+## 核心命令
+
+### 1. 发现可用工具
+```bash
+agentstudio admin tools                    # 列出全部工具（按类别分组）
+agentstudio admin tools --category agents  # 只看某个类别
+agentstudio admin tools --json             # JSON 格式（适合程序解析）
+```
+
+### 2. 查看工具用法
+```bash
+agentstudio admin describe <tool-name>       # 查看参数、类型、示例
+agentstudio admin describe create-agent      # 例：查看创建 Agent 的参数
+agentstudio admin describe <tool> --json     # JSON Schema 格式
+```
+
+### 3. 执行工具
+```bash
+# 方式一：--key value 参数（推荐）
+agentstudio admin call list-projects --limit 10
+agentstudio admin call get-agent --agent-id jarvis
+agentstudio admin call create-agent --id my-agent --name "My Agent" --system-prompt "You are helpful"
+
+# 方式二：JSON 参数（适合复杂参数）
+agentstudio admin call create-agent '{"id":"my-agent","name":"My Agent","systemPrompt":"You are helpful"}'
+
+# 方式三：stdin 管道
+echo '{"limit": 5}' | agentstudio admin call list-projects --stdin
+```
+
+### 4. 连通性检查
+```bash
+agentstudio admin ping
+```
+
+### 5. 批量操作
+```bash
+agentstudio admin batch --file operations.json
+# operations.json 格式: [{"tool":"list-agents","args":{}}, {"tool":"get-system-status"}]
+```
+
+## 参数转换规则
+
+| CLI 参数 (kebab-case) | API 参数 (camelCase) | 示例 |
+|---|---|---|
+| `--agent-id` | `agentId` | `--agent-id jarvis` |
+| `--system-prompt` | `systemPrompt` | `--system-prompt "You are..."` |
+| `--max-turns` | `maxTurns` | `--max-turns 50` |
+| `--include-disabled` | `includeDisabled` | `--include-disabled true` |
+| `--no-enabled` | `enabled: false` | `--no-enabled` |
+
+数值自动转换：`--limit 10` → `{limit: 10}`  
+布尔自动转换：`--enabled true` → `{enabled: true}`  
+数组重复指定：`--tags dev --tags test` → `{tags: ["dev", "test"]}`
+
+## 工具类别速查
+
+| 类别 | 常用工具 |
+|---|---|
+| Projects | `list-projects`, `get-project`, `register-project`, `update-project` |
+| Agents | `list-agents`, `get-agent`, `create-agent`, `update-agent`, `delete-agent` |
+| MCP Servers | `list-mcp-servers`, `add-mcp-server`, `remove-mcp-server` |
+| System | `get-system-status`, `health-check`, `get-active-sessions` |
+| Providers | `list-providers`, `create-provider`, `set-default-provider` |
+| Tasks | `list-scheduled-tasks`, `create-scheduled-task`, `run-scheduled-task` |
+| Skills | `list-skills`, `create-skill`, `update-skill`, `delete-skill` |
+| Rules | `list-rules`, `create-rule`, `update-rule`, `delete-rule` |
+| Commands | `list-commands`, `create-command` |
+| Hooks | `list-hooks`, `create-hook` |
+| Marketplace | `list-marketplace-plugins`, `install-plugin`, `uninstall-plugin` |
+| A2A | `get-a2a-endpoint`, `create-a2a-api-key`, `allow-a2a-call` |
+| Tunnel | `create-tunnel`, `connect-tunnel`, `get-tunnel-status` |
+| WeCom | `list-wecom-bots`, `create-wecom-bot` |
+| Enterprise | `login-enterprise`, `check-enterprise-auth` |
+
+## 开发模式快捷方式
+
+在 backend 目录下可直接用 tsx 运行（无需全局安装）：
+```bash
+cd agentstudio/backend
+pnpm admin tools
+pnpm admin call list-agents
+# 等价于: npx tsx src/bin/agentstudio.ts admin ...
+```

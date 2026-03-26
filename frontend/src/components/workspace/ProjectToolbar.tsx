@@ -12,6 +12,8 @@ import {
   CheckCircle,
   XCircle,
   MessageSquare,
+  MessageCircle,
+  Radio,
 } from 'lucide-react';
 import { getApiBase } from '../../lib/config';
 import { loadBackendServices, getCurrentService } from '../../utils/backendServiceStorage';
@@ -24,6 +26,8 @@ interface ProjectToolbarProps {
   hasLAVS: boolean;
   sidebarCollapsed: boolean;
   onToggleSidebar: () => void;
+  chatVisible?: boolean;
+  onToggleChat?: () => void;
   onSetRightPanelView: (view: RightPanelView | null) => void;
   onMemoryManagement: () => void;
   onCommandManagement: () => void;
@@ -31,6 +35,7 @@ interface ProjectToolbarProps {
   onA2AManagement: () => void;
   onVersionManagement: () => void;
   onSettings: () => void;
+  onIMChannels?: () => void;
 }
 
 const ToolbarButton: React.FC<{
@@ -130,6 +135,8 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   hasLAVS,
   sidebarCollapsed,
   onToggleSidebar,
+  chatVisible,
+  onToggleChat,
   onSetRightPanelView,
   onMemoryManagement,
   onCommandManagement,
@@ -137,6 +144,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   onA2AManagement,
   onVersionManagement,
   onSettings,
+  onIMChannels,
 }) => {
   const toggleView = (view: RightPanelView) => {
     onSetRightPanelView(rightPanelView === view ? null : view);
@@ -200,6 +208,15 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         active={!sidebarCollapsed}
       />
 
+      {onToggleChat && (
+        <ToolbarButton
+          icon={<MessageCircle className="w-3.5 h-3.5" />}
+          label="聊天框"
+          onClick={onToggleChat}
+          active={chatVisible}
+        />
+      )}
+
       <ToolbarButton
         icon={<FolderTree className="w-3.5 h-3.5" />}
         label="文件"
@@ -240,6 +257,13 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
         label="A2A"
         onClick={onA2AManagement}
       />
+      {onIMChannels && (
+        <ToolbarButton
+          icon={<Radio className="w-3.5 h-3.5" />}
+          label="IM渠道"
+          onClick={onIMChannels}
+        />
+      )}
       <ToolbarButton
         icon={<GitBranch className="w-3.5 h-3.5" />}
         label="版本"

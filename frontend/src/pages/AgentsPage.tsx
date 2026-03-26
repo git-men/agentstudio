@@ -67,7 +67,8 @@ export const AgentsPage: React.FC = () => {
     if (selectedAgentForStart) {
       const params = new URLSearchParams();
       params.set('project', projectPath);
-      const url = `/chat/${selectedAgentForStart.id}?${params.toString()}`;
+      params.set('agent', selectedAgentForStart.id);
+      const url = `/project-workspace?${params.toString()}`;
       openUrlInContext(url, navigate);
     }
     setShowProjectSelector(false);

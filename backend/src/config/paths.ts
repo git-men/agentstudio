@@ -125,10 +125,22 @@ export function getTunnelConfigFile(port: number): string {
 }
 
 /**
+ * File path for enterprise profile.
+ * Default: ~/.agentstudio/data/enterprise-profile.json
+ */
+export const ENTERPRISE_PROFILE_FILE = join(DATA_DIR, 'enterprise-profile.json');
+
+/**
  * File path for speech-to-text configuration.
  * Default: ~/.agentstudio/data/speech-to-text.json
  */
 export const SPEECH_TO_TEXT_CONFIG_FILE = join(DATA_DIR, 'speech-to-text.json');
+
+/**
+ * File path for IM binding records (WeChat Work, QQ Bot, WeChat).
+ * Default: ~/.agentstudio/data/im-bindings.json
+ */
+export const IM_BINDINGS_FILE = join(DATA_DIR, 'im-bindings.json');
 
 // ─── Runtime ─────────────────────────────────────────────────────────────────
 

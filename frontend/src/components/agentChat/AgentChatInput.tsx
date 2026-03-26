@@ -1,8 +1,9 @@
 import React, { ChangeEvent, useCallback } from 'react';
-import { Send, Square, Image, Wrench } from 'lucide-react';
+import { Send, Square, Image, Wrench, Plus, Scissors } from 'lucide-react';
 import { UnifiedToolSelector } from '../UnifiedToolSelector';
 import { SettingsDropdown } from '../SettingsDropdown';
 import { VoiceInputButton } from '../VoiceInputButton';
+import { AttachmentMenu } from './AttachmentMenu';
 import { useTranslation } from 'react-i18next';
 import type { EngineUICapabilities } from '../../stores/useAgentStore';
 
@@ -51,6 +52,16 @@ export interface AgentChatInputProps {
   // 语音输入
   onVoiceTranscribed?: (text: string) => void;
   onOpenVoiceSettings?: () => void;
+
+  /** Callback to create a new session */
+  onNewSession?: () => void;
+
+  /** Screen capture */
+  onScreenCapture?: () => void;
+  isScreenCaptureSupported?: boolean;
+
+  /** File reference (project file browser) */
+  onFileReference?: () => void;
 }
 
 export const AgentChatInput: React.FC<AgentChatInputProps> = ({
@@ -94,7 +105,11 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onDrop,
   engineUICapabilities,
   onVoiceTranscribed,
-  onOpenVoiceSettings
+  onOpenVoiceSettings,
+  onNewSession,
+  onScreenCapture,
+  isScreenCaptureSupported,
+  onFileReference
 }) => {
   // Default capabilities if not provided (Claude engine defaults)
   const uiCaps = engineUICapabilities || {
@@ -116,7 +131,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
 
   return (
     <div
-      className={`flex-shrink-0 border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl mx-4 mb-3 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
+      className={`flex-shrink-0 shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.08),0_4px_10px_-2px_rgba(0,0,0,0.05)] dark:shadow-[0_-8px_20px_-4px_rgba(0,0,0,0.25),0_4px_10px_-2px_rgba(0,0,0,0.15)] border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-xl mx-4 mb-3 ${isDragOver ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-300 dark:border-blue-700' : ''
         }`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -145,10 +160,10 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             : t('agentChat.inputPlaceholder')
         }
         rows={1}
-        className="w-full resize-none bg-transparent px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none transition-all duration-200 disabled:text-gray-500 dark:disabled:text-gray-400"
+        className="w-full resize-none bg-transparent px-4 py-3 text-sm text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none outline-none border-none ring-0 shadow-none focus:ring-0 focus:border-transparent focus:shadow-none focus-visible:outline-none focus-visible:ring-0 transition-all duration-200 disabled:text-gray-500 dark:disabled:text-gray-400 chat-textarea-clean"
         style={{
           minHeight: '44px',
-          maxHeight: '120px'
+          maxHeight: '150px'
         }}
         disabled={isAiTyping}
       />
@@ -156,8 +171,9 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
       {/* Toolbar */}
       <div className="px-3 pt-0 pb-2">
         <div className="flex items-center justify-between">
+          {/* Left: Content attachments */}
           <div className="flex items-center space-x-1">
-            {/* Hidden file input */}
+            {/* Hidden file input for image upload */}
             <input
               ref={fileInputRef}
               type="file"
@@ -167,7 +183,40 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               className="hidden"
             />
 
-            {/* Tool selector button - only show if MCP tools are enabled for this engine */}
+            {/* Attachment menu (image + file reference) */}
+            {uiCaps.showImageUpload && (
+              <AttachmentMenu
+                disabled={isAiTyping}
+                hasSelectedImages={selectedImages.length > 0}
+                onImageClick={() => fileInputRef.current?.click()}
+                onFileClick={() => onFileReference?.()}
+              />
+            )}
+
+            {/* Screen capture button */}
+            {isScreenCaptureSupported && (
+              <button
+                onClick={onScreenCapture}
+                className="p-2 transition-colors rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                title={t('agentChat.screenCapture.title')}
+                disabled={isAiTyping}
+              >
+                <Scissors className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Voice input button — temporarily hidden
+            <VoiceInputButton
+              onTranscribed={handleVoiceTranscribed}
+              disabled={isAiTyping}
+              onOpenSettings={onOpenVoiceSettings}
+            />
+            */}
+          </div>
+
+          {/* Right: Configuration & actions */}
+          <div className="flex items-center space-x-1">
+            {/* Tool selector */}
             {uiCaps.showMcpToolSelector && (
               <div className="relative">
                 <button
@@ -182,14 +231,12 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
                   <Wrench className="w-4 h-4" />
                 </button>
 
-                {/* Display tool count indicator */}
                 {(selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0)) && (
                   <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
                     {selectedRegularTools.length + (mcpToolsEnabled ? selectedMcpTools.length : 0)}
                   </span>
                 )}
 
-                {/* Tool selector - using new UnifiedToolSelector */}
                 <UnifiedToolSelector
                   isOpen={showToolSelector}
                   onClose={() => setShowToolSelector(false)}
@@ -204,37 +251,6 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               </div>
             )}
 
-            {/* Image upload button - only show if image upload is enabled for this engine */}
-            {uiCaps.showImageUpload && (
-              <div className="relative">
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className={`p-2 transition-colors rounded-lg ${selectedImages.length > 0
-                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50'
-                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    }`}
-                  title={selectedImages.length > 0 ? t('agentChat.imageSelection') + ` (${t('agentChat.selectedCount', { count: selectedImages.length })})` : t('agentChat.imageSelection')}
-                  disabled={isAiTyping}
-                >
-                  <Image className="w-4 h-4" />
-                </button>
-                {selectedImages.length > 0 && (
-                  <span className="absolute -top-1 -right-1 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center bg-blue-600 dark:bg-blue-500">
-                    {selectedImages.length}
-                  </span>
-                )}
-              </div>
-            )}
-
-            {/* Voice input button */}
-            <VoiceInputButton
-              onTranscribed={handleVoiceTranscribed}
-              disabled={isAiTyping}
-              onOpenSettings={onOpenVoiceSettings}
-            />
-          </div>
-
-          <div className="flex items-center space-x-2">
             <SettingsDropdown
               permissionMode={permissionMode as "default" | "acceptEdits" | "bypassPermissions"}
               onPermissionModeChange={setPermissionMode}
@@ -250,6 +266,17 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               onEnvVarsChange={setEnvVars}
               engineUICapabilities={uiCaps}
             />
+
+            {onNewSession && (
+              <button
+                onClick={onNewSession}
+                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                title={t('agentChat.newSession')}
+                disabled={isAiTyping}
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            )}
 
             {isAiTyping ? (
               <button
@@ -277,8 +304,8 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               </button>
             )}
           </div>
-        </div >
-      </div >
+        </div>
+      </div>
     </div >
   );
 };

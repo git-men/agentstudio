@@ -19,7 +19,10 @@ function resolveOptionLabel(option: unknown): string {
 }
 
 function resolveQuestionText(question: Record<string, unknown>): string {
-  return (question.question || question.prompt || '') as string;
+  for (const key of ['question', 'prompt', 'text', 'title', 'label', 'content']) {
+    if (typeof question[key] === 'string' && question[key]) return question[key] as string;
+  }
+  return '';
 }
 
 interface SubmitResult {

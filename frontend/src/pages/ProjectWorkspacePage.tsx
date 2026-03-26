@@ -21,6 +21,7 @@ import { ProjectSubAgentsModal } from '../components/ProjectSubAgentsModal';
 import { ProjectA2AModal } from '../components/ProjectA2AModal';
 import { ProjectSettingsModal } from '../components/ProjectSettingsModal';
 import { ProjectVersionModal } from '../components/ProjectVersionModal';
+import { ProjectIMChannelsModal } from '../components/ProjectIMChannelsModal';
 import { MessageSquarePlus, FolderOpen, Search, Clock } from 'lucide-react';
 import useEngine from '../hooks/useEngine';
 import { formatRelativeTime } from '../utils/dateFormat';
@@ -148,6 +149,7 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const projectPath = searchParams.get('project') || '';
   const sessionFromUrl = searchParams.get('session');
+  const agentFromUrl = searchParams.get('agent');
 
   const { data: projectsData } = useProjects();
   const project = useMemo(
@@ -172,8 +174,15 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
+  const setWorkspaceSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
+
+  // Ensure sidebar is minimum width on mount
+  useEffect(() => {
+    setWorkspaceSidebarWidth(200);
+  }, [setWorkspaceSidebarWidth]);
 
   // ---------- Panel & modal state ----------
+  const [chatVisible, setChatVisible] = useState(true);
   const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>('files');
   const [memoryProject, setMemoryProject] = useState<any>(null);
   const [commandsProject, setCommandsProject] = useState<any>(null);
@@ -181,6 +190,7 @@ export const ProjectWorkspacePage: React.FC = () => {
   const [a2aProject, setA2aProject] = useState<any>(null);
   const [settingsProject, setSettingsProject] = useState<any>(null);
   const [versionProject, setVersionProject] = useState<any>(null);
+  const [showIMChannels, setShowIMChannels] = useState(false);
 
   // ---------- Derived state ----------
   const activeAgentId = useMemo(() => {
@@ -219,11 +229,42 @@ export const ProjectWorkspacePage: React.FC = () => {
     }
   }, [hasLAVS, lavsLoading, rightPanelView]);
 
+  // Auto-create a new session when navigated with an explicit agent param,
+  // unless a real session ID was also provided (e.g. fullscreen from Meta Agent).
+  const agentBootedRef = useRef(false);
   useEffect(() => {
+    if (!agentFromUrl || agentBootedRef.current || !projectPath) return;
+    agentBootedRef.current = true;
+
+    const isTempId = (id: string) =>
+      id.startsWith('session_') || id.startsWith('__pending_');
+
+    if (sessionFromUrl && !isTempId(sessionFromUrl)) {
+      setSessionAgentMap((prev) => ({ ...prev, [sessionFromUrl]: agentFromUrl }));
+      const store = sessionStoreManager.getOrCreate(sessionFromUrl, agentFromUrl);
+      // Clear stale streaming state from a previous view (e.g. Meta Agent bubble)
+      // so AGUIChatPanel's initial-load effect correctly enters the load branch.
+      const storeState = store.getState();
+      if (storeState.isAiTyping) {
+        storeState.setAiTyping(false);
+      }
+      chatPanelKeyRef.current += 1;
+      setActiveSessionId(sessionFromUrl);
+    } else {
+      const newId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      setSessionAgentMap((prev) => ({ ...prev, [newId]: agentFromUrl }));
+      sessionStoreManager.getOrCreate(newId, agentFromUrl);
+      chatPanelKeyRef.current += 1;
+      setActiveSessionId(newId);
+    }
+  }, [agentFromUrl, projectPath]);
+
+  useEffect(() => {
+    if (agentFromUrl) return;
     if (!activeSessionId && sessionsData?.sessions?.length > 0) {
       setActiveSessionId(sessionsData.sessions[0].id);
     }
-  }, [activeSessionId, sessionsData]);
+  }, [activeSessionId, sessionsData, agentFromUrl]);
 
   useEffect(() => {
     if (!projectPath) return;
@@ -234,13 +275,21 @@ export const ProjectWorkspacePage: React.FC = () => {
       params.delete('session');
     }
     params.set('project', projectPath);
+    params.delete('agent');
     if (params.toString() !== searchParams.toString()) {
       setSearchParams(params, { replace: true });
     }
   }, [activeSessionId, projectPath, searchParams, setSearchParams]);
 
+  const disposeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    return () => sessionStoreManager.disposeAll();
+    if (disposeTimerRef.current) {
+      clearTimeout(disposeTimerRef.current);
+      disposeTimerRef.current = null;
+    }
+    return () => {
+      disposeTimerRef.current = setTimeout(() => sessionStoreManager.disposeAll(), 100);
+    };
   }, []);
 
   const activeStore = useMemo(() => {
@@ -367,7 +416,8 @@ export const ProjectWorkspacePage: React.FC = () => {
   return (
     <div className="h-screen bg-gray-100 dark:bg-gray-900">
       <WorkspaceLayout
-        defaultRightWidth={600}
+        defaultRightRatio={0.7}
+        mainPanelVisible={chatVisible}
         hideRightToggle
         sidebar={
           <ProjectSessionListPanel
@@ -404,12 +454,15 @@ export const ProjectWorkspacePage: React.FC = () => {
             hasLAVS={hasLAVSView}
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            chatVisible={chatVisible}
+            onToggleChat={() => setChatVisible((v) => !v)}
             onSetRightPanelView={setRightPanelView}
             onMemoryManagement={() => setMemoryProject(project)}
             onCommandManagement={() => setCommandsProject(project)}
             onSubAgentManagement={() => setSubAgentsProject(project)}
             onA2AManagement={() => setA2aProject(project)}
             onVersionManagement={() => setVersionProject(project)}
+            onIMChannels={() => setShowIMChannels(true)}
             onSettings={() => setSettingsProject(project)}
           />
         }
@@ -421,6 +474,7 @@ export const ProjectWorkspacePage: React.FC = () => {
               agent={agent}
               projectPath={projectPath}
               onSessionChange={handleSessionChange}
+              onNewSession={handleNewSession}
               hideHeader
             />
           </SessionStoreProvider>
@@ -461,12 +515,20 @@ export const ProjectWorkspacePage: React.FC = () => {
         isOpen={!!settingsProject}
         project={settingsProject}
         onClose={() => setSettingsProject(null)}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['projects'] })}
       />
 
       <ProjectVersionModal
         isOpen={!!versionProject}
         project={versionProject}
         onClose={() => setVersionProject(null)}
+      />
+
+      <ProjectIMChannelsModal
+        projectPath={projectPath}
+        projectName={project?.name || project?.dirName}
+        isOpen={showIMChannels}
+        onClose={() => setShowIMChannels(false)}
       />
     </div>
   );

@@ -1,9 +1,19 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { Menu } from 'lucide-react';
 import { MobileSidebar } from './MobileSidebar';
 import { Sidebar } from './Sidebar';
 import { MetaAgentBubble } from './MetaAgentBubble';
 import { useMobileContext } from '../contexts/MobileContext';
+
+const SIDEBAR_COLLAPSED_KEY = 'agentstudio:sidebar-collapsed';
+
+function getSidebarCollapsed(): boolean {
+  try {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    if (stored !== null) return stored === 'true';
+  } catch { /* ignore */ }
+  return true; // default: collapsed
+}
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -11,12 +21,21 @@ interface LayoutProps {
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { isMobile, sidebarOpen, setSidebarOpen } = useMobileContext();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(getSidebarCollapsed);
+
+  const handleToggleCollapse = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   return (
     <div className="h-screen bg-gray-50 dark:bg-gray-900 flex">
       {/* Desktop Sidebar - Visible on md (768px) and above */}
-      <div className="hidden md:block">
-        <Sidebar />
+      <div className="hidden md:block flex-shrink-0">
+        <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={handleToggleCollapse} />
       </div>
 
       {/* Mobile Sidebar - Overlay for all mobile sizes */}

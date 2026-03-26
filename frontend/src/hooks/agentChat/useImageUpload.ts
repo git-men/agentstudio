@@ -171,6 +171,7 @@ export const useImageUpload = ({
     handleDrop,
     clearImages,
     getImagesForBackend,
-    setPreviewImage
+    setPreviewImage,
+    processImageFile
   };
 };

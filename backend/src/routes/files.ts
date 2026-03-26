@@ -58,6 +58,24 @@ const resolveSafePath = (filePath: string, projectPath?: string): string => {
   return resolvedPath;
 };
 
+// GET /api/files/resolve - Resolve a path (expand ~ and relative paths)
+router.get('/resolve', (req, res) => {
+  try {
+    const rawPath = req.query.path as string;
+    if (!rawPath) {
+      return res.status(400).json({ error: 'path query parameter is required' });
+    }
+    let resolvedPath = rawPath;
+    if (resolvedPath.startsWith('~')) {
+      resolvedPath = join(os.homedir(), resolvedPath.slice(1));
+    }
+    resolvedPath = resolve(resolvedPath);
+    res.json({ resolved: resolvedPath });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to resolve path' });
+  }
+});
+
 // GET /api/files/read - Read a single file
 router.get('/read', async (req, res) => {
   try {

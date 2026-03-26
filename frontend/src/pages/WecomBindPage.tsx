@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -17,6 +17,7 @@ import { useProjects } from '../hooks/useProjects';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 import { showSuccess, showError } from '../utils/toast';
+import { DashboardShell } from '../components/DashboardShell';
 
 type WizardStep = 'form' | 'auth' | 'processing' | 'result';
 
@@ -85,6 +86,8 @@ function CopyField({ label, value }: { label: string; value: string }) {
 
 export const WecomBindPage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const backTo = searchParams.get('from') || '/dashboard';
   const { data: projectsData, isLoading: isLoadingProjects } = useProjects();
   const projects = projectsData?.projects || [];
 
@@ -241,12 +244,12 @@ export const WecomBindPage: React.FC = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-gray-50 dark:bg-gray-900 overflow-auto">
+    <DashboardShell environmentContext="用户当前所在页面：企业微信绑定向导">
       <div className="flex-1 flex flex-col items-center px-6 py-8">
         {/* Header */}
         <div className="w-full max-w-xl mb-8">
           <button
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(backTo)}
             className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors mb-6"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -606,7 +609,7 @@ export const WecomBindPage: React.FC = () => {
               {/* Actions */}
               <div className="px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700 flex items-center justify-between">
                 <button
-                  onClick={() => navigate('/dashboard')}
+                  onClick={() => navigate(backTo)}
                   className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
                 >
                   <ArrowLeft className="w-4 h-4" />
@@ -624,7 +627,7 @@ export const WecomBindPage: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </DashboardShell>
   );
 };
 

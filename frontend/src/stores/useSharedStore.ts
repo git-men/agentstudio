@@ -54,7 +54,7 @@ export const useSharedStore = create<SharedState & SharedActions>((set) => ({
   engineUICapabilities: getDefaultUICapabilities(getCachedEngineType()),
   engineModels: [],
   sidebarCollapsed: false,
-  workspaceSidebarWidth: 280,
+  workspaceSidebarWidth: 200,
 
   setCurrentAgent: (agent) => set({ currentAgent: agent }),
 
