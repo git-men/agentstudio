@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { showSuccess, showError, showInfo } from '../../utils/toast';
 import { useConfirm } from '../../hooks/useConfirm';
+import { authFetch } from '../../lib/authFetch';
+import { getApiBase } from '../../lib/config';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -108,21 +110,13 @@ export const WebSocketTunnelPage: React.FC = () => {
   // Copy state
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // JWT helper
-  const authHeaders = useCallback(
-    () => ({
-      Authorization: `Bearer ${localStorage.getItem('jwt')}`,
-    }),
-    [],
-  );
-
   // ---------------------------------------------------------------------------
   // Data fetching
   // ---------------------------------------------------------------------------
 
   const loadTunnels = useCallback(async () => {
     try {
-      const res = await fetch('/api/tunnel/list', { headers: authHeaders() });
+      const res = await authFetch(`${getApiBase()}/tunnel/list`);
       if (!res.ok) throw new Error('Failed to load tunnels');
       const data = await res.json();
       setTunnels(data.tunnels ?? []);
@@ -131,7 +125,7 @@ export const WebSocketTunnelPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [authHeaders]);
+  }, []);
 
   useEffect(() => {
     loadTunnels();
@@ -152,9 +146,9 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleConnect = async (id: string) => {
     setConnectingIds((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch(`/api/tunnel/${id}/connect`, {
+      const res = await authFetch(`${getApiBase()}/tunnel/${id}/connect`, {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
       if (!res.ok) {
         const data = await res.json();
@@ -176,9 +170,8 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleDisconnect = async (id: string) => {
     setConnectingIds((prev) => new Set(prev).add(id));
     try {
-      const res = await fetch(`/api/tunnel/${id}/disconnect`, {
+      const res = await authFetch(`${getApiBase()}/tunnel/${id}/disconnect`, {
         method: 'POST',
-        headers: authHeaders(),
       });
       if (!res.ok) throw new Error('Failed to disconnect');
       showSuccess('已断开连接');
@@ -205,9 +198,8 @@ export const WebSocketTunnelPage: React.FC = () => {
     if (!confirmed) return;
 
     try {
-      const res = await fetch(`/api/tunnel/${id}`, {
+      const res = await authFetch(`${getApiBase()}/tunnel/${id}`, {
         method: 'DELETE',
-        headers: authHeaders(),
       });
       if (!res.ok) throw new Error('Failed to delete');
       showSuccess('隧道已删除');
@@ -220,9 +212,9 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleToggleAutoConnect = async (item: TunnelItem) => {
     const newEnabled = !item.config.enabled;
     try {
-      await fetch(`/api/tunnel/${item.config.id}/config`, {
+      await authFetch(`${getApiBase()}/tunnel/${item.config.id}/config`, {
         method: 'PUT',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ enabled: newEnabled }),
       });
       await loadTunnels();
@@ -238,9 +230,8 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleConnectAll = async () => {
     setBatchConnecting(true);
     try {
-      await fetch('/api/tunnel/connect-all', {
+      await authFetch(`${getApiBase()}/tunnel/connect-all`, {
         method: 'POST',
-        headers: authHeaders(),
       });
       showInfo('正在连接所有隧道...');
       setTimeout(loadTunnels, 2000);
@@ -254,9 +245,8 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleDisconnectAll = async () => {
     setBatchDisconnecting(true);
     try {
-      await fetch('/api/tunnel/disconnect-all', {
+      await authFetch(`${getApiBase()}/tunnel/disconnect-all`, {
         method: 'POST',
-        headers: authHeaders(),
       });
       showSuccess('已断开所有隧道');
       await loadTunnels();
@@ -287,9 +277,9 @@ export const WebSocketTunnelPage: React.FC = () => {
   const fetchServerInfoFn = async (url: string) => {
     setFetchingInfo(true);
     try {
-      const res = await fetch('/api/tunnel/server-info', {
+      const res = await authFetch(`${getApiBase()}/tunnel/server-info`, {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serverUrl: url }),
       });
       const result = await res.json();
@@ -328,9 +318,8 @@ export const WebSocketTunnelPage: React.FC = () => {
     setChecking(true);
     setCheckResult(null);
     try {
-      const res = await fetch(
-        `/api/tunnel/check-name?name=${encodeURIComponent(tunnelName.trim())}&serverUrl=${encodeURIComponent(serverUrl)}`,
-        { headers: authHeaders() },
+      const res = await authFetch(
+        `${getApiBase()}/tunnel/check-name?name=${encodeURIComponent(tunnelName.trim())}&serverUrl=${encodeURIComponent(serverUrl)}`,
       );
       const data = await res.json();
       setCheckResult(data);
@@ -348,9 +337,9 @@ export const WebSocketTunnelPage: React.FC = () => {
     }
     setSaving(true);
     try {
-      const res = await fetch('/api/tunnel/create-tunnel', {
+      const res = await authFetch(`${getApiBase()}/tunnel/create-tunnel`, {
         method: 'POST',
-        headers: { ...authHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: tunnelName.trim(),
           serverUrl,
