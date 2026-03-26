@@ -531,11 +531,12 @@ router.get('/:agentId/lavs-view', async (req, res) => {
     // CSP: restrict scripts to self, allow connecting to LAVS API
     res.setHeader('Content-Security-Policy', [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",  // Allow inline scripts for LAVS context injection
-      "style-src 'self' 'unsafe-inline'",   // Allow inline styles for view components
-      "connect-src 'self'",                  // Only allow connections to same origin (LAVS API)
-      "img-src 'self' data: https:",         // Allow images from self, data URIs, and HTTPS
-      "frame-ancestors 'self'",              // Only allow embedding by same origin
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.sheetjs.com https://registry.npmmirror.com",
+      "style-src 'self' 'unsafe-inline' https://unpkg.com https://registry.npmmirror.com",
+      "connect-src 'self' https://unpkg.com https://cdn.sheetjs.com https://registry.npmmirror.com https://*.qpic.cn https://*.puui.qpic.cn",
+      "img-src 'self' data: https:",
+      "font-src 'self' data: https://unpkg.com https://registry.npmmirror.com",
+      "frame-ancestors 'self'",
     ].join('; '));
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');

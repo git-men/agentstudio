@@ -15,6 +15,7 @@ import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
 import { useMobileContext } from '../contexts/MobileContext';
 import { openUrlInContext } from '../utils/navigation';
+import { eventBus, EVENTS } from '../utils/eventBus';
 import {
   useImageUpload,
   useScrollManagement,
@@ -551,6 +552,17 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
       console.warn('[FrontendTools] Cancel failed:', error);
     }
   }, [currentSessionId, agent.id, pendingFrontendTools, removePendingFrontendTool]);
+
+  // Listen for LAVS View requests to send a chat message
+  useEffect(() => {
+    const handleLAVSMessage = (message: string) => {
+      if (isAiTyping) return;
+      setInputMessage(message);
+      shouldAutoSendRef.current = true;
+    };
+    eventBus.on(EVENTS.LAVS_SEND_CHAT_MESSAGE, handleLAVSMessage);
+    return () => eventBus.off(EVENTS.LAVS_SEND_CHAT_MESSAGE, handleLAVSMessage);
+  }, [isAiTyping, setInputMessage]);
 
   // 为 AgentCommandSelector 创建键盘处理器
   const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({

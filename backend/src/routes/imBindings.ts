@@ -24,6 +24,38 @@ router.get('/', (_req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/im-bindings
+ * Manually create (or upsert) an IM binding record.
+ * Required fields: platform, name, project_path, bot_key
+ * Optional: project_name, a2a_endpoint, channels, platform_config
+ */
+router.post('/', (req: Request, res: Response) => {
+  const { platform, name, project_path, bot_key, project_name, a2a_endpoint, channels, platform_config } = req.body;
+
+  if (!platform || !name || !project_path || !bot_key) {
+    return res.status(400).json({ error: '缺少必填字段：platform, name, project_path, bot_key' });
+  }
+
+  const validPlatforms = ['wecom', 'qqbot', 'weixin'];
+  if (!validPlatforms.includes(platform)) {
+    return res.status(400).json({ error: `platform 必须是 ${validPlatforms.join(' | ')}` });
+  }
+
+  const binding = imBindingService.upsert({
+    platform,
+    name,
+    project_path,
+    project_name: project_name || project_path.split('/').pop() || '',
+    bot_key,
+    a2a_endpoint: a2a_endpoint || '',
+    channels,
+    platform_config,
+  });
+
+  res.status(201).json({ success: true, binding });
+});
+
+/**
  * PATCH /api/im-bindings/:botKey
  * Update a binding record (name, channels, etc.).
  */

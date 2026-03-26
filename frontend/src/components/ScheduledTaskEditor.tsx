@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown } from 'lucide-react';
+import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown, Bell } from 'lucide-react';
 import { useCreateScheduledTask, useUpdateScheduledTask, useRunScheduledTask } from '../hooks/useScheduledTasks';
 import { useProjects } from '../hooks/useProjects';
 import { useClaudeVersions } from '../hooks/useClaudeVersions';
@@ -8,22 +8,34 @@ import type {
   CreateScheduledTaskRequest,
   TaskSchedule,
   ModelOverride,
+  NotificationConfig,
+  NotificationStrategy,
 } from '../types/scheduledTasks';
 import type { AgentConfig } from '../types/index';
 import { CRON_PRESETS } from '../types/scheduledTasks';
 import { showSuccess, showError } from '../utils/toast';
 
-// Helper function to format date for datetime-local input
+// Helper function to format date for datetime-local input (uses LOCAL time, not UTC)
 const formatDateTimeLocal = (isoString?: string): string => {
+  const date = isoString ? new Date(isoString) : new Date();
   if (!isoString) {
-    // Default to 1 hour from now
-    const date = new Date();
     date.setHours(date.getHours() + 1);
     date.setMinutes(0);
     date.setSeconds(0);
-    return date.toISOString().slice(0, 16);
+    date.setMilliseconds(0);
   }
-  return new Date(isoString).toISOString().slice(0, 16);
+  // Build YYYY-MM-DDTHH:MM string in LOCAL timezone (not UTC)
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+};
+
+// Helper function to get current datetime as local string for the "min" attribute
+const getLocalNow = (): string => {
+  return formatDateTimeLocal();
 };
 
 // Helper function to parse datetime-local input to ISO string
@@ -76,6 +88,18 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
   const [overrideModel, setOverrideModel] = useState(!!task?.modelOverride?.modelId);
   const [selectedVersionId, setSelectedVersionId] = useState(task?.modelOverride?.versionId || '');
   const [selectedModelId, setSelectedModelId] = useState(task?.modelOverride?.modelId || '');
+
+  // Notification config state
+  const [notifyEnabled, setNotifyEnabled] = useState(task?.notification?.enabled ?? false);
+  const [notifyStrategy, setNotifyStrategy] = useState<NotificationStrategy>(
+    task?.notification?.strategy ?? 'always'
+  );
+
+  // Advanced config state
+  const [timeoutMinutes, setTimeoutMinutes] = useState(
+    task?.timeoutMs ? Math.round(task.timeoutMs / 60000) : 30
+  );
+  const [maxTurns, setMaxTurns] = useState(task?.maxTurns || 0); // 0 = use agent default
 
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
@@ -156,6 +180,17 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     };
   };
 
+  // Build notification config
+  const buildNotification = (): NotificationConfig | undefined => {
+    if (!notifyEnabled) {
+      return undefined;
+    }
+    return {
+      enabled: true,
+      strategy: notifyStrategy,
+    };
+  };
+
   // Handle save
   const handleSave = async () => {
     // Validation
@@ -198,6 +233,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     setIsSaving(true);
 
     try {
+      const timeoutMs = timeoutMinutes > 0 ? timeoutMinutes * 60000 : undefined;
+      const maxTurnsValue = maxTurns > 0 ? maxTurns : undefined;
+
       if (isEditing) {
         await updateTask.mutateAsync({
           taskId: task.id,
@@ -210,6 +248,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            notification: buildNotification(),
+            timeoutMs,
+            maxTurns: maxTurnsValue,
           },
         });
         showSuccess('任务已更新');
@@ -223,6 +264,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          notification: buildNotification(),
+          timeoutMs,
+          maxTurns: maxTurnsValue,
         };
         await createTask.mutateAsync(data);
         showSuccess('任务已创建');
@@ -260,6 +304,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
     try {
       let taskId: string;
 
+      const timeoutMs = timeoutMinutes > 0 ? timeoutMinutes * 60000 : undefined;
+      const maxTurnsValue = maxTurns > 0 ? maxTurns : undefined;
+
       if (isEditing) {
         await updateTask.mutateAsync({
           taskId: task.id,
@@ -272,6 +319,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             triggerMessage: triggerMessage.trim(),
             enabled,
             modelOverride: buildModelOverride(),
+            notification: buildNotification(),
+            timeoutMs,
+            maxTurns: maxTurnsValue,
           },
         });
         taskId = task.id;
@@ -286,6 +336,9 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           triggerMessage: triggerMessage.trim(),
           enabled,
           modelOverride: buildModelOverride(),
+          notification: buildNotification(),
+          timeoutMs,
+          maxTurns: maxTurnsValue,
         };
         const newTask = await createTask.mutateAsync(data);
         taskId = newTask.id;
@@ -615,19 +668,26 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1 flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
-                执行时间
+                执行时间（本地时区）
               </label>
               <input
                 type="datetime-local"
                 value={executeAt}
                 onChange={(e) => setExecuteAt(e.target.value)}
-                min={new Date().toISOString().slice(0, 16)}
+                min={getLocalNow()}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                任务将在指定时间执行一次后自动禁用
+                任务将在指定时间（本地时间）执行一次后自动禁用
               </p>
             </div>
+          )}
+
+          {/* Timezone hint for cron */}
+          {scheduleType === 'cron' && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 rounded-lg">
+              Cron 表达式使用服务器本地时区执行
+            </p>
           )}
         </div>
 
@@ -652,6 +712,117 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               定时触发时，这条消息会发送给选定的 Agent
             </p>
+          </div>
+        </div>
+
+        {/* Notification Config */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Bell className="w-5 h-5" />
+            IM 通知
+          </h3>
+
+          <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  执行完成后通知
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  任务执行完成后将结果推送到 IM 群
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotifyEnabled(!notifyEnabled)}
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                  notifyEnabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                }`}
+              >
+                <span
+                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                    notifyEnabled ? 'translate-x-5' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+
+            {notifyEnabled && (
+              <div className="space-y-3 pt-3 border-t border-gray-100 dark:border-gray-700">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-2">
+                    通知策略
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: 'always' as const, label: '始终通知', desc: '每次执行完成都通知' },
+                      { value: 'on_success' as const, label: '成功时通知', desc: '仅执行成功时通知' },
+                      { value: 'on_error' as const, label: '失败时通知', desc: '仅执行失败时通知' },
+                      { value: 'agent_decided' as const, label: 'Agent 决定', desc: 'Agent 判断是否需要通知' },
+                    ]).map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setNotifyStrategy(opt.value)}
+                        className={`flex flex-col items-start px-3 py-2 text-sm rounded-lg border transition-all ${
+                          notifyStrategy === opt.value
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 shadow-sm'
+                            : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 text-gray-700 dark:text-gray-300'
+                        }`}
+                      >
+                        <span className="font-medium">{opt.label}</span>
+                        <span className="text-xs opacity-70 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400 dark:text-gray-500">
+                  通知渠道将自动从项目的 IM 绑定中获取，也可在任务配置的 channels 字段中显式指定
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Advanced Config */}
+        <div className="space-y-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white flex items-center gap-2">
+            <Cpu className="w-5 h-5" />
+            高级配置
+          </h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                超时时间（分钟）
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={120}
+                value={timeoutMinutes}
+                onChange={(e) => setTimeoutMinutes(parseInt(e.target.value) || 30)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                超过此时间强制终止（1~120 分钟，默认 30 分钟）
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                最大轮次
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={200}
+                value={maxTurns}
+                onChange={(e) => setMaxTurns(parseInt(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                0 = 使用 Agent 默认值
+              </p>
+            </div>
           </div>
         </div>
 

@@ -190,40 +190,42 @@ export const DispatchIMDialog: React.FC<DispatchIMDialogProps> = ({
             </div>
           )}
 
-          <div className="grid grid-cols-1 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Bot Key
-              </label>
-              <input
-                type="text"
-                value={botKey}
-                onChange={handleTypeBotKey}
-                placeholder="企微 Bot Webhook Key"
-                disabled={isSending}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
-                  bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                  disabled:opacity-50"
-              />
+          {!selectedBindingId && (
+            <div className="grid grid-cols-1 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Bot Key
+                </label>
+                <input
+                  type="text"
+                  value={botKey}
+                  onChange={handleTypeBotKey}
+                  placeholder="企微 Bot Webhook Key"
+                  disabled={isSending}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
+                    bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                    focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  Chat ID
+                </label>
+                <input
+                  type="text"
+                  value={chatId}
+                  onChange={handleTypeChatId}
+                  placeholder="目标群/会话 ID"
+                  disabled={isSending}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
+                    bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                    focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    disabled:opacity-50"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                Chat ID
-              </label>
-              <input
-                type="text"
-                value={chatId}
-                onChange={handleTypeChatId}
-                placeholder="目标群/会话 ID"
-                disabled={isSending}
-                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg
-                  bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
-                  focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                  disabled:opacity-50"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Error display */}

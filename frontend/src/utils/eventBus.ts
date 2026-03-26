@@ -50,4 +50,5 @@ export const eventBus = new EventBus();
 export const EVENTS = {
   AI_RESPONSE_COMPLETE: 'ai_response_complete', // AI回复完成
   REFRESH_AGENT_CONTENT: 'refresh_agent_content', // 刷新Agent内容
+  LAVS_SEND_CHAT_MESSAGE: 'lavs:send_chat_message', // LAVS View requests Chat to send a message
 } as const;

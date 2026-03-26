@@ -117,8 +117,8 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
       undefined  // agentIdForAskUser
     );
 
-    // Set max turns
-    queryOptions.maxTurns = task.maxTurns || agent.maxTurns || 10;
+    // Set max turns (default 50 for scheduled tasks if not configured)
+    queryOptions.maxTurns = task.maxTurns || agent.maxTurns || 50;
 
     addLog('info', 'system', `Max turns: ${queryOptions.maxTurns}`);
 
@@ -127,6 +127,8 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
 
     let fullResponse = '';
     let sessionId: string | undefined;
+    let stoppedByMaxTurns = false;
+    let finalNumTurns = 0;
 
     for await (const message of query({
       prompt: task.message,
@@ -149,15 +151,44 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
           }
         }
       } else if (message.type === 'result') {
-        addLog('info', 'result', `Query completed`, {
-          costUsd: (message as any).total_cost_usd,
-          durationMs: (message as any).duration_ms,
-          numTurns: (message as any).num_turns,
-        });
+        const resultMsg = message as any;
+        finalNumTurns = resultMsg.num_turns || 0;
+
+        // Detect max_turns stop: SDK reports subtype='error_max_turns' with is_error=true
+        if (resultMsg.subtype === 'error_max_turns' || resultMsg.is_error === true) {
+          stoppedByMaxTurns = resultMsg.subtype === 'error_max_turns';
+          addLog('warn', 'result', `Query stopped: subtype=${resultMsg.subtype}, is_error=${resultMsg.is_error}`, {
+            costUsd: resultMsg.total_cost_usd,
+            durationMs: resultMsg.duration_ms,
+            numTurns: finalNumTurns,
+          });
+        } else {
+          addLog('info', 'result', `Query completed`, {
+            costUsd: resultMsg.total_cost_usd,
+            durationMs: resultMsg.duration_ms,
+            numTurns: finalNumTurns,
+          });
+        }
       }
     }
 
     const executionTimeMs = Date.now() - startTime;
+
+    if (stoppedByMaxTurns) {
+      const errorMsg = `Agent stopped after reaching max turns limit (${finalNumTurns} turns, limit: ${queryOptions.maxTurns}). Task may be incomplete. Consider increasing maxTurns in task settings.`;
+      addLog('error', 'system', errorMsg);
+      return {
+        taskId: task.id,
+        status: 'failed',
+        error: errorMsg,
+        output: fullResponse,
+        sessionId,
+        completedAt: new Date().toISOString(),
+        executionTimeMs,
+        logs,
+      };
+    }
+
     addLog('info', 'system', `Task completed in ${executionTimeMs}ms`);
 
     return {

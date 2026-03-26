@@ -387,11 +387,192 @@ const PlatformSection: React.FC<PlatformSectionProps> = ({ platform, onNavigateN
 };
 
 // ──────────────────────────────────────────────────────────────
+// Manual binding modal
+// ──────────────────────────────────────────────────────────────
+
+interface ManualBindModalProps {
+  open: boolean;
+  onClose: () => void;
+  onCreated: () => void;
+}
+
+const ManualBindModal: React.FC<ManualBindModalProps> = ({ open, onClose, onCreated }) => {
+  const [platform, setPlatform] = useState<IMBinding['platform']>('wecom');
+  const [name, setName] = useState('');
+  const [projectPath, setProjectPath] = useState('');
+  const [botKey, setBotKey] = useState('');
+  const [chatId, setChatId] = useState('');
+  const [chatName, setChatName] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  const reset = () => {
+    setPlatform('wecom');
+    setName('');
+    setProjectPath('');
+    setBotKey('');
+    setChatId('');
+    setChatName('');
+  };
+
+  const handleSubmit = async () => {
+    if (!name.trim() || !projectPath.trim() || !botKey.trim()) {
+      showError('请填写必填项');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        platform,
+        name: name.trim(),
+        project_path: projectPath.trim(),
+        bot_key: botKey.trim(),
+      };
+
+      if (platform === 'wecom' && chatId.trim()) {
+        body.channels = [{ chat_id: chatId.trim(), chat_name: chatName.trim() || undefined }];
+      }
+
+      const resp = await authFetch(`${API_BASE}/im-bindings`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+      if (resp.ok) {
+        showSuccess('补录成功', `${name} 已添加`);
+        reset();
+        onCreated();
+        onClose();
+      } else {
+        const data = await resp.json().catch(() => ({}));
+        throw new Error((data as any).error || '创建失败');
+      }
+    } catch (err) {
+      showError('补录失败', err instanceof Error ? err.message : '未知错误');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">手动补录 IM 绑定</h2>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 rounded-lg">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">平台 *</label>
+            <select
+              value={platform}
+              onChange={(e) => setPlatform(e.target.value as IMBinding['platform'])}
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="wecom">企业微信</option>
+              <option value="weixin">微信</option>
+              <option value="qqbot">QQ Bot</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">名称 *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="例如：jarvis 企微"
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">项目路径 *</label>
+            <input
+              type="text"
+              value={projectPath}
+              onChange={(e) => setProjectPath(e.target.value)}
+              placeholder="/Users/kongjie/projects/jarvis"
+              className="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Bot Key *</label>
+            <input
+              type="text"
+              value={botKey}
+              onChange={(e) => setBotKey(e.target.value)}
+              placeholder="Webhook Key / Bot 标识"
+              className="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+
+          {platform === 'wecom' && (
+            <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                企微群关联（可选，填写后该群将收到定时任务通知）
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Chat ID</label>
+                  <input
+                    type="text"
+                    value={chatId}
+                    onChange={(e) => setChatId(e.target.value)}
+                    placeholder="企微群 Chat ID"
+                    className="w-full px-3 py-2 text-sm font-mono border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">群名称</label>
+                  <input
+                    type="text"
+                    value={chatName}
+                    onChange={(e) => setChatName(e.target.value)}
+                    placeholder="方便识别（可选）"
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={saving || !name.trim() || !projectPath.trim() || !botKey.trim()}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 rounded-lg transition-colors"
+          >
+            {saving ? '保存中...' : '补录'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ──────────────────────────────────────────────────────────────
 // Main page
 // ──────────────────────────────────────────────────────────────
 
 export const IMChannelsPage: React.FC = () => {
   const navigate = useNavigate();
+  const [manualBindOpen, setManualBindOpen] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   const handleNavigateNewBind = (platform: IMBinding['platform']) => {
     navigate(`${PLATFORM_BIND_ROUTES[platform]}?from=/im-channels`);
@@ -401,17 +582,28 @@ export const IMChannelsPage: React.FC = () => {
     <div className="flex-1 overflow-y-auto p-6 md:p-8">
       {/* Page header */}
       <div className="mb-6">
-        <div className="flex items-center gap-3 mb-1">
-          <MessageSquare className="w-6 h-6 text-blue-500" />
-          <h1 className="text-xl font-bold text-gray-900 dark:text-white">消息渠道</h1>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <MessageSquare className="w-6 h-6 text-blue-500" />
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">消息渠道</h1>
+            </div>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              管理已接入的 IM 渠道绑定。点击「新绑定」可前往对应平台的接入向导。
+            </p>
+          </div>
+          <button
+            onClick={() => setManualBindOpen(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors"
+          >
+            <Pencil className="w-4 h-4" />
+            手动补录
+          </button>
         </div>
-        <p className="text-sm text-gray-500 dark:text-gray-400">
-          管理已接入的 IM 渠道绑定。点击「新绑定」可前往对应平台的接入向导。
-        </p>
       </div>
 
       {/* Platform sections */}
-      <div className="space-y-4">
+      <div className="space-y-4" key={refreshKey}>
         {PLATFORMS.map((platform) => (
           <PlatformSection
             key={platform}
@@ -426,8 +618,16 @@ export const IMChannelsPage: React.FC = () => {
         <ExternalLink className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
         <p className="text-xs text-blue-600 dark:text-blue-400">
           「新绑定」会引导你完成接入配置（填写 Bot Webhook、授权企业微信回调等），完成后绑定记录会出现在对应平台区域。
+          如果绑定数据丢失，可以点击「手动补录」直接录入。
         </p>
       </div>
+
+      {/* Manual bind modal */}
+      <ManualBindModal
+        open={manualBindOpen}
+        onClose={() => setManualBindOpen(false)}
+        onCreated={() => setRefreshKey((k) => k + 1)}
+      />
     </div>
   );
 };

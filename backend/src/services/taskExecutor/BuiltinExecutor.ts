@@ -57,7 +57,7 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
   constructor(config: Partial<TaskExecutorConfig> = {}) {
     this.config = {
       maxConcurrent: config.maxConcurrent ?? 5,
-      defaultTimeoutMs: config.defaultTimeoutMs ?? 300000, // 5 minutes
+      defaultTimeoutMs: config.defaultTimeoutMs ?? 1800000, // 30 minutes
       maxMemoryMb: config.maxMemoryMb ?? 512,
       maxRetries: config.maxRetries ?? 0,
       retryDelayMs: config.retryDelayMs ?? 5000,
@@ -246,8 +246,8 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
       console.info(`[TaskExecutor] Updated maxConcurrent to ${newConfig.maxConcurrent}`);
     }
     if (newConfig.defaultTimeoutMs !== undefined) {
-      if (newConfig.defaultTimeoutMs < 10000 || newConfig.defaultTimeoutMs > 3600000) {
-        throw new Error('defaultTimeoutMs must be between 10 seconds and 1 hour');
+      if (newConfig.defaultTimeoutMs < 10000 || newConfig.defaultTimeoutMs > 7200000) {
+        throw new Error('defaultTimeoutMs must be between 10 seconds and 2 hours');
       }
       this.config.defaultTimeoutMs = newConfig.defaultTimeoutMs;
       console.info(`[TaskExecutor] Updated defaultTimeoutMs to ${newConfig.defaultTimeoutMs}`);
@@ -537,6 +537,21 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
         // This updates runningTaskCount and runningExecutions tracking
         // Pass executionId (task.id) because that's what's tracked in runningExecutions
         onScheduledTaskComplete(executionId);
+
+        // Fire-and-forget: send IM notification if configured (P6: non-blocking)
+        const { getScheduledTask: getTask } = await import('../scheduledTaskStorage.js');
+        const fullTask = getTask(scheduledTaskId);
+        if (fullTask?.notification?.enabled) {
+          const { sendNotification } = await import('../notificationService.js');
+          void sendNotification(fullTask, result).catch(err => {
+            console.warn('[TaskExecutor] Notification failed (non-blocking):', {
+              service: 'notification',
+              operation: 'sendNotification',
+              taskId: scheduledTaskId,
+              error: err,
+            });
+          });
+        }
       }
     } catch (error) {
       console.error(`[TaskExecutor] Error storing result:`, error);

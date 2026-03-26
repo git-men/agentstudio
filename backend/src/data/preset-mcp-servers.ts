@@ -3,7 +3,7 @@ export interface PresetMcpServer {
   name: string;
   serverName: string;
   description: string;
-  category: 'development' | 'productivity' | 'database' | 'infrastructure' | 'search' | 'reference' | 'ai';
+  category: 'development' | 'productivity' | 'database' | 'infrastructure' | 'search' | 'reference' | 'ai' | 'internal';
   type: 'stdio' | 'http';
   url?: string;
   command?: string;
@@ -464,4 +464,5 @@ export const PRESET_CATEGORIES = [
   { id: 'search', label: 'Search', labelZh: '搜索' },
   { id: 'reference', label: 'Reference', labelZh: '参考实现' },
   { id: 'ai', label: 'AI & Analytics', labelZh: 'AI & 分析' },
+  { id: 'internal', label: 'Internal Products', labelZh: '司内产品' },
 ] as const;

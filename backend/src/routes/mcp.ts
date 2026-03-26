@@ -9,6 +9,7 @@ import { getSdkConfigPath } from '../config/sdkConfig.js';
 import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEngineType } from '../config/engineConfig.js';
 import { getSystemMcpServers } from '../services/mcpAdmin/autoBootstrap.js';
 import { PRESET_MCP_SERVERS, PRESET_CATEGORIES } from '../data/preset-mcp-servers.js';
+import { getKnotMcpServers } from '../services/knotMcpService.js';
 
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
@@ -495,17 +496,21 @@ router.get('/claude-code', async (req, res) => {
 // GET /mcp/presets - Get preset MCP server catalog
 router.get('/presets', (_req, res) => {
   try {
-    // Read current config to determine which presets are already installed
     const config = readMcpConfig();
     const installedNames = new Set(Object.keys(config.mcpServers));
 
-    const presets = PRESET_MCP_SERVERS.map(preset => ({
+    const builtinPresets = PRESET_MCP_SERVERS.map(preset => ({
+      ...preset,
+      installed: installedNames.has(preset.serverName),
+    }));
+
+    const knotPresets = getKnotMcpServers().map(preset => ({
       ...preset,
       installed: installedNames.has(preset.serverName),
     }));
 
     res.json({
-      presets,
+      presets: [...builtinPresets, ...knotPresets],
       categories: PRESET_CATEGORIES,
     });
   } catch (error) {

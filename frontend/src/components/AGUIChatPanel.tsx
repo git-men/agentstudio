@@ -44,6 +44,7 @@ import {
 import useEngine from '../hooks/useEngine';
 import { useRatingTool } from '../hooks/useRatingTool';
 import { useConsoleLogsTool } from '../hooks/useConsoleLogsTool';
+import { eventBus, EVENTS } from '../utils/eventBus';
 import { useDispatchIM } from '../hooks/useDispatchIM';
 import { DispatchIMDialog } from './chat/DispatchIMDialog';
 import { useInjectObserver } from '../hooks/useInjectObserver';
@@ -646,6 +647,17 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
 
         return () => clearTimeout(timer);
     }, [inputMessage, isSendDisabled, isAiTyping, handleSendMessage]);
+
+    // Listen for LAVS View requests to send a chat message
+    useEffect(() => {
+        const handleLAVSMessage = (message: string) => {
+            if (isAiTyping) return;
+            setInputMessage(message);
+            shouldAutoSendRef.current = true;
+        };
+        eventBus.on(EVENTS.LAVS_SEND_CHAT_MESSAGE, handleLAVSMessage);
+        return () => eventBus.off(EVENTS.LAVS_SEND_CHAT_MESSAGE, handleLAVSMessage);
+    }, [isAiTyping, setInputMessage]);
 
     // Agent command selector key handler
     const agentCommandSelectorKeyHandler = createAgentCommandSelectorKeyHandler({

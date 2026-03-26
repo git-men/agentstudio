@@ -176,8 +176,15 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const sidebarCollapsed = useSharedStore((s) => s.sidebarCollapsed);
   const setSidebarCollapsed = useSharedStore((s) => s.setSidebarCollapsed);
+  const setWorkspaceSidebarWidth = useSharedStore((s) => s.setWorkspaceSidebarWidth);
+
+  // Ensure sidebar is minimum width on mount
+  useEffect(() => {
+    setWorkspaceSidebarWidth(200);
+  }, [setWorkspaceSidebarWidth]);
 
   // ---------- Panel & modal state ----------
+  const [chatVisible, setChatVisible] = useState(true);
   const [rightPanelView, setRightPanelView] = useState<RightPanelView | null>('files');
   const [memoryProject, setMemoryProject] = useState<any>(null);
   const [commandsProject, setCommandsProject] = useState<any>(null);
@@ -420,7 +427,8 @@ export const ProjectWorkspacePage: React.FC = () => {
         </button>
       )}
       <WorkspaceLayout
-        defaultRightWidth={600}
+        defaultRightRatio={0.7}
+        mainPanelVisible={chatVisible}
         hideRightToggle
         sidebar={
           <ProjectSessionListPanel
@@ -457,6 +465,8 @@ export const ProjectWorkspacePage: React.FC = () => {
             hasLAVS={hasLAVSView}
             sidebarCollapsed={sidebarCollapsed}
             onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
+            chatVisible={chatVisible}
+            onToggleChat={() => setChatVisible((v) => !v)}
             onSetRightPanelView={setRightPanelView}
             onMemoryManagement={() => setMemoryProject(project)}
             onCommandManagement={() => setCommandsProject(project)}

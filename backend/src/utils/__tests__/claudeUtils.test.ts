@@ -22,7 +22,9 @@ vi.mock('child_process', () => ({
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
   readFileSync: vi.fn(),
-  mkdirSync: vi.fn()
+  writeFileSync: vi.fn(),
+  mkdirSync: vi.fn(),
+  readdirSync: vi.fn(() => []),
 }));
 
 // Mock os
@@ -40,6 +42,11 @@ vi.mock('../../services/claudeVersionStorage', () => ({
 // Mock a2aIntegration
 vi.mock('../../services/a2a/a2aIntegration', () => ({
   integrateA2AMcpServer: vi.fn()
+}));
+
+// Mock a2uiIntegration
+vi.mock('../../services/a2ui/a2uiIntegration', () => ({
+  integrateA2UIMcpServer: vi.fn()
 }));
 
 // Mock lavsIntegration

@@ -21,6 +21,29 @@ export interface TaskSchedule {
 export type TaskRunStatus = 'running' | 'success' | 'error' | 'stopped';
 
 /**
+ * Notification strategy for scheduled task completion
+ */
+export type NotificationStrategy = 'always' | 'on_success' | 'on_error' | 'agent_decided';
+
+/**
+ * Notification delivery channel
+ */
+export interface NotificationChannel {
+  bot_key: string;
+  chat_id: string;
+  chat_name?: string;
+}
+
+/**
+ * Notification configuration embedded in a scheduled task
+ */
+export interface NotificationConfig {
+  enabled: boolean;
+  strategy: NotificationStrategy;
+  channels?: NotificationChannel[];
+}
+
+/**
  * Model override configuration for scheduled tasks
  */
 export interface ModelOverride {
@@ -44,6 +67,12 @@ export interface ScheduledTask {
   enabled: boolean;
   /** Model override configuration (optional) */
   modelOverride?: ModelOverride;
+  /** Optional notification configuration */
+  notification?: NotificationConfig;
+  /** Task execution timeout in milliseconds (10s ~ 2h). Defaults to 30 minutes if not set. */
+  timeoutMs?: number;
+  /** Maximum number of agent turns. Defaults to agent config if not set. */
+  maxTurns?: number;
   lastRunAt?: string;
   lastRunStatus?: TaskRunStatus;
   lastRunError?: string;
@@ -95,6 +124,11 @@ export interface CreateScheduledTaskRequest {
   triggerMessage: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
+  /** Task execution timeout in milliseconds (10s ~ 2h). Defaults to 30 minutes if not set. */
+  timeoutMs?: number;
+  /** Maximum number of agent turns. Defaults to agent config if not set. */
+  maxTurns?: number;
 }
 
 /**
@@ -109,6 +143,11 @@ export interface UpdateScheduledTaskRequest {
   triggerMessage?: string;
   enabled?: boolean;
   modelOverride?: ModelOverride;
+  notification?: NotificationConfig;
+  /** Task execution timeout in milliseconds (10s ~ 2h). Defaults to 30 minutes if not set. */
+  timeoutMs?: number;
+  /** Maximum number of agent turns. Defaults to agent config if not set. */
+  maxTurns?: number;
 }
 
 /**

@@ -4,6 +4,7 @@ import { BaseToolComponent } from './BaseToolComponent';
 import { MessageSquare, CheckCircle, Circle, Send, Check, PenLine } from 'lucide-react';
 import type { BaseToolExecution } from './sdk-types';
 import { useAgentStore, type PendingFrontendToolCall } from '../../stores/useAgentStore';
+import { useSessionStoreOptional, useIsWorkspaceMode } from '../../stores/SessionStoreContext';
 
 const TYPE_SOMETHING_MARKER = '__TYPE_SOMETHING__';
 
@@ -37,7 +38,10 @@ interface AskUserQuestionToolProps {
 export const AskUserQuestionTool: React.FC<AskUserQuestionToolProps> = ({ execution, onSubmit }) => {
   const { t } = useTranslation('components');
   const input = execution.toolInput as any;
-  const pendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
+  const isWorkspaceMode = useIsWorkspaceMode();
+  const ctxPendingFrontendTools = useSessionStoreOptional(s => s.pendingFrontendTools);
+  const facadePendingFrontendTools = useAgentStore(state => state.pendingFrontendTools);
+  const pendingFrontendTools = isWorkspaceMode ? ctxPendingFrontendTools : facadePendingFrontendTools;
 
   const [selections, setSelections] = useState<Map<number, string[]>>(new Map());
   const [isSubmitting, setIsSubmitting] = useState(false);

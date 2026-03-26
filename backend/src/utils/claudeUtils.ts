@@ -24,6 +24,7 @@ const projectStorage = new ProjectMetadataStorage();
 export type { SessionRef };
 import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME, resolvePath } from '../config/paths.js';
 import { getEnginePaths } from '../config/engineConfig.js';
+import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/autoBootstrap.js';
 
 const execAsync = promisify(exec);
 
@@ -400,6 +401,22 @@ export async function buildQueryOptions(
   // This ensures critical variables like PATH, etc. are available
   // Priority: userEnv > projectEnv > environmentVariables (from version/default) > process.env
   queryOptions.env = { ...process.env, ...environmentVariables, ...projectEnv, ...userEnv };
+
+  // Inject Admin CLI environment variables (API key + server URL)
+  // so agents can use `agentstudio admin call ...` without manual configuration
+  const adminCliEnv = getAdminCliEnvVars();
+  for (const [key, value] of Object.entries(adminCliEnv)) {
+    if (!queryOptions.env[key]) {
+      queryOptions.env[key] = value;
+    }
+  }
+
+  // Prepend ~/.agentstudio/bin to PATH so the `agentstudio` CLI wrapper is available
+  const adminBinDir = getAdminCliBinDir();
+  const currentPath = queryOptions.env['PATH'] || '';
+  if (!currentPath.includes(adminBinDir)) {
+    queryOptions.env['PATH'] = `${adminBinDir}:${currentPath}`;
+  }
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
   // This ensures proxy settings work regardless of which form the client library checks first

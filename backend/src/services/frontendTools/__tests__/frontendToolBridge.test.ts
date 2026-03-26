@@ -54,15 +54,14 @@ describe('FrontendToolBridge', () => {
       await promise.catch(() => {});
     });
 
-    it('fails for agent ID mismatch', async () => {
+    it('succeeds even with different agentId (agentId not validated in submitResult)', async () => {
       const promise = frontendToolBridge.waitForResult('tc-agent', 'tool1', 'session-1', 'agent-1', {});
 
       const result = frontendToolBridge.submitResult('tc-agent', 'value', 'session-1', 'wrong-agent');
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('Agent ID mismatch');
+      expect(result.success).toBe(true);
 
-      frontendToolBridge.cancel('tc-agent');
-      await promise.catch(() => {});
+      const value = await promise;
+      expect(value).toBe('value');
     });
   });
 

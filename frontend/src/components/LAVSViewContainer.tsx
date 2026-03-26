@@ -9,12 +9,14 @@
  * 4. Injects LAVSClient
  */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { LAVSClient, LAVSViewComponent } from 'lavs-client';
 import type { LAVSManifest } from 'lavs-client';
 import type { AgentConfig } from '../types';
 import { useAgentStore } from '../stores/useAgentStore';
 import { eventBus, EVENTS } from '../utils/eventBus';
+import { API_BASE } from '../lib/config';
+import { authFetch } from '../lib/authFetch';
 
 interface LAVSViewContainerProps {
   agent: AgentConfig;
@@ -192,6 +194,135 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     return () => {
       eventBus.off(EVENTS.AI_RESPONSE_COMPLETE, handleResponseComplete);
     };
+  }, [componentLoaded]);
+
+  // ---------------------------------------------------------------------------
+  // AI Bridge: handle lavs-ai-silent and lavs-ai-chat from iframe
+  // ---------------------------------------------------------------------------
+
+  const handleSilentAICall = useCallback(async (requestId: number, prompt: string) => {
+    try {
+      const sessionId = useAgentStore.getState().currentSessionId;
+      const response = await authFetch(`${API_BASE}/agents/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: prompt,
+          agentId: agent.id,
+          sessionId: `silent-${agent.id}`,
+          projectPath,
+          permissionMode: 'bypassPermissions',
+          outputFormat: 'default',
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No response body');
+
+      const decoder = new TextDecoder();
+      let lastAssistantText = '';
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const parsed = JSON.parse(line.slice(6));
+
+            // Each 'assistant' event contains the full message for that turn.
+            // Use only the last one (multi-turn agents may have several).
+            if (parsed.type === 'assistant' && parsed.message?.content) {
+              let text = '';
+              for (const block of parsed.message.content) {
+                if (block.type === 'text') text += block.text;
+              }
+              if (text) lastAssistantText = text;
+            }
+          } catch { /* skip non-JSON lines */ }
+        }
+      }
+
+      const assistantText = lastAssistantText;
+
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'lavs-ai-result',
+        id: requestId,
+        result: assistantText,
+      }, '*');
+    } catch (err: any) {
+      console.error('[LAVS AI Bridge] Silent call failed:', err);
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'lavs-ai-result',
+        id: requestId,
+        error: err.message || String(err),
+      }, '*');
+    }
+  }, [agent.id, projectPath]);
+
+  useEffect(() => {
+    if (!componentLoaded || !iframeRef.current) return;
+
+    const handleAIBridge = (event: MessageEvent) => {
+      if (event.data.type === 'lavs-ai-silent') {
+        console.log('[LAVS AI Bridge] Silent call:', event.data.prompt?.substring(0, 80));
+        handleSilentAICall(event.data.id, event.data.prompt);
+      }
+
+      if (event.data.type === 'lavs-ai-chat') {
+        console.log('[LAVS AI Bridge] Chat message:', event.data.message?.substring(0, 80));
+        eventBus.emit(EVENTS.LAVS_SEND_CHAT_MESSAGE, event.data.message);
+      }
+    };
+
+    window.addEventListener('message', handleAIBridge);
+    return () => window.removeEventListener('message', handleAIBridge);
+  }, [componentLoaded, handleSilentAICall]);
+
+  // Forward chat completion back to iframe
+  useEffect(() => {
+    if (!componentLoaded || !iframeRef.current) return;
+
+    const handleChatDone = () => {
+      const messages = useAgentStore.getState().messages;
+      const lastAssistant = [...messages].reverse().find(m => m.role === 'assistant');
+
+      console.log('[LAVS AI Bridge] Chat done, lastAssistant parts:', lastAssistant?.parts?.length,
+        'types:', lastAssistant?.parts?.map((p: any) => p.type));
+
+      // Collect text from all text parts
+      let text = '';
+      if (lastAssistant?.parts) {
+        for (const p of lastAssistant.parts as any[]) {
+          if (p.type === 'text' && p.content) text += p.content;
+          if (p.type === 'tool' && p.toolResult) {
+            // Tool results may contain the check output
+            const result = typeof p.toolResult === 'string' ? p.toolResult : JSON.stringify(p.toolResult);
+            text += result;
+          }
+        }
+      }
+
+      console.log('[LAVS AI Bridge] Extracted text (first 200):', text.substring(0, 200));
+
+      iframeRef.current?.contentWindow?.postMessage({
+        type: 'lavs-ai-chat-done',
+        message: text,
+      }, '*');
+    };
+
+    eventBus.on(EVENTS.AI_RESPONSE_COMPLETE, handleChatDone);
+    return () => eventBus.off(EVENTS.AI_RESPONSE_COMPLETE, handleChatDone);
   }, [componentLoaded]);
 
   /**

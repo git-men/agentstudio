@@ -75,7 +75,10 @@ function toResult(data: unknown, isError = false): McpToolCallResult {
 export const listWecomBotsTool: ToolDefinition = {
   tool: {
     name: 'list_wecom_bots',
-    description: 'List all registered WeChat Work bots in as-dispatch.',
+    description:
+      'List WeChat Work bots owned by the current user. ' +
+      'Returns sanitized data (sensitive fields like api_key and target_url are masked). ' +
+      'Requires enterprise JWT authentication via configured tunnel.',
     inputSchema: { type: 'object', properties: {} },
   },
   handler: async (): Promise<McpToolCallResult> => {
@@ -92,7 +95,9 @@ export const listWecomBotsTool: ToolDefinition = {
 export const getWecomBotTool: ToolDefinition = {
   tool: {
     name: 'get_wecom_bot',
-    description: 'Get details of a specific WeChat Work bot by its bot_key (the UUID from the Webhook URL).',
+    description:
+      'Get details of a specific WeChat Work bot by its bot_key. ' +
+      'Only returns data if the bot belongs to the current user (owner check enforced by server).',
     inputSchema: {
       type: 'object',
       properties: {
