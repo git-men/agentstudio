@@ -1,8 +1,8 @@
 {
   "lavs": "1.0",
-  "name": "gemini-slides",
+  "name": "smart-slides",
   "version": "1.0.0",
-  "description": "Gemini 智能 PPT - AI 演讲稿生成与编辑服务",
+  "description": "智能 PPT - AI 演讲稿生成与编辑服务",
   "endpoints": [
     {
       "id": "getPresentation",

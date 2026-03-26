@@ -1,0 +1,182 @@
+name: Gemini Slides API E2E Tests
+
+cases:
+  - name: "API Key detection with project path"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/getConfig
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body: {}
+    expect:
+      status: 200
+
+  - name: "API Key detection without project path"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/getConfig
+      headers:
+        Content-Type: application/json
+      body: {}
+    expect:
+      status: 200
+
+  - name: "Get presentation"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/getPresentation
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body: {}
+    expect:
+      status: 200
+
+  - name: "List styles"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/listStyles
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body: {}
+    expect:
+      status: 200
+
+  - name: "List references"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/listReferences
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body: {}
+    expect:
+      status: 200
+
+  - name: "Upload reference image"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/uploadReference
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        imageData: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+        name: "argusai-e2e-ref"
+    expect:
+      status: 200
+
+  - name: "Set style and resolution"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/setStyle
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        styleId: "cyber-dark"
+        resolution: "4K"
+    expect:
+      status: 200
+
+  - name: "Revert style"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/setStyle
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        styleId: "hand-drawn"
+        resolution: "2K"
+    expect:
+      status: 200
+
+  - name: "Create outline"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/createOutline
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        title: "ArgusAI E2E Test"
+        slides:
+          - title: "Intro"
+            body: ["Welcome"]
+            imageDescription: "opening"
+          - title: "Content"
+            body: ["Main"]
+            imageDescription: "content"
+    expect:
+      status: 200
+
+  - name: "Update slide"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/updateSlide
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        index: 0
+        title: "Updated Intro"
+    expect:
+      status: 200
+
+  - name: "Add slide"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/addSlide
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        index: 1
+        title: "Inserted"
+    expect:
+      status: 200
+
+  - name: "Move slide"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/moveSlide
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        index: 0
+        direction: 1
+    expect:
+      status: 200
+
+  - name: "Delete slide"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/deleteSlide
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        index: 2
+    expect:
+      status: 200
+
+  - name: "Update outline"
+    request:
+      method: POST
+      url: http://localhost:4936/api/agents/gemini-slides/lavs/updateOutline
+      headers:
+        Content-Type: application/json
+        x-project-path: /Users/kong/claude-code-projects/gemini-slides-project-2026-03-26-01-44
+      body:
+        title: "Updated E2E"
+        slides:
+          - title: "S1"
+            body: ["a"]
+          - title: "S2"
+            body: ["b"]
+    expect:
+      status: 200

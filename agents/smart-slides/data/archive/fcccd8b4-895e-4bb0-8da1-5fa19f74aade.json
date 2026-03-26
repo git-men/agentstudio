@@ -1,0 +1,140 @@
+{
+  "title": "AI Agent 工作流自动化",
+  "userInput": "AI Agent 工作流自动化",
+  "styleId": "minimal-modern",
+  "resolution": "2K",
+  "slides": [
+    {
+      "id": "5d136a69-1500-4411-aae7-1d7e6944b813",
+      "content": {
+        "title": "引言：AI Agent 的时代",
+        "body": [
+          "什么是 AI Agent",
+          "Agent 在企业中的应用现状",
+          "工作流自动化的核心价值"
+        ],
+        "imageDescription": "未来感的 AI 机器人在数字化办公环境中协调多个工作流程的视觉隐喻",
+        "layout": "Title and Body",
+        "speakerNotes": "开场引入 AI Agent 概念"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "dfc5be7b-75cb-46c9-a132-1c8617a9481e",
+      "content": {
+        "title": "传统工作流 vs Agent 驱动",
+        "body": [
+          "人工流程的瓶颈",
+          "规则引擎的局限",
+          "Agent 带来的范式转变"
+        ],
+        "imageDescription": "对比图：左侧是复杂的人工流程图，右侧是简洁的 Agent 自动化流",
+        "layout": "Two Column",
+        "speakerNotes": "通过对比突出 Agent 的优势"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "5f9a2d76-84ec-4185-890f-7fe6e5dc44c9",
+      "content": {
+        "title": "核心架构：多 Agent 协作",
+        "body": [
+          "单 Agent vs 多 Agent 系统",
+          "Agent-to-Agent (A2A) 协议",
+          "任务分解与委派机制"
+        ],
+        "imageDescription": "多个智能节点通过网络连接协作的架构图，节点间有数据流动",
+        "layout": "Title and Body",
+        "speakerNotes": "深入技术架构"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "049138cb-e685-49fe-bf2d-a3c2f3f5d509",
+      "content": {
+        "title": "工具集成：MCP 生态",
+        "body": [
+          "Model Context Protocol 简介",
+          "工具即能力：文件、数据库、API",
+          "插件化扩展机制"
+        ],
+        "imageDescription": "中心化的 Agent 连接多种工具图标（数据库、API、文件系统等）",
+        "layout": "Title and Body",
+        "speakerNotes": "介绍 MCP 生态"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "5fb64c5c-cbc3-4269-8fbe-3101187c42d7",
+      "content": {
+        "title": "实战案例：智能客服系统",
+        "body": [
+          "多轮对话管理",
+          "知识库自动检索",
+          "人机协作升级"
+        ],
+        "imageDescription": "客服场景：AI 助手与人类客服协同处理用户请求的流程图",
+        "layout": "Image Focused",
+        "speakerNotes": "用真实案例说明"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "781001fd-c42b-4eb6-bc71-c85a49286f88",
+      "content": {
+        "title": "实战案例：代码审查自动化",
+        "body": [
+          "PR 自动分析",
+          "安全漏洞检测",
+          "代码风格一致性"
+        ],
+        "imageDescription": "代码编辑器界面与 AI 审查建议的融合视觉",
+        "layout": "Title and Body",
+        "speakerNotes": "开发者场景案例"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "b4f87236-9a59-4d03-9bc6-59f7ab13330f",
+      "content": {
+        "title": "挑战与最佳实践",
+        "body": [
+          "幻觉与可靠性",
+          "权限与安全边界",
+          "成本优化策略",
+          "监控与可观测性"
+        ],
+        "imageDescription": "天平秤的隐喻：一侧是能力，一侧是风险控制",
+        "layout": "Title and Body",
+        "speakerNotes": "讨论实际挑战"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    },
+    {
+      "id": "b387b512-7006-49b5-b3be-f9d1426e0d4d",
+      "content": {
+        "title": "展望与总结",
+        "body": [
+          "Agent 技术演进趋势",
+          "从自动化到自主化",
+          "行动建议与下一步"
+        ],
+        "imageDescription": "通往未来的道路，光明的地平线，象征 AI Agent 的无限可能",
+        "layout": "Title",
+        "speakerNotes": "总结与展望"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    }
+  ],
+  "sources": [],
+  "createdAt": 1774487799138,
+  "updatedAt": 1774487799138
+}

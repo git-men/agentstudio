@@ -1,0 +1,26 @@
+{
+  "id": "a6134c70-542e-4763-a014-cb2b84778739",
+  "title": "第二个PPT",
+  "userInput": "新主题",
+  "styleId": "minimal-modern",
+  "resolution": "2K",
+  "slides": [
+    {
+      "id": "59d63a3a-8162-4b56-b433-b1bc3d3e0672",
+      "content": {
+        "title": "新页面",
+        "body": [
+          "新要点"
+        ],
+        "imageDescription": "新图片",
+        "layout": "Title",
+        "speakerNotes": "新备注"
+      },
+      "imageUrl": null,
+      "imageHistory": []
+    }
+  ],
+  "sources": [],
+  "createdAt": 1774493951756,
+  "updatedAt": 1774493951756
+}
