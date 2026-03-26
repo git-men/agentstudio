@@ -258,7 +258,7 @@ export async function sendNotification(
     };
 
     const message = formatMessage(payload);
-    const sessionId = `notify_${result.taskId}`;
+    const sessionId = result.sessionId;
 
     const sendPromises = resolution.channels.map(channel =>
       sendToIM({
