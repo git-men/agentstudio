@@ -121,7 +121,7 @@ ${lines}`;
 function groupByCid(entries) {
   const map = new Map();
   for (const e of entries) {
-    if (!map.has(e.cid)) map.set(e.cid, { cid: e.cid, coverName: e.coverName, cidOrder: e.cidOrder || 0, updateTime: '', entries: [] });
+    if (!map.has(e.cid)) map.set(e.cid, { cid: e.cid, showName: e.showName, cidOrder: e.cidOrder || 0, updateTime: '', entries: [] });
     const g = map.get(e.cid);
     g.entries.push(e);
     if (e.updateTime && !g.updateTime) g.updateTime = e.updateTime;
@@ -158,6 +158,23 @@ async function fetchImageBase64(url) {
   } catch { return null; }
 }
 
+const IMG_RATIOS = {
+  '1920': 1920 / 800,
+  '1280_pure': 1280 / 720,
+  '1280_mark': 1280 / 720,
+  '276_vertical': 276 / 386,
+  'ott': 1704 / 728,
+  'gif': 600 / 338,
+};
+
+function fitImageSize(imgKey, maxW, maxH) {
+  const ratio = IMG_RATIOS[imgKey] || (maxW / maxH);
+  let w, h;
+  if (ratio > maxW / maxH) { w = maxW; h = maxW / ratio; }
+  else { h = maxH; w = maxH * ratio; }
+  return { width: Math.round(w), height: Math.round(h) };
+}
+
 function getImageExt(url) {
   if (/gif/i.test(url)) return 'gif';
   if (/png/i.test(url)) return 'png';
@@ -171,7 +188,7 @@ async function exportExcel(entries, date, onProgress) {
 
   const baseColumns = [
     { header: 'cid', key: 'cid', width: 20 },
-    { header: 'coverName', key: 'coverName', width: 12 },
+    { header: 'showName', key: 'showName', width: 12 },
     { header: 'title', key: 'title', width: 14 },
     { header: 'updateTime', key: 'updateTime', width: 12 },
     { header: 'shortHighlight', key: 'shortHighlight', width: 22 },
@@ -198,7 +215,7 @@ async function exportExcel(entries, date, onProgress) {
     if (onProgress) onProgress(ei + 1, entries.length);
     const rowNum = ei + 2;
     const rowData = {
-      cid: e.cid, coverName: e.coverName, title: e.title,
+      cid: e.cid, showName: e.showName, title: e.title,
       updateTime: e.updateTime || '',
       shortHighlight: e.shortHighlight || '', shortHighlightLen: (e.shortHighlight||'').length,
       longHighlight: e.longHighlight || '', longHighlightLen: (e.longHighlight||'').length,
@@ -234,9 +251,10 @@ async function exportExcel(entries, date, onProgress) {
           try {
             const imgId = wb.addImage({ base64: b64, extension: getImageExt(url) });
             const colIdx = imgCol.number - 1;
+            const size = fitImageSize(key, 160, 76);
             ws.addImage(imgId, {
               tl: { col: colIdx + 0.1, row: rowNum - 1 + 0.1 },
-              ext: { width: 140, height: 80 },
+              ext: size,
             });
           } catch (imgErr) { console.warn('Image insert failed:', key, imgErr.message); }
         }
@@ -260,7 +278,7 @@ async function exportCMSExcel(entries, date, onProgress) {
 
   const baseColumns = [
     { header: 'cid', key: 'cid', width: 20 },
-    { header: 'coverName', key: 'coverName', width: 12 },
+    { header: 'showName', key: 'showName', width: 12 },
     { header: 'title', key: 'title', width: 14 },
     { header: 'updateTime', key: 'updateTime', width: 12 },
     { header: 'shortHighlight', key: 'shortHighlight', width: 22 },
@@ -296,7 +314,7 @@ async function exportCMSExcel(entries, date, onProgress) {
     if (onProgress) onProgress(ri + 1, rowItems.length);
     const rowNum = ri + 2;
     const rowData = {
-      cid: e.cid, coverName: e.coverName, title: e.title,
+      cid: e.cid, showName: e.showName, title: e.title,
       updateTime: e.updateTime || '',
       shortHighlight: e.shortHighlight || '', shortHighlightLen: (e.shortHighlight||'').length,
       longHighlight: e.longHighlight || '', longHighlightLen: (e.longHighlight||'').length,
@@ -337,9 +355,10 @@ async function exportCMSExcel(entries, date, onProgress) {
           try {
             const imgId = wb.addImage({ base64: b64, extension: getImageExt(url) });
             const colIdx = imgCol.number - 1;
+            const size = fitImageSize(key, 160, 76);
             ws.addImage(imgId, {
               tl: { col: colIdx + 0.1, row: rowNum - 1 + 0.1 },
-              ext: { width: 140, height: 80 },
+              ext: size,
             });
           } catch (imgErr) { console.warn('Image insert failed:', key, imgErr.message); }
         }
@@ -463,7 +482,7 @@ function EditableText({ value, field, entryId, onRefresh, strong, style, placeho
 }
 
 function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandlers, selectedIds, onToggleEntry, onToggleGroup }) {
-  const { cid, coverName, updateTime, entries } = group;
+  const { cid, showName, updateTime, entries } = group;
   const allSelected = entries.length > 0 && entries.every(e => selectedIds.has(e.id));
   const someSelected = entries.some(e => selectedIds.has(e.id));
 
@@ -510,10 +529,10 @@ function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandle
   ];
 
   const handleShowNameSave = async (newVal) => {
-    if (newVal === coverName || !newVal) return;
+    if (newVal === showName || !newVal) return;
     try {
       for (const e of entries) {
-        await lavsCall('updateEntry', { id: e.id, updates: { coverName: newVal } });
+        await lavsCall('updateEntry', { id: e.id, updates: { showName: newVal } });
       }
       if (onRefresh) await onRefresh();
     } catch (e) { message.error('保存失败'); }
@@ -542,8 +561,8 @@ function CIDGroup({ group, checkingIds, onCheck, onDelete, onRefresh, dragHandle
   const label = (
     <Flex align="center" gap={6} style={{ width: '100%', minHeight: 28 }} {...dragHandlers} draggable>
       <MenuOutlined style={{ color: '#aaa', cursor: 'grab', fontSize: 12, flexShrink: 0 }} />
-      <Paragraph editable={{ onChange: handleShowNameSave, text: coverName || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
-        strong style={{ fontSize: 16, marginBottom: 0, color: coverName ? undefined : '#999', fontStyle: coverName ? undefined : 'italic' }}>{coverName || '输入剧名'}</Paragraph>
+      <Paragraph editable={{ onChange: handleShowNameSave, text: showName || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 11, color: '#999' }} />, autoSize: true }}
+        strong style={{ fontSize: 16, marginBottom: 0, color: showName ? undefined : '#999', fontStyle: showName ? undefined : 'italic' }}>{showName || '输入剧名'}</Paragraph>
       <Paragraph editable={{ onChange: handleCidSave, text: cid || '', triggerType: ['icon'], icon: <EditOutlined style={{ fontSize: 10, color: '#999' }} />, autoSize: true }}
         copyable={cid ? { tooltips: ['复制 CID', '已复制'] } : false}
         type="secondary" style={{ fontSize: 11, marginBottom: 0, fontFamily: 'monospace', fontStyle: cid ? undefined : 'italic' }}>{cid || '输入 CID'}</Paragraph>

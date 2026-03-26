@@ -137,7 +137,7 @@ function actionAdd(input) {
     const newEntry = {
       id: crypto.randomUUID(),
       cid: entry.cid || '',
-      coverName: entry.coverName || '',
+      showName: entry.showName || '',
       title: entry.title || '',
       updateTime: entry.updateTime || '',
       shortHighlight: entry.shortHighlight || entry.shortTitle || entry.short_highlight || '',
@@ -306,7 +306,7 @@ function parseSection(text, updateTime, entries, parseErrors) {
       continue;
     }
 
-    // Show-level header: "ShowName·更新" (sets coverName context)
+    // Show-level header: "ShowName·更新" (sets showName context)
     if (line.match(/[·]更新\s*$/)) {
       flushEntry();
       currentShowName = line.replace(/[·]更新\s*$/, '');
@@ -367,7 +367,7 @@ function parseSection(text, updateTime, entries, parseErrors) {
     }
 
     // Entry title line: "ShowName·EntryTitle" or just "EntryTitle" (with context)
-    // This is a title line if it contains a · separator or comes after a coverName header
+    // This is a title line if it contains a · separator or comes after a showName header
     const titleMatch = line.match(/^(.+?)[·](.+)$/);
     if (titleMatch) {
       flushEntry();
@@ -403,10 +403,10 @@ function parseSection(text, updateTime, entries, parseErrors) {
   flushEntry();
 }
 
-function createEmptyEntry(coverName, title, cid, updateTime) {
+function createEmptyEntry(showName, title, cid, updateTime) {
   return {
     cid: cid || '',
-    coverName: coverName || '',
+    showName: showName || '',
     title: title || '',
     updateTime: updateTime || '',
     shortHighlight: '',
@@ -447,7 +447,7 @@ function actionExport(input) {
 
     if (lines.length > 0) lines.push('');
 
-    lines.push(first.coverName || '');
+    lines.push(first.showName || '');
     if (first.cid) lines.push(`cid: ${first.cid}`);
     lines.push(`更新时间：${first.updateTime || ''}`);
     lines.push('');
@@ -481,7 +481,7 @@ function groupByCid(entries) {
     if (!cidMap.has(entry.cid)) {
       cidMap.set(entry.cid, {
         cid: entry.cid,
-        coverName: entry.coverName,
+        showName: entry.showName,
         cidOrder: entry.cidOrder || 0,
         entries: [],
       });

@@ -215,7 +215,7 @@
       "properties": {
         "id": { "type": "string" },
         "cid": { "type": "string" },
-        "coverName": { "type": "string" },
+        "showName": { "type": "string" },
         "title": { "type": "string" },
         "updateTime": { "type": "string" },
         "shortHighlight": { "type": "string" },
@@ -242,13 +242,13 @@
         "cidOrder": { "type": "number" },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["id", "cid", "coverName", "title"]
+      "required": ["id", "cid", "showName", "title"]
     },
     "ContentEntryInput": {
       "type": "object",
       "properties": {
         "cid": { "type": "string" },
-        "coverName": { "type": "string" },
+        "showName": { "type": "string" },
         "title": { "type": "string" },
         "updateTime": { "type": "string" },
         "shortHighlight": { "type": "string" },
@@ -268,7 +268,7 @@
           "additionalProperties": false
         }
       },
-      "required": ["cid", "coverName", "title"]
+      "required": ["cid", "showName", "title"]
     },
     "ContentIssue": {
       "type": "object",
