@@ -75,6 +75,7 @@ const IMG_KEY_MAP = [
   { key: '1920', patterns: ['1920'] },
   { key: '1280_pure', patterns: ['1280纯净', '1280净图', '1280净版', '1280净', '拼图净', '1280_pure', 'pure'] },
   { key: '1280_mark', patterns: ['1280独播', '1280首播', '拼图独播', '1280_mark', 'mark'] },
+  { key: '276_vertical', patterns: ['276竖图', '276竖', '276x386', '276_vertical', '276竖版'] },
   { key: 'ott', patterns: ['ott', 'ott1704', 'OTT'] },
   { key: 'gif', patterns: ['gif', 'GIF', '动图', 'Gif'] },
 ];
@@ -423,6 +424,7 @@ const IMG_KEY_LABELS = {
   '1920': '1920',
   '1280_pure': '1280净图',
   '1280_mark': '1280硬压',
+  '276_vertical': '276竖图',
   'ott': 'OTT',
   'gif': 'GIF',
 };
