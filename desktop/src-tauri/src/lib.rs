@@ -141,11 +141,52 @@ fn kill_sidecar(state: &AppState) {
     }
 }
 
+/// Try to connect to an already-running backend (dev mode) before falling back
+/// to spawning the sidecar binary.
+async fn try_detect_running_backend(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/api/health");
+    match reqwest::Client::new()
+        .get(&url)
+        .timeout(Duration::from_secs(2))
+        .send()
+        .await
+    {
+        Ok(resp) => resp.status().is_success(),
+        Err(_) => false,
+    }
+}
+
 /// Spawn the backend sidecar, parse BACKEND_PORT from its stdout, then
 /// close the splashscreen and show the main window.
+/// In dev mode, first polls for an already-running backend started by beforeDevCommand.
 fn start_sidecar(app: AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
+        // In dev builds, the backend is started by beforeDevCommand.
+        // Poll for it before attempting to spawn the sidecar binary.
+        if cfg!(debug_assertions) {
+            let default_port: u16 = 4936;
+            log::info!("Dev mode: polling for backend on port {default_port}...");
+            let deadline = std::time::Instant::now() + Duration::from_secs(30);
+            loop {
+                if try_detect_running_backend(default_port).await {
+                    log::info!("Dev mode: backend detected on port {default_port}");
+                    let state = app_clone.state::<AppState>();
+                    *state.backend_port.lock().unwrap() = Some(default_port);
+                    close_splashscreen_internal(&app_clone);
+                    if let Err(e) = app_clone.emit("backend-ready", default_port) {
+                        log::warn!("Failed to emit backend-ready: {e}");
+                    }
+                    return;
+                }
+                if std::time::Instant::now() > deadline {
+                    log::warn!("Dev mode: backend not found after 30s, falling back to sidecar");
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(500)).await;
+            }
+        }
+
         let shell = app_clone.shell();
         let sidecar_result = shell.sidecar("agentstudio-backend");
 
