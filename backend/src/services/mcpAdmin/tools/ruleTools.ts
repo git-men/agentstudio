@@ -10,7 +10,7 @@ import path from 'path';
 import os from 'os';
 import matter from 'gray-matter';
 import { isCursorEngine } from '../../../config/engineConfig.js';
-import { getSdkDirName } from '../../../config/sdkConfig.js';
+import { getSdkDirName } from '../../../config/engineConfig.js';
 
 // Get file extension based on engine
 const getRuleExtension = (): string => {

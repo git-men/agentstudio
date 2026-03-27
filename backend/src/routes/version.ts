@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import type { Router as RouterType } from 'express';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { SDK_ENGINE, getSdkDir, getSdkDirName } from '../config/sdkConfig.js';
+import { getEngineType, getSdkDir, getSdkDirName } from '../config/engineConfig.js';
 
 const router: RouterType = Router();
 
@@ -218,7 +218,7 @@ router.get('/info', async (_req: Request, res: Response) => {
         arch: process.arch,
       },
       sdk: {
-        engine: SDK_ENGINE,
+        engine: getEngineType(),
         directory: getSdkDir(),
         dirName: getSdkDirName(),
       },

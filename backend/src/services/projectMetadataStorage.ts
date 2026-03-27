@@ -4,7 +4,7 @@ import * as os from 'os';
 import { ProjectMetadata, ProjectWithAgentInfo } from '../types/projects';
 import { AgentStorage } from './agentStorage';
 import { CLAUDE_AGENT_DIR, PROJECTS_METADATA_FILE } from '../config/paths.js';
-import { getProjectsDir, getSdkConfigPath } from '../config/sdkConfig.js';
+import { getProjectsDir, getSdkConfigPath } from '../config/engineConfig.js';
 
 interface ProjectMetadataStore {
   [projectPath: string]: ProjectMetadata;

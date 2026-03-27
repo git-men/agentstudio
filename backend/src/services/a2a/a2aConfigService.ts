@@ -14,7 +14,7 @@ import lockfile from 'proper-lockfile';
 import type { A2AConfig } from '../../types/a2a.js';
 import { DEFAULT_A2A_CONFIG } from '../../types/a2a.js';
 import { isIPAddress } from '../../middleware/httpsOnly.js';
-import { getProjectsDir } from '../../config/sdkConfig.js';
+import { getProjectsDir } from '../../config/engineConfig.js';
 
 const LOCK_OPTIONS = {
   retries: { retries: 5, minTimeout: 100, maxTimeout: 500 },

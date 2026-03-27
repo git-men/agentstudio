@@ -3,7 +3,7 @@ import { ClaudeSession } from './claudeSession';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { getProjectsDir, getAllProjectsDirs } from '../config/sdkConfig.js';
+import { getProjectsDir, getAllProjectsDirs } from '../config/engineConfig.js';
 
 /**
  * 会话配置快照

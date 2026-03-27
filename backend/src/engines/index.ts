@@ -54,6 +54,7 @@ function mapServiceEngineToAguiEngine(serviceEngine: string): EngineType {
   if (serviceEngine === 'codex-sdk') {
     return 'codex-sdk';
   }
+  // Both claude-sdk and claude-internal-sdk use the same claude AGUI engine
   return 'claude';
 }
 

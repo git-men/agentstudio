@@ -47,7 +47,8 @@ program
   .description('Start AgentStudio server')
   .option('-p, --port <port>', 'server port', '4936')
   .option('-H, --host <host>', 'server host', '0.0.0.0')
-  .option('--sdk <engine>', 'agent SDK engine (claude-code, claude-internal)', 'claude-code')
+  .option('--engine <engine>', 'service engine (claude-sdk, claude-internal-sdk, cursor-cli, etc.)', 'claude-sdk')
+  .option('--sdk <engine>', '[deprecated] use --engine instead (claude-code, claude-internal)', '')
   .option('--api-only', 'start API server only (no frontend)')
   .option('--env <path>', 'path to .env file')
   .option('--data-dir <path>', 'data directory for agents, sessions, etc.')
@@ -59,7 +60,13 @@ program
     // Set environment variables
     process.env.PORT = options.port;
     process.env.HOST = options.host;
-    process.env.AGENT_SDK = options.sdk;
+
+    // --engine takes priority; fall back to legacy --sdk for backward compatibility
+    if (options.engine && options.engine !== 'claude-sdk') {
+      process.env.ENGINE = options.engine;
+    } else if (options.sdk) {
+      process.env.AGENT_SDK = options.sdk;
+    }
 
     if (options.env) {
       process.env.ENV_PATH = path.resolve(options.env);
@@ -76,8 +83,10 @@ program
       console.log('   Auth: disabled');
     }
 
-    if (options.sdk !== 'claude-code') {
-      console.log(`   SDK: ${options.sdk}`);
+    if (options.engine && options.engine !== 'claude-sdk') {
+      console.log(`   Engine: ${options.engine}`);
+    } else if (options.sdk) {
+      console.log(`   SDK (legacy): ${options.sdk}`);
     }
 
     if (options.apiOnly) {

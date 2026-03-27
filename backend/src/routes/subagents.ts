@@ -4,7 +4,7 @@ import path from 'path';
 import { promisify } from 'util';
 import matter from 'gray-matter';
 import { Subagent, SubagentCreate, SubagentUpdate, SubagentFilter } from '../types/subagents';
-import { getAgentsDir, getSdkDirName } from '../config/sdkConfig.js';
+import { getAgentsDir, getSdkDirName } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 const readdir = promisify(fs.readdir);

@@ -11,7 +11,7 @@ import path from 'path';
 import os from 'os';
 import type { ToolDefinition, McpToolCallResult } from '../types.js';
 import { isCursorEngine } from '../../../config/engineConfig.js';
-import { getSdkDirName } from '../../../config/sdkConfig.js';
+import { getSdkDirName } from '../../../config/engineConfig.js';
 import type { Hook, HookListItem, HooksConfig, HookEventType } from '../../../types/hooks.js';
 
 const HOOK_EVENT_TYPES: HookEventType[] = [

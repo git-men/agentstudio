@@ -16,7 +16,7 @@ import {
 } from '../services/claudeVersionStorage';
 import { ClaudeVersionCreate, ClaudeVersionUpdate } from '../types/claude-versions';
 import { loadConfig } from '../config';
-import { getSdkDir } from '../config/sdkConfig.js';
+import { getSdkDir } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 const execAsync = promisify(exec);
