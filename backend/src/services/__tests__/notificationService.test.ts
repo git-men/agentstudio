@@ -516,17 +516,17 @@ describe('sendNotification', () => {
     await expect(sendNotification(task, makeResult())).resolves.toBeUndefined();
   });
 
-  it('generates sessionId from taskId', async () => {
+  it('passes through sessionId from result', async () => {
     const task = makeTask({
       notification: makeConfig({
         strategy: 'always',
         channels: [{ bot_key: 'bot_1', chat_id: 'chat_1' }],
       }),
     });
-    const result = makeResult({ taskId: 'exec_12345' });
+    const result = makeResult({ taskId: 'exec_12345', sessionId: 'session_abc' });
     await sendNotification(task, result);
     expect(mockedSendToIM).toHaveBeenCalledWith(
-      expect.objectContaining({ sessionId: 'notify_exec_12345' })
+      expect.objectContaining({ sessionId: 'session_abc' })
     );
   });
 });
@@ -605,16 +605,16 @@ describe('edge cases', () => {
     });
 
     await Promise.all([
-      sendNotification(task1, makeResult({ taskId: 'exec_A' })),
-      sendNotification(task2, makeResult({ taskId: 'exec_B' })),
+      sendNotification(task1, makeResult({ taskId: 'exec_A', sessionId: 'session_A' })),
+      sendNotification(task2, makeResult({ taskId: 'exec_B', sessionId: 'session_B' })),
     ]);
 
     expect(mockedSendToIM).toHaveBeenCalledTimes(2);
     expect(mockedSendToIM).toHaveBeenCalledWith(
-      expect.objectContaining({ botKey: 'bot_1', sessionId: 'notify_exec_A' })
+      expect.objectContaining({ botKey: 'bot_1', sessionId: 'session_A' })
     );
     expect(mockedSendToIM).toHaveBeenCalledWith(
-      expect.objectContaining({ botKey: 'bot_2', sessionId: 'notify_exec_B' })
+      expect.objectContaining({ botKey: 'bot_2', sessionId: 'session_B' })
     );
   });
 });

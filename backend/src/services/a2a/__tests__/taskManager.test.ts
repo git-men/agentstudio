@@ -53,7 +53,7 @@ describe('TaskManager', () => {
       expect(task.agentId).toBe('test-agent');
       expect(task.a2aAgentId).toBe('a2a-test-agent-id');
       expect(task.input.message).toBe('Test task');
-      expect(task.timeoutMs).toBe(300000); // Default 5 minutes
+      expect(task.timeoutMs).toBe(1800000); // Default 30 minutes
       expect(task.createdAt).toBeDefined();
       expect(task.updatedAt).toBeDefined();
     });
