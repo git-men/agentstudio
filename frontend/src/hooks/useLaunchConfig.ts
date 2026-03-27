@@ -59,6 +59,7 @@ export function useLaunchConfig() {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
       setStarting(false);
+      throw e;
     }
   }, []);
 

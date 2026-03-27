@@ -29,7 +29,7 @@ pub struct UpdateInfo {
     pub notes: String,
 }
 
-#[derive(Clone, serde::Serialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackendLogEntry {
     pub level: String,
     pub message: String,
@@ -297,10 +297,11 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
     // Inject launch config as sidecar env vars (thread-safe, no set_var)
     {
         let state = app.state::<AppState>();
-        if let Some(ref config) = *state.launch_config.lock().unwrap() {
+        let config = state.launch_config.lock().unwrap().clone();
+        if let Some(config) = config {
             let mut env_map = std::collections::HashMap::new();
-            env_map.insert("ENGINE".to_string(), config.engine.clone());
-            env_map.insert("AGENT_SDK".to_string(), config.sdk.clone());
+            env_map.insert("ENGINE".to_string(), config.engine);
+            env_map.insert("AGENT_SDK".to_string(), config.sdk);
             sidecar_cmd = sidecar_cmd.envs(env_map);
         }
     }
@@ -417,6 +418,114 @@ fn flush_log_buffer(app: &AppHandle, buffer: &mut Vec<BackendLogEntry>) {
     if buffer.is_empty() { return; }
     let _ = app.emit("backend-log-batch", buffer.as_slice());
     buffer.clear();
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn launch_config_default_values() {
+        let config = LaunchConfig::default();
+        assert_eq!(config.engine, "claude-sdk");
+        assert_eq!(config.sdk, "claude-code");
+    }
+
+    #[test]
+    fn launch_config_serialization_roundtrip() {
+        let config = LaunchConfig {
+            engine: "cursor-cli".to_string(),
+            sdk: "claude-internal".to_string(),
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        let parsed: LaunchConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.engine, "cursor-cli");
+        assert_eq!(parsed.sdk, "claude-internal");
+    }
+
+    #[test]
+    fn launch_config_deserialize_with_extra_fields() {
+        let json = r#"{"engine":"codex-cli","sdk":"claude-code","unknown_field":"value"}"#;
+        let config: LaunchConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.engine, "codex-cli");
+        assert_eq!(config.sdk, "claude-code");
+    }
+
+    #[test]
+    fn launch_config_deserialize_invalid_json_falls_back_to_default() {
+        let json = "not valid json";
+        let config: LaunchConfig = serde_json::from_str(json).unwrap_or_default();
+        assert_eq!(config.engine, "claude-sdk");
+        assert_eq!(config.sdk, "claude-code");
+    }
+
+    #[test]
+    fn launch_config_pretty_print() {
+        let config = LaunchConfig::default();
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        assert!(json.contains("claude-sdk"));
+        assert!(json.contains("claude-code"));
+        assert!(json.contains('\n'));
+    }
+
+    #[test]
+    fn backend_log_entry_serialization() {
+        let entry = BackendLogEntry {
+            level: "stdout".to_string(),
+            message: "Server started on port 4936".to_string(),
+        };
+        let json = serde_json::to_string(&entry).unwrap();
+        assert!(json.contains("stdout"));
+        assert!(json.contains("Server started on port 4936"));
+    }
+
+    #[test]
+    fn backend_log_entry_batch_serialization() {
+        let batch = vec![
+            BackendLogEntry { level: "stdout".to_string(), message: "line 1".to_string() },
+            BackendLogEntry { level: "stderr".to_string(), message: "line 2".to_string() },
+        ];
+        let json = serde_json::to_string(&batch).unwrap();
+        let parsed: Vec<BackendLogEntry> = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0].level, "stdout");
+        assert_eq!(parsed[1].level, "stderr");
+    }
+
+    #[test]
+    fn config_file_write_and_read() {
+        let dir = std::env::temp_dir().join("clawstudio-test");
+        let _ = std::fs::create_dir_all(&dir);
+        let path = dir.join("test-launch-config.json");
+
+        let config = LaunchConfig {
+            engine: "codebuddy-sdk".to_string(),
+            sdk: "claude-internal".to_string(),
+        };
+        let json = serde_json::to_string_pretty(&config).unwrap();
+        std::fs::write(&path, &json).unwrap();
+
+        let read_json = std::fs::read_to_string(&path).unwrap();
+        let read_config: LaunchConfig = serde_json::from_str(&read_json).unwrap();
+        assert_eq!(read_config.engine, "codebuddy-sdk");
+        assert_eq!(read_config.sdk, "claude-internal");
+
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(&dir);
+    }
+
+    #[test]
+    fn update_info_serialization() {
+        let info = UpdateInfo {
+            version: "1.0.0".to_string(),
+            notes: "Bug fixes".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("1.0.0"));
+        assert!(json.contains("Bug fixes"));
+    }
 }
 
 /// Background task: wait 5 seconds after startup, then check for updates.

@@ -23,8 +23,12 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
       engine: engine ?? config.engine,
       sdk: sdk ?? config.sdk,
     };
-    await startBackend(selectedConfig);
-    onStarted();
+    try {
+      await startBackend(selectedConfig);
+      onStarted();
+    } catch {
+      // error state is set inside the hook
+    }
   };
 
   const currentEngine = engine ?? config.engine;
