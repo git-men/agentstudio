@@ -1,4 +1,4 @@
-import React, { useEffect, lazy, Suspense } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { startConsoleCapture } from './utils/consoleCapture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -15,6 +15,9 @@ import { isTauri } from './lib/environment';
 import { useBackendReady } from './hooks/useBackendReady';
 import { useUpdateChecker } from './hooks/useUpdateChecker';
 import { UpdateDialog } from './components/desktop/UpdateDialog';
+import { DesktopLaunchConfig } from './components/desktop/DesktopLaunchConfig';
+import { BackendLogPanel } from './components/desktop/BackendLogPanel';
+import { useBackendLogs } from './hooks/useBackendLogs';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -288,15 +291,23 @@ const AppContent: React.FC = () => {
 };
 
 /**
- * In Tauri mode, wait for the backend sidecar to report its port before
- * rendering the main app. The splashscreen is already shown by Tauri (Rust
- * owns its lifecycle); we only gate the React tree here as a safety net.
- * In Web mode this wrapper is a no-op.
+ * In Tauri mode, gate the React tree behind backend readiness.
+ *
+ * - Web mode / Tauri dev: passes through immediately.
+ * - Tauri prod (VITE_TAURI=true): shows DesktopLaunchConfig first.
+ *   Once the user confirms, the sidecar is started via IPC and we poll
+ *   for the backend port before rendering the main app.
  */
 function TauriBackendGate({ children }: { children: React.ReactNode }) {
-  const { isReady, error } = useBackendReady();
+  const isTauriProd = isTauri() && import.meta.env.VITE_TAURI === 'true';
+  const [backendStarted, setBackendStarted] = useState(!isTauriProd);
+  const { isReady, error } = useBackendReady(backendStarted);
 
   if (!isTauri()) return <>{children}</>;
+
+  if (isTauriProd && !backendStarted) {
+    return <DesktopLaunchConfig onStarted={() => setBackendStarted(true)} />;
+  }
 
   if (error) {
     return (
@@ -339,12 +350,25 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
       <div
         style={{
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           height: '100vh',
+          gap: '16px',
           background: '#0f172a',
+          color: '#94a3b8',
+          fontFamily: 'system-ui, sans-serif',
         }}
-      />
+      >
+        <div style={{
+          width: '24px', height: '24px',
+          border: '2px solid #1e293b', borderTopColor: '#6366f1',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+        }} />
+        <p style={{ fontSize: '13px' }}>Starting backend...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
     );
   }
 
@@ -353,6 +377,8 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
   const { updatePayload, dismiss } = useUpdateChecker();
+  const { logs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, getFrontendLogs, clearFrontendLogs } = useBackendLogs();
+
   return (
     <>
       {children}
@@ -361,6 +387,30 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
           version={updatePayload.version}
           notes={updatePayload.notes}
           onDismiss={dismiss}
+        />
+      )}
+
+      {/* Log panel toggle (Tauri only) */}
+      {isTauri() && (
+        <button
+          onClick={() => setLogPanelVisible(!logPanelVisible)}
+          className="fixed bottom-4 right-4 z-[60] w-9 h-9 rounded-full bg-[#1e293b] border border-[#334155] text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#334155] transition-all shadow-lg flex items-center justify-center"
+          title="Toggle Log Panel"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
+            <path d="M4 6h8M4 8.5h5" stroke="currentColor" strokeWidth="1" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
+
+      {logPanelVisible && (
+        <BackendLogPanel
+          backendLogs={logs}
+          getFrontendLogs={getFrontendLogs}
+          onClearBackend={clearLogs}
+          onClearFrontend={clearFrontendLogs}
+          onClose={() => setLogPanelVisible(false)}
         />
       )}
     </>

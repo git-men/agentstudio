@@ -24,13 +24,11 @@ function shouldUseIpcPortDiscovery(): boolean {
  * Resolves the backend base URL and caches it in the config module so that
  * all synchronous API callers (`getApiBase()`, etc.) can access it.
  *
- * In Web mode: resolves immediately (synchronous-like).
- * In Tauri prod mode (VITE_TAURI=true): polls the `get_backend_port` IPC
- * command until the sidecar reports its port or the 30-second timeout expires.
- * In Tauri dev mode (VITE_TAURI unset): treats as Web mode since Vite proxy
- * forwards API requests, avoiding cross-origin issues.
+ * @param enabled  When false in Tauri prod mode, polling is deferred until
+ *                 set to true (used by the launch config flow to delay
+ *                 backend discovery until the user starts the sidecar).
  */
-export function useBackendReady(): BackendReadyState {
+export function useBackendReady(enabled = true): BackendReadyState {
   const needsIpc = shouldUseIpcPortDiscovery();
 
   const [state, setState] = useState<BackendReadyState>({
@@ -52,6 +50,8 @@ export function useBackendReady(): BackendReadyState {
       return;
     }
 
+    if (!enabled) return;
+
     let cancelled = false;
 
     getBackendBaseUrl()
@@ -70,7 +70,7 @@ export function useBackendReady(): BackendReadyState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [needsIpc, enabled]);
 
   return state;
 }

@@ -27,6 +27,27 @@ pub struct UpdateInfo {
     pub notes: String,
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct BackendLogEntry {
+    pub level: String,
+    pub message: String,
+}
+
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
+pub struct LaunchConfig {
+    pub engine: String,
+    pub sdk: String,
+}
+
+impl Default for LaunchConfig {
+    fn default() -> Self {
+        Self {
+            engine: "claude-sdk".to_string(),
+            sdk: "claude-code".to_string(),
+        }
+    }
+}
+
 // ── IPC Commands ──────────────────────────────────────────────────────────────
 
 /// Query the backend port. Returns None while the sidecar is still starting.
@@ -129,6 +150,52 @@ async fn send_notification(
     Ok(())
 }
 
+// ── Config persistence ───────────────────────────────────────────────────────
+
+fn get_config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let config_dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&config_dir).map_err(|e| e.to_string())?;
+    Ok(config_dir.join("launch-config.json"))
+}
+
+fn read_launch_config_from_file(app: &AppHandle) -> LaunchConfig {
+    match get_config_path(app) {
+        Ok(path) => match std::fs::read_to_string(&path) {
+            Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
+            Err(_) => LaunchConfig::default(),
+        },
+        Err(_) => LaunchConfig::default(),
+    }
+}
+
+fn write_launch_config_to_file(app: &AppHandle, config: &LaunchConfig) -> Result<(), String> {
+    let path = get_config_path(app)?;
+    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| e.to_string())
+}
+
+/// Load saved launch configuration (engine + SDK selection).
+#[tauri::command]
+fn load_launch_config(app: AppHandle) -> LaunchConfig {
+    read_launch_config_from_file(&app)
+}
+
+/// Save config, set environment variables, and start the backend sidecar.
+#[tauri::command]
+fn start_backend(
+    app: AppHandle,
+    engine: String,
+    sdk: String,
+) -> Result<(), String> {
+    let config = LaunchConfig { engine: engine.clone(), sdk: sdk.clone() };
+    write_launch_config_to_file(&app, &config)?;
+    std::env::set_var("ENGINE", &engine);
+    std::env::set_var("AGENT_SDK", &sdk);
+    log::info!("Starting backend with ENGINE={engine}, AGENT_SDK={sdk}");
+    spawn_backend_sidecar(app);
+    Ok(())
+}
+
 // ── Sidecar helpers ───────────────────────────────────────────────────────────
 
 fn kill_sidecar(state: &AppState) {
@@ -156,113 +223,151 @@ async fn try_detect_running_backend(port: u16) -> bool {
     }
 }
 
-/// Spawn the backend sidecar, parse BACKEND_PORT from its stdout, then
-/// close the splashscreen and show the main window.
-/// In dev mode, first polls for an already-running backend started by beforeDevCommand.
-fn start_sidecar(app: AppHandle) {
+/// Dev mode: poll for a running backend started by beforeDevCommand,
+/// then fall back to spawning the sidecar binary.
+fn start_sidecar_dev(app: AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        // In dev builds, the backend is started by beforeDevCommand.
-        // Poll for it before attempting to spawn the sidecar binary.
-        if cfg!(debug_assertions) {
-            let default_port: u16 = 4936;
-            log::info!("Dev mode: polling for backend on port {default_port}...");
-            let deadline = std::time::Instant::now() + Duration::from_secs(30);
-            loop {
-                if try_detect_running_backend(default_port).await {
-                    log::info!("Dev mode: backend detected on port {default_port}");
-                    let state = app_clone.state::<AppState>();
-                    *state.backend_port.lock().unwrap() = Some(default_port);
-                    close_splashscreen_internal(&app_clone);
-                    if let Err(e) = app_clone.emit("backend-ready", default_port) {
-                        log::warn!("Failed to emit backend-ready: {e}");
-                    }
-                    return;
-                }
-                if std::time::Instant::now() > deadline {
-                    log::warn!("Dev mode: backend not found after 30s, falling back to sidecar");
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(500)).await;
-            }
-        }
-
-        let shell = app_clone.shell();
-        let sidecar_result = shell.sidecar("agentstudio-backend");
-
-        let sidecar_cmd = match sidecar_result {
-            Ok(cmd) => cmd,
-            Err(e) => {
-                log::error!("Failed to create sidecar command: {e}");
-                notify_start_failed(&app_clone, &e.to_string());
-                return;
-            }
-        };
-
-        let spawn_result = sidecar_cmd.spawn();
-        let (mut rx, child) = match spawn_result {
-            Ok(pair) => pair,
-            Err(e) => {
-                log::error!("Failed to spawn sidecar: {e}");
-                notify_start_failed(&app_clone, &e.to_string());
-                return;
-            }
-        };
-
-        // Store child handle so ExitRequested handler can kill it
-        {
-            let state = app_clone.state::<AppState>();
-            *state.sidecar_child.lock().unwrap() = Some(child);
-        }
-
+        let default_port: u16 = 4936;
+        log::info!("Dev mode: polling for backend on port {default_port}...");
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
-        let mut port_found = false;
-
-        while let Some(event) = rx.recv().await {
-            use tauri_plugin_shell::process::CommandEvent;
-            match event {
-                CommandEvent::Stdout(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    log::debug!("[sidecar stdout] {line}");
-                    if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
-                        if let Ok(port) = port_str.parse::<u16>() {
-                            let state = app_clone.state::<AppState>();
-                            *state.backend_port.lock().unwrap() = Some(port);
-                            port_found = true;
-
-                            close_splashscreen_internal(&app_clone);
-
-                            if let Err(e) = app_clone.emit("backend-ready", port) {
-                                log::warn!("Failed to emit backend-ready: {e}");
-                            }
-                            log::info!("Backend sidecar ready on port {port}");
-                        }
-                    }
+        loop {
+            if try_detect_running_backend(default_port).await {
+                log::info!("Dev mode: backend detected on port {default_port}");
+                let state = app_clone.state::<AppState>();
+                *state.backend_port.lock().unwrap() = Some(default_port);
+                close_splashscreen_internal(&app_clone);
+                if let Err(e) = app_clone.emit("backend-ready", default_port) {
+                    log::warn!("Failed to emit backend-ready: {e}");
                 }
-                CommandEvent::Stderr(line_bytes) => {
-                    let line = String::from_utf8_lossy(&line_bytes);
-                    log::debug!("[sidecar stderr] {line}");
-                }
-                CommandEvent::Error(e) => {
-                    log::error!("[sidecar error] {e}");
-                }
-                CommandEvent::Terminated(status) => {
-                    log::warn!("[sidecar terminated] code={:?}", status.code);
-                    if !port_found {
-                        notify_start_failed(&app_clone, "Backend process terminated unexpectedly");
-                    }
-                    break;
-                }
-                _ => {}
+                return;
             }
-
-            if !port_found && std::time::Instant::now() > deadline {
-                log::error!("Backend sidecar timed out after 30 seconds");
-                notify_start_failed(&app_clone, "Backend startup timed out (30s)");
+            if std::time::Instant::now() > deadline {
+                log::warn!("Dev mode: backend not found after 30s, falling back to sidecar");
                 break;
             }
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
+        spawn_backend_sidecar_inner(app_clone, true).await;
     });
+}
+
+/// Launch the sidecar in a background task (called by `start_backend` IPC).
+fn spawn_backend_sidecar(app: AppHandle) {
+    let app_clone = app.clone();
+    tauri::async_runtime::spawn(async move {
+        spawn_backend_sidecar_inner(app_clone, false).await;
+    });
+}
+
+/// Core sidecar lifecycle: spawn process, stream logs, detect port.
+/// When `close_splash` is true (dev-mode fallback), the splashscreen
+/// is closed once the backend port is detected.
+async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
+    let shell = app.shell();
+    let sidecar_result = shell.sidecar("agentstudio-backend");
+
+    let sidecar_cmd = match sidecar_result {
+        Ok(cmd) => cmd,
+        Err(e) => {
+            log::error!("Failed to create sidecar command: {e}");
+            let _ = app.emit("backend-log", BackendLogEntry {
+                level: "error".to_string(),
+                message: format!("Failed to create sidecar command: {e}"),
+            });
+            notify_start_failed(&app, &e.to_string());
+            return;
+        }
+    };
+
+    let spawn_result = sidecar_cmd.spawn();
+    let (mut rx, child) = match spawn_result {
+        Ok(pair) => pair,
+        Err(e) => {
+            log::error!("Failed to spawn sidecar: {e}");
+            let _ = app.emit("backend-log", BackendLogEntry {
+                level: "error".to_string(),
+                message: format!("Failed to spawn sidecar: {e}"),
+            });
+            notify_start_failed(&app, &e.to_string());
+            return;
+        }
+    };
+
+    {
+        let state = app.state::<AppState>();
+        *state.sidecar_child.lock().unwrap() = Some(child);
+    }
+
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let mut port_found = false;
+
+    while let Some(event) = rx.recv().await {
+        use tauri_plugin_shell::process::CommandEvent;
+        match event {
+            CommandEvent::Stdout(line_bytes) => {
+                let line = String::from_utf8_lossy(&line_bytes);
+                log::debug!("[sidecar stdout] {line}");
+                let _ = app.emit("backend-log", BackendLogEntry {
+                    level: "stdout".to_string(),
+                    message: line.to_string(),
+                });
+                if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
+                    if let Ok(port) = port_str.parse::<u16>() {
+                        let state = app.state::<AppState>();
+                        *state.backend_port.lock().unwrap() = Some(port);
+                        port_found = true;
+
+                        if close_splash {
+                            close_splashscreen_internal(&app);
+                        }
+
+                        if let Err(e) = app.emit("backend-ready", port) {
+                            log::warn!("Failed to emit backend-ready: {e}");
+                        }
+                        log::info!("Backend sidecar ready on port {port}");
+                    }
+                }
+            }
+            CommandEvent::Stderr(line_bytes) => {
+                let line = String::from_utf8_lossy(&line_bytes);
+                log::debug!("[sidecar stderr] {line}");
+                let _ = app.emit("backend-log", BackendLogEntry {
+                    level: "stderr".to_string(),
+                    message: line.to_string(),
+                });
+            }
+            CommandEvent::Error(e) => {
+                log::error!("[sidecar error] {e}");
+                let _ = app.emit("backend-log", BackendLogEntry {
+                    level: "error".to_string(),
+                    message: e.clone(),
+                });
+            }
+            CommandEvent::Terminated(status) => {
+                log::warn!("[sidecar terminated] code={:?}", status.code);
+                let _ = app.emit("backend-log", BackendLogEntry {
+                    level: "system".to_string(),
+                    message: format!("Backend process terminated (code: {:?})", status.code),
+                });
+                if !port_found {
+                    notify_start_failed(&app, "Backend process terminated unexpectedly");
+                }
+                break;
+            }
+            _ => {}
+        }
+
+        if !port_found && std::time::Instant::now() > deadline {
+            log::error!("Backend sidecar timed out after 30 seconds");
+            let _ = app.emit("backend-log", BackendLogEntry {
+                level: "error".to_string(),
+                message: "Backend startup timed out (30s)".to_string(),
+            });
+            notify_start_failed(&app, "Backend startup timed out (30s)");
+            break;
+        }
+    }
 }
 
 /// Background task: wait 5 seconds after startup, then check for updates.
@@ -417,10 +522,18 @@ pub fn run() {
             check_update,
             install_update,
             send_notification,
+            load_launch_config,
+            start_backend,
         ])
-        // Start the sidecar, update check, and tray after Tauri is fully ready
         .setup(|app| {
-            start_sidecar(app.handle().clone());
+            if cfg!(debug_assertions) {
+                // Dev mode: auto-detect running backend or fall back to sidecar
+                start_sidecar_dev(app.handle().clone());
+            } else {
+                // Prod mode: show main window with launch config UI;
+                // backend will be started when user confirms via start_backend IPC.
+                close_splashscreen_internal(app.handle());
+            }
             start_update_check(app.handle().clone());
             if let Err(e) = setup_system_tray(app) {
                 log::warn!("Failed to setup system tray: {e}");
