@@ -40,16 +40,29 @@ export function validateGitUrl(url: string): boolean {
   return true;
 }
 
-function spawnAsync(command: string, args: string[]): Promise<void> {
+function spawnAsync(command: string, args: string[], timeoutMs = 120_000): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { stdio: 'pipe' });
+    const child = spawn(command, args, {
+      stdio: 'pipe',
+      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
+    });
     let stderr = '';
     child.stderr?.on('data', (data: Buffer) => { stderr += data.toString(); });
+
+    const timer = setTimeout(() => {
+      child.kill('SIGTERM');
+      reject(new Error(`${command} timed out after ${timeoutMs / 1000}s. If this is an HTTPS git URL requiring authentication, try using SSH (git@...) instead.`));
+    }, timeoutMs);
+
     child.on('close', (code) => {
+      clearTimeout(timer);
       if (code === 0) resolve();
       else reject(new Error(`${command} failed with code ${code}: ${stderr}`));
     });
-    child.on('error', reject);
+    child.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
   });
 }
 

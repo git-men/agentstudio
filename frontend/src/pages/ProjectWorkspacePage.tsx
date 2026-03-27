@@ -416,16 +416,24 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   // ---------- Main render ----------
   return (
-    <div className="h-screen bg-gray-100 dark:bg-gray-900">
+    <div className="h-screen flex flex-col bg-gray-100 dark:bg-gray-900">
       {isTauri() && (
-        <button
-          onClick={() => closeCurrentWindow()}
-          className="fixed top-3 left-3 z-50 flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md bg-gray-200/80 dark:bg-gray-700/80 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 backdrop-blur-sm transition-colors"
-          title="关闭窗口"
-        >
-          ✕ 关闭
-        </button>
+        <div className="flex-shrink-0 h-9 px-3 flex items-center justify-between bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
+              {project?.name || projectPath.split('/').pop() || 'Project'}
+            </span>
+          </div>
+          <button
+            onClick={() => closeCurrentWindow()}
+            className="flex-shrink-0 flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            title="关闭窗口"
+          >
+            ✕
+          </button>
+        </div>
       )}
+      <div className="flex-1 min-h-0">
       <WorkspaceLayout
         defaultRightRatio={0.7}
         mainPanelVisible={chatVisible}
@@ -493,6 +501,7 @@ export const ProjectWorkspacePage: React.FC = () => {
           renderEmptyState()
         )}
       </WorkspaceLayout>
+      </div>
 
       {memoryProject && (
         <ProjectMemoryModal

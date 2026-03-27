@@ -619,7 +619,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           title={t('agentChat.attachment.selectFile')}
           initialPath={projectPath}
           allowFiles={true}
-          allowDirectories={false}
+          allowDirectories={true}
           restrictToProject={true}
           onSelect={handleFileReferenceSelect}
           onClose={() => setShowFileReferenceBrowser(false)}
