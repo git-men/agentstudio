@@ -59,8 +59,7 @@ import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
 import { enterpriseAuthService } from './services/enterpriseAuthService.js';
-import { logSdkConfig } from './config/sdkConfig.js';
-import { initializeEngine, logEngineConfig } from './config/engineConfig.js';
+import { initializeEngine, logEngineConfig, getClaudeCliName } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
 import { productGateMiddleware } from './middleware/productGate.js';
 
@@ -149,7 +148,6 @@ runMigrations();
 // Initialize and log engine configuration at startup
 initializeEngine();
 logEngineConfig();
-logSdkConfig(); // Keep for backward compatibility
 
 // Initialize runtime engines after dotenv + service engine config are ready.
 try {
@@ -237,17 +235,16 @@ const app: express.Express = express();
   try {
     const { initializeSystemVersion } = await import('./services/claudeVersionStorage.js');
     const { getSystemClaudeExecutablePath } = await import('./utils/claudeUtils.js');
-    const { SDK_ENGINE } = await import('./config/sdkConfig.js');
+    const cliName = getClaudeCliName();
 
-    // Try to find Claude executable based on SDK engine
     let claudePath: string | null = null;
     try {
-      claudePath = await getSystemClaudeExecutablePath(SDK_ENGINE);
+      claudePath = await getSystemClaudeExecutablePath(cliName);
       if (claudePath) {
-        console.log(`[System] Found ${SDK_ENGINE} CLI at: ${claudePath}`);
+        console.log(`[System] Found ${cliName} CLI at: ${claudePath}`);
       }
     } catch (error) {
-      console.log(`[System] ${SDK_ENGINE} CLI not found in PATH, initializing without executable path`);
+      console.log(`[System] ${cliName} CLI not found in PATH, initializing without executable path`);
     }
 
     // Initialize system version (with or without executable path)

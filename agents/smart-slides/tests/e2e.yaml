@@ -1,0 +1,15 @@
+version: "1"
+project:
+  name: gemini-slides-e2e
+  description: E2E tests for Gemini Slides PPT agent view
+
+resilience:
+  preflight:
+    enabled: false
+
+tests:
+  suites:
+    - name: Gemini Slides UI
+      id: gemini-slides-ui
+      file: tests/gemini-slides-ui.yaml
+      runner: yaml

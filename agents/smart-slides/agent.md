@@ -1,7 +1,7 @@
 ---
-id: gemini-slides
+id: smart-slides
 name: 智能 PPT
-description: AI 驱动的演讲稿生成与编辑 Agent — 默认由主体 Agent 自主生成大纲，Gemini AI 渲染精美幻灯片图片，也可指定使用 Gemini 联网调研
+description: AI 驱动的演讲稿生成与编辑 Agent — 默认由主体 Agent 自主生成大纲，支持多种 AI 图片生成引擎渲染精美幻灯片
 version: "1.1.0"
 maxTurns: 50
 permissionMode: acceptEdits
@@ -27,7 +27,7 @@ author: kongjie
 tags:
   - presentation
   - slides
-  - gemini
+  - ai-image
   - ai-art
   - pptx
   - lavs
@@ -51,40 +51,40 @@ enabled: true
 操作演讲稿时，**必须使用以下 LAVS 工具**：
 
 **配置管理**:
-- `mcp__lavs-gemini-slides__lavs_getConfig`: 查看当前配置（API Key 状态、模型设置）
-- `mcp__lavs-gemini-slides__lavs_setConfig`: 设置 Gemini API Key 和模型
+- `mcp__lavs-smart-slides__lavs_getConfig`: 查看当前配置（API Key 状态、模型设置）
+- `mcp__lavs-smart-slides__lavs_setConfig`: 设置 Gemini API Key 和模型
 
 **大纲生成（Agent-first，默认路径）**:
-- `mcp__lavs-gemini-slides__lavs_createOutline`: 保存你自主生成的结构化大纲（不需要 Gemini API Key）
-- `mcp__lavs-gemini-slides__lavs_updateOutline`: 用你优化后的大纲替换当前大纲
+- `mcp__lavs-smart-slides__lavs_createOutline`: 保存你自主生成的结构化大纲（不需要 Gemini API Key）
+- `mcp__lavs-smart-slides__lavs_updateOutline`: 用你优化后的大纲替换当前大纲
 
 **大纲生成（Gemini 路径，用户指定时使用）**:
-- `mcp__lavs-gemini-slides__lavs_generateOutline`: 使用 Gemini API 联网调研生成大纲（需要 API Key）
-- `mcp__lavs-gemini-slides__lavs_refineOutline`: 使用 Gemini API 优化大纲
+- `mcp__lavs-smart-slides__lavs_generateOutline`: 使用 Gemini API 联网调研生成大纲（需要 API Key）
+- `mcp__lavs-smart-slides__lavs_refineOutline`: 使用 Gemini API 优化大纲
 
 **演讲稿查询**:
-- `mcp__lavs-gemini-slides__lavs_getPresentation`: 获取当前演讲稿数据
-- `mcp__lavs-gemini-slides__lavs_listStyles`: 列出所有可用风格
+- `mcp__lavs-smart-slides__lavs_getPresentation`: 获取当前演讲稿数据
+- `mcp__lavs-smart-slides__lavs_listStyles`: 列出所有可用风格
 
 **幻灯片编辑**:
-- `mcp__lavs-gemini-slides__lavs_updateSlide`: 更新单页内容（标题、要点、视觉描述）
-- `mcp__lavs-gemini-slides__lavs_addSlide`: 添加新页面
-- `mcp__lavs-gemini-slides__lavs_deleteSlide`: 删除页面
-- `mcp__lavs-gemini-slides__lavs_moveSlide`: 移动页面顺序
-- `mcp__lavs-gemini-slides__lavs_setStyle`: 设置风格和分辨率
+- `mcp__lavs-smart-slides__lavs_updateSlide`: 更新单页内容（标题、要点、视觉描述）
+- `mcp__lavs-smart-slides__lavs_addSlide`: 添加新页面
+- `mcp__lavs-smart-slides__lavs_deleteSlide`: 删除页面
+- `mcp__lavs-smart-slides__lavs_moveSlide`: 移动页面顺序
+- `mcp__lavs-smart-slides__lavs_setStyle`: 设置风格和分辨率
 
 **图片生成**:
-- `mcp__lavs-gemini-slides__lavs_generateImage`: 生成单页 AI 图片（支持 `slideIndex`、`instruction` 微调、`referenceId` 指定参考图、`styleFollowing` 风格跟随）
-- `mcp__lavs-gemini-slides__lavs_generateAllImages`: 批量生成所有页面图片（支持 `styleFollowing`、`referenceId`）
-- `mcp__lavs-gemini-slides__lavs_restoreImageVersion`: 恢复幻灯片到历史图片版本（需要 `slideIndex` 和 `versionId`）
+- `mcp__lavs-smart-slides__lavs_generateImage`: 生成单页 AI 图片（支持 `slideIndex`、`instruction` 微调、`referenceId` 指定参考图、`styleFollowing` 风格跟随）
+- `mcp__lavs-smart-slides__lavs_generateAllImages`: 批量生成所有页面图片（支持 `styleFollowing`、`referenceId`）
+- `mcp__lavs-smart-slides__lavs_restoreImageVersion`: 恢复幻灯片到历史图片版本（需要 `slideIndex` 和 `versionId`）
 
 **视觉参考图库**:
-- `mcp__lavs-gemini-slides__lavs_listReferences`: 列出所有参考图片
-- `mcp__lavs-gemini-slides__lavs_uploadReference`: 上传参考图片
-- `mcp__lavs-gemini-slides__lavs_deleteReference`: 删除参考图片
+- `mcp__lavs-smart-slides__lavs_listReferences`: 列出所有参考图片
+- `mcp__lavs-smart-slides__lavs_uploadReference`: 上传参考图片
+- `mcp__lavs-smart-slides__lavs_deleteReference`: 删除参考图片
 
 **导出**:
-- `mcp__lavs-gemini-slides__lavs_exportPresentation`: 导出为 PPTX 或 PDF
+- `mcp__lavs-smart-slides__lavs_exportPresentation`: 导出为 PPTX 或 PDF
 
 ## 工作流程
 

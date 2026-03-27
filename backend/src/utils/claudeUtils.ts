@@ -35,15 +35,13 @@ const execAsync = promisify(exec);
  * Note: When no executable path is specified, SDK will automatically
  * use its bundled CLI which is always compatible with the SDK version.
  * 
- * @param sdkEngine - SDK engine to use (claude-code or claude-internal)
+ * @param cliName - CLI executable name (e.g., 'claude' or 'claude-internal')
  */
-export async function getSystemClaudeExecutablePath(sdkEngine?: string): Promise<string | null> {
+export async function getSystemClaudeExecutablePath(cliName?: string): Promise<string | null> {
+  const resolvedCliName = cliName || 'claude';
   try {
     const isWindows = process.platform === 'win32';
-    
-    // Determine which CLI to search for based on SDK engine
-    const cliName = sdkEngine === 'claude-internal' ? 'claude-internal' : 'claude';
-    const command = isWindows ? `where ${cliName}` : `which ${cliName}`;
+    const command = isWindows ? `where ${resolvedCliName}` : `which ${resolvedCliName}`;
 
     const { stdout: claudePath } = await execAsync(command);
     if (!claudePath) return null;
@@ -53,7 +51,7 @@ export async function getSystemClaudeExecutablePath(sdkEngine?: string): Promise
     // Skip local node_modules paths - we want global installation
     if (cleanPath.includes('node_modules/.bin') || cleanPath.includes('node_modules\\.bin')) {
       try {
-        const allCommand = isWindows ? `where ${cliName}` : `which -a ${cliName}`;
+        const allCommand = isWindows ? `where ${resolvedCliName}` : `which -a ${resolvedCliName}`;
         const { stdout: allClaudes } = await execAsync(allCommand);
         const claudes = allClaudes.trim().split('\n');
 
@@ -101,7 +99,7 @@ export async function getSystemClaudeExecutablePath(sdkEngine?: string): Promise
 
     return cleanPath;
   } catch (error) {
-    console.error(`Failed to get system ${sdkEngine || 'claude'} executable path:`, error);
+    console.error(`Failed to get system ${resolvedCliName} executable path:`, error);
     return null;
   }
 }

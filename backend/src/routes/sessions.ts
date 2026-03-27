@@ -7,7 +7,7 @@ import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-hist
 // Note: Cursor/CodeBuddy session reading is now handled via engine.readSessions()
 // Claude session reading still uses readClaudeHistorySessions() below (pending migration)
 import { sessionManager } from '../services/sessionManager';
-import { getProjectsDir, getAllProjectsDirs } from '../config/sdkConfig.js';
+import { getProjectsDir, getAllProjectsDirs } from '../config/engineConfig.js';
 // Note: getEngineType is no longer needed here - engine routing is handled via engineManager
 import { engineManager } from '../engines/index.js';
 import { resolvePath } from '../config/paths.js';

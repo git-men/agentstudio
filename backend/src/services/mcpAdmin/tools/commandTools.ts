@@ -9,7 +9,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import matter from 'gray-matter';
 import { getEnginePaths } from '../../../config/engineConfig.js';
-import { getSdkDirName } from '../../../config/sdkConfig.js';
+import { getSdkDirName } from '../../../config/engineConfig.js';
 import { isCursorEngine } from '../../../config/engineConfig.js';
 
 // Get user-level commands directory

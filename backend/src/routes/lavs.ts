@@ -25,8 +25,10 @@ import type {
   FunctionHandler,
 } from 'lavs-runtime';
 import { AGENTS_DIR } from '../config/paths.js';
+import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
 
 const router: express.Router = express.Router();
+const projectStorage = new ProjectMetadataStorage();
 
 // Shared instances
 const validator = new LAVSValidator();
@@ -56,16 +58,22 @@ function assertSafeAgentId(agentId: string): void {
 
 /**
  * Get agent directory path
- * Agents can be in either global agents directory or project agents directory
+ * Priority: ~/.agentstudio/agents/ (global) > project source agents/
+ * Global directory takes precedence because installed/marketplace agents
+ * should override development source copies.
  */
 function getAgentDirectory(agentId: string): string {
   assertSafeAgentId(agentId);
 
-  // Check project agents directory (one level up from backend if cwd is backend/)
+  // 1. Check global agents directory first (highest priority)
+  const globalAgentDir = path.join(AGENTS_DIR, agentId);
+  if (fs.existsSync(globalAgentDir)) {
+    return globalAgentDir;
+  }
+
+  // 2. Fallback to project agents directory
   const cwd = process.cwd();
   let projectAgentDir = path.join(cwd, 'agents', agentId);
-
-  // If cwd ends with 'backend', check parent directory
   if (cwd.endsWith('backend')) {
     projectAgentDir = path.join(cwd, '..', 'agents', agentId);
   }
@@ -74,14 +82,8 @@ function getAgentDirectory(agentId: string): string {
     return path.resolve(projectAgentDir);
   }
 
-  // Check global agents directory
-  const globalAgentDir = path.join(AGENTS_DIR, agentId);
-  if (fs.existsSync(globalAgentDir)) {
-    return globalAgentDir;
-  }
-
-  // Default to project directory even if it doesn't exist yet
-  return path.resolve(projectAgentDir);
+  // Default to global directory
+  return globalAgentDir;
 }
 
 /**
@@ -250,15 +252,25 @@ router.post('/:agentId/lavs/:endpoint', async (req, res) => {
       endpoint.permissions
     );
 
+    let contextEnv: Record<string, string> | undefined;
+    if (projectPath) {
+      contextEnv = { LAVS_PROJECT_PATH: projectPath };
+      try {
+        const projectMeta = projectStorage.getProjectMetadata(projectPath);
+        if (projectMeta?.env) {
+          Object.assign(contextEnv, projectMeta.env);
+        }
+      } catch (e) {
+        console.warn('Failed to load project env vars for LAVS context:', e);
+      }
+    }
+
     const context: ExecutionContext = {
       endpointId: endpoint.id,
       agentId,
       workdir: agentDir,
       permissions: mergedPermissions,
-      // Pass projectPath as environment variable for data isolation
-      env: projectPath ? {
-        LAVS_PROJECT_PATH: projectPath,
-      } : undefined,
+      env: contextEnv,
     };
 
     // 6. Check permissions (path traversal, file access)

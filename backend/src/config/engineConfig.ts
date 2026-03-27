@@ -8,6 +8,7 @@
  * Supported engines:
  * - cursor-cli: Uses Cursor CLI, reads from ~/.cursor/
  * - claude-sdk: Uses Claude Agent SDK, reads from ~/.claude/
+ * - claude-internal-sdk: Uses Claude Internal SDK, reads from ~/.claude-internal/
  * - codebuddy-sdk: Uses CodeBuddy Agent SDK, reads from ~/.codebuddy/
  * - codex-cli: Uses Codex CLI, reads from ~/.codex/
  * 
@@ -19,6 +20,8 @@
 
 import * as path from 'path';
 import * as os from 'os';
+import * as fs from 'fs';
+import { AGENTSTUDIO_HOME } from './paths.js';
 import type {
   ServiceEngineType,
   ServiceEngineConfig,
@@ -60,6 +63,9 @@ function detectEngineType(): ServiceEngineType {
     if (legacySdk === 'cursor' || legacySdk === 'cursor-cli') {
       return 'cursor-cli';
     }
+    if (legacySdk === 'claude-internal') {
+      return 'claude-internal-sdk';
+    }
     return 'claude-sdk';
   }
   
@@ -71,7 +77,7 @@ function detectEngineType(): ServiceEngineType {
  * Supports case-insensitive matching and common aliases
  */
 function validateEngineType(engine: string): ServiceEngineType {
-  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'codebuddy-sdk', 'codex-cli', 'codex-sdk'];
+  const validEngines: ServiceEngineType[] = ['cursor-cli', 'claude-sdk', 'claude-internal-sdk', 'codebuddy-sdk', 'codex-cli', 'codex-sdk'];
   const normalized = engine.trim().toLowerCase();
 
   // 直接匹配
@@ -88,6 +94,11 @@ function validateEngineType(engine: string): ServiceEngineType {
     'claude_sdk': 'claude-sdk',
     'claudesdk': 'claude-sdk',
     'claude-code': 'claude-sdk',
+    'claude-internal': 'claude-internal-sdk',
+    'claude_internal': 'claude-internal-sdk',
+    'claudeinternal': 'claude-internal-sdk',
+    'claude-internal-sdk': 'claude-internal-sdk',
+    'claude_internal_sdk': 'claude-internal-sdk',
     'codebuddy': 'codebuddy-sdk',
     'codebuddy_sdk': 'codebuddy-sdk',
     'codebuddysdk': 'codebuddy-sdk',
@@ -394,6 +405,27 @@ function getClaudeSdkPaths(): EnginePathConfig {
 }
 
 /**
+ * Get Claude Internal SDK paths
+ * Inherits from Claude SDK, overriding only the base directory (~/.claude-internal)
+ */
+function getClaudeInternalSdkPaths(): EnginePathConfig {
+  const internalDir = path.join(os.homedir(), '.claude-internal');
+  return {
+    ...getClaudeSdkPaths(),
+    userConfigDir: internalDir,
+    mcpConfigPath: path.join(internalDir, 'mcp.json'),
+    mcpDir: path.join(internalDir, 'mcp'),
+    rulesDir: path.join(internalDir, 'rules'),
+    commandsDir: path.join(internalDir, 'commands'),
+    agentsDir: path.join(internalDir, 'agents'),
+    skillsDir: path.join(internalDir, 'skills'),
+    hooksDir: path.join(internalDir, 'hooks'),
+    pluginsDir: path.join(internalDir, 'plugins'),
+    projectsDataDir: path.join(internalDir, 'projects'),
+  };
+}
+
+/**
  * Get Cursor CLI paths
  */
 function getCursorCliPaths(): EnginePathConfig {
@@ -475,6 +507,13 @@ export function initializeEngine(): ServiceEngineConfig {
       capabilities: CURSOR_CLI_CAPABILITIES,
       paths: getCursorCliPaths(),
     };
+  } else if (engineType === 'claude-internal-sdk') {
+    _engineConfig = {
+      engine: 'claude-internal-sdk',
+      name: 'Claude Internal SDK',
+      capabilities: CLAUDE_SDK_CAPABILITIES,
+      paths: getClaudeInternalSdkPaths(),
+    };
   } else if (engineType === 'codebuddy-sdk') {
     _engineConfig = {
       engine: 'codebuddy-sdk',
@@ -534,10 +573,18 @@ export function isCursorEngine(): boolean {
 }
 
 /**
- * Check if current engine is Claude SDK
+ * Check if current engine is Claude SDK (includes Claude Internal)
  */
 export function isClaudeEngine(): boolean {
-  return getEngineType() === 'claude-sdk';
+  const engine = getEngineType();
+  return engine === 'claude-sdk' || engine === 'claude-internal-sdk';
+}
+
+/**
+ * Check if current engine is Claude Internal SDK
+ */
+export function isClaudeInternalEngine(): boolean {
+  return getEngineType() === 'claude-internal-sdk';
 }
 
 /**
@@ -620,6 +667,65 @@ export function getProjectMcpDir(projectPath: string): string {
 }
 
 // =============================================================================
+// Cross-variant Session Discovery (migrated from sdkConfig.ts)
+// =============================================================================
+
+/**
+ * Get all projects directories to search for Claude session files.
+ *
+ * Sessions may be created by different Claude variants (claude-sdk, claude-internal-sdk),
+ * each writing to its own config directory. We search both to find sessions regardless
+ * of which variant created them.
+ *
+ * On macOS, also includes ~/.agentstudio/claude-sdk-config/projects for the EMFILE workaround.
+ */
+export function getAllProjectsDirs(): string[] {
+  const home = os.homedir();
+  const seen = new Set<string>();
+  const dirs: string[] = [];
+
+  const addIfExists = (dir: string) => {
+    if (!seen.has(dir)) {
+      seen.add(dir);
+      if (fs.existsSync(dir)) {
+        dirs.push(dir);
+      }
+    }
+  };
+
+  if (process.platform === 'darwin') {
+    addIfExists(path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects'));
+  }
+
+  addIfExists(getEnginePaths().projectsDataDir);
+
+  addIfExists(path.join(home, '.claude-internal', 'projects'));
+  addIfExists(path.join(home, '.claude', 'projects'));
+
+  return dirs;
+}
+
+/**
+ * Get the SDK config file path (e.g., ~/.claude.json or ~/.claude-internal/.claude.json)
+ */
+export function getSdkConfigPath(): string {
+  if (isClaudeInternalEngine()) {
+    return path.join(getEnginePaths().userConfigDir, '.claude.json');
+  }
+  return path.join(os.homedir(), '.claude.json');
+}
+
+/**
+ * Get the Claude CLI executable name based on engine type
+ */
+export function getClaudeCliName(): string {
+  if (isClaudeInternalEngine()) {
+    return 'claude-internal';
+  }
+  return 'claude';
+}
+
+// =============================================================================
 // Backward Compatibility with sdkConfig.ts
 // =============================================================================
 
@@ -632,6 +738,7 @@ export { getEngineType as SDK_ENGINE_TYPE };
  */
 export function getSdkDirName(): string {
   if (isCursorEngine()) return '.cursor';
+  if (isClaudeInternalEngine()) return '.claude-internal';
   if (isCodebuddyEngine()) return '.codebuddy';
   if (isCodexEngine() || isCodexSdkEngine()) return '.codex';
   return '.claude';

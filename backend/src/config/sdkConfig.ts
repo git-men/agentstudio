@@ -1,21 +1,23 @@
+/**
+ * @deprecated This module is deprecated. Use engineConfig.ts instead.
+ * 
+ * Claude Internal is now a first-class engine type ('claude-internal-sdk') in engineConfig.ts.
+ * All functions from this module have been migrated to engineConfig.ts.
+ * This file is kept for backward compatibility and will be removed in a future release.
+ * 
+ * Migration guide:
+ * - SDK_ENGINE → getEngineType() from engineConfig.ts
+ * - getSdkDir() → getEnginePaths().userConfigDir from engineConfig.ts
+ * - getProjectsDir() → getEnginePaths().projectsDataDir from engineConfig.ts
+ * - getAllProjectsDirs() → getAllProjectsDirs() from engineConfig.ts
+ * - getSdkConfigPath() → getSdkConfigPath() from engineConfig.ts
+ * - getSdkDirName() → getSdkDirName() from engineConfig.ts
+ */
+
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
 import { AGENTSTUDIO_HOME } from './paths.js';
-
-/**
- * SDK Engine Configuration
- * 
- * AgentStudio can work with different Agent SDK implementations:
- * - claude-code: Claude Code (default, uses ~/.claude)
- * - claude-internal: Claude Internal (uses ~/.claude-internal)
- * - code-buddy: Code Buddy (uses ~/.codebuddy)
- * 
- * The SDK engine is specified at service startup via:
- * - Environment variable: AGENT_SDK=claude-internal
- * - Command line argument: --sdk=claude-internal
- * - Default: claude-code
- */
 
 // Get SDK engine from environment or default to claude-code
 export const SDK_ENGINE = process.env.AGENT_SDK || 'claude-code';
