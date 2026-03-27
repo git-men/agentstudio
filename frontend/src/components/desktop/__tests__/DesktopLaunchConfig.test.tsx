@@ -12,7 +12,6 @@ vi.mock('../../../lib/environment', () => ({
   isTauri: () => true,
 }));
 
-// Stub global __APP_VERSION__
 // @ts-expect-error - test global
 globalThis.__APP_VERSION__ = '1.0.0-test';
 
@@ -23,7 +22,7 @@ describe('DesktopLaunchConfig', () => {
     vi.clearAllMocks();
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
         return Promise.resolve();
@@ -42,11 +41,12 @@ describe('DesktopLaunchConfig', () => {
     });
   });
 
-  it('displays all engine options', async () => {
+  it('displays all engine options including Claude Internal', async () => {
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
       expect(screen.getByText('Claude Agent SDK')).toBeTruthy();
+      expect(screen.getByText('Claude Internal')).toBeTruthy();
       expect(screen.getByText('CodeBuddy')).toBeTruthy();
       expect(screen.getByText('Codex CLI')).toBeTruthy();
       expect(screen.getByText('Codex SDK')).toBeTruthy();
@@ -59,6 +59,23 @@ describe('DesktopLaunchConfig', () => {
 
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('load_launch_config');
+    });
+  });
+
+  it('allows selecting Claude Internal engine and launching', async () => {
+    render(<DesktopLaunchConfig onStarted={onStarted} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Claude Internal')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Claude Internal'));
+    fireEvent.click(screen.getByText('Launch'));
+
+    await waitFor(() => {
+      expect(mockInvoke).toHaveBeenCalledWith('start_backend', {
+        engine: 'claude-internal-sdk',
+      });
     });
   });
 
@@ -75,25 +92,19 @@ describe('DesktopLaunchConfig', () => {
     await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('start_backend', {
         engine: 'codebuddy-sdk',
-        sdk: 'claude-code',
       });
     });
   });
 
-  it('shows advanced options when toggled', async () => {
+  it('does not show Advanced Options / SDK Variant section', async () => {
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Advanced Options')).toBeTruthy();
+      expect(screen.getByText('Launch')).toBeTruthy();
     });
 
+    expect(screen.queryByText('Advanced Options')).toBeNull();
     expect(screen.queryByText('SDK Variant')).toBeNull();
-
-    fireEvent.click(screen.getByText('Advanced Options'));
-
-    expect(screen.getByText('SDK Variant')).toBeTruthy();
-    expect(screen.getByText('Claude Code')).toBeTruthy();
-    expect(screen.getByText('Claude Internal')).toBeTruthy();
   });
 
   it('calls onStarted after successful launch', async () => {
@@ -113,7 +124,7 @@ describe('DesktopLaunchConfig', () => {
   it('does NOT call onStarted when start_backend fails', async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
         return Promise.reject(new Error('Backend is already running'));
@@ -139,7 +150,7 @@ describe('DesktopLaunchConfig', () => {
   it('shows loading spinner while config is loading', () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return new Promise(() => {}); // never resolves
+        return new Promise(() => {});
       }
       return Promise.resolve();
     });
@@ -153,10 +164,10 @@ describe('DesktopLaunchConfig', () => {
   it('shows starting state while backend is launching', async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
-        return new Promise(() => {}); // never resolves
+        return new Promise(() => {});
       }
       return Promise.resolve();
     });
@@ -171,25 +182,6 @@ describe('DesktopLaunchConfig', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Starting...')).toBeTruthy();
-    });
-  });
-
-  it('can switch SDK variant in advanced options', async () => {
-    render(<DesktopLaunchConfig onStarted={onStarted} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Advanced Options')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByText('Advanced Options'));
-    fireEvent.click(screen.getByText('Claude Internal'));
-    fireEvent.click(screen.getByText('Launch'));
-
-    await waitFor(() => {
-      expect(mockInvoke).toHaveBeenCalledWith('start_backend', {
-        engine: 'claude-sdk',
-        sdk: 'claude-internal',
-      });
     });
   });
 });

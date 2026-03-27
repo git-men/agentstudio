@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useLaunchConfig, ENGINE_OPTIONS, SDK_OPTIONS, type LaunchConfig } from '../../hooks/useLaunchConfig';
+import { useLaunchConfig, ENGINE_OPTIONS, type LaunchConfig } from '../../hooks/useLaunchConfig';
 
 interface DesktopLaunchConfigProps {
   onStarted: () => void;
@@ -8,20 +8,16 @@ interface DesktopLaunchConfigProps {
 export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStarted }) => {
   const { config, loading, starting, error, startBackend } = useLaunchConfig();
   const [engine, setEngine] = useState<string | null>(null);
-  const [sdk, setSdk] = useState<string | null>(null);
-  const [showAdvanced, setShowAdvanced] = useState(false);
 
   React.useEffect(() => {
     if (!loading && engine === null) {
       setEngine(config.engine);
-      setSdk(config.sdk);
     }
   }, [loading, config, engine]);
 
   const handleLaunch = async () => {
     const selectedConfig: LaunchConfig = {
       engine: engine ?? config.engine,
-      sdk: sdk ?? config.sdk,
     };
     try {
       await startBackend(selectedConfig);
@@ -32,7 +28,6 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
   };
 
   const currentEngine = engine ?? config.engine;
-  const currentSdk = sdk ?? config.sdk;
 
   if (loading) {
     return (
@@ -56,7 +51,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
         </div>
 
         {/* Engine Selection */}
-        <div className="mb-6">
+        <div className="mb-8">
           <h3 className="text-sm font-medium text-[#94a3b8] mb-3">Execution Engine</h3>
           <div className="grid grid-cols-1 gap-2">
             {ENGINE_OPTIONS.map((opt) => (
@@ -82,44 +77,6 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
               </button>
             ))}
           </div>
-        </div>
-
-        {/* SDK Selection (collapsible advanced) */}
-        <div className="mb-8">
-          <button
-            onClick={() => setShowAdvanced(!showAdvanced)}
-            className="flex items-center gap-1.5 text-sm text-[#64748b] hover:text-[#94a3b8] transition-colors mb-3"
-          >
-            <svg
-              className={`w-3.5 h-3.5 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            Advanced Options
-          </button>
-          {showAdvanced && (
-            <div className="pl-5">
-              <h4 className="text-xs font-medium text-[#94a3b8] mb-2">SDK Variant</h4>
-              <div className="flex gap-2">
-                {SDK_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setSdk(opt.value)}
-                    className={`flex-1 px-3 py-2 rounded-lg border text-center transition-all ${
-                      currentSdk === opt.value
-                        ? 'border-[#6366f1] bg-[#6366f1]/10 text-[#e2e8f0]'
-                        : 'border-[#1e293b] bg-[#0f172a] text-[#64748b] hover:border-[#334155]'
-                    }`}
-                    disabled={starting}
-                  >
-                    <div className="text-sm font-medium">{opt.label}</div>
-                    <div className="text-[10px] text-[#64748b] mt-0.5">{opt.description}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Error */}

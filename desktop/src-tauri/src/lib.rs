@@ -38,14 +38,12 @@ pub struct BackendLogEntry {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct LaunchConfig {
     pub engine: String,
-    pub sdk: String,
 }
 
 impl Default for LaunchConfig {
     fn default() -> Self {
         Self {
             engine: "claude-sdk".to_string(),
-            sdk: "claude-code".to_string(),
         }
     }
 }
@@ -184,13 +182,12 @@ fn load_launch_config(app: AppHandle) -> LaunchConfig {
 
 /// Save config and start the backend sidecar.
 /// Guards against double invocation — returns error if sidecar is already running.
-/// Engine/SDK config is injected via Command::envs() (thread-safe), not set_var.
+/// Engine config is injected via Command::envs() (thread-safe), not set_var.
 #[tauri::command]
 fn start_backend(
     app: AppHandle,
     state: tauri::State<AppState>,
     engine: String,
-    sdk: String,
 ) -> Result<(), String> {
     {
         let guard = state.sidecar_child.lock().unwrap();
@@ -202,10 +199,10 @@ fn start_backend(
         }
     }
 
-    let config = LaunchConfig { engine: engine.clone(), sdk: sdk.clone() };
+    let config = LaunchConfig { engine: engine.clone() };
     write_launch_config_to_file(&app, &config)?;
     *state.launch_config.lock().unwrap() = Some(config);
-    log::info!("Starting backend with ENGINE={engine}, AGENT_SDK={sdk}");
+    log::info!("Starting backend with ENGINE={engine}");
     spawn_backend_sidecar(app);
     Ok(())
 }
@@ -301,7 +298,6 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         if let Some(config) = config {
             let mut env_map = std::collections::HashMap::new();
             env_map.insert("ENGINE".to_string(), config.engine);
-            env_map.insert("AGENT_SDK".to_string(), config.sdk);
             sidecar_cmd = sidecar_cmd.envs(env_map);
         }
     }
@@ -430,27 +426,23 @@ mod tests {
     fn launch_config_default_values() {
         let config = LaunchConfig::default();
         assert_eq!(config.engine, "claude-sdk");
-        assert_eq!(config.sdk, "claude-code");
     }
 
     #[test]
     fn launch_config_serialization_roundtrip() {
         let config = LaunchConfig {
-            engine: "cursor-cli".to_string(),
-            sdk: "claude-internal".to_string(),
+            engine: "claude-internal-sdk".to_string(),
         };
         let json = serde_json::to_string(&config).unwrap();
         let parsed: LaunchConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(parsed.engine, "cursor-cli");
-        assert_eq!(parsed.sdk, "claude-internal");
+        assert_eq!(parsed.engine, "claude-internal-sdk");
     }
 
     #[test]
     fn launch_config_deserialize_with_extra_fields() {
-        let json = r#"{"engine":"codex-cli","sdk":"claude-code","unknown_field":"value"}"#;
+        let json = r#"{"engine":"codex-cli","unknown_field":"value"}"#;
         let config: LaunchConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.engine, "codex-cli");
-        assert_eq!(config.sdk, "claude-code");
     }
 
     #[test]
@@ -458,7 +450,6 @@ mod tests {
         let json = "not valid json";
         let config: LaunchConfig = serde_json::from_str(json).unwrap_or_default();
         assert_eq!(config.engine, "claude-sdk");
-        assert_eq!(config.sdk, "claude-code");
     }
 
     #[test]
@@ -466,7 +457,7 @@ mod tests {
         let config = LaunchConfig::default();
         let json = serde_json::to_string_pretty(&config).unwrap();
         assert!(json.contains("claude-sdk"));
-        assert!(json.contains("claude-code"));
+        assert!(!json.contains("sdk\":"));
         assert!(json.contains('\n'));
     }
 
@@ -501,16 +492,14 @@ mod tests {
         let path = dir.join("test-launch-config.json");
 
         let config = LaunchConfig {
-            engine: "codebuddy-sdk".to_string(),
-            sdk: "claude-internal".to_string(),
+            engine: "claude-internal-sdk".to_string(),
         };
         let json = serde_json::to_string_pretty(&config).unwrap();
         std::fs::write(&path, &json).unwrap();
 
         let read_json = std::fs::read_to_string(&path).unwrap();
         let read_config: LaunchConfig = serde_json::from_str(&read_json).unwrap();
-        assert_eq!(read_config.engine, "codebuddy-sdk");
-        assert_eq!(read_config.sdk, "claude-internal");
+        assert_eq!(read_config.engine, "claude-internal-sdk");
 
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_dir(&dir);

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useLaunchConfig, ENGINE_OPTIONS, SDK_OPTIONS } from '../useLaunchConfig';
+import { useLaunchConfig, ENGINE_OPTIONS } from '../useLaunchConfig';
 
 const mockInvoke = vi.fn();
 vi.mock('@tauri-apps/api/core', () => ({
@@ -16,7 +16,7 @@ describe('useLaunchConfig', () => {
     vi.clearAllMocks();
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
         return Promise.resolve();
@@ -35,28 +35,21 @@ describe('useLaunchConfig', () => {
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('load_launch_config');
-    expect(result.current.config).toEqual({
-      engine: 'claude-sdk',
-      sdk: 'claude-code',
-    });
+    expect(result.current.config).toEqual({ engine: 'claude-sdk' });
   });
 
-  it('exports engine and SDK option constants', () => {
+  it('exports engine option constants including claude-internal-sdk', () => {
     expect(ENGINE_OPTIONS.length).toBeGreaterThan(0);
-    expect(SDK_OPTIONS.length).toBeGreaterThan(0);
 
     const engineValues = ENGINE_OPTIONS.map(e => e.value);
     expect(engineValues).toContain('claude-sdk');
+    expect(engineValues).toContain('claude-internal-sdk');
     expect(engineValues).toContain('codebuddy-sdk');
     expect(engineValues).toContain('codex-cli');
     expect(engineValues).toContain('cursor-cli');
-
-    const sdkValues = SDK_OPTIONS.map(s => s.value);
-    expect(sdkValues).toContain('claude-code');
-    expect(sdkValues).toContain('claude-internal');
   });
 
-  it('starts backend with a LaunchConfig object', async () => {
+  it('starts backend with engine only (no sdk)', async () => {
     const { result } = renderHook(() => useLaunchConfig());
 
     await waitFor(() => {
@@ -64,19 +57,18 @@ describe('useLaunchConfig', () => {
     });
 
     await act(async () => {
-      await result.current.startBackend({ engine: 'cursor-cli', sdk: 'claude-internal' });
+      await result.current.startBackend({ engine: 'claude-internal-sdk' });
     });
 
     expect(mockInvoke).toHaveBeenCalledWith('start_backend', {
-      engine: 'cursor-cli',
-      sdk: 'claude-internal',
+      engine: 'claude-internal-sdk',
     });
   });
 
   it('sets starting=true while invoke is pending', async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
         return new Promise(() => {}); // never resolves
@@ -91,7 +83,7 @@ describe('useLaunchConfig', () => {
     });
 
     act(() => {
-      result.current.startBackend({ engine: 'claude-sdk', sdk: 'claude-code' });
+      result.current.startBackend({ engine: 'claude-sdk' });
     });
 
     await waitFor(() => {
@@ -104,7 +96,7 @@ describe('useLaunchConfig', () => {
   it('sets error and re-throws on start failure', async () => {
     mockInvoke.mockImplementation((cmd: string) => {
       if (cmd === 'load_launch_config') {
-        return Promise.resolve({ engine: 'claude-sdk', sdk: 'claude-code' });
+        return Promise.resolve({ engine: 'claude-sdk' });
       }
       if (cmd === 'start_backend') {
         return Promise.reject(new Error('Backend crashed'));
@@ -120,7 +112,7 @@ describe('useLaunchConfig', () => {
 
     await act(async () => {
       await expect(
-        result.current.startBackend({ engine: 'claude-sdk', sdk: 'claude-code' }),
+        result.current.startBackend({ engine: 'claude-sdk' }),
       ).rejects.toThrow('Backend crashed');
     });
 
@@ -136,10 +128,10 @@ describe('useLaunchConfig', () => {
     });
 
     act(() => {
-      result.current.setConfig({ engine: 'codex-cli', sdk: 'claude-internal' });
+      result.current.setConfig({ engine: 'codex-cli' });
     });
 
-    expect(result.current.config).toEqual({ engine: 'codex-cli', sdk: 'claude-internal' });
+    expect(result.current.config).toEqual({ engine: 'codex-cli' });
   });
 
   it('handles load failure gracefully', async () => {
@@ -156,6 +148,6 @@ describe('useLaunchConfig', () => {
       expect(result.current.loading).toBe(false);
     });
 
-    expect(result.current.config).toEqual({ engine: 'claude-sdk', sdk: 'claude-code' });
+    expect(result.current.config).toEqual({ engine: 'claude-sdk' });
   });
 });
