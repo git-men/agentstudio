@@ -391,9 +391,9 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Log panel toggle (Tauri only) */}
-      {isTauri() && (
+      {isTauri() && !logPanelVisible && (
         <button
-          onClick={() => setLogPanelVisible(!logPanelVisible)}
+          onClick={() => setLogPanelVisible(true)}
           className="fixed bottom-4 right-4 z-[60] w-9 h-9 rounded-full bg-[#1e293b] border border-[#334155] text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#334155] transition-all shadow-lg flex items-center justify-center"
           title="Toggle Log Panel"
         >

@@ -181,16 +181,31 @@ fn load_launch_config(app: AppHandle) -> LaunchConfig {
 }
 
 /// Save config, set environment variables, and start the backend sidecar.
+/// Guards against double invocation — returns error if sidecar is already running.
 #[tauri::command]
 fn start_backend(
     app: AppHandle,
+    state: tauri::State<AppState>,
     engine: String,
     sdk: String,
 ) -> Result<(), String> {
+    {
+        let guard = state.sidecar_child.lock().unwrap();
+        if guard.is_some() {
+            return Err("Backend is already running".to_string());
+        }
+        if state.backend_port.lock().unwrap().is_some() {
+            return Err("Backend is already running".to_string());
+        }
+    }
+
     let config = LaunchConfig { engine: engine.clone(), sdk: sdk.clone() };
     write_launch_config_to_file(&app, &config)?;
-    std::env::set_var("ENGINE", &engine);
-    std::env::set_var("AGENT_SDK", &sdk);
+    #[allow(deprecated)]
+    {
+        std::env::set_var("ENGINE", &engine);
+        std::env::set_var("AGENT_SDK", &sdk);
+    }
     log::info!("Starting backend with ENGINE={engine}, AGENT_SDK={sdk}");
     spawn_backend_sidecar(app);
     Ok(())
@@ -425,13 +440,13 @@ fn close_splashscreen_internal(app: &AppHandle) {
     }
 }
 
-/// Emit `backend-start-failed` to the splashscreen window.
+/// Notify that the backend failed to start.
+/// Emits to splashscreen (dev mode) and as a global event (prod mode).
 fn notify_start_failed(app: &AppHandle, reason: &str) {
     if let Some(splash) = app.get_webview_window("splashscreen") {
-        if let Err(e) = splash.emit("backend-start-failed", reason) {
-            log::warn!("Failed to emit backend-start-failed: {e}");
-        }
+        let _ = splash.emit("backend-start-failed", reason);
     }
+    let _ = app.emit("backend-start-failed", reason);
 }
 
 /// Build and register the system tray icon with menu.

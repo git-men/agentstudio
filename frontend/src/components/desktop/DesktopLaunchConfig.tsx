@@ -7,23 +7,28 @@ interface DesktopLaunchConfigProps {
 
 export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStarted }) => {
   const { config, loading, starting, error, startBackend } = useLaunchConfig();
-  const [engine, setEngine] = useState<string>(config.engine);
-  const [sdk, setSdk] = useState<string>(config.sdk);
+  const [engine, setEngine] = useState<string | null>(null);
+  const [sdk, setSdk] = useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  // Sync with loaded config
   React.useEffect(() => {
-    if (!loading) {
+    if (!loading && engine === null) {
       setEngine(config.engine);
       setSdk(config.sdk);
     }
-  }, [loading, config]);
+  }, [loading, config, engine]);
 
   const handleLaunch = async () => {
-    const selectedConfig: LaunchConfig = { engine, sdk };
+    const selectedConfig: LaunchConfig = {
+      engine: engine ?? config.engine,
+      sdk: sdk ?? config.sdk,
+    };
     await startBackend(selectedConfig);
     onStarted();
   };
+
+  const currentEngine = engine ?? config.engine;
+  const currentSdk = sdk ?? config.sdk;
 
   if (loading) {
     return (
@@ -55,16 +60,16 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
                 key={opt.value}
                 onClick={() => setEngine(opt.value)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
-                  engine === opt.value
+                  currentEngine === opt.value
                     ? 'border-[#6366f1] bg-[#6366f1]/10 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]'
                     : 'border-[#1e293b] bg-[#0f172a] hover:border-[#334155] hover:bg-[#1e293b]/50'
                 }`}
                 disabled={starting}
               >
                 <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                  engine === opt.value ? 'border-[#6366f1]' : 'border-[#475569]'
+                  currentEngine === opt.value ? 'border-[#6366f1]' : 'border-[#475569]'
                 }`}>
-                  {engine === opt.value && <div className="w-2 h-2 rounded-full bg-[#6366f1]" />}
+                  {currentEngine === opt.value && <div className="w-2 h-2 rounded-full bg-[#6366f1]" />}
                 </div>
                 <div>
                   <div className="text-sm font-medium text-[#e2e8f0]">{opt.label}</div>
@@ -98,7 +103,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
                     key={opt.value}
                     onClick={() => setSdk(opt.value)}
                     className={`flex-1 px-3 py-2 rounded-lg border text-center transition-all ${
-                      sdk === opt.value
+                      currentSdk === opt.value
                         ? 'border-[#6366f1] bg-[#6366f1]/10 text-[#e2e8f0]'
                         : 'border-[#1e293b] bg-[#0f172a] text-[#64748b] hover:border-[#334155]'
                     }`}
