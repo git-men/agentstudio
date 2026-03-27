@@ -3,7 +3,7 @@ import type { BackendLogEntry } from '../../hooks/useBackendLogs';
 
 interface BackendLogPanelProps {
   backendLogs: BackendLogEntry[];
-  getFrontendLogs: () => BackendLogEntry[];
+  frontendLogs: BackendLogEntry[];
   onClearBackend: () => void;
   onClearFrontend: () => void;
   onClose: () => void;
@@ -25,7 +25,7 @@ const LEVEL_COLORS: Record<string, string> = {
 
 export const BackendLogPanel: React.FC<BackendLogPanelProps> = ({
   backendLogs,
-  getFrontendLogs,
+  frontendLogs,
   onClearBackend,
   onClearFrontend,
   onClose,
@@ -33,21 +33,7 @@ export const BackendLogPanel: React.FC<BackendLogPanelProps> = ({
   const [activeTab, setActiveTab] = useState<TabType>('backend');
   const [levelFilter, setLevelFilter] = useState<LevelFilter>('all');
   const [autoScroll, setAutoScroll] = useState(true);
-  const [frontendLogs, setFrontendLogs] = useState<BackendLogEntry[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const refreshTimerRef = useRef<ReturnType<typeof setInterval>>();
-
-  useEffect(() => {
-    if (activeTab === 'frontend') {
-      setFrontendLogs(getFrontendLogs());
-      refreshTimerRef.current = setInterval(() => {
-        setFrontendLogs(getFrontendLogs());
-      }, 1000);
-    }
-    return () => {
-      if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
-    };
-  }, [activeTab, getFrontendLogs]);
 
   const logs = activeTab === 'backend' ? backendLogs : frontendLogs;
 
@@ -70,10 +56,7 @@ export const BackendLogPanel: React.FC<BackendLogPanelProps> = ({
 
   const handleClear = () => {
     if (activeTab === 'backend') onClearBackend();
-    else {
-      onClearFrontend();
-      setFrontendLogs([]);
-    }
+    else onClearFrontend();
   };
 
   const backendFilters: LevelFilter[] = ['all', 'stdout', 'stderr', 'error', 'system'];

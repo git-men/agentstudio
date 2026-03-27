@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { isTauri } from '../lib/environment';
-import { getCapturedLogs, clearCapturedLogs, type CapturedLogEntry } from '../utils/consoleCapture';
+import { getCapturedLogs, clearCapturedLogs, onConsoleEntry, type CapturedLogEntry } from '../utils/consoleCapture';
 
 export interface BackendLogEntry {
   level: string;
@@ -11,11 +11,19 @@ export interface BackendLogEntry {
 
 const MAX_LOGS = 500;
 
+function appendLogs(prev: BackendLogEntry[], entries: BackendLogEntry[]): BackendLogEntry[] {
+  const next = [...prev, ...entries];
+  return next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next;
+}
+
 export function useBackendLogs() {
   const [logs, setLogs] = useState<BackendLogEntry[]>([]);
+  const [frontendLogs, setFrontendLogs] = useState<BackendLogEntry[]>([]);
   const [visible, setVisible] = useState(false);
   const unlistenRef = useRef<(() => void) | null>(null);
+  const unsubConsoleRef = useRef<(() => void) | null>(null);
 
+  // Backend log batch events from Tauri
   useEffect(() => {
     if (!isTauri()) return;
 
@@ -25,17 +33,15 @@ export function useBackendLogs() {
       const { listen } = await import('@tauri-apps/api/event');
       if (cancelled) return;
 
-      const unlisten = await listen<{ level: string; message: string }>('backend-log', (event) => {
-        const entry: BackendLogEntry = {
-          level: event.payload.level,
-          message: event.payload.message.replace(/\n$/, ''),
-          timestamp: new Date().toISOString(),
-          source: 'backend',
-        };
-        setLogs((prev) => {
-          const next = [...prev, entry];
-          return next.length > MAX_LOGS ? next.slice(-MAX_LOGS) : next;
-        });
+      const unlisten = await listen<Array<{ level: string; message: string }>>('backend-log-batch', (event) => {
+        const now = new Date().toISOString();
+        const entries: BackendLogEntry[] = event.payload.map(e => ({
+          level: e.level,
+          message: e.message.replace(/\n$/, ''),
+          timestamp: now,
+          source: 'backend' as const,
+        }));
+        setLogs((prev) => appendLogs(prev, entries));
       });
 
       if (cancelled) {
@@ -51,20 +57,41 @@ export function useBackendLogs() {
     };
   }, []);
 
-  const clearLogs = useCallback(() => setLogs([]), []);
+  // Frontend console entries (event-driven via onConsoleEntry)
+  useEffect(() => {
+    setFrontendLogs(
+      getCapturedLogs().map((e: CapturedLogEntry) => ({
+        level: e.level,
+        message: e.message,
+        timestamp: e.timestamp,
+        source: 'frontend' as const,
+      })),
+    );
 
-  const toggleVisible = useCallback(() => setVisible((v) => !v), []);
+    const unsub = onConsoleEntry((entry: CapturedLogEntry) => {
+      setFrontendLogs((prev) =>
+        appendLogs(prev, [{
+          level: entry.level,
+          message: entry.message,
+          timestamp: entry.timestamp,
+          source: 'frontend',
+        }]),
+      );
+    });
+    unsubConsoleRef.current = unsub;
 
-  const getFrontendLogs = useCallback((): BackendLogEntry[] => {
-    return getCapturedLogs().map((entry: CapturedLogEntry) => ({
-      level: entry.level,
-      message: entry.message,
-      timestamp: entry.timestamp,
-      source: 'frontend' as const,
-    }));
+    return () => {
+      unsub();
+    };
   }, []);
 
-  const clearFrontendLogs = useCallback(() => clearCapturedLogs(), []);
+  const clearLogs = useCallback(() => setLogs([]), []);
+  const toggleVisible = useCallback(() => setVisible((v) => !v), []);
 
-  return { logs, visible, setVisible, toggleVisible, clearLogs, getFrontendLogs, clearFrontendLogs };
+  const clearFrontendLogs = useCallback(() => {
+    clearCapturedLogs();
+    setFrontendLogs([]);
+  }, []);
+
+  return { logs, frontendLogs, visible, setVisible, toggleVisible, clearLogs, clearFrontendLogs };
 }

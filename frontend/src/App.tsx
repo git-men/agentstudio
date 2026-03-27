@@ -377,7 +377,7 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
   const { updatePayload, dismiss } = useUpdateChecker();
-  const { logs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, getFrontendLogs, clearFrontendLogs } = useBackendLogs();
+  const { logs, frontendLogs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, clearFrontendLogs } = useBackendLogs();
 
   return (
     <>
@@ -407,7 +407,7 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
       {logPanelVisible && (
         <BackendLogPanel
           backendLogs={logs}
-          getFrontendLogs={getFrontendLogs}
+          frontendLogs={frontendLogs}
           onClearBackend={clearLogs}
           onClearFrontend={clearFrontendLogs}
           onClose={() => setLogPanelVisible(false)}

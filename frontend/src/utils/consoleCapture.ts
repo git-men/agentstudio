@@ -21,6 +21,16 @@ export interface CapturedLogEntry {
 const MAX_ENTRIES = 200;
 const capturedLogs: CapturedLogEntry[] = [];
 let capturing = false;
+const listeners = new Set<(entry: CapturedLogEntry) => void>();
+
+/**
+ * Subscribe to new console entries as they are captured.
+ * Returns an unsubscribe function.
+ */
+export function onConsoleEntry(cb: (entry: CapturedLogEntry) => void): () => void {
+  listeners.add(cb);
+  return () => { listeners.delete(cb); };
+}
 
 /** Stringify console args the same way DevTools would (roughly). */
 function argsToString(args: unknown[]): string {
@@ -59,10 +69,10 @@ export function startConsoleCapture(): void {
       };
 
       capturedLogs.push(entry);
-      // Keep the buffer bounded
       if (capturedLogs.length > MAX_ENTRIES) {
         capturedLogs.splice(0, capturedLogs.length - MAX_ENTRIES);
       }
+      for (const cb of listeners) cb(entry);
     };
   }
 }

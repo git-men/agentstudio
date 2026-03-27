@@ -17,6 +17,8 @@ pub struct AppState {
     pub sidecar_child: Arc<Mutex<Option<CommandChild>>>,
     /// Cached pending update (populated by background update check task).
     pub pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Engine/SDK configuration selected at launch (prod mode only).
+    pub launch_config: Mutex<Option<LaunchConfig>>,
 }
 
 // ── Update types ──────────────────────────────────────────────────────────────
@@ -180,8 +182,9 @@ fn load_launch_config(app: AppHandle) -> LaunchConfig {
     read_launch_config_from_file(&app)
 }
 
-/// Save config, set environment variables, and start the backend sidecar.
+/// Save config and start the backend sidecar.
 /// Guards against double invocation — returns error if sidecar is already running.
+/// Engine/SDK config is injected via Command::envs() (thread-safe), not set_var.
 #[tauri::command]
 fn start_backend(
     app: AppHandle,
@@ -201,11 +204,7 @@ fn start_backend(
 
     let config = LaunchConfig { engine: engine.clone(), sdk: sdk.clone() };
     write_launch_config_to_file(&app, &config)?;
-    #[allow(deprecated)]
-    {
-        std::env::set_var("ENGINE", &engine);
-        std::env::set_var("AGENT_SDK", &sdk);
-    }
+    *state.launch_config.lock().unwrap() = Some(config);
     log::info!("Starting backend with ENGINE={engine}, AGENT_SDK={sdk}");
     spawn_backend_sidecar(app);
     Ok(())
@@ -282,7 +281,7 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
     let shell = app.shell();
     let sidecar_result = shell.sidecar("agentstudio-backend");
 
-    let sidecar_cmd = match sidecar_result {
+    let mut sidecar_cmd = match sidecar_result {
         Ok(cmd) => cmd,
         Err(e) => {
             log::error!("Failed to create sidecar command: {e}");
@@ -294,6 +293,17 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
             return;
         }
     };
+
+    // Inject launch config as sidecar env vars (thread-safe, no set_var)
+    {
+        let state = app.state::<AppState>();
+        if let Some(ref config) = *state.launch_config.lock().unwrap() {
+            let mut env_map = std::collections::HashMap::new();
+            env_map.insert("ENGINE".to_string(), config.engine.clone());
+            env_map.insert("AGENT_SDK".to_string(), config.sdk.clone());
+            sidecar_cmd = sidecar_cmd.envs(env_map);
+        }
+    }
 
     let spawn_result = sidecar_cmd.spawn();
     let (mut rx, child) = match spawn_result {
@@ -316,73 +326,97 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
 
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     let mut port_found = false;
+    let mut log_buffer: Vec<BackendLogEntry> = Vec::new();
+    let mut flush_ticker = tokio::time::interval(Duration::from_millis(100));
+    flush_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-    while let Some(event) = rx.recv().await {
-        use tauri_plugin_shell::process::CommandEvent;
-        match event {
-            CommandEvent::Stdout(line_bytes) => {
-                let line = String::from_utf8_lossy(&line_bytes);
-                log::debug!("[sidecar stdout] {line}");
-                let _ = app.emit("backend-log", BackendLogEntry {
-                    level: "stdout".to_string(),
-                    message: line.to_string(),
-                });
-                if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
-                    if let Ok(port) = port_str.parse::<u16>() {
-                        let state = app.state::<AppState>();
-                        *state.backend_port.lock().unwrap() = Some(port);
-                        port_found = true;
-
-                        if close_splash {
-                            close_splashscreen_internal(&app);
+    loop {
+        tokio::select! {
+            event = rx.recv() => {
+                use tauri_plugin_shell::process::CommandEvent;
+                match event {
+                    Some(CommandEvent::Stdout(line_bytes)) => {
+                        let line = String::from_utf8_lossy(&line_bytes).to_string();
+                        log::debug!("[sidecar stdout] {line}");
+                        log_buffer.push(BackendLogEntry {
+                            level: "stdout".to_string(),
+                            message: line.clone(),
+                        });
+                        if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
+                            if let Ok(port) = port_str.parse::<u16>() {
+                                let state = app.state::<AppState>();
+                                *state.backend_port.lock().unwrap() = Some(port);
+                                port_found = true;
+                                flush_log_buffer(&app, &mut log_buffer);
+                                if close_splash {
+                                    close_splashscreen_internal(&app);
+                                }
+                                if let Err(e) = app.emit("backend-ready", port) {
+                                    log::warn!("Failed to emit backend-ready: {e}");
+                                }
+                                log::info!("Backend sidecar ready on port {port}");
+                            }
                         }
-
-                        if let Err(e) = app.emit("backend-ready", port) {
-                            log::warn!("Failed to emit backend-ready: {e}");
-                        }
-                        log::info!("Backend sidecar ready on port {port}");
                     }
+                    Some(CommandEvent::Stderr(line_bytes)) => {
+                        let line = String::from_utf8_lossy(&line_bytes).to_string();
+                        log::debug!("[sidecar stderr] {line}");
+                        log_buffer.push(BackendLogEntry {
+                            level: "stderr".to_string(),
+                            message: line,
+                        });
+                    }
+                    Some(CommandEvent::Error(e)) => {
+                        log::error!("[sidecar error] {e}");
+                        log_buffer.push(BackendLogEntry {
+                            level: "error".to_string(),
+                            message: e,
+                        });
+                    }
+                    Some(CommandEvent::Terminated(status)) => {
+                        log::warn!("[sidecar terminated] code={:?}", status.code);
+                        log_buffer.push(BackendLogEntry {
+                            level: "system".to_string(),
+                            message: format!("Backend process terminated (code: {:?})", status.code),
+                        });
+                        flush_log_buffer(&app, &mut log_buffer);
+                        if !port_found {
+                            notify_start_failed(&app, "Backend process terminated unexpectedly");
+                        }
+                        return;
+                    }
+                    None => {
+                        flush_log_buffer(&app, &mut log_buffer);
+                        return;
+                    }
+                    _ => {}
+                }
+                if log_buffer.len() >= 50 {
+                    flush_log_buffer(&app, &mut log_buffer);
                 }
             }
-            CommandEvent::Stderr(line_bytes) => {
-                let line = String::from_utf8_lossy(&line_bytes);
-                log::debug!("[sidecar stderr] {line}");
-                let _ = app.emit("backend-log", BackendLogEntry {
-                    level: "stderr".to_string(),
-                    message: line.to_string(),
-                });
+            _ = flush_ticker.tick(), if !log_buffer.is_empty() => {
+                flush_log_buffer(&app, &mut log_buffer);
             }
-            CommandEvent::Error(e) => {
-                log::error!("[sidecar error] {e}");
-                let _ = app.emit("backend-log", BackendLogEntry {
-                    level: "error".to_string(),
-                    message: e.clone(),
-                });
-            }
-            CommandEvent::Terminated(status) => {
-                log::warn!("[sidecar terminated] code={:?}", status.code);
-                let _ = app.emit("backend-log", BackendLogEntry {
-                    level: "system".to_string(),
-                    message: format!("Backend process terminated (code: {:?})", status.code),
-                });
-                if !port_found {
-                    notify_start_failed(&app, "Backend process terminated unexpectedly");
-                }
-                break;
-            }
-            _ => {}
         }
 
         if !port_found && std::time::Instant::now() > deadline {
             log::error!("Backend sidecar timed out after 30 seconds");
-            let _ = app.emit("backend-log", BackendLogEntry {
+            log_buffer.push(BackendLogEntry {
                 level: "error".to_string(),
                 message: "Backend startup timed out (30s)".to_string(),
             });
+            flush_log_buffer(&app, &mut log_buffer);
             notify_start_failed(&app, "Backend startup timed out (30s)");
-            break;
+            return;
         }
     }
+}
+
+fn flush_log_buffer(app: &AppHandle, buffer: &mut Vec<BackendLogEntry>) {
+    if buffer.is_empty() { return; }
+    let _ = app.emit("backend-log-batch", buffer.as_slice());
+    buffer.clear();
 }
 
 /// Background task: wait 5 seconds after startup, then check for updates.
@@ -527,6 +561,7 @@ pub fn run() {
             backend_port: Mutex::new(None),
             sidecar_child: sidecar_child_arc,
             pending_update: Mutex::new(None),
+            launch_config: Mutex::new(None),
         })
         // Register IPC command handlers
         .invoke_handler(tauri::generate_handler![
