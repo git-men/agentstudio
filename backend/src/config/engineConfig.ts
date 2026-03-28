@@ -623,6 +623,28 @@ export function getEnginePaths(): EnginePathConfig {
 }
 
 /**
+ * Get mirror paths for Claude-family engines.
+ * When engine is claude-sdk, returns claude-internal-sdk paths (if dir exists), and vice versa.
+ * Enables plugin installations to be synced across both ~/.claude and ~/.claude-internal.
+ * Returns empty array for non-Claude engines.
+ */
+export function getClaudeMirrorPaths(): EnginePathConfig[] {
+  const engine = getEngineType();
+  if (engine === 'claude-sdk') {
+    const internalDir = path.join(os.homedir(), '.claude-internal');
+    if (fs.existsSync(internalDir)) {
+      return [getClaudeInternalSdkPaths()];
+    }
+  } else if (engine === 'claude-internal-sdk') {
+    const claudeDir = path.join(os.homedir(), '.claude');
+    if (fs.existsSync(claudeDir)) {
+      return [getClaudeSdkPaths()];
+    }
+  }
+  return [];
+}
+
+/**
  * Log engine configuration at startup
  */
 export function logEngineConfig(): void {

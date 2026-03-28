@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../lib/authFetch';
 import { API_BASE } from '../lib/config';
+import { openExternalUrl } from '../utils/navigation';
 
 export interface EnterpriseProfile {
   authenticated: boolean;
@@ -50,7 +51,7 @@ export function useEnterpriseProfile() {
       });
       const data = await resp.json();
       if (data.auth_url) {
-        window.open(data.auth_url, '_blank');
+        openExternalUrl(data.auth_url);
         // Start polling for auth completion
         pollForAuth();
       }

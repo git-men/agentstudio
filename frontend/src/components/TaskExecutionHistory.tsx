@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { isTauri } from '../lib/environment';
 import { ArrowLeft, CheckCircle, XCircle, Loader2, Clock, ChevronDown, ChevronRight, FileText, MessageSquare } from 'lucide-react';
 import {
   Table,
@@ -151,7 +152,11 @@ export const TaskExecutionHistory: React.FC<TaskExecutionHistoryProps> = ({
     e.stopPropagation(); // Prevent row expansion toggle
     const url = buildChatUrl(execution);
     if (url) {
-      window.open(url, '_blank');
+      if (isTauri()) {
+        window.location.href = url;
+      } else {
+        window.open(url, '_blank');
+      }
     }
   };
 

@@ -393,6 +393,81 @@ program
       checks.push({ name: 'API Key', status: 'warn', message: 'No API key found in environment' });
     }
 
+    // Desktop development dependencies (optional)
+    const tryExec = (cmd: string): string | null => {
+      try {
+        return execSync(cmd, { encoding: 'utf8', timeout: 5000, stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      } catch {
+        return null;
+      }
+    };
+
+    const cargoVersion = tryExec('cargo --version');
+    if (cargoVersion) {
+      checks.push({ name: 'Rust (cargo)', status: 'ok', message: cargoVersion });
+    } else {
+      checks.push({ name: 'Rust (cargo)', status: 'warn', message: 'Not found (required for desktop dev). Install: curl --proto \'=https\' --tlsv1.2 -sSf https://sh.rustup.rs | sh' });
+    }
+
+    const bunVersion = tryExec('bun --version');
+    if (bunVersion) {
+      checks.push({ name: 'Bun', status: 'ok', message: `v${bunVersion}` });
+    } else {
+      checks.push({ name: 'Bun', status: 'warn', message: 'Not found (required for desktop sidecar build). Install: curl -fsSL https://bun.sh/install | bash' });
+    }
+
+    // Xcode CLI Tools (macOS only)
+    if (process.platform === 'darwin') {
+      const xcodeResult = tryExec('xcode-select -p');
+      if (xcodeResult) {
+        checks.push({ name: 'Xcode CLI Tools', status: 'ok', message: 'installed' });
+      } else {
+        checks.push({ name: 'Xcode CLI Tools', status: 'warn', message: 'Not found (required for desktop dev on macOS). Install: xcode-select --install' });
+      }
+    }
+
+    // System libraries (Linux only)
+    if (process.platform === 'linux') {
+      const linuxLibs = [
+        { name: 'webkit2gtk-4.1', pkg: 'libwebkit2gtk-4.1-dev' },
+        { name: 'openssl', pkg: 'libssl-dev' },
+        { name: 'librsvg-2.0', pkg: 'librsvg2-dev' },
+      ];
+      const missingPkgs = linuxLibs
+        .filter(l => tryExec(`pkg-config --exists ${l.name}`) === null)
+        .map(l => l.pkg);
+      if (missingPkgs.length === 0) {
+        checks.push({ name: 'System libraries', status: 'ok', message: 'OK' });
+      } else {
+        checks.push({ name: 'System libraries', status: 'warn', message: `Missing: ${missingPkgs.join(', ')}. Install: sudo apt install ${missingPkgs.join(' ')}` });
+      }
+    }
+
+    // Sidecar binary placeholder (desktop dev)
+    const sidecarCheck = (): { exists: boolean; name: string } => {
+      const arch = process.arch;
+      const os = process.platform;
+      let triple: string;
+      if (os === 'darwin') {
+        triple = arch === 'arm64' ? 'aarch64-apple-darwin' : 'x86_64-apple-darwin';
+      } else if (os === 'win32') {
+        triple = 'x86_64-pc-windows-msvc';
+      } else {
+        triple = 'x86_64-unknown-linux-gnu';
+      }
+      const ext = os === 'win32' ? '.exe' : '';
+      const name = `agentstudio-backend-${triple}${ext}`;
+      const binPath = path.resolve(__dirname, '../../desktop/src-tauri/binaries', name);
+      const npmBinPath = path.resolve(__dirname, '../desktop/src-tauri/binaries', name);
+      return { exists: existsSync(binPath) || existsSync(npmBinPath), name };
+    };
+    const sidecar = sidecarCheck();
+    if (sidecar.exists) {
+      checks.push({ name: 'Sidecar binary', status: 'ok', message: sidecar.name });
+    } else {
+      checks.push({ name: 'Sidecar binary', status: 'warn', message: `${sidecar.name} not found. Run: pnpm run dev:desktop (auto-creates placeholder) or pnpm run sidecar:build` });
+    }
+
     // Print results
     let hasErrors = false;
     for (const check of checks) {

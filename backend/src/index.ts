@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { join } from 'path';
 import { readFileSync } from 'fs';
+import * as net from 'net';
 
 import filesRouter from './routes/files';
 import agentsRouter from './routes/agents';
@@ -59,7 +60,7 @@ import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
 import { enterpriseAuthService } from './services/enterpriseAuthService.js';
-import { initializeEngine, logEngineConfig, getClaudeCliName } from './config/engineConfig.js';
+import { initializeEngine, logEngineConfig, getClaudeCliName, getEngineType } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
 import { productGateMiddleware } from './middleware/productGate.js';
 
@@ -188,14 +189,48 @@ const getVersion = () => {
 
 const VERSION = getVersion();
 
+/**
+ * Try to bind a TCP server to a port; resolves true if available, false if in use.
+ */
+function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => server.close(() => resolve(true)));
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+/**
+ * Find an available port starting from startPort.
+ * Tries up to 10 sequential ports, then falls back to OS-assigned port (listen(0)).
+ */
+async function findAvailablePort(startPort: number): Promise<number> {
+  for (let port = startPort; port < startPort + 10; port++) {
+    if (await isPortAvailable(port)) {
+      return port;
+    }
+  }
+  // All preferred ports busy — let the OS pick one
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const addr = server.address() as net.AddressInfo;
+      server.close(() => resolve(addr.port));
+    });
+  });
+}
+
 const app: express.Express = express();
 
 // Async initialization
 (async () => {
   // Load configuration (including port and host)
   const config = await loadConfig();
-  const PORT = config.port || 4936;
+  const configuredPort = parseInt(process.env.PORT || String(config.port || 4936), 10);
   const HOST = config.host || '0.0.0.0';
+  const PORT = await findAvailablePort(configuredPort);
 
   // Initialize system Claude version if needed
   try {
@@ -214,8 +249,9 @@ const app: express.Express = express();
     }
 
     // Initialize system version (with or without executable path)
-    await initializeSystemVersion(claudePath || '');
-    console.log(`[System] Initialized Claude version${claudePath ? ` from: ${claudePath}` : ' without executable path'}`);
+    const currentEngineType = getEngineType();
+    await initializeSystemVersion(claudePath || '', currentEngineType);
+    console.log(`[System] Initialized Claude version${claudePath ? ` from: ${claudePath}` : ' without executable path'} (engine: ${currentEngineType})`);
   } catch (error) {
     console.warn('Failed to initialize system Claude version:', error);
   }
@@ -315,6 +351,11 @@ const app: express.Express = express();
 
       // Allow 127.0.0.1 with any port for development
       if (origin.match(/^https?:\/\/127\.0\.0\.1(:\d+)?$/)) {
+        return callback(null, true);
+      }
+
+      // Allow Tauri app origins (desktop app)
+      if (origin === 'tauri://localhost' || origin === 'https://tauri.localhost') {
         return callback(null, true);
       }
 
@@ -597,6 +638,7 @@ const app: express.Express = express();
         version: VERSION,
         name: 'agentstudio-backend',
         engine: engineStatus.defaultEngine || 'unknown',
+        serviceEngine: getEngineType(),
         engines: engineStatus.registeredEngines || [],
       });
     } catch (error) {
@@ -776,8 +818,11 @@ const app: express.Express = express();
   // Check if this file is being run directly (CommonJS way)
   if (require.main === module) {
     const server = app.listen(PORT, HOST, () => {
-      console.log(`AI PPT Editor backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-      console.log(`Serving slides from: ${slidesDir}`);
+      // BACKEND_PORT signal MUST be first on stdout so Tauri sidecar manager can parse it.
+      // All other diagnostic output goes to stderr to avoid polluting the signal channel.
+      process.stdout.write(`BACKEND_PORT=${PORT}\n`);
+      process.stderr.write(`[System] Backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
+      process.stderr.write(`[System] Serving slides from: ${slidesDir}\n`);
     });
 
     server.on('error', (error: NodeJS.ErrnoException) => {

@@ -62,6 +62,9 @@ coverage/
 .cursor/
 .specify/
 specs/
+# Tauri signing keys (private key must never be committed)
+desktop/.tauri/
+
 .codebuddy/
 # A2A local configurations
 .a2a/
@@ -76,6 +79,9 @@ backend/config.local.json
 extension/sidepanel/
 extension-pure/sidepanel/
 extension-pure/icons/
+
+# Rust build output
+desktop/src-tauri/target/
 
 # Runtime project data
 projects/

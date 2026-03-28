@@ -1,0 +1,13 @@
+/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/deps/libagentstudio_desktop_lib-b4d670edfa5091a9.rmeta: src/lib.rs /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/b8d16923355de0862e2ced92f0206283e4035c6c6b0a3c606b36b13424d62810 /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/5f950722c8b1c9e841e49453cec455364473b3a6eff4be7986dff4d3d04772d2 /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/d870fed0b2055f856b27a4e4d51e9103c90d3a16a5c7ba1ea820852654141ec7
+
+/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/deps/agentstudio_desktop_lib-b4d670edfa5091a9.d: src/lib.rs /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/b8d16923355de0862e2ced92f0206283e4035c6c6b0a3c606b36b13424d62810 /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/5f950722c8b1c9e841e49453cec455364473b3a6eff4be7986dff4d3d04772d2 /Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/d870fed0b2055f856b27a4e4d51e9103c90d3a16a5c7ba1ea820852654141ec7
+
+src/lib.rs:
+/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/b8d16923355de0862e2ced92f0206283e4035c6c6b0a3c606b36b13424d62810:
+/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/5f950722c8b1c9e841e49453cec455364473b3a6eff4be7986dff4d3d04772d2:
+/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out/d870fed0b2055f856b27a4e4d51e9103c90d3a16a5c7ba1ea820852654141ec7:
+
+# env-dep:CARGO_PKG_AUTHORS=AgentStudio Team
+# env-dep:CARGO_PKG_DESCRIPTION=AgentStudio Desktop Application
+# env-dep:CARGO_PKG_NAME=agentstudio-desktop
+# env-dep:OUT_DIR=/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/build/agentstudio-desktop-3755a4781e4b16d3/out

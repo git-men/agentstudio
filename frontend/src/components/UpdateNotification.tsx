@@ -2,6 +2,7 @@ import React from 'react';
 import { ArrowUpCircle, X, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useVersionCheck } from '../hooks/useVersionCheck';
+import { isTauri } from '../lib/environment';
 
 interface UpdateNotificationProps {
   compact?: boolean;
@@ -22,7 +23,14 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ compact 
   }
 
   const handleViewUpdate = () => {
-    window.open('https://github.com/okguitar/agentstudio/releases', '_blank');
+    const url = 'https://github.com/okguitar/agentstudio/releases';
+    if (isTauri()) {
+      import('@tauri-apps/plugin-shell').then(({ open }) => open(url)).catch(() => {
+        window.open(url, '_blank');
+      });
+    } else {
+      window.open(url, '_blank');
+    }
   };
 
   if (compact) {

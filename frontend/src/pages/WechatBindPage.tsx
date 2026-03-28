@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { openExternalUrl } from '../utils/navigation';
 import {
   ArrowLeft,
   Check,
@@ -130,7 +131,7 @@ export const WechatBindPage: React.FC = () => {
       });
       const data = await resp.json();
       if (data.auth_url) {
-        window.open(data.auth_url, '_blank', 'noopener,noreferrer');
+        openExternalUrl(data.auth_url);
         setStep('auth');
         setAuthPolling(true);
         pollAuthStatus();

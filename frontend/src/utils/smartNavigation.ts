@@ -1,8 +1,12 @@
 /**
  * 智能导航工具 - 基于 localStorage 和 TabManager 的智能导航
+ *
+ * In Tauri desktop mode, multi-window navigation via window.open is not
+ * supported. We fall back to SPA navigation within the single main window.
  */
 
 import { tabManager } from './tabManager';
+import { isTauri } from '../lib/environment';
 
 export interface NavigationResult {
   action: 'awakened' | 'opened_new' | 'failed';
@@ -58,6 +62,16 @@ export async function smartNavigate(
     // 标准化URL参数顺序
     const normalizedUrl = normalizeUrl(url);
     console.log(`🔄 Normalized URL: ${normalizedUrl}`);
+
+    if (isTauri()) {
+      console.log(`🖥️ Tauri mode: navigating within current window`);
+      window.location.href = normalizedUrl;
+      return {
+        action: 'opened_new',
+        success: true,
+        message: `在当前窗口打开会话`,
+      };
+    }
     
     // 第一步：尝试使用window.open的窗口名称机制（最可靠的方法）
     const windowName = getWindowName(agentId, sessionId);

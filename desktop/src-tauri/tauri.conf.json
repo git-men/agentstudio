@@ -1,0 +1,77 @@
+{
+  "productName": "ClawStudio",
+  "version": "0.1.0",
+  "identifier": "com.clawstudio.desktop",
+  "build": {
+    "frontendDist": "../../frontend/dist",
+    "devUrl": "http://localhost:3100",
+    "beforeDevCommand": "ENGINE=$(node scripts/read-engine.mjs) PORT=4938 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_BASE=/api pnpm --filter frontend dev",
+    "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && VITE_TAURI=true pnpm --filter frontend build"
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.ico",
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png"
+    ],
+    "externalBin": [
+      "binaries/agentstudio-backend"
+    ],
+    "macOS": {
+      "entitlements": null,
+      "signingIdentity": null,
+      "providerShortName": null
+    },
+    "windows": {
+      "nsis": {}
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      },
+      "appimage": {}
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ClawStudio",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600,
+        "visible": false,
+        "center": true,
+        "decorations": true
+      },
+      {
+        "label": "splashscreen",
+        "title": "ClawStudio",
+        "width": 400,
+        "height": 300,
+        "visible": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "center": true,
+        "url": "splashscreen.html"
+      }
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "dialog": false,
+      "pubkey": "RWTY8aHmKO/WXLyO4gOiYiDVX+si7dMgtoNKSvNkPhnBwBPuEQ8Wbjdn",
+      "endpoints": [
+        "https://COS_BUCKET.cos.COS_REGION.myqcloud.com/desktop/latest.json"
+      ]
+    },
+    "singleInstance": {}
+  }
+}

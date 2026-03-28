@@ -1,0 +1,417 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 1: Build backend sidecar binaries for all platforms
+  # ────────────────────────────────────────────────────────────────────────────
+  build-sidecar:
+    name: Build Sidecar (${{ matrix.arch }}-${{ matrix.os_suffix }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bun_target: darwin-x64
+            arch: x86_64
+            os_suffix: apple-darwin
+            artifact_name: agentstudio-backend-x86_64-apple-darwin
+
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bun_target: darwin-arm64
+            arch: aarch64
+            os_suffix: apple-darwin
+            artifact_name: agentstudio-backend-aarch64-apple-darwin
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bun_target: windows-x64
+            arch: x86_64
+            os_suffix: pc-windows-msvc
+            artifact_name: agentstudio-backend-x86_64-pc-windows-msvc.exe
+
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            bun_target: linux-x64
+            arch: x86_64
+            os_suffix: unknown-linux-gnu
+            artifact_name: agentstudio-backend-x86_64-unknown-linux-gnu
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install backend dependencies
+        run: bun install
+        working-directory: backend
+
+      - name: Build sidecar binary
+        run: |
+          bun build ./src/index.ts \
+            --compile \
+            --target bun-${{ matrix.bun_target }} \
+            --outfile agentstudio-backend-${{ matrix.arch }}-${{ matrix.os_suffix }}
+        working-directory: backend
+        shell: bash
+
+      - name: Rename binary for Windows
+        if: matrix.os == 'windows-latest'
+        run: |
+          mv backend/agentstudio-backend-${{ matrix.arch }}-${{ matrix.os_suffix }} \
+             backend/agentstudio-backend-${{ matrix.arch }}-${{ matrix.os_suffix }}.exe
+        shell: bash
+
+      - name: Upload sidecar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-${{ matrix.arch }}-${{ matrix.os_suffix }}
+          path: backend/${{ matrix.artifact_name }}
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 2: Merge macOS x64 + arm64 into a universal binary via lipo
+  # ────────────────────────────────────────────────────────────────────────────
+  merge-macos-universal:
+    name: Merge macOS Universal Binary
+    needs: build-sidecar
+    runs-on: macos-latest
+    steps:
+      - name: Download macOS x86_64 sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-x86_64-apple-darwin
+          path: sidecar-x86_64
+
+      - name: Download macOS aarch64 sidecar
+        uses: actions/download-artifact@v4
+        with:
+          name: sidecar-aarch64-apple-darwin
+          path: sidecar-arm64
+
+      - name: Create universal binary with lipo
+        run: |
+          chmod +x sidecar-x86_64/agentstudio-backend-x86_64-apple-darwin
+          chmod +x sidecar-arm64/agentstudio-backend-aarch64-apple-darwin
+          lipo -create \
+            sidecar-x86_64/agentstudio-backend-x86_64-apple-darwin \
+            sidecar-arm64/agentstudio-backend-aarch64-apple-darwin \
+            -output agentstudio-backend-universal-apple-darwin
+
+      - name: Upload universal binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: sidecar-universal-apple-darwin
+          path: agentstudio-backend-universal-apple-darwin
+          if-no-files-found: error
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 3: Build Tauri installers for all platforms
+  # ────────────────────────────────────────────────────────────────────────────
+  build-tauri:
+    name: Build Tauri (${{ matrix.name }})
+    needs: [build-sidecar, merge-macos-universal]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - name: macOS Universal
+            os: macos-latest
+            platform: darwin
+            arch: universal
+            sidecar_artifact: sidecar-universal-apple-darwin
+            sidecar_filename: agentstudio-backend-universal-apple-darwin
+            sidecar_dest: agentstudio-backend-x86_64-apple-darwin
+            tauri_target: universal-apple-darwin
+            sign: true
+
+          - name: Windows x64
+            os: windows-latest
+            platform: windows
+            arch: x86_64
+            sidecar_artifact: sidecar-x86_64-pc-windows-msvc
+            sidecar_filename: agentstudio-backend-x86_64-pc-windows-msvc.exe
+            sidecar_dest: agentstudio-backend-x86_64-pc-windows-msvc.exe
+            tauri_target: x86_64-pc-windows-msvc
+            sign: false
+
+          - name: Linux x64
+            os: ubuntu-22.04
+            platform: linux
+            arch: x86_64
+            sidecar_artifact: sidecar-x86_64-unknown-linux-gnu
+            sidecar_filename: agentstudio-backend-x86_64-unknown-linux-gnu
+            sidecar_dest: agentstudio-backend-x86_64-unknown-linux-gnu
+            tauri_target: x86_64-unknown-linux-gnu
+            sign: false
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            dpkg-sig
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: '9'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.tauri_target }}
+
+      - name: Install Rust target (macOS universal extra)
+        if: matrix.platform == 'darwin'
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      # macOS: Import signing certificate
+      - name: Import macOS signing certificate
+        if: matrix.platform == 'darwin'
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      # Linux: Import GPG signing key
+      - name: Import GPG key (Linux)
+        if: matrix.platform == 'linux'
+        uses: crazy-max/ghaction-import-gpg@v6
+        with:
+          gpg_private_key: ${{ secrets.GPG_PRIVATE_KEY }}
+          passphrase: ${{ secrets.GPG_PASSPHRASE }}
+
+      - name: Download sidecar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.sidecar_artifact }}
+          path: sidecar-download
+
+      - name: Place sidecar binary
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/binaries
+          cp "sidecar-download/${{ matrix.sidecar_filename }}" \
+             "desktop/src-tauri/binaries/${{ matrix.sidecar_dest }}"
+          chmod +x "desktop/src-tauri/binaries/${{ matrix.sidecar_dest }}" || true
+
+      - name: Sync version from git tag
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME:-${{ inputs.tag }}}
+          VERSION=${VERSION#v}
+          echo "Setting version to: $VERSION"
+          # Update tauri.conf.json version
+          node -e "
+            const fs = require('fs');
+            const path = 'desktop/src-tauri/tauri.conf.json';
+            const conf = JSON.parse(fs.readFileSync(path, 'utf-8'));
+            conf.version = '$VERSION';
+            fs.writeFileSync(path, JSON.stringify(conf, null, 2));
+          "
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Build Tauri app (macOS)
+        if: matrix.platform == 'darwin'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          projectPath: desktop
+          args: --target universal-apple-darwin
+          includeUpdaterJson: false
+          uploadArtifacts: true
+
+      - name: Build Tauri app (Windows)
+        if: matrix.platform == 'windows'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          args: --target x86_64-pc-windows-msvc
+          includeUpdaterJson: false
+          uploadArtifacts: true
+
+      - name: Build Tauri app (Linux)
+        if: matrix.platform == 'linux'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: desktop
+          args: --target x86_64-unknown-linux-gnu
+          includeUpdaterJson: false
+          uploadArtifacts: true
+
+      # Linux: Sign AppImage and .deb packages
+      - name: Sign Linux packages with GPG
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          # Find and sign AppImage
+          APPIMAGE=$(find desktop/src-tauri/target -name "*.AppImage" | head -1)
+          if [ -n "$APPIMAGE" ]; then
+            echo "Signing AppImage: $APPIMAGE"
+            gpg --batch --yes --detach-sign --armor "$APPIMAGE"
+          fi
+
+          # Find and sign .deb
+          DEB=$(find desktop/src-tauri/target -name "*.deb" | head -1)
+          if [ -n "$DEB" ]; then
+            echo "Signing .deb: $DEB"
+            dpkg-sig --sign builder "$DEB" || true
+          fi
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Job 4: Publish GitHub Release with all platform artifacts
+  # ────────────────────────────────────────────────────────────────────────────
+  publish:
+    name: Publish GitHub Release
+    needs: build-tauri
+    if: success()
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Get release version
+        id: version
+        shell: bash
+        run: |
+          VERSION=${GITHUB_REF_NAME:-${{ inputs.tag }}}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_clean=${VERSION#v}" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json update manifest
+        shell: bash
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          # Find platform artifacts
+          DMG=$(find release-artifacts -name "*.dmg" | head -1)
+          EXE=$(find release-artifacts -name "*.exe" -not -name "*.nsis.zip" | head -1)
+          MSI=$(find release-artifacts -name "*.msi" | head -1)
+          APPIMAGE=$(find release-artifacts -name "*.AppImage" | head -1)
+          DEB=$(find release-artifacts -name "*.deb" | head -1)
+
+          # Read signatures (tauri-action generates .sig files)
+          SIG_DARWIN=""
+          SIG_WIN=""
+          SIG_LINUX=""
+
+          [ -f "${DMG}.sig" ] && SIG_DARWIN=$(cat "${DMG}.sig")
+          [ -f "${EXE}.sig" ] && SIG_WIN=$(cat "${EXE}.sig")
+          [ -f "${MSI}.sig" ] && SIG_WIN=$(cat "${MSI}.sig")
+          [ -f "${APPIMAGE}.sig" ] && SIG_LINUX=$(cat "${APPIMAGE}.sig")
+
+          REPO_URL="https://github.com/${{ github.repository }}"
+
+          cat > latest.json << EOF
+          {
+            "version": "${VERSION}",
+            "notes": "See the release notes at ${REPO_URL}/releases/tag/${VERSION}",
+            "pub_date": "${PUB_DATE}",
+            "platforms": {
+              "darwin-x86_64": {
+                "signature": "${SIG_DARWIN}",
+                "url": "${REPO_URL}/releases/download/${VERSION}/$(basename ${DMG:-AgentStudio.dmg})"
+              },
+              "darwin-aarch64": {
+                "signature": "${SIG_DARWIN}",
+                "url": "${REPO_URL}/releases/download/${VERSION}/$(basename ${DMG:-AgentStudio.dmg})"
+              },
+              "linux-x86_64": {
+                "signature": "${SIG_LINUX}",
+                "url": "${REPO_URL}/releases/download/${VERSION}/$(basename ${APPIMAGE:-AgentStudio.AppImage})"
+              },
+              "windows-x86_64": {
+                "signature": "${SIG_WIN}",
+                "url": "${REPO_URL}/releases/download/${VERSION}/$(basename ${EXE:-AgentStudio.exe})"
+              }
+            }
+          }
+          EOF
+
+          echo "Generated latest.json:"
+          cat latest.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: AgentStudio ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/**/*.dmg
+            release-artifacts/**/*.exe
+            release-artifacts/**/*.msi
+            release-artifacts/**/*.AppImage
+            release-artifacts/**/*.deb
+            release-artifacts/**/*.sig
+            latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
