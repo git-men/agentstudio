@@ -47,15 +47,54 @@ function parseEngineFromArgs(): ServiceEngineType | null {
 }
 
 /**
+ * Read engine from Tauri's persisted launch-config.json.
+ * Only reads the file when running inside the Tauri Desktop environment
+ * (detected via TAURI_DESKTOP=1 env var injected by the Rust sidecar launcher).
+ * This prevents the Web dev server from being "polluted" by Desktop's config.
+ */
+function readTauriLaunchConfig(): ServiceEngineType | null {
+  if (!process.env.TAURI_DESKTOP) {
+    return null;
+  }
+
+  try {
+    const home = os.homedir();
+    let configDir: string;
+    if (process.platform === 'darwin') {
+      configDir = path.join(home, 'Library', 'Application Support', 'com.clawstudio.desktop');
+    } else if (process.platform === 'win32') {
+      configDir = path.join(home, 'AppData', 'Roaming', 'com.clawstudio.desktop');
+    } else {
+      configDir = path.join(home, '.config', 'com.clawstudio.desktop');
+    }
+    const configPath = path.join(configDir, 'launch-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      if (config.engine) {
+        console.log(`🔧 Engine from Tauri launch-config: ${config.engine}`);
+        return config.engine as ServiceEngineType;
+      }
+    }
+  } catch {
+    // Config not accessible
+  }
+  return null;
+}
+
+/**
  * Get engine type from environment or command line
  */
 function detectEngineType(): ServiceEngineType {
-  // Priority: command line > environment variable > default
+  // Priority: command line > environment variable > Tauri launch-config > legacy env > default
   const fromArgs = parseEngineFromArgs();
   if (fromArgs) return fromArgs;
   
   const fromEnv = process.env.ENGINE;
   if (fromEnv) return fromEnv as ServiceEngineType;
+
+  // Read from Tauri Desktop's persisted launch-config.json
+  const fromTauri = readTauriLaunchConfig();
+  if (fromTauri) return fromTauri;
   
   // Check legacy AGENT_SDK environment variable for backward compatibility
   const legacySdk = process.env.AGENT_SDK;

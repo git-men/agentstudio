@@ -20,6 +20,7 @@ describe('engineConfig', () => {
     process.argv = [...originalArgv];
     delete process.env.ENGINE;
     delete process.env.AGENT_SDK;
+    delete process.env.TAURI_DESKTOP;
   });
 
   afterEach(() => {
