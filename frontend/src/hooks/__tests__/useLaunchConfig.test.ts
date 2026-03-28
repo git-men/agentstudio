@@ -43,15 +43,35 @@ describe('useLaunchConfig', () => {
     expect(result.current.internalAccessible).toBe(true);
   });
 
-  it('exports engine options including claude-internal-sdk with metadata', () => {
-    expect(ENGINE_OPTIONS.length).toBeGreaterThan(0);
+  it('exports engine options with metadata for all engines', () => {
+    expect(ENGINE_OPTIONS.length).toBeGreaterThanOrEqual(6);
+
+    const claude = ENGINE_OPTIONS.find(e => e.value === 'claude-sdk');
+    expect(claude).toBeTruthy();
+    expect(claude!.cliName).toBe('claude');
+    expect(claude!.npmPackage).toBe('@anthropic-ai/claude-code');
 
     const internal = ENGINE_OPTIONS.find(e => e.value === 'claude-internal-sdk');
     expect(internal).toBeTruthy();
     expect(internal!.cliName).toBe('claude-internal');
-    expect(internal!.npmPackage).toBe('@anthropic-ai/claude-code-internal');
+    expect(internal!.npmPackage).toBe('@tencent/claude-code-internal');
     expect(internal!.internalOnly).toBe(true);
-    expect(internal!.internalDomain).toBe('agentstudio.woa.com');
+
+    const codebuddy = ENGINE_OPTIONS.find(e => e.value === 'codebuddy-sdk');
+    expect(codebuddy).toBeTruthy();
+    expect(codebuddy!.cliName).toBe('codebuddy');
+    expect(codebuddy!.npmPackage).toBe('@tencent-ai/codebuddy-code');
+
+    const codex = ENGINE_OPTIONS.find(e => e.value === 'codex-cli');
+    expect(codex).toBeTruthy();
+    expect(codex!.cliName).toBe('codex');
+    expect(codex!.npmPackage).toBe('@openai/codex');
+
+    const cursor = ENGINE_OPTIONS.find(e => e.value === 'cursor-cli');
+    expect(cursor).toBeTruthy();
+    expect(cursor!.cliName).toBe('agent');
+    expect(cursor!.installCmd).toBeTruthy();
+    expect(cursor!.npmPackage).toBeUndefined();
   });
 
   it('filters out internal engine when domain is not accessible', async () => {
@@ -74,6 +94,9 @@ describe('useLaunchConfig', () => {
     expect(result.current.internalAccessible).toBe(false);
     const internalInList = result.current.availableEngines.find(e => e.value === 'claude-internal-sdk');
     expect(internalInList).toBeUndefined();
+
+    const claudeInList = result.current.availableEngines.find(e => e.value === 'claude-sdk');
+    expect(claudeInList).toBeTruthy();
   });
 
   it('includes internal engine when domain is accessible', async () => {

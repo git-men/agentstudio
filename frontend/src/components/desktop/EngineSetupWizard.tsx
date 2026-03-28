@@ -19,6 +19,11 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
   const [installLog, setInstallLog] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
+  const canAutoInstall = !!(engine.npmPackage || engine.installCmd);
+  const installCommand = engine.npmPackage
+    ? `npm install -g ${engine.npmPackage}`
+    : engine.installCmd || '';
+
   const checkCli = useCallback(async () => {
     if (!engine.cliName) {
       onReady('');
@@ -46,17 +51,28 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
   }, [checkCli]);
 
   const handleInstall = async () => {
-    if (!engine.npmPackage) return;
-
     setStep('installing');
     setInstallLog('');
     setErrorMsg('');
 
     try {
       const { invoke } = await import('@tauri-apps/api/core');
-      const output = await invoke<string>('install_npm_package', {
-        packageName: engine.npmPackage,
-      });
+
+      let output: string;
+      if (engine.npmPackage) {
+        output = await invoke<string>('install_npm_package', {
+          packageName: engine.npmPackage,
+        });
+      } else if (engine.installCmd) {
+        output = await invoke<string>('run_shell_command', {
+          command: engine.installCmd,
+        });
+      } else {
+        setErrorMsg('No install method available');
+        setStep('install_failed');
+        return;
+      }
+
       setInstallLog(output);
 
       const path = await invoke<string | null>('check_cli_installed', { cliName: engine.cliName });
@@ -113,16 +129,18 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
                     <code className="text-[#a78bfa]">{engine.cliName}</code> is not installed
                   </p>
                   <p className="text-xs text-[#64748b] mt-1">
-                    Install it globally via npm to continue.
+                    {canAutoInstall
+                      ? 'Install it to continue.'
+                      : 'Please install it manually and try again.'}
                   </p>
                 </div>
               </div>
 
-              {engine.npmPackage && (
+              {installCommand && (
                 <div className="rounded-lg bg-[#0f172a] border border-[#334155] px-4 py-3">
                   <p className="text-[10px] text-[#64748b] mb-1">Command:</p>
-                  <code className="text-sm text-[#a78bfa] select-all">
-                    npm install -g {engine.npmPackage}
+                  <code className="text-sm text-[#a78bfa] select-all break-all">
+                    {installCommand}
                   </code>
                 </div>
               )}
@@ -133,7 +151,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-[#94a3b8]">
                 <div className="w-5 h-5 border-2 border-[#475569] border-t-[#6366f1] rounded-full animate-spin" />
-                <span className="text-sm">Installing <code className="text-[#a78bfa]">{engine.npmPackage}</code>...</span>
+                <span className="text-sm">Installing <code className="text-[#a78bfa]">{engine.label}</code>...</span>
               </div>
               <p className="text-[10px] text-[#475569]">This may take a minute...</p>
             </div>
@@ -190,7 +208,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
             Cancel
           </button>
 
-          {step === 'not_installed' && engine.npmPackage && (
+          {step === 'not_installed' && canAutoInstall && (
             <button
               onClick={handleInstall}
               className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-medium hover:from-[#4f46e5] hover:to-[#7c3aed] transition-all"

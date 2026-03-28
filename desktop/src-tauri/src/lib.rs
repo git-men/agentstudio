@@ -236,6 +236,47 @@ async fn install_npm_package(app: AppHandle, package_name: String) -> Result<Str
     }
 }
 
+/// Run a shell command and return stdout. Used for custom install commands.
+#[tauri::command]
+async fn run_shell_command(app: AppHandle, command: String) -> Result<String, String> {
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "installing".to_string(),
+        message: format!("Running: {command}"),
+        done: false,
+        success: false,
+    });
+
+    let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
+    let flag = if cfg!(target_os = "windows") { "/C" } else { "-c" };
+
+    let output = std::process::Command::new(shell)
+        .args([flag, &command])
+        .output()
+        .map_err(|e| format!("Failed to run command: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let _ = app.emit("install-progress", InstallProgress {
+            stage: "done".to_string(),
+            message: "Command completed successfully".to_string(),
+            done: true,
+            success: true,
+        });
+        Ok(stdout)
+    } else {
+        let msg = if stderr.is_empty() { stdout } else { stderr };
+        let _ = app.emit("install-progress", InstallProgress {
+            stage: "error".to_string(),
+            message: msg.clone(),
+            done: true,
+            success: false,
+        });
+        Err(msg)
+    }
+}
+
 // ── Config persistence ───────────────────────────────────────────────────────
 
 fn get_config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -759,6 +800,7 @@ pub fn run() {
             check_domain_accessible,
             check_cli_installed,
             install_npm_package,
+            run_shell_command,
             load_launch_config,
             start_backend,
         ])

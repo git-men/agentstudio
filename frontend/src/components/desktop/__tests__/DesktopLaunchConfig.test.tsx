@@ -31,7 +31,7 @@ describe('DesktopLaunchConfig', () => {
         return Promise.resolve();
       }
       if (cmd === 'check_cli_installed') {
-        return Promise.resolve('/usr/local/bin/claude-internal');
+        return Promise.resolve('/usr/local/bin/claude');
       }
       return Promise.resolve();
     });
@@ -80,7 +80,7 @@ describe('DesktopLaunchConfig', () => {
     expect(screen.queryByText('Claude Internal')).toBeNull();
   });
 
-  it('launches directly for engines without CLI requirement', async () => {
+  it('shows setup wizard when clicking Launch (CLI check)', async () => {
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
@@ -90,6 +90,27 @@ describe('DesktopLaunchConfig', () => {
     fireEvent.click(screen.getByText('Launch'));
 
     await waitFor(() => {
+      expect(screen.getByText('Claude Agent SDK Setup')).toBeTruthy();
+    });
+  });
+
+  it('proceeds through wizard when CLI is found and launches backend', async () => {
+    render(<DesktopLaunchConfig onStarted={onStarted} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Launch')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Launch'));
+
+    await waitFor(() => {
+      expect(screen.getByText('/usr/local/bin/claude')).toBeTruthy();
+      expect(screen.getByText('Continue')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Continue'));
+
+    await waitFor(() => {
       expect(mockInvoke).toHaveBeenCalledWith('start_backend', {
         engine: 'claude-sdk',
       });
@@ -97,7 +118,26 @@ describe('DesktopLaunchConfig', () => {
     });
   });
 
-  it('shows setup wizard when selecting Claude Internal', async () => {
+  it('shows Claude Internal setup with correct CLI name', async () => {
+    mockInvoke.mockImplementation((cmd: string, args?: Record<string, unknown>) => {
+      if (cmd === 'load_launch_config') {
+        return Promise.resolve({ engine: 'claude-sdk' });
+      }
+      if (cmd === 'check_domain_accessible') {
+        return Promise.resolve(true);
+      }
+      if (cmd === 'check_cli_installed') {
+        if (args && args.cliName === 'claude-internal') {
+          return Promise.resolve('/usr/local/bin/claude-internal');
+        }
+        return Promise.resolve(null);
+      }
+      if (cmd === 'start_backend') {
+        return Promise.resolve();
+      }
+      return Promise.resolve();
+    });
+
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
@@ -109,22 +149,7 @@ describe('DesktopLaunchConfig', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Claude Internal Setup')).toBeTruthy();
-    });
-  });
-
-  it('shows CLI path when installed and proceeds on Continue', async () => {
-    render(<DesktopLaunchConfig onStarted={onStarted} />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Claude Internal')).toBeTruthy();
-    });
-
-    fireEvent.click(screen.getByText('Claude Internal'));
-    fireEvent.click(screen.getByText('Launch'));
-
-    await waitFor(() => {
       expect(screen.getByText('/usr/local/bin/claude-internal')).toBeTruthy();
-      expect(screen.getByText('Continue')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByText('Continue'));
@@ -153,10 +178,9 @@ describe('DesktopLaunchConfig', () => {
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Claude Internal')).toBeTruthy();
+      expect(screen.getByText('Launch')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText('Claude Internal'));
     fireEvent.click(screen.getByText('Launch'));
 
     await waitFor(() => {
@@ -173,6 +197,9 @@ describe('DesktopLaunchConfig', () => {
       if (cmd === 'check_domain_accessible') {
         return Promise.resolve(true);
       }
+      if (cmd === 'check_cli_installed') {
+        return Promise.resolve('/usr/local/bin/claude');
+      }
       if (cmd === 'start_backend') {
         return Promise.reject(new Error('Backend is already running'));
       }
@@ -186,6 +213,12 @@ describe('DesktopLaunchConfig', () => {
     });
 
     fireEvent.click(screen.getByText('Launch'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Continue')).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByText('Continue'));
 
     await waitFor(() => {
       expect(screen.getByText('Backend is already running')).toBeTruthy();
@@ -207,20 +240,27 @@ describe('DesktopLaunchConfig', () => {
     render(<DesktopLaunchConfig onStarted={onStarted} />);
 
     await waitFor(() => {
-      expect(screen.getByText('Claude Internal')).toBeTruthy();
+      expect(screen.getByText('Launch')).toBeTruthy();
     });
 
-    fireEvent.click(screen.getByText('Claude Internal'));
     fireEvent.click(screen.getByText('Launch'));
 
     await waitFor(() => {
-      expect(screen.getByText('Claude Internal Setup')).toBeTruthy();
+      expect(screen.getByText('Claude Agent SDK Setup')).toBeTruthy();
     });
 
     fireEvent.click(screen.getByText('Cancel'));
 
     await waitFor(() => {
-      expect(screen.queryByText('Claude Internal Setup')).toBeNull();
+      expect(screen.queryByText('Claude Agent SDK Setup')).toBeNull();
+    });
+  });
+
+  it('shows Internal badge on internal-only engines', async () => {
+    render(<DesktopLaunchConfig onStarted={onStarted} />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Internal')).toBeTruthy();
     });
   });
 });

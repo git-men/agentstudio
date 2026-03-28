@@ -11,25 +11,56 @@ export interface EngineOption {
   readonly description: string;
   readonly cliName?: string;
   readonly npmPackage?: string;
+  readonly installCmd?: string;
   readonly internalOnly?: boolean;
   readonly internalDomain?: string;
 }
 
 const ENGINE_OPTIONS: EngineOption[] = [
-  { value: 'claude-sdk', label: 'Claude Agent SDK', description: 'Official Claude Code SDK' },
+  {
+    value: 'claude-sdk',
+    label: 'Claude Agent SDK',
+    description: 'Official Claude Code SDK',
+    cliName: 'claude',
+    npmPackage: '@anthropic-ai/claude-code',
+  },
   {
     value: 'claude-internal-sdk',
     label: 'Claude Internal',
     description: 'Claude Internal SDK (~/.claude-internal)',
     cliName: 'claude-internal',
-    npmPackage: '@anthropic-ai/claude-code-internal',
+    npmPackage: '@tencent/claude-code-internal',
     internalOnly: true,
     internalDomain: 'agentstudio.woa.com',
   },
-  { value: 'codebuddy-sdk', label: 'CodeBuddy', description: 'CodeBuddy SDK engine' },
-  { value: 'codex-cli', label: 'Codex CLI', description: 'OpenAI Codex CLI' },
-  { value: 'codex-sdk', label: 'Codex SDK', description: 'OpenAI Codex SDK' },
-  { value: 'cursor-cli', label: 'Cursor CLI', description: 'Cursor CLI engine' },
+  {
+    value: 'codebuddy-sdk',
+    label: 'CodeBuddy',
+    description: 'CodeBuddy Agent SDK',
+    cliName: 'codebuddy',
+    npmPackage: '@tencent-ai/codebuddy-code',
+  },
+  {
+    value: 'codex-cli',
+    label: 'Codex CLI',
+    description: 'OpenAI Codex CLI',
+    cliName: 'codex',
+    npmPackage: '@openai/codex',
+  },
+  {
+    value: 'codex-sdk',
+    label: 'Codex SDK',
+    description: 'OpenAI Codex SDK',
+    cliName: 'codex',
+    npmPackage: '@openai/codex',
+  },
+  {
+    value: 'cursor-cli',
+    label: 'Cursor CLI',
+    description: 'Cursor Agent CLI',
+    cliName: 'agent',
+    installCmd: 'curl https://cursor.com/install -fsS | bash',
+  },
 ];
 
 export { ENGINE_OPTIONS };
