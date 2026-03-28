@@ -62,21 +62,14 @@ export function getProjectsDir(): string {
 }
 
 /**
- * Get all projects directories to search for Claude session files.
+ * Get projects directories to search for Claude session files.
  *
- * Sessions may be created by different Claude versions (claude-code, claude-internal),
- * each writing to its own config directory. We search both to find sessions regardless
- * of which version created them.
+ * @deprecated Use getAllProjectsDirs() from engineConfig.ts instead.
  *
- * On macOS, also includes ~/.agentstudio/claude-sdk-config/projects for the EMFILE workaround.
- *
- * Returns directories in priority order (existing directories only):
- * - macOS custom dir (~/.agentstudio/claude-sdk-config/projects)
- * - Current engine dir (e.g., ~/.claude/projects)
- * - claude-internal dir (~/.claude-internal/projects)
+ * Only returns directories belonging to the current engine type, ensuring
+ * strict session isolation between engines.
  */
 export function getAllProjectsDirs(): string[] {
-  const home = os.homedir();
   const seen = new Set<string>();
   const dirs: string[] = [];
 
@@ -89,19 +82,11 @@ export function getAllProjectsDirs(): string[] {
     }
   };
 
-  // 1. macOS custom dir (EMFILE workaround, where new sessions may go)
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && SDK_ENGINE === 'claude-code') {
     addIfExists(path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects'));
   }
 
-  // 2. Current engine's directory (highest priority)
   addIfExists(getProjectsDir());
-
-  // 3. claude-internal directory (sessions created with claude-internal provider)
-  addIfExists(path.join(home, SDK_DIR_MAP['claude-internal'], 'projects'));
-
-  // 4. claude-code directory (in case current engine is claude-internal)
-  addIfExists(path.join(home, SDK_DIR_MAP['claude-code'], 'projects'));
 
   return dirs;
 }

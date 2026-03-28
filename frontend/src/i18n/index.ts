@@ -12,6 +12,7 @@ import zhCN_agents from './locales/zh-CN/agents.json';
 import zhCN_onboarding from './locales/zh-CN/onboarding.json';
 import zhCN_skills from './locales/zh-CN/skills.json';
 import zhCN_hooks from './locales/zh-CN/hooks.json';
+import zhCN_teamWorkspace from './locales/zh-CN/teamWorkspace.json';
 
 import enUS_common from './locales/en-US/common.json';
 import enUS_pages from './locales/en-US/pages.json';
@@ -22,6 +23,7 @@ import enUS_agents from './locales/en-US/agents.json';
 import enUS_onboarding from './locales/en-US/onboarding.json';
 import enUS_skills from './locales/en-US/skills.json';
 import enUS_hooks from './locales/en-US/hooks.json';
+import enUS_teamWorkspace from './locales/en-US/teamWorkspace.json';
 
 const resources = {
   'zh-CN': {
@@ -34,6 +36,7 @@ const resources = {
     onboarding: zhCN_onboarding,
     skills: zhCN_skills,
     hooks: zhCN_hooks,
+    teamWorkspace: zhCN_teamWorkspace,
   },
   'en-US': {
     common: enUS_common,
@@ -45,6 +48,7 @@ const resources = {
     onboarding: enUS_onboarding,
     skills: enUS_skills,
     hooks: enUS_hooks,
+    teamWorkspace: enUS_teamWorkspace,
   },
 };
 
@@ -55,7 +59,7 @@ i18n
     resources,
     fallbackLng: 'en-US',
     defaultNS: 'common',
-    ns: ['common', 'pages', 'home', 'components', 'errors', 'agents', 'onboarding', 'skills', 'hooks'],
+    ns: ['common', 'pages', 'home', 'components', 'errors', 'agents', 'onboarding', 'skills', 'hooks', 'teamWorkspace'],
 
     interpolation: {
       escapeValue: false, // React已经处理了XSS

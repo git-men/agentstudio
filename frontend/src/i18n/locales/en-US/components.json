@@ -89,6 +89,7 @@
     "loading": "Loading files...",
     "loadFailed": "Failed to load project files",
     "retry": "Retry",
+    "updatePathInSettings": "Update path in member settings",
     "projectPath": "Project path",
     "emptyDirectory": "Project directory is empty",
     "selectFile": "Select a file to preview",

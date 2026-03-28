@@ -6,6 +6,7 @@
   "nav": {
     "dashboard": "首页",
     "projects": "项目管理",
+    "teamWorkspace": "团队工作区",
     "agents": "Agent管理",
     "scheduledTasks": "定时任务",
     "extensions": "扩展能力",

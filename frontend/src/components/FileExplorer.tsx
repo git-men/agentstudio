@@ -44,6 +44,8 @@ interface FileExplorerProps {
   height?: string;
   /** 'horizontal' = side-by-side (default), 'vertical' = stacked (for narrow panels) */
   layout?: 'horizontal' | 'vertical';
+  /** Called when projectPath is invalid/non-existent — e.g. to open member settings to update path (T046) */
+  onPathInvalid?: () => void;
 }
 
 // 图标映射表
@@ -334,7 +336,8 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   onFileSelect,
   className = '',
   height = '100vh',
-  layout = 'horizontal'
+  layout = 'horizontal',
+  onPathInvalid,
 }) => {
   const { t } = useTranslation('components');
   const [tabs, setTabs] = useState<FileTab[]>([]);
@@ -1016,12 +1019,22 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             {(treeError as Error).message}
           </p>
           <p className="text-xs mt-2 text-gray-500 dark:text-gray-400">{t('fileExplorer.projectPath')}: {projectPath}</p>
-          <button
-            onClick={() => refetchTree()}
-            className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-          >
-            {t('fileExplorer.retry')}
-          </button>
+          <div className="mt-4 flex flex-col sm:flex-row gap-2 justify-center items-center">
+            <button
+              onClick={() => refetchTree()}
+              className="px-4 py-2 bg-blue-500 dark:bg-blue-600 text-white rounded hover:bg-blue-600 dark:hover:bg-blue-700 transition-colors"
+            >
+              {t('fileExplorer.retry')}
+            </button>
+            {onPathInvalid && (
+              <button
+                onClick={onPathInvalid}
+                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                {t('fileExplorer.updatePathInSettings', '在成员设置中更新路径')}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );

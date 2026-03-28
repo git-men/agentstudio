@@ -46,6 +46,7 @@ import rulesRouter from './routes/rules';
 import hooksRouter from './routes/hooks';
 import platformHooksRouter from './routes/platformHooks';
 import lavsRouter from './routes/lavs';
+import teamsRouter from './routes/teams';
 import { authMiddleware } from './middleware/auth';
 import { callChainMiddleware } from './middleware/callChain';
 import { requestIdMiddleware } from './middleware/requestId';
@@ -686,6 +687,7 @@ const app: express.Express = express();
   app.use('/api/rules', authMiddleware, rulesRouter); // Rules management (both Claude and Cursor)
   app.use('/api/hooks', authMiddleware, hooksRouter); // Hooks management (Claude only)
   app.use('/api/platform-hooks', authMiddleware, platformHooksRouter); // Platform hooks (engine-agnostic)
+  app.use('/api/teams', authMiddleware, teamsRouter); // Team workspace management
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
 

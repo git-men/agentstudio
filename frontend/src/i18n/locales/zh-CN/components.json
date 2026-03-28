@@ -89,6 +89,7 @@
     "loading": "加载文件中...",
     "loadFailed": "加载项目文件失败",
     "retry": "重新加载",
+    "updatePathInSettings": "在成员设置中更新路径",
     "projectPath": "项目路径",
     "emptyDirectory": "项目目录为空",
     "selectFile": "选择一个文件进行预览",

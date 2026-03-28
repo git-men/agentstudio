@@ -50,6 +50,7 @@ const ScheduledTasksPage = lazy(() => import('./pages/ScheduledTasksPage').then(
 const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })));
 const ProjectWorkspacePage = lazy(() => import('./pages/ProjectWorkspacePage').then(module => ({ default: module.ProjectWorkspacePage })));
+const TeamWorkspacePage = lazy(() => import('./pages/TeamWorkspacePage').then(module => ({ default: module.TeamWorkspacePage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(module => ({ default: module.default })));
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.default })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
@@ -140,6 +141,12 @@ const AppContent: React.FC = () => {
           <Route path="/project-workspace" element={
             <ProtectedRoute>
               <ProjectWorkspacePage />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/team-workspace" element={
+            <ProtectedRoute>
+              <TeamWorkspacePage />
             </ProtectedRoute>
           } />
 

@@ -27,6 +27,7 @@ import {
   Building2,
   LogOut,
   MessageSquare,
+  UsersRound,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -66,6 +67,11 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     href: '/projects',
     icon: FolderOpen,
     requireModule: 'manage.projects',
+  },
+  {
+    name: t('nav.teamWorkspace') || '团队工作区',
+    href: '/team-workspace',
+    icon: UsersRound,
   },
   {
     name: t('nav.mcp'),
