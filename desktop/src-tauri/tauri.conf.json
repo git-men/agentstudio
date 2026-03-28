@@ -69,7 +69,7 @@
       "dialog": false,
       "pubkey": "RWTY8aHmKO/WXLyO4gOiYiDVX+si7dMgtoNKSvNkPhnBwBPuEQ8Wbjdn",
       "endpoints": [
-        "https://COS_BUCKET.cos.COS_REGION.myqcloud.com/desktop/latest.json"
+        "https://static-76067.cos.ap-guangzhou.myqcloud.com/clawstudio-desktop/latest.json"
       ]
     },
     "singleInstance": {}
