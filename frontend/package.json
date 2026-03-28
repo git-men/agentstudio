@@ -16,7 +16,9 @@
     "test:coverage": "vitest run --coverage",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "list-models": "node scripts/list-models.js"
+    "list-models": "node scripts/list-models.js",
+    "test:e2e:desktop": "VITE_TAURI=true playwright test tests/e2e/desktop/ --project=desktop",
+    "test:e2e:tauri": "wdio wdio.tauri.conf.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.42",

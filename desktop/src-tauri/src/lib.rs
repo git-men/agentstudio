@@ -759,7 +759,7 @@ pub fn run() {
     let sidecar_child_arc: Arc<Mutex<Option<CommandChild>>> = Arc::new(Mutex::new(None));
     let sidecar_child_for_exit = sidecar_child_arc.clone();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         // Structured logging (replaces console.* in desktop context)
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -780,7 +780,13 @@ pub fn run() {
         // Window state persistence: restore position/size on relaunch
         .plugin(tauri_plugin_window_state::Builder::new().build())
         // Native system notifications
-        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_notification::init());
+
+    // WebDriver automation plugin (E2E testing only, enable with --features webdriver)
+    #[cfg(feature = "webdriver")]
+    let builder = builder.plugin(tauri_plugin_webdriver::init());
+
+    builder
         // Register AppState
         .manage(AppState {
             backend_port: Mutex::new(None),

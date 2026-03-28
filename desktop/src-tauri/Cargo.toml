@@ -30,6 +30,11 @@ serde_json = "1"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time"] }
 log = "0.4"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+tauri-plugin-webdriver = { version = "0.2", optional = true }
+
+[features]
+default = []
+webdriver = ["tauri-plugin-webdriver"]
 
 [profile.release]
 panic = "abort"
