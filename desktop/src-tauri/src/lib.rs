@@ -150,6 +150,92 @@ async fn send_notification(
     Ok(())
 }
 
+// ── Engine setup helpers ─────────────────────────────────────────────────────
+
+/// Check if a domain is accessible (HTTP GET with short timeout).
+#[tauri::command]
+async fn check_domain_accessible(domain: String) -> bool {
+    let url = if domain.starts_with("http") {
+        domain
+    } else {
+        format!("https://{domain}")
+    };
+
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .danger_accept_invalid_certs(true)
+        .build()
+    {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    client.get(&url).send().await.is_ok()
+}
+
+/// Check if a CLI tool is installed. Returns the absolute path if found.
+#[tauri::command]
+async fn check_cli_installed(cli_name: String) -> Option<String> {
+    let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
+    let output = std::process::Command::new(cmd)
+        .arg(&cli_name)
+        .output()
+        .ok()?;
+
+    if output.status.success() {
+        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if path.is_empty() { None } else { Some(path) }
+    } else {
+        None
+    }
+}
+
+#[derive(Clone, serde::Serialize)]
+struct InstallProgress {
+    stage: String,
+    message: String,
+    done: bool,
+    success: bool,
+}
+
+/// Install an npm package globally and stream progress.
+#[tauri::command]
+async fn install_npm_package(app: AppHandle, package_name: String) -> Result<String, String> {
+    let _ = app.emit("install-progress", InstallProgress {
+        stage: "installing".to_string(),
+        message: format!("Running: npm install -g {package_name}"),
+        done: false,
+        success: false,
+    });
+
+    let output = std::process::Command::new("npm")
+        .args(["install", "-g", &package_name])
+        .output()
+        .map_err(|e| format!("Failed to run npm: {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    if output.status.success() {
+        let _ = app.emit("install-progress", InstallProgress {
+            stage: "done".to_string(),
+            message: "Installation completed successfully".to_string(),
+            done: true,
+            success: true,
+        });
+        Ok(stdout)
+    } else {
+        let msg = if stderr.is_empty() { stdout } else { stderr };
+        let _ = app.emit("install-progress", InstallProgress {
+            stage: "error".to_string(),
+            message: msg.clone(),
+            done: true,
+            success: false,
+        });
+        Err(msg)
+    }
+}
+
 // ── Config persistence ───────────────────────────────────────────────────────
 
 fn get_config_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
@@ -670,6 +756,9 @@ pub fn run() {
             check_update,
             install_update,
             send_notification,
+            check_domain_accessible,
+            check_cli_installed,
+            install_npm_package,
             load_launch_config,
             start_backend,
         ])

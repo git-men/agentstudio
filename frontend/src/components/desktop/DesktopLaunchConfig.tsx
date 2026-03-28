@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { useLaunchConfig, ENGINE_OPTIONS, type LaunchConfig } from '../../hooks/useLaunchConfig';
+import { useLaunchConfig, ENGINE_OPTIONS, type LaunchConfig, type EngineOption } from '../../hooks/useLaunchConfig';
+import { EngineSetupWizard } from './EngineSetupWizard';
 
 interface DesktopLaunchConfigProps {
   onStarted: () => void;
 }
 
 export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStarted }) => {
-  const { config, loading, starting, error, startBackend } = useLaunchConfig();
+  const { config, loading, starting, error, startBackend, availableEngines } = useLaunchConfig();
   const [engine, setEngine] = useState<string | null>(null);
+  const [setupEngine, setSetupEngine] = useState<EngineOption | null>(null);
 
   React.useEffect(() => {
     if (!loading && engine === null) {
@@ -16,15 +18,35 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
   }, [loading, config, engine]);
 
   const handleLaunch = async () => {
-    const selectedConfig: LaunchConfig = {
-      engine: engine ?? config.engine,
-    };
+    const currentEngine = engine ?? config.engine;
+    const engineDef = ENGINE_OPTIONS.find(e => e.value === currentEngine);
+
+    if (engineDef?.cliName) {
+      setSetupEngine(engineDef);
+      return;
+    }
+
+    await doLaunch(currentEngine);
+  };
+
+  const doLaunch = async (engineValue: string) => {
+    const selectedConfig: LaunchConfig = { engine: engineValue };
     try {
       await startBackend(selectedConfig);
       onStarted();
     } catch {
       // error state is set inside the hook
     }
+  };
+
+  const handleSetupReady = async (_cliPath: string) => {
+    setSetupEngine(null);
+    const currentEngine = engine ?? config.engine;
+    await doLaunch(currentEngine);
+  };
+
+  const handleSetupCancel = () => {
+    setSetupEngine(null);
   };
 
   const currentEngine = engine ?? config.engine;
@@ -54,7 +76,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
         <div className="mb-8">
           <h3 className="text-sm font-medium text-[#94a3b8] mb-3">Execution Engine</h3>
           <div className="grid grid-cols-1 gap-2">
-            {ENGINE_OPTIONS.map((opt) => (
+            {availableEngines.map((opt) => (
               <button
                 key={opt.value}
                 onClick={() => setEngine(opt.value)}
@@ -70,10 +92,15 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
                 }`}>
                   {currentEngine === opt.value && <div className="w-2 h-2 rounded-full bg-[#6366f1]" />}
                 </div>
-                <div>
+                <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium text-[#e2e8f0]">{opt.label}</div>
                   <div className="text-xs text-[#64748b]">{opt.description}</div>
                 </div>
+                {opt.internalOnly && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#6366f1]/15 text-[#a78bfa] border border-[#6366f1]/20 shrink-0">
+                    Internal
+                  </span>
+                )}
               </button>
             ))}
           </div>
@@ -110,6 +137,15 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
           v{__APP_VERSION__ || '0.1.0'}
         </p>
       </div>
+
+      {/* Engine Setup Wizard (modal overlay) */}
+      {setupEngine && (
+        <EngineSetupWizard
+          engine={setupEngine}
+          onReady={handleSetupReady}
+          onCancel={handleSetupCancel}
+        />
+      )}
     </div>
   );
 };
