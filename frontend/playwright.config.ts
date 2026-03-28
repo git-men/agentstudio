@@ -11,6 +11,16 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3001',
     trace: 'on-first-retry',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'desktop',
+      testDir: './tests/e2e/desktop',
+      use: { ...devices['Desktop Chrome'] },
+    },
+  ],
   timeout: 120000,
 });
