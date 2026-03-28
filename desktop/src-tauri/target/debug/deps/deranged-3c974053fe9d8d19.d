@@ -1,9 +1,0 @@
-/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/deps/libderanged-3c974053fe9d8d19.rmeta: /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/lib.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/traits.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/unsafe_wrapper.rs
-
-/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/deps/libderanged-3c974053fe9d8d19.rlib: /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/lib.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/traits.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/unsafe_wrapper.rs
-
-/Users/kongjie/projects/agent-studio/agentstudio/.worktrees/tauri-desktop/desktop/src-tauri/target/debug/deps/deranged-3c974053fe9d8d19.d: /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/lib.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/traits.rs /Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/unsafe_wrapper.rs
-
-/Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/lib.rs:
-/Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/traits.rs:
-/Users/kongjie/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/deranged-0.3.11/src/unsafe_wrapper.rs:
