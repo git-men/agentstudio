@@ -194,7 +194,7 @@ class TunnelService {
     if (enabledTunnels.length > 0) {
       console.log(`[Tunnel] Auto-connecting ${enabledTunnels.length} tunnel(s)...`);
       await Promise.allSettled(
-        enabledTunnels.map((c) => this.connect(c.id)),
+        enabledTunnels.map((c) => this.connect(c.id, true)),
       );
     } else {
       console.log('[Tunnel] No tunnels to auto-connect');
