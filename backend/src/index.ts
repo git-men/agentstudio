@@ -59,7 +59,7 @@ import { shutdownTelemetry } from './services/telemetry';
 import { initializeTaskExecutor, shutdownTaskExecutor } from './services/taskExecutor/index.js';
 import { tunnelService } from './services/tunnelService.js';
 import { enterpriseAuthService } from './services/enterpriseAuthService.js';
-import { initializeEngine, logEngineConfig, getClaudeCliName } from './config/engineConfig.js';
+import { initializeEngine, logEngineConfig, getClaudeCliName, getEngineType } from './config/engineConfig.js';
 import { initializeProduct, logProductConfig } from './config/productConfig.js';
 import { productGateMiddleware } from './middleware/productGate.js';
 
@@ -248,8 +248,9 @@ const app: express.Express = express();
     }
 
     // Initialize system version (with or without executable path)
-    await initializeSystemVersion(claudePath || '');
-    console.log(`[System] Initialized Claude version${claudePath ? ` from: ${claudePath}` : ' without executable path'}`);
+    const currentEngineType = getEngineType();
+    await initializeSystemVersion(claudePath || '', currentEngineType);
+    console.log(`[System] Initialized Claude version${claudePath ? ` from: ${claudePath}` : ' without executable path'} (engine: ${currentEngineType})`);
   } catch (error) {
     console.warn('Failed to initialize system Claude version:', error);
   }
@@ -636,6 +637,7 @@ const app: express.Express = express();
         version: VERSION,
         name: 'agentstudio-backend',
         engine: engineStatus.defaultEngine || 'unknown',
+        serviceEngine: getEngineType(),
         engines: engineStatus.registeredEngines || [],
       });
     } catch (error) {

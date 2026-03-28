@@ -19,7 +19,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
   const [installLog, setInstallLog] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  const canAutoInstall = !!(engine.npmPackage || engine.installCmd);
+  const canAutoInstall = !!engine.npmPackage;
   const installCommand = engine.npmPackage
     ? `npm install -g ${engine.npmPackage}`
     : engine.installCmd || '';
@@ -36,8 +36,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
       const path = await invoke<string | null>('check_cli_installed', { cliName: engine.cliName });
 
       if (path) {
-        setCliPath(path);
-        setStep('ready');
+        onReady(path);
       } else {
         setStep('not_installed');
       }
@@ -63,12 +62,8 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
         output = await invoke<string>('install_npm_package', {
           packageName: engine.npmPackage,
         });
-      } else if (engine.installCmd) {
-        output = await invoke<string>('run_shell_command', {
-          command: engine.installCmd,
-        });
       } else {
-        setErrorMsg('No install method available');
+        setErrorMsg('No auto-install method available. Please install manually.');
         setStep('install_failed');
         return;
       }
@@ -94,15 +89,19 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="engine-setup-title">
       <div className="w-full max-w-md mx-4 rounded-2xl bg-[#1e293b] border border-[#334155] shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#334155]">
-          <h2 className="text-lg font-semibold text-[#e2e8f0]">
+          <h2 id="engine-setup-title" className="text-lg font-semibold text-[#e2e8f0]">
             {engine.label} Setup
           </h2>
           <p className="text-xs text-[#64748b] mt-1">
-            Checking environment for {engine.label}...
+            {step === 'checking' && `Checking environment for ${engine.label}...`}
+            {step === 'not_installed' && `${engine.label} requires setup`}
+            {step === 'installing' && `Installing ${engine.label}...`}
+            {step === 'install_failed' && 'Setup encountered an error'}
+            {step === 'ready' && `${engine.label} is ready to use`}
           </p>
         </div>
 

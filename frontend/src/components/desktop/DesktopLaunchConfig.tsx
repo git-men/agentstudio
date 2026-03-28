@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLaunchConfig, ENGINE_OPTIONS, type LaunchConfig, type EngineOption } from '../../hooks/useLaunchConfig';
 import { EngineSetupWizard } from './EngineSetupWizard';
+
+const AUTO_LAUNCH_SECONDS = 10;
 
 interface DesktopLaunchConfigProps {
   onStarted: () => void;
@@ -10,44 +12,110 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
   const { config, loading, starting, error, startBackend, availableEngines } = useLaunchConfig();
   const [engine, setEngine] = useState<string | null>(null);
   const [setupEngine, setSetupEngine] = useState<EngineOption | null>(null);
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const hasLaunchedRef = useRef(false);
+  const hasAttemptedAutoLaunchRef = useRef(false);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!loading && engine === null) {
       setEngine(config.engine);
     }
   }, [loading, config, engine]);
 
-  const handleLaunch = async () => {
+  const stopCountdown = useCallback(() => {
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+    setCountdown(null);
+  }, []);
+
+  const doLaunch = useCallback(async (engineValue: string) => {
+    const selectedConfig: LaunchConfig = { engine: engineValue };
+    try {
+      await startBackend(selectedConfig);
+      onStarted();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('already running')) {
+        onStarted();
+      } else {
+        hasLaunchedRef.current = false;
+      }
+    }
+  }, [startBackend, onStarted]);
+
+  const handleLaunch = useCallback(async () => {
+    stopCountdown();
+    if (hasLaunchedRef.current) return;
+    hasLaunchedRef.current = true;
+
     const currentEngine = engine ?? config.engine;
     const engineDef = ENGINE_OPTIONS.find(e => e.value === currentEngine);
 
     if (engineDef?.cliName) {
       setSetupEngine(engineDef);
+      hasLaunchedRef.current = false;
       return;
     }
 
     await doLaunch(currentEngine);
-  };
+  }, [engine, config.engine, stopCountdown, doLaunch]);
 
-  const doLaunch = async (engineValue: string) => {
-    const selectedConfig: LaunchConfig = { engine: engineValue };
-    try {
-      await startBackend(selectedConfig);
-      onStarted();
-    } catch {
-      // error state is set inside the hook
+  // Auto-launch countdown — only triggers once per mount
+  useEffect(() => {
+    if (loading || !config.engine || starting || hasAttemptedAutoLaunchRef.current) return;
+    hasAttemptedAutoLaunchRef.current = true;
+
+    setCountdown(AUTO_LAUNCH_SECONDS);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          countdownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+    };
+  }, [loading, config.engine, starting]);
+
+  useEffect(() => {
+    if (countdown === 0 && !starting && !hasLaunchedRef.current) {
+      handleLaunch();
     }
+  }, [countdown, starting, handleLaunch]);
+
+  const handleEngineChange = (value: string) => {
+    setEngine(value);
+    stopCountdown();
+    hasAttemptedAutoLaunchRef.current = true;
   };
 
-  const handleSetupReady = async (_cliPath: string) => {
+  const isDevMode = import.meta.env.DEV;
+
+  const handleSetupReady = useCallback(async (_cliPath: string) => {
     setSetupEngine(null);
     const currentEngine = engine ?? config.engine;
-    await doLaunch(currentEngine);
-  };
+    try {
+      await doLaunch(currentEngine);
+    } catch {
+      // error surfaced via hook's error state
+    }
+  }, [engine, config.engine, doLaunch]);
 
-  const handleSetupCancel = () => {
+  const handleSetupCancel = useCallback(() => {
     setSetupEngine(null);
-  };
+    hasLaunchedRef.current = false;
+  }, []);
 
   const currentEngine = engine ?? config.engine;
 
@@ -64,9 +132,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
       <div className="w-full max-w-lg px-8 py-10">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-10">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#6366f1] to-[#8b5cf6] flex items-center justify-center text-2xl">
-            🦀
-          </div>
+          <img src="/cc-studio.png" alt="ClawStudio" className="w-12 h-12 rounded-xl" />
           <span className="text-2xl font-bold bg-gradient-to-r from-[#6366f1] to-[#a78bfa] bg-clip-text text-transparent">
             ClawStudio
           </span>
@@ -79,7 +145,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
             {availableEngines.map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => setEngine(opt.value)}
+                onClick={() => handleEngineChange(opt.value)}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg border transition-all text-left ${
                   currentEngine === opt.value
                     ? 'border-[#6366f1] bg-[#6366f1]/10 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]'
@@ -106,6 +172,13 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
           </div>
         </div>
 
+        {/* Dev mode engine switch hint */}
+        {isDevMode && config.engine && engine && engine !== config.engine && (
+          <div className="mb-4 px-4 py-2 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] text-xs">
+            Dev mode: engine change will take effect on next restart.
+          </div>
+        )}
+
         {/* Error */}
         {error && (
           <div className="mb-4 px-4 py-2 rounded-lg bg-[#f87171]/10 border border-[#f87171]/20 text-[#f87171] text-sm">
@@ -128,6 +201,8 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               Starting...
             </span>
+          ) : countdown !== null && countdown > 0 ? (
+            `Launch (${countdown}s)`
           ) : (
             'Launch'
           )}

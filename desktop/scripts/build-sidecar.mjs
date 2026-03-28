@@ -19,7 +19,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, renameSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
 import os from 'os';
@@ -87,6 +87,44 @@ function buildTarget(triple) {
   process.stderr.write(`[build-sidecar] ✓ ${outname}\n`);
 }
 
+// ── Workaround: bun bundler follows .d.ts imports as real modules ─────────────
+// @a2a-js/sdk uses tsup chunked types (types-*.d.ts) that reference non-existent
+// .js counterparts. Temporarily hiding the server .d.ts during bun compile.
+
+import { readdirSync } from 'fs';
+
+function findA2aDtsFiles() {
+  const found = [];
+  const pnpmDir = join(DESKTOP_DIR, '..', 'node_modules', '.pnpm');
+  if (!existsSync(pnpmDir)) return found;
+  try {
+    for (const entry of readdirSync(pnpmDir)) {
+      if (!entry.startsWith('@a2a-js+sdk@')) continue;
+      const candidate = join(pnpmDir, entry, 'node_modules', '@a2a-js', 'sdk', 'dist', 'server', 'index.d.ts');
+      if (existsSync(candidate)) found.push(candidate);
+    }
+  } catch { /* ignore */ }
+  return found;
+}
+
+function hideA2aDts() {
+  const files = findA2aDtsFiles();
+  for (const f of files) {
+    renameSync(f, f + '.bun-hide');
+    process.stderr.write(`[build-sidecar] workaround: hid ${f}\n`);
+  }
+  return files;
+}
+
+function restoreA2aDts(files) {
+  for (const f of files) {
+    const hidden = f + '.bun-hide';
+    if (existsSync(hidden)) {
+      renameSync(hidden, f);
+    }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (!existsSync(BINARIES_DIR)) {
@@ -109,14 +147,20 @@ if (args.includes('--all')) {
 
 process.stderr.write(`[build-sidecar] Targets: ${targets.join(', ')}\n`);
 
+const hiddenDtsFiles = hideA2aDts();
+
 let failed = 0;
-for (const triple of targets) {
-  try {
-    buildTarget(triple);
-  } catch (err) {
-    process.stderr.write(`[build-sidecar] ✗ Failed for ${triple}: ${err.message}\n`);
-    failed++;
+try {
+  for (const triple of targets) {
+    try {
+      buildTarget(triple);
+    } catch (err) {
+      process.stderr.write(`[build-sidecar] ✗ Failed for ${triple}: ${err.message}\n`);
+      failed++;
+    }
   }
+} finally {
+  restoreA2aDts(hiddenDtsFiles);
 }
 
 if (failed > 0) {

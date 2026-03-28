@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "identifier": "com.clawstudio.desktop",
   "build": {
-    "frontendDist": "../frontend/dist",
+    "frontendDist": "../../frontend/dist",
     "devUrl": "http://localhost:3100",
-    "beforeDevCommand": "pnpm --filter agentstudio-backend run dev & PORT=3100 pnpm --filter frontend dev",
-    "beforeBuildCommand": "VITE_TAURI=true pnpm --filter frontend build"
+    "beforeDevCommand": "ENGINE=$(node scripts/read-engine.mjs) PORT=4938 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_BASE=/api pnpm --filter frontend dev",
+    "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && VITE_TAURI=true pnpm --filter frontend build"
   },
   "bundle": {
     "active": true,
@@ -69,7 +69,7 @@
       "dialog": false,
       "pubkey": "RWTY8aHmKO/WXLyO4gOiYiDVX+si7dMgtoNKSvNkPhnBwBPuEQ8Wbjdn",
       "endpoints": [
-        "https://github.com/okguitar/agentstudio/releases/latest/download/latest.json"
+        "https://COS_BUCKET.cos.COS_REGION.myqcloud.com/desktop/latest.json"
       ]
     },
     "singleInstance": {}

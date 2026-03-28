@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -7,6 +7,23 @@ use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
 use tauri_plugin_updater::UpdaterExt;
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const DEFAULT_BACKEND_PORT: u16 = 4938;
+
+const ALLOWED_NPM_PACKAGES: &[&str] = &[
+    "@anthropic-ai/claude-code",
+    "@anthropic-ai/claude-code-internal",
+    "@openai/codex",
+    "@anthropic-ai/codebuddy",
+];
+
+// ── Mutex helper ──────────────────────────────────────────────────────────────
+
+fn lock_or_recover<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 // ── AppState ──────────────────────────────────────────────────────────────────
 
@@ -53,7 +70,7 @@ impl Default for LaunchConfig {
 /// Query the backend port. Returns None while the sidecar is still starting.
 #[tauri::command]
 fn get_backend_port(state: tauri::State<AppState>) -> Option<u16> {
-    *state.backend_port.lock().unwrap()
+    *lock_or_recover(&state.backend_port)
 }
 
 /// Close the splashscreen window and show the main window.
@@ -105,7 +122,7 @@ async fn check_update(
                 version: update.version.clone(),
                 notes: update.body.clone().unwrap_or_default(),
             };
-            *state.pending_update.lock().unwrap() = Some(update);
+            *lock_or_recover(&state.pending_update) = Some(update);
             Ok(Some(info))
         }
         None => Ok(None),
@@ -118,10 +135,7 @@ async fn install_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let update = state
-        .pending_update
-        .lock()
-        .unwrap()
+    let update = lock_or_recover(&state.pending_update)
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
@@ -161,10 +175,11 @@ async fn check_domain_accessible(domain: String) -> bool {
         format!("https://{domain}")
     };
 
-    let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .danger_accept_invalid_certs(true)
-        .build()
+    let mut builder = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5));
+    #[cfg(debug_assertions)]
+    { builder = builder.danger_accept_invalid_certs(true); }
+    let client = match builder.build()
     {
         Ok(c) => c,
         Err(_) => return false,
@@ -176,10 +191,14 @@ async fn check_domain_accessible(domain: String) -> bool {
 /// Check if a CLI tool is installed. Returns the absolute path if found.
 #[tauri::command]
 async fn check_cli_installed(cli_name: String) -> Option<String> {
+    if !cli_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        return None;
+    }
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
-    let output = std::process::Command::new(cmd)
+    let output = tokio::process::Command::new(cmd)
         .arg(&cli_name)
         .output()
+        .await
         .ok()?;
 
     if output.status.success() {
@@ -199,8 +218,13 @@ struct InstallProgress {
 }
 
 /// Install an npm package globally and stream progress.
+/// Only packages in ALLOWED_NPM_PACKAGES are permitted.
 #[tauri::command]
 async fn install_npm_package(app: AppHandle, package_name: String) -> Result<String, String> {
+    if !ALLOWED_NPM_PACKAGES.iter().any(|p| *p == package_name) {
+        return Err(format!("Package '{}' is not in the allowed list", package_name));
+    }
+
     let _ = app.emit("install-progress", InstallProgress {
         stage: "installing".to_string(),
         message: format!("Running: npm install -g {package_name}"),
@@ -208,9 +232,10 @@ async fn install_npm_package(app: AppHandle, package_name: String) -> Result<Str
         success: false,
     });
 
-    let output = std::process::Command::new("npm")
+    let output = tokio::process::Command::new("npm")
         .args(["install", "-g", &package_name])
         .output()
+        .await
         .map_err(|e| format!("Failed to run npm: {e}"))?;
 
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
@@ -236,46 +261,8 @@ async fn install_npm_package(app: AppHandle, package_name: String) -> Result<Str
     }
 }
 
-/// Run a shell command and return stdout. Used for custom install commands.
-#[tauri::command]
-async fn run_shell_command(app: AppHandle, command: String) -> Result<String, String> {
-    let _ = app.emit("install-progress", InstallProgress {
-        stage: "installing".to_string(),
-        message: format!("Running: {command}"),
-        done: false,
-        success: false,
-    });
-
-    let shell = if cfg!(target_os = "windows") { "cmd" } else { "sh" };
-    let flag = if cfg!(target_os = "windows") { "/C" } else { "-c" };
-
-    let output = std::process::Command::new(shell)
-        .args([flag, &command])
-        .output()
-        .map_err(|e| format!("Failed to run command: {e}"))?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    if output.status.success() {
-        let _ = app.emit("install-progress", InstallProgress {
-            stage: "done".to_string(),
-            message: "Command completed successfully".to_string(),
-            done: true,
-            success: true,
-        });
-        Ok(stdout)
-    } else {
-        let msg = if stderr.is_empty() { stdout } else { stderr };
-        let _ = app.emit("install-progress", InstallProgress {
-            stage: "error".to_string(),
-            message: msg.clone(),
-            done: true,
-            success: false,
-        });
-        Err(msg)
-    }
-}
+// run_shell_command removed — arbitrary shell execution is an RCE risk.
+// Use install_npm_package with allowlisted packages instead.
 
 // ── Config persistence ───────────────────────────────────────────────────────
 
@@ -310,25 +297,28 @@ fn load_launch_config(app: AppHandle) -> LaunchConfig {
 /// Save config and start the backend sidecar.
 /// Guards against double invocation — returns error if sidecar is already running.
 /// Engine config is injected via Command::envs() (thread-safe), not set_var.
+/// Always persists the selected engine so the next session uses it.
 #[tauri::command]
 fn start_backend(
     app: AppHandle,
     state: tauri::State<AppState>,
     engine: String,
 ) -> Result<(), String> {
+    let config = LaunchConfig { engine: engine.clone() };
+    write_launch_config_to_file(&app, &config)?;
+    *lock_or_recover(&state.launch_config) = Some(config);
+
+    // Hold sidecar lock across the check-and-mark to prevent TOCTOU race
     {
-        let guard = state.sidecar_child.lock().unwrap();
+        let guard = lock_or_recover(&state.sidecar_child);
         if guard.is_some() {
             return Err("Backend is already running".to_string());
         }
-        if state.backend_port.lock().unwrap().is_some() {
+        if lock_or_recover(&state.backend_port).is_some() {
             return Err("Backend is already running".to_string());
         }
     }
 
-    let config = LaunchConfig { engine: engine.clone() };
-    write_launch_config_to_file(&app, &config)?;
-    *state.launch_config.lock().unwrap() = Some(config);
     log::info!("Starting backend with ENGINE={engine}");
     spawn_backend_sidecar(app);
     Ok(())
@@ -366,27 +356,25 @@ async fn try_detect_running_backend(port: u16) -> bool {
 fn start_sidecar_dev(app: AppHandle) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
-        let default_port: u16 = 4936;
-        log::info!("Dev mode: polling for backend on port {default_port}...");
+        log::info!("Dev mode: polling for backend on port {DEFAULT_BACKEND_PORT}...");
         let deadline = std::time::Instant::now() + Duration::from_secs(30);
         loop {
-            if try_detect_running_backend(default_port).await {
-                log::info!("Dev mode: backend detected on port {default_port}");
+            if try_detect_running_backend(DEFAULT_BACKEND_PORT).await {
+                log::info!("Dev mode: backend detected on port {DEFAULT_BACKEND_PORT}");
                 let state = app_clone.state::<AppState>();
-                *state.backend_port.lock().unwrap() = Some(default_port);
-                close_splashscreen_internal(&app_clone);
-                if let Err(e) = app_clone.emit("backend-ready", default_port) {
+                *lock_or_recover(&state.backend_port) = Some(DEFAULT_BACKEND_PORT);
+                if let Err(e) = app_clone.emit("backend-ready", DEFAULT_BACKEND_PORT) {
                     log::warn!("Failed to emit backend-ready: {e}");
                 }
                 return;
             }
             if std::time::Instant::now() > deadline {
-                log::warn!("Dev mode: backend not found after 30s, falling back to sidecar");
+                log::warn!("Dev mode: backend not found after 30s");
+                let _ = app_clone.emit("backend-start-failed", "Dev backend not detected after 30s");
                 break;
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
-        spawn_backend_sidecar_inner(app_clone, true).await;
     });
 }
 
@@ -418,15 +406,16 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         }
     };
 
-    // Inject launch config as sidecar env vars (thread-safe, no set_var)
+    // Inject launch config and default port as sidecar env vars
     {
         let state = app.state::<AppState>();
-        let config = state.launch_config.lock().unwrap().clone();
+        let config = lock_or_recover(&state.launch_config).clone();
+        let mut env_map = std::collections::HashMap::new();
+        env_map.insert("PORT".to_string(), DEFAULT_BACKEND_PORT.to_string());
         if let Some(config) = config {
-            let mut env_map = std::collections::HashMap::new();
             env_map.insert("ENGINE".to_string(), config.engine);
-            sidecar_cmd = sidecar_cmd.envs(env_map);
         }
+        sidecar_cmd = sidecar_cmd.envs(env_map);
     }
 
     let spawn_result = sidecar_cmd.spawn();
@@ -445,7 +434,7 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
 
     {
         let state = app.state::<AppState>();
-        *state.sidecar_child.lock().unwrap() = Some(child);
+        *lock_or_recover(&state.sidecar_child) = Some(child);
     }
 
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
@@ -469,7 +458,7 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
                         if let Some(port_str) = line.trim().strip_prefix("BACKEND_PORT=") {
                             if let Ok(port) = port_str.parse::<u16>() {
                                 let state = app.state::<AppState>();
-                                *state.backend_port.lock().unwrap() = Some(port);
+                                *lock_or_recover(&state.backend_port) = Some(port);
                                 port_found = true;
                                 flush_log_buffer(&app, &mut log_buffer);
                                 if close_splash {
@@ -526,6 +515,8 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
 
         if !port_found && std::time::Instant::now() > deadline {
             log::error!("Backend sidecar timed out after 30 seconds");
+            let state = app.state::<AppState>();
+            kill_sidecar(&state);
             log_buffer.push(BackendLogEntry {
                 level: "error".to_string(),
                 message: "Backend startup timed out (30s)".to_string(),
@@ -668,7 +659,7 @@ fn start_update_check(app: AppHandle) {
                 log::info!("Update available: v{}", info.version);
 
                 let state = app.state::<AppState>();
-                *state.pending_update.lock().unwrap() = Some(update);
+                *lock_or_recover(&state.pending_update) = Some(update);
 
                 if let Err(e) = app.emit("update-available", &info) {
                     log::warn!("Failed to emit update-available: {e}");
@@ -717,7 +708,7 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
     let menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
 
     TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(app.default_window_icon().expect("default window icon must be configured").clone())
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => {
@@ -806,19 +797,21 @@ pub fn run() {
             check_domain_accessible,
             check_cli_installed,
             install_npm_package,
-            run_shell_command,
             load_launch_config,
             start_backend,
         ])
         .setup(|app| {
+            // Both dev and prod: close splash, show main with launch config UI.
+            // The frontend DesktopLaunchConfig handles engine selection.
+            // In dev mode the backend may already be running via beforeDevCommand;
+            // start_backend IPC handles "already running" gracefully.
+            close_splashscreen_internal(app.handle());
+
             if cfg!(debug_assertions) {
-                // Dev mode: auto-detect running backend or fall back to sidecar
+                // Dev mode: detect the already-running backend started by beforeDevCommand
                 start_sidecar_dev(app.handle().clone());
-            } else {
-                // Prod mode: show main window with launch config UI;
-                // backend will be started when user confirms via start_backend IPC.
-                close_splashscreen_internal(app.handle());
             }
+
             start_update_check(app.handle().clone());
             if let Err(e) = setup_system_tray(app) {
                 log::warn!("Failed to setup system tray: {e}");
@@ -849,7 +842,6 @@ pub fn run() {
                         }
                     }
                 }
-                let _ = app_handle;
             }
             _ => {}
         });

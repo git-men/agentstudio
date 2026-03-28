@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/ensure-rust.mjs tauri dev",
-    "build": "node scripts/ensure-rust.mjs tauri build",
-    "build:debug": "node scripts/ensure-rust.mjs tauri build --debug",
+    "dev": "npx tauri dev",
+    "build": "npx tauri build",
+    "build:debug": "npx tauri build --debug",
     "sidecar:build": "node scripts/build-sidecar.mjs"
   },
   "devDependencies": {

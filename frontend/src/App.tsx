@@ -293,51 +293,33 @@ const AppContent: React.FC = () => {
 /**
  * In Tauri mode, gate the React tree behind backend readiness.
  *
- * - Web mode / Tauri dev: passes through immediately.
- * - Tauri prod (VITE_TAURI=true): shows DesktopLaunchConfig first.
- *   Once the user confirms, the sidecar is started via IPC and we poll
- *   for the backend port before rendering the main app.
+ * Both dev and prod modes show DesktopLaunchConfig so users can
+ * choose the execution engine. In dev mode the backend may already
+ * be running via beforeDevCommand; "already running" is handled
+ * gracefully by DesktopLaunchConfig.
  */
 function TauriBackendGate({ children }: { children: React.ReactNode }) {
-  const isTauriProd = isTauri() && import.meta.env.VITE_TAURI === 'true';
-  const [backendStarted, setBackendStarted] = useState(!isTauriProd);
+  const isTauriEnv = isTauri();
+  const isMainWindow = !window.location.pathname.startsWith('/project-workspace');
+  const needsLaunchGate = isTauriEnv && isMainWindow;
+  const [backendStarted, setBackendStarted] = useState(!needsLaunchGate);
   const { isReady, error } = useBackendReady(backendStarted);
 
-  if (!isTauri()) return <>{children}</>;
+  if (!isTauriEnv) return <>{children}</>;
 
-  if (isTauriProd && !backendStarted) {
+  if (!backendStarted) {
     return <DesktopLaunchConfig onStarted={() => setBackendStarted(true)} />;
   }
 
   if (error) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          gap: '16px',
-          fontFamily: 'system-ui, sans-serif',
-          background: '#0f172a',
-          color: '#e2e8f0',
-        }}
-      >
-        <p style={{ color: '#f87171', fontSize: '14px', textAlign: 'center', maxWidth: '400px' }}>
+      <div className="flex flex-col items-center justify-center h-screen gap-4 bg-[#0f172a] text-[#e2e8f0] font-sans">
+        <p className="text-sm text-[#f87171] text-center max-w-[400px]">
           后端启动失败：{error}
         </p>
         <button
           onClick={() => window.location.reload()}
-          style={{
-            padding: '8px 20px',
-            background: '#6366f1',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '6px',
-            fontSize: '13px',
-            cursor: 'pointer',
-          }}
+          className="px-5 py-2 bg-[#6366f1] text-white border-none rounded-md text-sm cursor-pointer hover:bg-[#4f46e5] transition-colors"
         >
           重试
         </button>
@@ -347,27 +329,9 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 
   if (!isReady) {
     return (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          height: '100vh',
-          gap: '16px',
-          background: '#0f172a',
-          color: '#94a3b8',
-          fontFamily: 'system-ui, sans-serif',
-        }}
-      >
-        <div style={{
-          width: '24px', height: '24px',
-          border: '2px solid #1e293b', borderTopColor: '#6366f1',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-        <p style={{ fontSize: '13px' }}>Starting backend...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div className="flex flex-col items-center justify-center h-screen gap-4 bg-[#0f172a] text-[#94a3b8] font-sans">
+        <div className="w-6 h-6 border-2 border-[#1e293b] border-t-[#6366f1] rounded-full animate-spin" />
+        <p className="text-sm">Starting backend...</p>
       </div>
     );
   }

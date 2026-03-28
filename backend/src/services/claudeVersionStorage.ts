@@ -402,49 +402,82 @@ async function cleanupDuplicateSystemVersions(): Promise<boolean> {
   return true;
 }
 
-export async function initializeSystemVersion(executablePath: string): Promise<ClaudeVersion> {
+interface EngineMetadata {
+  name: string;
+  alias: string;
+  description: string;
+  descriptionNoExec: string;
+}
+
+const ENGINE_METADATA: Record<string, EngineMetadata> = {
+  'claude-internal-sdk': {
+    name: 'Claude Internal',
+    alias: 'system',
+    description: '内部 Claude Code 版本（claude-internal）',
+    descriptionNoExec: '内部 Claude 供应商（需要配置 API 密钥）',
+  },
+  'claude-sdk': {
+    name: 'Claude',
+    alias: 'system',
+    description: '系统默认的 Claude Code 版本（通过 which claude 查找）',
+    descriptionNoExec: '系统默认的 Claude 供应商（需要配置 API 密钥）',
+  },
+};
+
+export async function initializeSystemVersion(executablePath: string, engineType?: string): Promise<ClaudeVersion> {
   return withWriteLock(async () => {
     await cleanupDuplicateSystemVersions();
 
     const storage = await loadClaudeVersions();
+    const meta = ENGINE_METADATA[engineType || ''] || ENGINE_METADATA['claude-sdk'];
+    const hasExecutable = !!executablePath;
 
     let systemVersion = storage.versions.find(v => v.isSystem === true);
+    let changed = false;
 
     if (systemVersion) {
       if (systemVersion.executablePath !== executablePath) {
         systemVersion.executablePath = executablePath;
-        systemVersion.updatedAt = new Date().toISOString();
-        await saveClaudeVersions(storage);
+        changed = true;
       }
-      return systemVersion;
+      if (systemVersion.name !== meta.name) {
+        systemVersion.name = meta.name;
+        systemVersion.description = hasExecutable ? meta.description : meta.descriptionNoExec;
+        changed = true;
+      }
+      if (changed) {
+        systemVersion.updatedAt = new Date().toISOString();
+      }
+    } else {
+      const now = new Date().toISOString();
+      systemVersion = {
+        id: 'claude',
+        name: meta.name,
+        alias: meta.alias,
+        description: hasExecutable ? meta.description : meta.descriptionNoExec,
+        executablePath: hasExecutable ? executablePath : undefined,
+        isDefault: storage.versions.length === 0,
+        isSystem: true,
+        environmentVariables: {},
+        models: DEFAULT_MODELS,
+        createdAt: now,
+        updatedAt: now
+      };
+      storage.versions.unshift(systemVersion);
+      changed = true;
+      console.log(`✅ Created new system version: ${systemVersion.alias} (${systemVersion.id})`);
     }
 
-    const now = new Date().toISOString();
-    const hasExecutable = !!executablePath;
-    systemVersion = {
-      id: 'claude',
-      name: 'claude',
-      alias: 'system',
-      description: hasExecutable
-        ? '系统默认的 Claude Code 版本（通过 which claude 查找）'
-        : '系统默认的 Claude 供应商（需要配置 API 密钥）',
-      executablePath: hasExecutable ? executablePath : undefined,
-      isDefault: storage.versions.length === 0,
-      isSystem: true,
-      environmentVariables: {},
-      models: DEFAULT_MODELS,
-      createdAt: now,
-      updatedAt: now
-    };
-
-    storage.versions.unshift(systemVersion);
-
-    if (storage.versions.length === 1) {
+    if (storage.defaultVersionId !== systemVersion.id) {
+      console.log(`🔧 Setting system version as default provider (engine: ${engineType || 'claude-sdk'})`);
       storage.defaultVersionId = systemVersion.id;
+      changed = true;
     }
 
-    await saveClaudeVersions(storage);
-    console.log(`✅ Created new system version: ${systemVersion.alias} (${systemVersion.id})`);
+    if (changed) {
+      await saveClaudeVersions(storage);
+    }
+
     return systemVersion;
   });
 }

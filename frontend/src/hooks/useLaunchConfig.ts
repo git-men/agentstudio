@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { isTauri } from '../lib/environment';
 
 export interface LaunchConfig {
@@ -97,10 +97,10 @@ export function useLaunchConfig() {
     })();
   }, []);
 
-  const availableEngines = ENGINE_OPTIONS.filter((opt) => {
-    if (opt.internalOnly && internalAccessible === false) return false;
-    return true;
-  });
+  const availableEngines = useMemo(
+    () => ENGINE_OPTIONS.filter((opt) => !(opt.internalOnly && internalAccessible === false)),
+    [internalAccessible]
+  );
 
   const startBackend = useCallback(async (selectedConfig: LaunchConfig) => {
     setStarting(true);
@@ -113,8 +113,9 @@ export function useLaunchConfig() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setError(msg);
-      setStarting(false);
       throw e;
+    } finally {
+      setStarting(false);
     }
   }, []);
 

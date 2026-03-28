@@ -693,16 +693,14 @@ export function getProjectMcpDir(projectPath: string): string {
 // =============================================================================
 
 /**
- * Get all projects directories to search for Claude session files.
+ * Get projects directories to search for Claude session files.
  *
- * Sessions may be created by different Claude variants (claude-sdk, claude-internal-sdk),
- * each writing to its own config directory. We search both to find sessions regardless
- * of which variant created them.
+ * Only returns directories belonging to the current engine type, ensuring
+ * strict session isolation between engines (e.g. claude-sdk vs claude-internal-sdk).
  *
- * On macOS, also includes ~/.agentstudio/claude-sdk-config/projects for the EMFILE workaround.
+ * For claude-sdk on macOS, also includes the EMFILE workaround directory.
  */
 export function getAllProjectsDirs(): string[] {
-  const home = os.homedir();
   const seen = new Set<string>();
   const dirs: string[] = [];
 
@@ -715,14 +713,12 @@ export function getAllProjectsDirs(): string[] {
     }
   };
 
-  if (process.platform === 'darwin') {
+  // macOS EMFILE workaround dir is only relevant for claude-sdk
+  if (process.platform === 'darwin' && !isClaudeInternalEngine()) {
     addIfExists(path.join(AGENTSTUDIO_HOME, 'claude-sdk-config', 'projects'));
   }
 
   addIfExists(getEnginePaths().projectsDataDir);
-
-  addIfExists(path.join(home, '.claude-internal', 'projects'));
-  addIfExists(path.join(home, '.claude', 'projects'));
 
   return dirs;
 }

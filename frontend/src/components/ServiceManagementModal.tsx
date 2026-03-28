@@ -24,6 +24,23 @@ import { useAuthStore } from '../stores/authStore';
 import { showSuccess, showError } from '../utils/toast';
 import { normalizeServiceUrl } from '../utils/backendServiceStorage';
 
+const ENGINE_LABEL_MAP: Record<string, string> = {
+  'claude-sdk': 'Claude',
+  'claude-internal-sdk': 'Claude Internal',
+  'cursor-cli': 'Cursor',
+  'codebuddy-sdk': 'CodeBuddy',
+  'codex-cli': 'Codex CLI',
+  'codex-sdk': 'Codex SDK',
+  'claude': 'Claude',
+  'cursor': 'Cursor',
+  'codebuddy': 'CodeBuddy',
+  'codex': 'Codex',
+};
+
+function formatEngineLabel(engine: string): string {
+  return ENGINE_LABEL_MAP[engine] || engine;
+}
+
 interface ServiceManagementModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -34,6 +51,7 @@ interface ServiceWithStatus extends BackendService {
   version?: string;
   backendName?: string;
   engine?: string;
+  serviceEngine?: string;
   isTesting?: boolean;
 }
 
@@ -90,6 +108,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
               version: data.version,
               backendName: data.name,
               engine: data.engine,
+              serviceEngine: data.serviceEngine,
               isTesting: false
             };
           } else {
@@ -140,6 +159,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
             version: data.version,
             backendName: data.name,
             engine: data.engine,
+            serviceEngine: data.serviceEngine,
             isTesting: false
           } : s)
         );
@@ -195,15 +215,25 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
   };
 
   const handleAddService = () => {
-    if (newService.name.trim() && newService.url.trim()) {
-      addService({
-        name: newService.name.trim(),
-        url: newService.url.trim()
-      });
-      setNewService({ name: '', url: '' });
-      setIsAddingService(false);
-      showSuccess(t('serviceManagementModal.addSuccess'));
+    const url = newService.url.trim();
+    if (!newService.name.trim() || !url) return;
+    try {
+      const parsed = new URL(url);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        showError('Only HTTP/HTTPS URLs are allowed');
+        return;
+      }
+    } catch {
+      showError('Invalid URL format');
+      return;
     }
+    addService({
+      name: newService.name.trim(),
+      url,
+    });
+    setNewService({ name: '', url: '' });
+    setIsAddingService(false);
+    showSuccess(t('serviceManagementModal.addSuccess'));
   };
 
   const handleUpdateService = () => {
@@ -219,6 +249,7 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
   };
 
   const handleRemoveService = (serviceId: string) => {
+    if (!window.confirm(t('serviceManagementModal.confirmRemove') || 'Are you sure you want to remove this service?')) return;
     removeService(serviceId);
     showSuccess(t('serviceManagementModal.removeSuccess'));
   };
@@ -488,9 +519,9 @@ export const ServiceManagementModal: React.FC<ServiceManagementModalProps> = ({
                             {service.version && (
                               <span>{t('serviceManagementModal.version')}: v{service.version}</span>
                             )}
-                            {service.engine && (
+                            {(service.serviceEngine || service.engine) && (
                               <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
-                                {service.engine === 'cursor-cli' ? 'Cursor' : service.engine === 'claude-sdk' ? 'Claude' : service.engine}
+                                {formatEngineLabel(service.serviceEngine || service.engine || '')}
                               </span>
                             )}
                             {service.backendName && (
