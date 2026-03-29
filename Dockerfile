@@ -50,7 +50,7 @@ COPY tsconfig.json ./
 
 ENV NODE_OPTIONS="--max-old-space-size=3072"
 
-RUN cd frontend && pnpm run build
+RUN cd frontend && VITE_API_BASE=/api pnpm run build
 RUN cd backend && pnpm run build
 
 # -----------------------------------------------------------------------------

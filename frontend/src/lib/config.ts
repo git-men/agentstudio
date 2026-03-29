@@ -10,9 +10,29 @@ let _tauriBackendBaseUrl: string | null = null;
 /**
  * Called by `useBackendReady` once the Tauri sidecar port is known.
  * After this call, `getApiBase()` / `getMediaBase()` use the dynamic port.
+ * Also patches the "default" stored backend service so ServiceManagementModal
+ * shows engine/version info from the actual desktop sidecar.
+ *
+ * IMPORTANT: Also refreshes the module-level API_BASE / MEDIA_BASE so that
+ * all importers (ES live bindings) immediately see the correct URL.
  */
 export function setTauriBackendBaseUrl(baseUrl: string): void {
-  _tauriBackendBaseUrl = baseUrl.replace(/\/$/, ''); // strip trailing slash
+  _tauriBackendBaseUrl = baseUrl.replace(/\/$/, '');
+
+  // Refresh module-level exports so all live-binding consumers get the new URL
+  API_BASE = getApiBase();
+  MEDIA_BASE = getMediaBase();
+
+  try {
+    const state = loadBackendServices();
+    const defaultSvc = state.services.find((s) => s.isDefault);
+    if (defaultSvc && defaultSvc.url !== _tauriBackendBaseUrl) {
+      defaultSvc.url = _tauriBackendBaseUrl;
+      saveBackendServices(state);
+    }
+  } catch {
+    // non-critical
+  }
 }
 
 // ── Embedded mode detection ───────────────────────────────────────────────────
@@ -84,10 +104,11 @@ export const getMediaBase = (): string => {
   return getCurrentBackendServiceUrl() + '/media';
 };
 
-// For backward compatibility, export constant that gets current value
-// WARNING: These will be the value at import time, use getApiBase() for current value
-const MEDIA_BASE = getMediaBase();
-const API_BASE = getApiBase();
+// Module-level exports — refreshed by setTauriBackendBaseUrl() via ES live bindings.
+// eslint-disable-next-line import/no-mutable-exports
+let MEDIA_BASE = getMediaBase();
+// eslint-disable-next-line import/no-mutable-exports
+let API_BASE = getApiBase();
 
 // Helper function to build API URLs
 export const buildApiUrl = (path: string): string => {

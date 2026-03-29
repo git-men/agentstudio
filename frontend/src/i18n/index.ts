@@ -1,8 +1,6 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 
-// 导入翻译资源
 import zhCN_common from './locales/zh-CN/common.json';
 import zhCN_pages from './locales/zh-CN/pages.json';
 import zhCN_home from './locales/zh-CN/home.json';
@@ -22,6 +20,21 @@ import enUS_agents from './locales/en-US/agents.json';
 import enUS_onboarding from './locales/en-US/onboarding.json';
 import enUS_skills from './locales/en-US/skills.json';
 import enUS_hooks from './locales/en-US/hooks.json';
+
+const STORAGE_KEY = 'i18nextLng';
+
+function detectLanguage(): string {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      if (stored.startsWith('zh')) return 'zh-CN';
+      if (stored.startsWith('en')) return 'en-US';
+    }
+  } catch { /* localStorage may be unavailable in some contexts */ }
+  const nav = (typeof navigator !== 'undefined' && navigator.language) || '';
+  if (nav.startsWith('zh')) return 'zh-CN';
+  return 'en-US';
+}
 
 const resources = {
   'zh-CN': {
@@ -48,25 +61,28 @@ const resources = {
   },
 };
 
-i18n
-  .use(LanguageDetector) // 自动检测用户语言
+const resolvedLng = detectLanguage();
+try { localStorage.setItem(STORAGE_KEY, resolvedLng); } catch { /* ignore */ }
+
+/**
+ * i18n.init() returns a Promise even with inline resources.
+ * Export it so main.tsx can await before mounting React.
+ */
+export const i18nReady = i18n
   .use(initReactI18next)
   .init({
     resources,
+    lng: resolvedLng,
     fallbackLng: 'en-US',
-    supportedLngs: ['zh-CN', 'en-US'],
-    nonExplicitSupportedLngs: true, // 允许 'zh' 匹配到 'zh-CN'
     defaultNS: 'common',
     ns: ['common', 'pages', 'home', 'components', 'errors', 'agents', 'onboarding', 'skills', 'hooks'],
-
     interpolation: {
-      escapeValue: false, // React已经处理了XSS
-    },
-
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage'],
+      escapeValue: false,
     },
   });
+
+i18n.on('languageChanged', (lng: string) => {
+  try { localStorage.setItem(STORAGE_KEY, lng); } catch { /* ignore */ }
+});
 
 export default i18n;
