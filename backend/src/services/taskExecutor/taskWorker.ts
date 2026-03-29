@@ -93,7 +93,7 @@ async function executeTask(task: TaskDefinition): Promise<TaskResult> {
 
     // Extract MCP tools from agent configuration
     // MCP tools are identified by the naming pattern: mcp__<serverName>__<toolName>
-    const mcpTools = agent.allowedTools
+    const mcpTools = (agent.allowedTools ?? [])
       .filter((tool: any) => tool.enabled && tool.name.startsWith('mcp__'))
       .map((tool: any) => tool.name);
 

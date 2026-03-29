@@ -255,7 +255,7 @@ export async function buildQueryOptions(
   }
 
   // Build allowed tools list from agent configuration
-  const allowedTools = agent.allowedTools
+  const allowedTools = (agent.allowedTools ?? [])
     .filter((tool: any) => tool.enabled)
     .map((tool: any) => tool.name);
 

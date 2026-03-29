@@ -973,7 +973,7 @@ router.post('/chat', async (req, res) => {
           claudeVersionId: claudeVersion,
           permissionMode: queryOptions.permissionMode,
           mcpTools: mcpTools || [],
-          allowedTools: agent.allowedTools
+          allowedTools: (agent.allowedTools ?? [])
             .filter((tool: any) => tool.enabled)
             .map((tool: any) => tool.name)
         };
