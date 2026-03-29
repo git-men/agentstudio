@@ -225,6 +225,81 @@ PRODUCT_EDITION=custom pnpm run dev
 
 **Full documentation:** `docs/features/PRODUCT_EDITION.md` (in meta repo)
 
+## Desktop App (Tauri)
+
+### Architecture
+
+ClawStudio Desktop 使用 Tauri 2.x 将 Web 版打包为原生桌面应用：
+
+```
+desktop/src-tauri/    # Rust 原生层（窗口管理、IPC、Sidecar 生命周期）
+desktop/scripts/      # 构建脚本（sidecar 编译、引擎配置读取）
+frontend/             # 共用 Web 前端（通过 isTauri() 区分行为）
+backend/              # 共用后端（编译为 Sidecar 二进制分发）
+```
+
+**核心模式：Sidecar**
+- 后端通过 `bun build --compile` 编译为独立可执行文件
+- 作为 Tauri Sidecar 随应用启动，不依赖用户安装 Node.js
+- 前端与后端通过 `http://127.0.0.1:<port>` 通信
+
+**多窗口：** 主窗口 + 动态项目窗口（`WebviewWindow`），共享同一个 Sidecar 后端
+
+**引擎选择：** 启动时可选 Claude SDK / Claude Internal / Codex 等，通过 `ENGINE` 环境变量注入 Sidecar
+
+### Development
+
+```bash
+# 启动 Desktop 开发模式（需要 Rust 工具链）
+pnpm run dev:desktop
+
+# 或者分别启动
+cd desktop && pnpm dev          # 启动 Tauri dev server
+```
+
+默认端口: **4938**（与 Web 版 4936 隔离，避免冲突）
+
+引擎配置持久化在 `~/Library/Application Support/com.clawstudio.desktop/launch-config.json`
+
+### Build & Release
+
+```bash
+# 1. 构建 Sidecar（后端编译为二进制）
+pnpm sidecar:build
+
+# 2. 构建前端
+VITE_TAURI=true pnpm --filter frontend build
+
+# 3. 构建 Tauri 包（.dmg / .msi / .AppImage）
+pnpm build:desktop
+
+# 一键发布到 COS（需要配置 COS_BUCKET / COS_REGION）
+./tools/desktop-release.sh
+./tools/desktop-release.sh --build-only   # 仅构建
+./tools/desktop-release.sh --upload-only  # 仅上传
+```
+
+**自动更新：** 使用 Tauri Updater 插件 + 腾讯 COS 分发 `latest.json`
+
+### Key Files
+
+| 文件 | 用途 |
+|------|------|
+| `desktop/src-tauri/src/lib.rs` | Rust 核心（IPC commands、Sidecar 管理、系统托盘） |
+| `desktop/src-tauri/tauri.conf.json` | Tauri 配置（窗口、权限、更新端点） |
+| `desktop/scripts/build-sidecar.mjs` | Sidecar 编译脚本（bun build） |
+| `desktop/scripts/read-engine.mjs` | 读取持久化的引擎配置 |
+| `frontend/src/hooks/useLaunchConfig.ts` | 引擎选择 Hook |
+| `frontend/src/components/desktop/` | Desktop 专有组件（引擎选择、安装向导） |
+| `tools/desktop-release.sh` | COS 发布脚本 |
+
+### Notes
+
+- `isTauri()` 守卫确保 Desktop 专有代码不影响 Web 版
+- 不同引擎的会话历史严格隔离（`getAllProjectsDirs()`）
+- `run_shell_command` 已移除（安全考虑），仅允许白名单 npm 包安装
+- 多引擎多实例方案见 `docs/features/DESKTOP_MULTI_ENGINE.md`
+
 ## Environment Configuration
 
 Backend `.env` file (`backend/.env`):
