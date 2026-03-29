@@ -23,6 +23,8 @@ import {
 import { useMobileContext } from '../../contexts/MobileContext';
 import { useVersionCheck, useSystemInfo } from '../../hooks/useVersionCheck';
 import { isTelemetryEnabled, setTelemetryEnabled } from '../../components/TelemetryProvider';
+import { useDesktopUpdate } from '../../contexts/DesktopUpdateContext';
+import { isTauri } from '../../lib/environment';
 
 export const GeneralSettingsPage: React.FC = () => {
   const { t, i18n } = useTranslation('pages');
@@ -78,9 +80,15 @@ export const GeneralSettingsPage: React.FC = () => {
     i18n.changeLanguage(newLanguage);
   };
 
+  const desktopUpdate = useDesktopUpdate();
+  const isTauriEnv = isTauri();
+
   const handleCheckUpdate = () => {
     forceCheck();
     refetch();
+    if (isTauriEnv && desktopUpdate) {
+      desktopUpdate.checkForUpdate();
+    }
   };
 
   const handleTelemetryToggle = () => {
@@ -207,14 +215,28 @@ export const GeneralSettingsPage: React.FC = () => {
             <Info className="w-5 h-5" />
             {t('settings.systemInfo.title')}
           </h2>
-          <button
-            onClick={handleCheckUpdate}
-            disabled={isChecking}
-            className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-3 h-3 mr-1 ${isChecking ? 'animate-spin' : ''}`} />
-            {t('settings.systemInfo.checkUpdate')}
-          </button>
+          <div className="flex items-center gap-2">
+            {isTauriEnv && desktopUpdate?.checkStatus === 'up_to_date' && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">
+                <Check className="w-3 h-3 mr-1" />
+                已是最新版本
+              </span>
+            )}
+            {isTauriEnv && desktopUpdate?.checkStatus === 'error' && (
+              <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400">
+                <AlertCircle className="w-3 h-3 mr-1" />
+                检查失败
+              </span>
+            )}
+            <button
+              onClick={handleCheckUpdate}
+              disabled={isChecking || (isTauriEnv && desktopUpdate?.checkStatus === 'checking')}
+              className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3 h-3 mr-1 ${(isChecking || (isTauriEnv && desktopUpdate?.checkStatus === 'checking')) ? 'animate-spin' : ''}`} />
+              {t('settings.systemInfo.checkUpdate')}
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">

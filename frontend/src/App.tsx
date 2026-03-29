@@ -18,6 +18,7 @@ import { UpdateDialog } from './components/desktop/UpdateDialog';
 import { DesktopLaunchConfig } from './components/desktop/DesktopLaunchConfig';
 import { BackendLogPanel } from './components/desktop/BackendLogPanel';
 import { useBackendLogs } from './hooks/useBackendLogs';
+import { DesktopUpdateProvider } from './contexts/DesktopUpdateContext';
 
 // External redirect component for non-React routes
 const ExternalRedirect: React.FC<{ url: string }> = ({ url }) => {
@@ -372,11 +373,11 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 }
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
-  const { updatePayload, dismiss } = useUpdateChecker();
+  const { updatePayload, dismiss, checkForUpdate, checkStatus, checkError } = useUpdateChecker();
   const { logs, frontendLogs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, clearFrontendLogs } = useBackendLogs();
 
   return (
-    <>
+    <DesktopUpdateProvider value={{ checkForUpdate, checkStatus, checkError }}>
       {children}
       {updatePayload && (
         <UpdateDialog
@@ -409,7 +410,7 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
           onClose={() => setLogPanelVisible(false)}
         />
       )}
-    </>
+    </DesktopUpdateProvider>
   );
 }
 

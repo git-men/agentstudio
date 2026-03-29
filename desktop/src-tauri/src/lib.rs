@@ -519,7 +519,7 @@ fn spawn_backend_sidecar(app: AppHandle) {
 /// is closed once the backend port is detected.
 async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
     let shell = app.shell();
-    let sidecar_result = shell.sidecar("agentstudio-backend");
+    let sidecar_result = shell.sidecar("clawstudio-backend");
 
     let mut sidecar_cmd = match sidecar_result {
         Ok(cmd) => cmd,
@@ -849,10 +849,11 @@ fn notify_start_failed(app: &AppHandle, reason: &str) {
 /// Build and register the system tray icon with menu.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open_item = MenuItem::with_id(app, "open", "打开 ClawStudio", true, None::<&str>)?;
+    let check_update_item = MenuItem::with_id(app, "check_update", "检查更新…", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
 
-    let menu = Menu::with_items(app, &[&open_item, &separator, &quit_item])?;
+    let menu = Menu::with_items(app, &[&open_item, &check_update_item, &separator, &quit_item])?;
 
     TrayIconBuilder::new()
         .icon(app.default_window_icon().expect("default window icon must be configured").clone())
@@ -863,6 +864,44 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                     let _ = main.show();
                     let _ = main.set_focus();
                 }
+            }
+            "check_update" => {
+                let handle = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    log::info!("Manual update check from tray menu");
+                    let updater = match handle.updater_builder().build() {
+                        Ok(u) => u,
+                        Err(e) => {
+                            log::warn!("Failed to build updater: {e}");
+                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
+                            return;
+                        }
+                    };
+                    match updater.check().await {
+                        Ok(Some(update)) => {
+                            let info = UpdateInfo {
+                                version: update.version.clone(),
+                                notes: update.body.clone().unwrap_or_default(),
+                            };
+                            log::info!("Update available: v{}", info.version);
+                            let state = handle.state::<AppState>();
+                            *lock_or_recover(&state.pending_update) = Some(update);
+                            let _ = handle.emit("update-available", &info);
+                            if let Some(main) = handle.get_webview_window("main") {
+                                let _ = main.show();
+                                let _ = main.set_focus();
+                            }
+                        }
+                        Ok(None) => {
+                            log::info!("No updates available (manual check)");
+                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "up_to_date"}));
+                        }
+                        Err(e) => {
+                            log::warn!("Update check failed: {e}");
+                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
+                        }
+                    }
+                });
             }
             "quit" => {
                 let state = app.state::<AppState>();
