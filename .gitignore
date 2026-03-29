@@ -83,6 +83,9 @@ extension-pure/icons/
 # Rust build output
 desktop/src-tauri/target/
 
+# Tauri sidecar binaries (built locally, not committed)
+desktop/src-tauri/binaries/
+
 # Runtime project data
 projects/
 backend/e2e-tests/.argusai/
