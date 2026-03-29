@@ -417,6 +417,11 @@ export async function buildQueryOptions(
   // Priority: userEnv > projectEnv > environmentVariables (from version/default) > process.env
   queryOptions.env = { ...process.env, ...environmentVariables, ...projectEnv, ...userEnv };
 
+  // Prevent claude-internal's @tencent/update-notifier from spawning detached
+  // check.js processes on every invocation — these accumulate as orphans and
+  // cause severe CPU/network load (fork-bomb behavior observed in Desktop).
+  queryOptions.env['NO_UPDATE_NOTIFIER'] = '1';
+
   // Inject Admin CLI environment variables (API key + server URL)
   // so agents can use `agentstudio admin call ...` without manual configuration
   const adminCliEnv = getAdminCliEnvVars();
