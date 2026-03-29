@@ -137,7 +137,10 @@ function restoreA2aDts(files) {
 // and tells the setup wizard the CLI is not available.
 
 const ENGINE_CLIS = [
-  { cliName: 'claude-internal', npmPackage: '@tencent/claude-code-internal' },
+  // claude-internal is no longer bundled as a bun-compiled binary.
+  // The desktop app discovers and uses the system-installed version (npm -g)
+  // which runs natively on Node.js and avoids bun runtime incompatibilities.
+  // { cliName: 'claude-internal', npmPackage: '@tencent/claude-code-internal' },
 ];
 
 /** Bundle one CLI tool for a given Tauri target triple. */

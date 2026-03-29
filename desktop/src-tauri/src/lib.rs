@@ -190,10 +190,52 @@ async fn check_domain_accessible(domain: String) -> bool {
 /// Stub sentinel written by build-sidecar.mjs when the npm package was unavailable.
 const STUB_SENTINEL: &str = "was not bundled in this build";
 
+/// Resolve the user's home directory.
+fn home_dir() -> Option<String> {
+    std::env::var("HOME").ok()
+}
+
+/// Build a list of well-known Node.js binary directories for common version
+/// managers (fnm, nvm, volta, n) so that CLI lookups work even when launched
+/// from a macOS GUI app with a minimal inherited PATH.
+fn node_manager_bin_dirs() -> Vec<std::path::PathBuf> {
+    let Some(home) = home_dir() else { return vec![] };
+    let h = std::path::PathBuf::from(&home);
+    let mut dirs = Vec::new();
+
+    // fnm — stable alias symlink (not the per-session multishell path)
+    dirs.push(h.join(".local/share/fnm/aliases/default/bin"));
+    // fnm — also check each installed version
+    if let Ok(entries) = std::fs::read_dir(h.join(".local/share/fnm/node-versions")) {
+        for entry in entries.flatten() {
+            dirs.push(entry.path().join("installation/bin"));
+        }
+    }
+
+    // nvm
+    if let Ok(entries) = std::fs::read_dir(h.join(".nvm/versions/node")) {
+        for entry in entries.flatten() {
+            dirs.push(entry.path().join("bin"));
+        }
+    }
+    dirs.push(h.join(".nvm/current/bin"));
+
+    // volta
+    dirs.push(h.join(".volta/bin"));
+
+    // n (tj/n)
+    dirs.push(h.join("n/bin"));
+
+    // Global npm / homebrew
+    dirs.push(std::path::PathBuf::from("/usr/local/bin"));
+    dirs.push(std::path::PathBuf::from("/opt/homebrew/bin"));
+
+    dirs
+}
+
 /// Check if a CLI tool is installed. Returns the absolute path if found.
-/// Priority: (1) bundled binary next to this .app executable, (2) system PATH.
-/// A stub binary (written by build-sidecar when the package was unavailable)
-/// is treated as not-found so the setup wizard shows the install prompt.
+/// Priority: (1) bundled binary, (2) inherited PATH, (3) well-known node
+/// manager paths, (4) login shell lookup.
 #[tauri::command]
 async fn check_cli_installed(cli_name: String) -> Option<String> {
     if !cli_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
@@ -201,12 +243,10 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
     }
 
     // 1. Prefer the binary bundled alongside this executable (Tauri externalBin).
-    //    On macOS this is Contents/MacOS/; on Windows next to the .exe.
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let bundled = exe_dir.join(&cli_name);
             if bundled.exists() {
-                // Reject stubs written by build-sidecar when the package was unavailable.
                 let is_stub = tokio::fs::read_to_string(&bundled)
                     .await
                     .map(|s| s.contains(STUB_SENTINEL))
@@ -218,20 +258,50 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
         }
     }
 
-    // 2. Fall back to system PATH (handles dev machines with global npm installs).
+    // 2. Try the process-inherited PATH (works when launched from terminal).
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
-    let output = tokio::process::Command::new(cmd)
+    if let Ok(output) = tokio::process::Command::new(cmd)
         .arg(&cli_name)
         .output()
         .await
-        .ok()?;
-
-    if output.status.success() {
-        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if path.is_empty() { None } else { Some(path) }
-    } else {
-        None
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
     }
+
+    // 3. Scan well-known node version manager directories (fnm, nvm, volta, n).
+    //    This is the most reliable method for GUI-launched apps where the
+    //    inherited PATH is minimal and login shells don't include fnm multishell.
+    for dir in node_manager_bin_dirs() {
+        let candidate = dir.join(&cli_name);
+        if candidate.exists() {
+            return Some(candidate.to_string_lossy().to_string());
+        }
+    }
+
+    // 4. Last resort: ask a user's default login shell (zsh on modern macOS).
+    if cfg!(not(target_os = "windows")) {
+        for shell in &["zsh", "bash", "sh"] {
+            if let Ok(output) = tokio::process::Command::new(shell)
+                .args(["-lc", &format!("command -v {}", cli_name)])
+                .output()
+                .await
+            {
+                if output.status.success() {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+    }
+
+    None
 }
 
 #[derive(Clone, serde::Serialize)]
@@ -550,19 +620,47 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
             // Pass engine as CLI arg (top priority in backend's detectEngineType)
             sidecar_cmd = sidecar_cmd.args([format!("--engine={}", config.engine)]);
         }
-        // Prepend the directory containing this executable to PATH so the backend
-        // sidecar can locate bundled engine CLIs (e.g. claude-internal) without
-        // requiring the user to have them installed globally.
+        // Build a comprehensive PATH for the sidecar:
+        // (a) bundled binaries next to this .app executable
+        // (b) well-known node version manager dirs (fnm, nvm, volta)
+        // (c) login shell PATH
+        // (d) system defaults
+        //
+        // macOS GUI apps inherit a minimal PATH (/usr/bin:/bin:/usr/sbin:/sbin).
+        // fnm uses per-session "multishell" temp dirs that login shells won't
+        // include, so we explicitly add the stable fnm/nvm/volta bin paths.
+        let mut path_parts: Vec<String> = Vec::new();
         if let Ok(exe_path) = std::env::current_exe() {
             if let Some(exe_dir) = exe_path.parent() {
-                let sys_path = std::env::var("PATH")
-                    .unwrap_or_else(|_| "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".to_string());
-                env_map.insert(
-                    "PATH".to_string(),
-                    format!("{}:{}", exe_dir.display(), sys_path),
-                );
+                path_parts.push(exe_dir.display().to_string());
             }
         }
+        // Add well-known node manager directories (fnm default alias, nvm, volta)
+        for dir in node_manager_bin_dirs() {
+            if dir.exists() {
+                path_parts.push(dir.display().to_string());
+            }
+        }
+        // Also try login shell PATH (zsh on modern macOS) for anything we missed
+        for shell in &["zsh", "bash", "sh"] {
+            if let Ok(output) = std::process::Command::new(shell)
+                .args(["-lc", "echo $PATH"])
+                .output()
+            {
+                if output.status.success() {
+                    let shell_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !shell_path.is_empty() {
+                        path_parts.push(shell_path);
+                        break;
+                    }
+                }
+            }
+        }
+        // Fallback system PATH
+        let sys_path = std::env::var("PATH")
+            .unwrap_or_else(|_| "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".to_string());
+        path_parts.push(sys_path);
+        env_map.insert("PATH".to_string(), path_parts.join(":"));
         sidecar_cmd = sidecar_cmd.envs(env_map);
     }
 
