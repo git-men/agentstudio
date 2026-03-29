@@ -10,11 +10,12 @@ use tauri_plugin_updater::UpdaterExt;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_BACKEND_PORT: u16 = 4938;
+const DEFAULT_BACKEND_PORT: u16 = 4200;
 
 const ALLOWED_NPM_PACKAGES: &[&str] = &[
     "@anthropic-ai/claude-code",
     "@anthropic-ai/claude-code-internal",
+    "@tencent/claude-code-internal",
     "@openai/codex",
     "@anthropic-ai/codebuddy",
 ];
@@ -188,12 +189,38 @@ async fn check_domain_accessible(domain: String) -> bool {
     client.get(&url).send().await.is_ok()
 }
 
+/// Stub sentinel written by build-sidecar.mjs when the npm package was unavailable.
+const STUB_SENTINEL: &str = "was not bundled in this build";
+
 /// Check if a CLI tool is installed. Returns the absolute path if found.
+/// Priority: (1) bundled binary next to this .app executable, (2) system PATH.
+/// A stub binary (written by build-sidecar when the package was unavailable)
+/// is treated as not-found so the setup wizard shows the install prompt.
 #[tauri::command]
 async fn check_cli_installed(cli_name: String) -> Option<String> {
     if !cli_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
         return None;
     }
+
+    // 1. Prefer the binary bundled alongside this executable (Tauri externalBin).
+    //    On macOS this is Contents/MacOS/; on Windows next to the .exe.
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            let bundled = exe_dir.join(&cli_name);
+            if bundled.exists() {
+                // Reject stubs written by build-sidecar when the package was unavailable.
+                let is_stub = tokio::fs::read_to_string(&bundled)
+                    .await
+                    .map(|s| s.contains(STUB_SENTINEL))
+                    .unwrap_or(false);
+                if !is_stub {
+                    return Some(bundled.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Fall back to system PATH (handles dev machines with global npm installs).
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
     let output = tokio::process::Command::new(cmd)
         .arg(&cli_name)
@@ -217,6 +244,36 @@ struct InstallProgress {
     success: bool,
 }
 
+/// Locate the npm binary on macOS, where GUI apps have a minimal PATH.
+/// Checks well-known static locations first, then falls back to a shell lookup.
+async fn find_npm_binary() -> Option<String> {
+    let static_paths = [
+        "/opt/homebrew/bin/npm",
+        "/usr/local/bin/npm",
+        "/usr/bin/npm",
+        "/opt/local/bin/npm",
+    ];
+    for path in &static_paths {
+        if std::path::Path::new(path).exists() {
+            return Some(path.to_string());
+        }
+    }
+    // Fallback: ask a login shell (handles nvm, volta, fnm, etc.)
+    if let Ok(output) = tokio::process::Command::new("sh")
+        .args(["-lc", "command -v npm"])
+        .output()
+        .await
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(path);
+            }
+        }
+    }
+    None
+}
+
 /// Install an npm package globally and stream progress.
 /// Only packages in ALLOWED_NPM_PACKAGES are permitted.
 #[tauri::command]
@@ -225,6 +282,10 @@ async fn install_npm_package(app: AppHandle, package_name: String) -> Result<Str
         return Err(format!("Package '{}' is not in the allowed list", package_name));
     }
 
+    let npm_path = find_npm_binary().await.ok_or_else(|| {
+        "npm not found. Please ensure Node.js is installed (https://nodejs.org).".to_string()
+    })?;
+
     let _ = app.emit("install-progress", InstallProgress {
         stage: "installing".to_string(),
         message: format!("Running: npm install -g {package_name}"),
@@ -232,7 +293,7 @@ async fn install_npm_package(app: AppHandle, package_name: String) -> Result<Str
         success: false,
     });
 
-    let output = tokio::process::Command::new("npm")
+    let output = tokio::process::Command::new(&npm_path)
         .args(["install", "-g", &package_name])
         .output()
         .await
@@ -320,7 +381,14 @@ fn start_backend(
     }
 
     log::info!("Starting backend with ENGINE={engine}");
-    spawn_backend_sidecar(app);
+
+    if cfg!(debug_assertions) {
+        // Dev mode: detect the backend started by beforeDevCommand,
+        // then verify its ENGINE matches the user's selection.
+        start_sidecar_dev(app, engine);
+    } else {
+        spawn_backend_sidecar(app);
+    }
     Ok(())
 }
 
@@ -352,8 +420,8 @@ async fn try_detect_running_backend(port: u16) -> bool {
 }
 
 /// Dev mode: poll for a running backend started by beforeDevCommand,
-/// then fall back to spawning the sidecar binary.
-fn start_sidecar_dev(app: AppHandle) {
+/// then verify its ENGINE matches the user's selected engine.
+fn start_sidecar_dev(app: AppHandle, expected_engine: String) {
     let app_clone = app.clone();
     tauri::async_runtime::spawn(async move {
         log::info!("Dev mode: polling for backend on port {DEFAULT_BACKEND_PORT}...");
@@ -363,6 +431,22 @@ fn start_sidecar_dev(app: AppHandle) {
                 log::info!("Dev mode: backend detected on port {DEFAULT_BACKEND_PORT}");
                 let state = app_clone.state::<AppState>();
                 *lock_or_recover(&state.backend_port) = Some(DEFAULT_BACKEND_PORT);
+
+                // Verify the running backend's engine matches user selection
+                let actual_engine = detect_running_engine(DEFAULT_BACKEND_PORT).await;
+                if let Some(ref actual) = actual_engine {
+                    if actual != &expected_engine {
+                        log::warn!(
+                            "Dev mode: engine mismatch! User selected '{}' but backend is running '{}'",
+                            expected_engine, actual
+                        );
+                        let _ = app_clone.emit("engine-mismatch", serde_json::json!({
+                            "expected": expected_engine,
+                            "actual": actual,
+                        }).to_string());
+                    }
+                }
+
                 if let Err(e) = app_clone.emit("backend-ready", DEFAULT_BACKEND_PORT) {
                     log::warn!("Failed to emit backend-ready: {e}");
                 }
@@ -376,6 +460,29 @@ fn start_sidecar_dev(app: AppHandle) {
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
     });
+}
+
+/// Query the health endpoint of a running backend to determine its ENGINE type.
+async fn detect_running_engine(port: u16) -> Option<String> {
+    let url = format!("http://127.0.0.1:{port}/api/health");
+    match reqwest::Client::new()
+        .get(&url)
+        .timeout(Duration::from_secs(3))
+        .send()
+        .await
+    {
+        Ok(resp) if resp.status().is_success() => {
+            if let Ok(body) = resp.json::<serde_json::Value>().await {
+                body.get("serviceEngine")
+                    .or_else(|| body.get("engine"))
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Launch the sidecar in a background task (called by `start_backend` IPC).
@@ -406,14 +513,33 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         }
     };
 
-    // Inject launch config and default port as sidecar env vars
+    // Inject launch config and default port as sidecar env vars.
+    // Engine is passed both as --engine=<value> CLI arg (highest priority in
+    // engineConfig.ts) AND as the ENGINE env var, to guarantee the selection
+    // made in DesktopLaunchConfig is never overridden by a stale config file.
     {
         let state = app.state::<AppState>();
         let config = lock_or_recover(&state.launch_config).clone();
         let mut env_map = std::collections::HashMap::new();
         env_map.insert("PORT".to_string(), DEFAULT_BACKEND_PORT.to_string());
-        if let Some(config) = config {
-            env_map.insert("ENGINE".to_string(), config.engine);
+        env_map.insert("TAURI_DESKTOP".to_string(), "1".to_string());
+        if let Some(ref config) = config {
+            env_map.insert("ENGINE".to_string(), config.engine.clone());
+            // Pass engine as CLI arg (top priority in backend's detectEngineType)
+            sidecar_cmd = sidecar_cmd.args([format!("--engine={}", config.engine)]);
+        }
+        // Prepend the directory containing this executable to PATH so the backend
+        // sidecar can locate bundled engine CLIs (e.g. claude-internal) without
+        // requiring the user to have them installed globally.
+        if let Ok(exe_path) = std::env::current_exe() {
+            if let Some(exe_dir) = exe_path.parent() {
+                let sys_path = std::env::var("PATH")
+                    .unwrap_or_else(|_| "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".to_string());
+                env_map.insert(
+                    "PATH".to_string(),
+                    format!("{}:{}", exe_dir.display(), sys_path),
+                );
+            }
         }
         sidecar_cmd = sidecar_cmd.envs(env_map);
     }
@@ -801,16 +927,11 @@ pub fn run() {
             start_backend,
         ])
         .setup(|app| {
-            // Both dev and prod: close splash, show main with launch config UI.
+            // Close splash, show main with launch config UI.
             // The frontend DesktopLaunchConfig handles engine selection.
-            // In dev mode the backend may already be running via beforeDevCommand;
-            // start_backend IPC handles "already running" gracefully.
+            // Backend detection/startup is deferred to start_backend IPC
+            // so the user's engine choice is respected.
             close_splashscreen_internal(app.handle());
-
-            if cfg!(debug_assertions) {
-                // Dev mode: detect the already-running backend started by beforeDevCommand
-                start_sidecar_dev(app.handle().clone());
-            }
 
             start_update_check(app.handle().clone());
             if let Err(e) = setup_system_tray(app) {
@@ -831,6 +952,17 @@ pub fn run() {
                 api.prevent_close();
                 if let Some(main) = app_handle.get_webview_window("main") {
                     let _ = main.hide();
+                }
+            }
+            // macOS: user clicks the Dock icon when all windows are hidden —
+            // bring the main window back to the foreground.
+            RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } if !has_visible_windows => {
+                if let Some(main) = app_handle.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
                 }
             }
             RunEvent::ExitRequested { .. } => {

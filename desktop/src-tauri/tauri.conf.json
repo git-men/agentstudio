@@ -5,7 +5,7 @@
   "build": {
     "frontendDist": "../../frontend/dist",
     "devUrl": "http://localhost:3100",
-    "beforeDevCommand": "PORT=4938 TAURI_DESKTOP=1 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_PORT=4938 VITE_API_BASE=/api pnpm --filter frontend dev",
+    "beforeDevCommand": "PORT=4200 TAURI_DESKTOP=1 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_PORT=4200 VITE_API_BASE=/api pnpm --filter frontend dev",
     "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && VITE_TAURI=true pnpm --filter frontend build"
   },
   "bundle": {
@@ -20,7 +20,8 @@
       "icons/icon.png"
     ],
     "externalBin": [
-      "binaries/agentstudio-backend"
+      "binaries/agentstudio-backend",
+      "binaries/claude-internal"
     ],
     "macOS": {
       "entitlements": null,
@@ -67,7 +68,7 @@
     "updater": {
       "active": true,
       "dialog": false,
-      "pubkey": "RWTY8aHmKO/WXLyO4gOiYiDVX+si7dMgtoNKSvNkPhnBwBPuEQ8Wbjdn",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlFRURBN0QyOTYwRDBCMDUKUldRRkN3MlcwcWZ0bm1EeVJJTG16bFZVTlZRbGI3Ynk0OXlNUVl2YTZyUHJ5SjZwVWsxRmJqQzgK",
       "endpoints": [
         "https://static-76067.cos.ap-guangzhou.myqcloud.com/clawstudio-desktop/latest.json"
       ]

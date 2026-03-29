@@ -19,47 +19,19 @@ export interface EngineOption {
 const ENGINE_OPTIONS: EngineOption[] = [
   {
     value: 'claude-sdk',
-    label: 'Claude Agent SDK',
+    label: 'Claude Code',
     description: 'Official Claude Code SDK',
     cliName: 'claude',
     npmPackage: '@anthropic-ai/claude-code',
   },
   {
     value: 'claude-internal-sdk',
-    label: 'Claude Internal',
+    label: 'Claude Code Internal',
     description: 'Claude Internal SDK (~/.claude-internal)',
     cliName: 'claude-internal',
     npmPackage: '@tencent/claude-code-internal',
     internalOnly: true,
     internalDomain: 'agentstudio.woa.com',
-  },
-  {
-    value: 'codebuddy-sdk',
-    label: 'CodeBuddy',
-    description: 'CodeBuddy Agent SDK',
-    cliName: 'codebuddy',
-    npmPackage: '@tencent-ai/codebuddy-code',
-  },
-  {
-    value: 'codex-cli',
-    label: 'Codex CLI',
-    description: 'OpenAI Codex CLI',
-    cliName: 'codex',
-    npmPackage: '@openai/codex',
-  },
-  {
-    value: 'codex-sdk',
-    label: 'Codex SDK',
-    description: 'OpenAI Codex SDK',
-    cliName: 'codex',
-    npmPackage: '@openai/codex',
-  },
-  {
-    value: 'cursor-cli',
-    label: 'Cursor CLI',
-    description: 'Cursor Agent CLI',
-    cliName: 'agent',
-    installCmd: 'curl https://cursor.com/install -fsS | bash',
   },
 ];
 
@@ -87,7 +59,11 @@ export function useLaunchConfig() {
           invoke<boolean>('check_domain_accessible', { domain: 'agentstudio.woa.com' }).catch(() => false),
         ]);
 
-        if (saved) setConfig(saved);
+        if (saved) {
+          setConfig(saved);
+        } else if (accessible) {
+          setConfig({ engine: 'claude-internal-sdk' });
+        }
         setInternalAccessible(accessible);
       } catch (e) {
         console.warn('Failed to load launch config:', e);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useLaunchConfig, ENGINE_OPTIONS, type LaunchConfig, type EngineOption } from '../../hooks/useLaunchConfig';
 import { EngineSetupWizard } from './EngineSetupWizard';
 
@@ -8,8 +9,26 @@ interface DesktopLaunchConfigProps {
   onStarted: () => void;
 }
 
+const ENGINE_I18N_KEY_MAP: Record<string, string> = {
+  'claude-sdk': 'claudeSdk',
+  'claude-internal-sdk': 'claudeInternalSdk',
+};
+
 export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStarted }) => {
+  const { t } = useTranslation('components');
   const { config, loading, starting, error, startBackend, availableEngines } = useLaunchConfig();
+
+  const getEngineLabel = (opt: EngineOption) => {
+    const key = ENGINE_I18N_KEY_MAP[opt.value];
+    if (key) return t(`engineOptions.${key}.label`, { defaultValue: opt.label });
+    return opt.label;
+  };
+
+  const getEngineDescription = (opt: EngineOption) => {
+    const key = ENGINE_I18N_KEY_MAP[opt.value];
+    if (key) return t(`engineOptions.${key}.description`, { defaultValue: opt.description });
+    return opt.description;
+  };
   const [engine, setEngine] = useState<string | null>(null);
   const [setupEngine, setSetupEngine] = useState<EngineOption | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -140,7 +159,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
 
         {/* Engine Selection */}
         <div className="mb-8">
-          <h3 className="text-sm font-medium text-[#94a3b8] mb-3">Execution Engine</h3>
+          <h3 className="text-sm font-medium text-[#94a3b8] mb-3">{t('desktopLaunch.executionEngine')}</h3>
           <div className="grid grid-cols-1 gap-2">
             {availableEngines.map((opt) => (
               <button
@@ -159,12 +178,12 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
                   {currentEngine === opt.value && <div className="w-2 h-2 rounded-full bg-[#6366f1]" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-[#e2e8f0]">{opt.label}</div>
-                  <div className="text-xs text-[#64748b]">{opt.description}</div>
+                  <div className="text-sm font-medium text-[#e2e8f0]">{getEngineLabel(opt)}</div>
+                  <div className="text-xs text-[#64748b]">{getEngineDescription(opt)}</div>
                 </div>
                 {opt.internalOnly && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#6366f1]/15 text-[#a78bfa] border border-[#6366f1]/20 shrink-0">
-                    Internal
+                    {t('desktopLaunch.internal')}
                   </span>
                 )}
               </button>
@@ -175,7 +194,7 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
         {/* Dev mode engine switch hint */}
         {isDevMode && config.engine && engine && engine !== config.engine && (
           <div className="mb-4 px-4 py-2 rounded-lg bg-[#f59e0b]/10 border border-[#f59e0b]/20 text-[#f59e0b] text-xs">
-            Dev mode: engine change will take effect on next restart.
+            {t('desktopLaunch.devModeEngineHint')}
           </div>
         )}
 
@@ -199,12 +218,12 @@ export const DesktopLaunchConfig: React.FC<DesktopLaunchConfigProps> = ({ onStar
           {starting ? (
             <span className="flex items-center justify-center gap-2">
               <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              Starting...
+              {t('desktopLaunch.starting')}
             </span>
           ) : countdown !== null && countdown > 0 ? (
-            `Launch (${countdown}s)`
+            t('desktopLaunch.launchWithCountdown', { count: countdown })
           ) : (
-            'Launch'
+            t('desktopLaunch.launch')
           )}
         </button>
 

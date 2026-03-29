@@ -1,7 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { EngineOption } from '../../hooks/useLaunchConfig';
 
 type WizardStep = 'checking' | 'not_installed' | 'installing' | 'install_failed' | 'ready';
+
+const ENGINE_LABEL_KEY_MAP: Record<string, string> = {
+  'claude-sdk': 'claudeSdk',
+  'claude-internal-sdk': 'claudeInternalSdk',
+};
 
 interface EngineSetupWizardProps {
   engine: EngineOption;
@@ -14,6 +20,12 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
   onReady,
   onCancel,
 }) => {
+  const { t } = useTranslation('components');
+  const engineLabel = (() => {
+    const key = ENGINE_LABEL_KEY_MAP[engine.value];
+    if (key) return t(`engineOptions.${key}.label`, { defaultValue: engine.label });
+    return engine.label;
+  })();
   const [step, setStep] = useState<WizardStep>('checking');
   const [cliPath, setCliPath] = useState<string | null>(null);
   const [installLog, setInstallLog] = useState('');
@@ -63,7 +75,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
           packageName: engine.npmPackage,
         });
       } else {
-        setErrorMsg('No auto-install method available. Please install manually.');
+        setErrorMsg(t('engineSetupWizard.noAutoInstall'));
         setStep('install_failed');
         return;
       }
@@ -75,7 +87,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
         setCliPath(path);
         setStep('ready');
       } else {
-        setErrorMsg('Installation completed but CLI not found in PATH. Try restarting your terminal.');
+        setErrorMsg(t('engineSetupWizard.cliNotFoundAfterInstall'));
         setStep('install_failed');
       }
     } catch (e) {
@@ -94,14 +106,14 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#334155]">
           <h2 id="engine-setup-title" className="text-lg font-semibold text-[#e2e8f0]">
-            {engine.label} Setup
+            {t('engineSetupWizard.setupTitle', { engine: engineLabel })}
           </h2>
           <p className="text-xs text-[#64748b] mt-1">
-            {step === 'checking' && `Checking environment for ${engine.label}...`}
-            {step === 'not_installed' && `${engine.label} requires setup`}
-            {step === 'installing' && `Installing ${engine.label}...`}
-            {step === 'install_failed' && 'Setup encountered an error'}
-            {step === 'ready' && `${engine.label} is ready to use`}
+            {step === 'checking' && t('engineSetupWizard.subtitle.checking', { engine: engineLabel })}
+            {step === 'not_installed' && t('engineSetupWizard.subtitle.notInstalled', { engine: engineLabel })}
+            {step === 'installing' && t('engineSetupWizard.subtitle.installing', { engine: engineLabel })}
+            {step === 'install_failed' && t('engineSetupWizard.subtitle.installFailed')}
+            {step === 'ready' && t('engineSetupWizard.subtitle.ready', { engine: engineLabel })}
           </p>
         </div>
 
@@ -110,7 +122,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
           {step === 'checking' && (
             <div className="flex items-center gap-3 text-[#94a3b8]">
               <div className="w-5 h-5 border-2 border-[#475569] border-t-[#6366f1] rounded-full animate-spin" />
-              <span className="text-sm">Checking if <code className="text-[#a78bfa]">{engine.cliName}</code> is installed...</span>
+              <span className="text-sm">{t('engineSetupWizard.checking', { cliName: engine.cliName })}</span>
             </div>
           )}
 
@@ -125,19 +137,19 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#e2e8f0]">
-                    <code className="text-[#a78bfa]">{engine.cliName}</code> is not installed
+                    {t('engineSetupWizard.notInstalled', { cliName: engine.cliName })}
                   </p>
                   <p className="text-xs text-[#64748b] mt-1">
                     {canAutoInstall
-                      ? 'Install it to continue.'
-                      : 'Please install it manually and try again.'}
+                      ? t('engineSetupWizard.installHint')
+                      : t('engineSetupWizard.manualInstallHint')}
                   </p>
                 </div>
               </div>
 
               {installCommand && (
                 <div className="rounded-lg bg-[#0f172a] border border-[#334155] px-4 py-3">
-                  <p className="text-[10px] text-[#64748b] mb-1">Command:</p>
+                  <p className="text-[10px] text-[#64748b] mb-1">{t('engineSetupWizard.commandLabel')}</p>
                   <code className="text-sm text-[#a78bfa] select-all break-all">
                     {installCommand}
                   </code>
@@ -150,9 +162,9 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-[#94a3b8]">
                 <div className="w-5 h-5 border-2 border-[#475569] border-t-[#6366f1] rounded-full animate-spin" />
-                <span className="text-sm">Installing <code className="text-[#a78bfa]">{engine.label}</code>...</span>
+                <span className="text-sm">{t('engineSetupWizard.installing', { engine: engineLabel })}</span>
               </div>
-              <p className="text-[10px] text-[#475569]">This may take a minute...</p>
+              <p className="text-[10px] text-[#475569]">{t('engineSetupWizard.installWait')}</p>
             </div>
           )}
 
@@ -165,7 +177,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
                   </svg>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-[#e2e8f0]">Installation failed</p>
+                  <p className="text-sm font-medium text-[#e2e8f0]">{t('engineSetupWizard.installFailed')}</p>
                   <p className="text-xs text-[#f87171] mt-1 break-all">{errorMsg}</p>
                 </div>
               </div>
@@ -187,7 +199,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
                 </div>
                 <div>
                   <p className="text-sm font-medium text-[#e2e8f0]">
-                    <code className="text-[#a78bfa]">{engine.cliName}</code> is ready
+                    {t('engineSetupWizard.ready', { cliName: engine.cliName })}
                   </p>
                   {cliPath && (
                     <p className="text-xs text-[#64748b] mt-1 font-mono break-all">{cliPath}</p>
@@ -204,7 +216,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
             onClick={onCancel}
             className="px-4 py-2 text-sm rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#334155] transition-colors"
           >
-            Cancel
+            {t('engineSetupWizard.cancel')}
           </button>
 
           {step === 'not_installed' && canAutoInstall && (
@@ -212,7 +224,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
               onClick={handleInstall}
               className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-medium hover:from-[#4f46e5] hover:to-[#7c3aed] transition-all"
             >
-              Install Now
+              {t('engineSetupWizard.installNow')}
             </button>
           )}
 
@@ -221,7 +233,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
               onClick={handleInstall}
               className="px-4 py-2 text-sm rounded-lg bg-[#475569] text-[#e2e8f0] hover:bg-[#64748b] transition-colors"
             >
-              Retry
+              {t('engineSetupWizard.retry')}
             </button>
           )}
 
@@ -230,7 +242,7 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
               onClick={handleProceed}
               className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-[#6366f1] to-[#8b5cf6] text-white font-medium hover:from-[#4f46e5] hover:to-[#7c3aed] transition-all"
             >
-              Continue
+              {t('engineSetupWizard.continue')}
             </button>
           )}
         </div>

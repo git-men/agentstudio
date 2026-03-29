@@ -19,7 +19,7 @@
  */
 
 import { execSync } from 'child_process';
-import { existsSync, mkdirSync, renameSync } from 'fs';
+import { existsSync, mkdirSync, renameSync, mkdtempSync, realpathSync, chmodSync, copyFileSync, rmSync, readFileSync, writeFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, resolve, join } from 'path';
 import os from 'os';
@@ -125,6 +125,86 @@ function restoreA2aDts(files) {
   }
 }
 
+// ── Engine CLI bundling ───────────────────────────────────────────────────────
+//
+// Bundle engine-specific CLI tools as Tauri externalBin sidecars so the desktop
+// app is fully self-contained and doesn't require users to install Node.js or
+// run `npm install -g <package>`.
+//
+// If the npm package is inaccessible (e.g. internal registry unavailable), a
+// stub executable is written instead so that Tauri's build doesn't fail. The
+// stub exits with an error message; `check_cli_installed` in lib.rs detects it
+// and tells the setup wizard the CLI is not available.
+
+const ENGINE_CLIS = [
+  { cliName: 'claude-internal', npmPackage: '@tencent/claude-code-internal' },
+];
+
+/** Bundle one CLI tool for a given Tauri target triple. */
+function bundleEngineCli({ cliName, npmPackage, triple }) {
+  const isWindows = triple.includes('windows');
+  const outname = `${cliName}-${triple}${isWindows ? '.exe' : ''}`;
+  const outfile = join(BINARIES_DIR, outname);
+
+  if (existsSync(outfile)) {
+    process.stderr.write(`[build-sidecar] Skipping ${cliName} for ${triple} (already exists)\n`);
+    return;
+  }
+
+  process.stderr.write(`[build-sidecar] Bundling ${cliName} from ${npmPackage} for ${triple}...\n`);
+  const tmpDir = mkdtempSync(join(os.tmpdir(), `claw-cli-`));
+
+  try {
+    execSync(`npm install --prefix "${tmpDir}" "${npmPackage}" --no-save`, {
+      stdio: 'pipe',
+      timeout: 120_000,
+    });
+
+    // Resolve the CLI binary: node_modules/.bin/<cliName> is usually a symlink
+    const binLink = join(tmpDir, 'node_modules', '.bin', cliName);
+    if (!existsSync(binLink)) {
+      throw new Error(`Binary '${cliName}' not found in ${join(tmpDir, 'node_modules/.bin')}`);
+    }
+    let realBin = binLink;
+    try { realBin = realpathSync(binLink); } catch { /* use symlink path */ }
+
+    const header = readFileSync(realBin).slice(0, 2).toString();
+    const isScript = header === '#!';
+    const bunTarget = TARGET_MAP[triple];
+
+    if (isScript && bunTarget) {
+      // JS/shell script entry point → compile to standalone binary with bun
+      const cmd = [
+        'bun', 'build', '--compile',
+        `--target=${bunTarget}`,
+        `--outfile=${outfile}`,
+        realBin,
+      ].join(' ');
+      execSync(cmd, { stdio: 'inherit' });
+    } else {
+      // Pre-compiled native binary → copy directly
+      copyFileSync(realBin, outfile);
+      chmodSync(outfile, 0o755);
+    }
+
+    process.stderr.write(`[build-sidecar] ✓ Bundled ${cliName}\n`);
+  } catch (e) {
+    process.stderr.write(`[build-sidecar] ⚠ Could not bundle ${cliName}: ${e.message}\n`);
+    process.stderr.write(`[build-sidecar] → Writing stub (install ${npmPackage} to enable full functionality)\n`);
+    // Write a stub so tauri.conf.json's externalBin entry doesn't break the build.
+    // lib.rs detects this stub text and reports the CLI as not-found to the wizard.
+    const stub = [
+      '#!/bin/sh',
+      `echo "Error: ${npmPackage} was not bundled in this build." >&2`,
+      `echo "Please run: npm install -g ${npmPackage}" >&2`,
+      'exit 1',
+    ].join('\n') + '\n';
+    writeFileSync(outfile, stub, { mode: 0o755 });
+  } finally {
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 if (!existsSync(BINARIES_DIR)) {
@@ -169,3 +249,12 @@ if (failed > 0) {
 } else {
   process.stderr.write('[build-sidecar] All targets built successfully.\n');
 }
+
+// Bundle engine CLI tools (non-fatal: stubs are written on failure)
+process.stderr.write('[build-sidecar] Bundling engine CLIs...\n');
+for (const triple of targets) {
+  for (const cli of ENGINE_CLIS) {
+    bundleEngineCli({ ...cli, triple });
+  }
+}
+process.stderr.write('[build-sidecar] Engine CLI bundling complete.\n');
