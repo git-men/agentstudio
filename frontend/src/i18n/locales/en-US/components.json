@@ -1341,6 +1341,49 @@
     "noDevice": "No microphone device found",
     "tooShort": "Recording too short"
   },
+  "desktopLaunch": {
+    "executionEngine": "Execution Engine",
+    "internal": "Internal",
+    "starting": "Starting...",
+    "launch": "Launch",
+    "launchWithCountdown": "Launch ({{count}}s)",
+    "devModeEngineHint": "Dev mode: engine change will take effect on next restart."
+  },
+  "engineSetupWizard": {
+    "setupTitle": "{{engine}} Setup",
+    "subtitle": {
+      "checking": "Checking environment for {{engine}}...",
+      "notInstalled": "{{engine}} requires setup",
+      "installing": "Installing {{engine}}...",
+      "installFailed": "Setup encountered an error",
+      "ready": "{{engine}} is ready to use"
+    },
+    "checking": "Checking if {{cliName}} is installed...",
+    "notInstalled": "{{cliName}} is not installed",
+    "installHint": "Install it to continue.",
+    "manualInstallHint": "Please install it manually and try again.",
+    "commandLabel": "Command:",
+    "installing": "Installing {{engine}}...",
+    "installWait": "This may take a minute...",
+    "installFailed": "Installation failed",
+    "cliNotFoundAfterInstall": "Installation completed but CLI not found in PATH. Try restarting your terminal.",
+    "noAutoInstall": "No auto-install method available. Please install manually.",
+    "ready": "{{cliName}} is ready",
+    "cancel": "Cancel",
+    "installNow": "Install Now",
+    "retry": "Retry",
+    "continue": "Continue"
+  },
+  "engineOptions": {
+    "claudeSdk": {
+      "label": "Claude Code",
+      "description": "Official Claude Code SDK"
+    },
+    "claudeInternalSdk": {
+      "label": "Claude Code Internal",
+      "description": "Claude Internal SDK (~/.claude-internal)"
+    }
+  },
   "workspace": {
     "newSession": "New Session",
     "searchSessions": "Search sessions…",

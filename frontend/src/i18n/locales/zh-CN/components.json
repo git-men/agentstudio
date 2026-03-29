@@ -1338,6 +1338,49 @@
     "noDevice": "未找到麦克风设备",
     "tooShort": "录音时间太短"
   },
+  "desktopLaunch": {
+    "executionEngine": "执行引擎",
+    "internal": "内部",
+    "starting": "启动中...",
+    "launch": "启动",
+    "launchWithCountdown": "启动 ({{count}}s)",
+    "devModeEngineHint": "开发模式：切换引擎将在下次重启后生效。"
+  },
+  "engineSetupWizard": {
+    "setupTitle": "{{engine}} 配置",
+    "subtitle": {
+      "checking": "正在检查 {{engine}} 环境...",
+      "notInstalled": "{{engine}} 需要配置",
+      "installing": "正在安装 {{engine}}...",
+      "installFailed": "配置遇到了错误",
+      "ready": "{{engine}} 已就绪"
+    },
+    "checking": "正在检查 {{cliName}} 是否已安装...",
+    "notInstalled": "{{cliName}} 未安装",
+    "installHint": "请安装后继续。",
+    "manualInstallHint": "请手动安装后重试。",
+    "commandLabel": "命令：",
+    "installing": "正在安装 {{engine}}...",
+    "installWait": "这可能需要一点时间...",
+    "installFailed": "安装失败",
+    "cliNotFoundAfterInstall": "安装完成但在 PATH 中未找到 CLI。请尝试重启终端。",
+    "noAutoInstall": "没有可用的自动安装方式，请手动安装。",
+    "ready": "{{cliName}} 已就绪",
+    "cancel": "取消",
+    "installNow": "立即安装",
+    "retry": "重试",
+    "continue": "继续"
+  },
+  "engineOptions": {
+    "claudeSdk": {
+      "label": "Claude Code",
+      "description": "官方 Claude Code SDK"
+    },
+    "claudeInternalSdk": {
+      "label": "Claude Code 内部版",
+      "description": "Claude 内部 SDK (~/.claude-internal)"
+    }
+  },
   "workspace": {
     "newSession": "新建会话",
     "searchSessions": "搜索会话…",
