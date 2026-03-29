@@ -244,10 +244,31 @@ class TunnelService {
       if (isLegacyConfig(rawData)) {
         console.log('[Tunnel] Migrating legacy single-tunnel config to multi-tunnel format');
         tunnelConfigs = migrateLegacyConfig(rawData);
-        // Persist migrated config
+        if (source === 'default') {
+          // Loaded from global fallback: disable all tunnels to prevent
+          // multiple port instances from racing for the same token.
+          console.warn(
+            `[Tunnel] Global fallback config detected for port ${this.localPort}. ` +
+            `Disabling all tunnels to avoid token conflicts across instances. ` +
+            `Re-enable tunnels manually in Settings if needed.`,
+          );
+          tunnelConfigs = tunnelConfigs.map((c) => ({ ...c, enabled: false }));
+        }
+        // Persist to port-specific file (migration)
         await this.persistConfigs(tunnelConfigs);
       } else if (Array.isArray(rawData)) {
         tunnelConfigs = rawData as TunnelConfig[];
+        if (source === 'default') {
+          // Loaded from global fallback: disable and persist to port-specific
+          // file so future startups use the isolated copy, not the shared one.
+          console.warn(
+            `[Tunnel] Global fallback config detected for port ${this.localPort}. ` +
+            `Disabling all tunnels to avoid token conflicts across instances. ` +
+            `Re-enable tunnels manually in Settings if needed.`,
+          );
+          tunnelConfigs = tunnelConfigs.map((c) => ({ ...c, enabled: false }));
+          await this.persistConfigs(tunnelConfigs);
+        }
       }
     }
 

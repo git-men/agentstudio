@@ -251,7 +251,6 @@ router.post('/bind', async (req: Request, res: Response) => {
       enabled: true,
     };
 
-    // Check if bot already exists — if so, update (PUT); otherwise create (POST)
     const checkResp = await fetch(`${dispatchUrl}/api/bots/${botKey}`, {
       method: 'GET',
       headers,
@@ -270,6 +269,14 @@ router.post('/bind', async (req: Request, res: Response) => {
     );
     if (!botResponse.ok) {
       const err = await botResponse.json().catch(() => ({}));
+
+      if (botResponse.status === 401) {
+        return res.status(401).json({
+          error: 'enterprise_token_expired',
+          message: 'Enterprise 登录已过期，请重新登录',
+        });
+      }
+
       return res.status(502).json({
         error: `as-dispatch ${botExists ? '更新' : '注册'}失败`,
         details: err,

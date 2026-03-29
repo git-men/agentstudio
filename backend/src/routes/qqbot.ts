@@ -203,6 +203,14 @@ router.post('/bind', async (req: Request, res: Response) => {
         url: botExists ? `${dispatchUrl}/api/bots/${botKey}` : `${dispatchUrl}/api/bots`,
         response: err,
       });
+
+      if (botResp.status === 401) {
+        return res.status(401).json({
+          error: 'enterprise_token_expired',
+          message: 'Enterprise 登录已过期，请重新登录',
+        });
+      }
+
       return res.status(502).json({
         error: `as-dispatch Bot ${botExists ? '更新' : '注册'}失败 (${botResp.status})`,
         message: err.detail || err.error || err.message || JSON.stringify(err),

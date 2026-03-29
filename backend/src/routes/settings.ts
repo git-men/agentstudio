@@ -563,6 +563,12 @@ router.post('/claude-versions/:id/test', async (req, res) => {
       });
     }
 
+    // System versions (e.g. claude-internal) use the engine's own auth mechanism
+    // and do not require ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN.
+    if (version.isSystem) {
+      return res.json({ available: true });
+    }
+
     const envVars = version.environmentVariables || {};
     const apiKey = envVars.ANTHROPIC_API_KEY;
     const authToken = envVars.ANTHROPIC_AUTH_TOKEN;
