@@ -149,9 +149,11 @@ async function createClient(options: { server?: string; apiKey?: string }): Prom
 
 /**
  * Create the `admin` command group for the AgentStudio CLI.
+ * @param cliPrefix - Command prefix shown in help text (default: 'agentstudio admin')
  */
-export function createAdminCommand(): Command {
-  const admin = new Command('admin')
+export function createAdminCommand(cliPrefix = 'agentstudio admin'): Command {
+  const commandName = cliPrefix === 'agentstudio admin' ? 'admin' : cliPrefix;
+  const admin = new Command(commandName)
     .description('Manage AgentStudio via Admin API (replaces MCP with lightweight CLI)')
     .option('-s, --server <url>', 'Server URL (env: AGENTSTUDIO_SERVER)', process.env.AGENTSTUDIO_SERVER || 'http://127.0.0.1:4936')
     .option('-k, --api-key <key>', 'Admin API key (env: AGENTSTUDIO_ADMIN_API_KEY)');
@@ -219,8 +221,8 @@ export function createAdminCommand(): Command {
         }
 
         console.log('\x1b[90m  Usage:\x1b[0m');
-        console.log('    agentstudio admin call <tool-name> [--param value ...]');
-        console.log('    agentstudio admin describe <tool-name>');
+        console.log(`    ${cliPrefix} call <tool-name> [--param value ...]`);
+        console.log(`    ${cliPrefix} describe <tool-name>`);
         console.log('');
       } catch (err) {
         outputError(err instanceof Error ? err.message : String(err));
@@ -247,7 +249,7 @@ export function createAdminCommand(): Command {
         if (!tool) {
           outputError(`Tool not found: ${toolNameRaw}`);
           console.error('');
-          console.error('Run \x1b[33magistentstudio admin tools\x1b[0m to see available tools.');
+          console.error(`Run \x1b[33m${cliPrefix} tools\x1b[0m to see available tools.`);
           process.exit(1);
         }
 
@@ -301,7 +303,7 @@ export function createAdminCommand(): Command {
         console.log('\x1b[36m  Example:\x1b[0m');
 
         // Build example command
-        const exampleParts = [`agentstudio admin call ${cliName}`];
+        const exampleParts = [`${cliPrefix} call ${cliName}`];
         for (const key of paramKeys) {
           const flagName = camelToKebab(key);
           const prop = props[key] as Record<string, unknown>;
@@ -321,7 +323,7 @@ export function createAdminCommand(): Command {
             const typeStr = String(prop.type || 'string');
             jsonExample[key] = typeStr === 'number' ? 1 : typeStr === 'boolean' ? true : `<${key}>`;
           }
-          console.log(`    agentstudio admin call ${cliName} '${JSON.stringify(jsonExample)}'`);
+          console.log(`    ${cliPrefix} call ${cliName} '${JSON.stringify(jsonExample)}'`);
         }
 
         console.log('');
