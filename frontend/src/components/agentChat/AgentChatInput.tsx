@@ -170,9 +170,9 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
 
       {/* Toolbar */}
       <div className="px-3 pt-0 pb-2">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           {/* Left: Content attachments */}
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 flex-shrink-0">
             {/* Hidden file input for image upload */}
             <input
               ref={fileInputRef}
@@ -215,10 +215,10 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
           </div>
 
           {/* Right: Configuration & actions */}
-          <div className="flex items-center space-x-1">
+          <div className="flex items-center space-x-1 min-w-0">
             {/* Tool selector */}
             {uiCaps.showMcpToolSelector && (
-              <div className="relative">
+              <div className="relative flex-shrink-0">
                 <button
                   onClick={() => setShowToolSelector(!showToolSelector)}
                   className={`p-2 transition-colors rounded-lg ${showToolSelector || (selectedRegularTools.length > 0 || (mcpToolsEnabled && selectedMcpTools.length > 0))
@@ -265,12 +265,13 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               envVars={envVars}
               onEnvVarsChange={setEnvVars}
               engineUICapabilities={uiCaps}
+              className="min-w-0"
             />
 
             {onNewSession && (
               <button
                 onClick={onNewSession}
-                className="p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
+                className="flex-shrink-0 p-1.5 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
                 title={t('agentChat.newSession')}
                 disabled={isAiTyping}
               >
@@ -281,7 +282,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             {isAiTyping ? (
               <button
                 onClick={onStopGeneration}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 text-red-600 dark:text-red-400 rounded-md transition-colors text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20"
+                className="flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1.5 text-red-600 dark:text-red-400 rounded-md transition-colors text-sm font-medium hover:bg-red-50 dark:hover:bg-red-900/20"
                 title={t('agentChatPanel.stopGeneration')}
               >
                 <Square className="w-3.5 h-3.5" />
@@ -291,7 +292,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               <button
                 onClick={onSend}
                 disabled={isSendDisabled}
-                className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 text-sm font-medium disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
+                className="flex-shrink-0 flex items-center space-x-1.5 px-2.5 py-1.5 rounded-md transition-all duration-200 text-sm font-medium disabled:text-gray-400 dark:disabled:text-gray-600 disabled:cursor-not-allowed"
                 style={{ color: !isSendDisabled ? 'hsl(var(--primary))' : undefined }}
                 title={
                   isAiTyping ? t('agentChatPanel.aiTyping') :

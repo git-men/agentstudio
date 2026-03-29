@@ -14,10 +14,8 @@ const DEFAULT_BACKEND_PORT: u16 = 4200;
 
 const ALLOWED_NPM_PACKAGES: &[&str] = &[
     "@anthropic-ai/claude-code",
-    "@anthropic-ai/claude-code-internal",
     "@tencent/claude-code-internal",
     "@openai/codex",
-    "@anthropic-ai/codebuddy",
 ];
 
 // ── Mutex helper ──────────────────────────────────────────────────────────────
@@ -382,6 +380,9 @@ fn start_backend(
 
     log::info!("Starting backend with ENGINE={engine}");
 
+    // Clean up any residual process on the default port from a previous session
+    cleanup_port(DEFAULT_BACKEND_PORT);
+
     if cfg!(debug_assertions) {
         // Dev mode: detect the backend started by beforeDevCommand,
         // then verify its ENGINE matches the user's selection.
@@ -399,6 +400,26 @@ fn kill_sidecar(state: &AppState) {
         if let Some(child) = guard.take() {
             if let Err(e) = child.kill() {
                 log::warn!("Failed to kill sidecar: {e}");
+            }
+        }
+    }
+}
+
+/// Kill any process listening on the given port (macOS/Linux).
+/// Prevents "address already in use" when restarting the sidecar.
+fn cleanup_port(port: u16) {
+    let output = std::process::Command::new("lsof")
+        .args(["-ti", &format!(":{port}")])
+        .output();
+    if let Ok(out) = output {
+        let pids = String::from_utf8_lossy(&out.stdout);
+        for pid_str in pids.split_whitespace() {
+            if let Ok(_pid) = pid_str.trim().parse::<i32>() {
+                log::info!("Cleaning up residual process {pid_str} on port {port}");
+                let _ = std::process::Command::new("kill")
+                    .arg(pid_str.trim())
+                    .output();
+                std::thread::sleep(std::time::Duration::from_millis(200));
             }
         }
     }
@@ -563,7 +584,7 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         *lock_or_recover(&state.sidecar_child) = Some(child);
     }
 
-    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    let deadline = std::time::Instant::now() + Duration::from_secs(60);
     let mut port_found = false;
     let mut log_buffer: Vec<BackendLogEntry> = Vec::new();
     let mut flush_ticker = tokio::time::interval(Duration::from_millis(100));
@@ -640,15 +661,15 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         }
 
         if !port_found && std::time::Instant::now() > deadline {
-            log::error!("Backend sidecar timed out after 30 seconds");
+            log::error!("Backend sidecar timed out after 60 seconds");
             let state = app.state::<AppState>();
             kill_sidecar(&state);
             log_buffer.push(BackendLogEntry {
                 level: "error".to_string(),
-                message: "Backend startup timed out (30s)".to_string(),
+                message: "Backend startup timed out (60s)".to_string(),
             });
             flush_log_buffer(&app, &mut log_buffer);
-            notify_start_failed(&app, "Backend startup timed out (30s)");
+            notify_start_failed(&app, "Backend startup timed out (60s)");
             return;
         }
     }

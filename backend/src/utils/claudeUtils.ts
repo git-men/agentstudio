@@ -356,6 +356,23 @@ export async function buildQueryOptions(
     console.log(`📦 Using SDK bundled CLI (fallback due to error)`);
   }
 
+  // When engine is claude-internal-sdk and no explicit path was resolved from
+  // the provider config, try to locate the claude-internal CLI on the system.
+  // This prevents the SDK from falling back to its bundled `claude` CLI.
+  if (!executablePath) {
+    const { isClaudeInternalEngine, getClaudeCliName } = await import('../config/engineConfig.js');
+    if (isClaudeInternalEngine()) {
+      const internalCliName = getClaudeCliName();
+      const internalPath = await getSystemClaudeExecutablePath(internalCliName).catch(() => null);
+      if (internalPath) {
+        executablePath = internalPath;
+        console.log(`🎯 Auto-detected ${internalCliName} CLI at: ${executablePath}`);
+      } else {
+        console.warn(`⚠️  ${internalCliName} CLI not found — SDK will use bundled claude CLI (engine mismatch possible)`);
+      }
+    }
+  }
+
   if (executablePath) {
     console.log(`🎯 Custom Claude executable path: ${executablePath}`);
   } else {

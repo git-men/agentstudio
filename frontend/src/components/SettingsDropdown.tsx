@@ -122,28 +122,28 @@ export const SettingsDropdown: React.FC<SettingsDropdownProps> = ({
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className={`flex items-center space-x-2 px-2 py-1.5 text-sm rounded-md transition-colors ${isOpen
+        className={`w-full flex items-center gap-1.5 px-2 py-1.5 text-sm rounded-md transition-colors min-w-0 overflow-hidden ${isOpen
           ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30'
           : 'hover:bg-gray-100 dark:hover:bg-gray-700'
           }`}
         disabled={isAiTyping}
         title={t('agentChat.settings.title')}
       >
-        <div className="flex items-center space-x-2 text-gray-700 dark:text-gray-300">
+        <div className="flex items-center gap-1.5 min-w-0 overflow-hidden text-gray-700 dark:text-gray-300">
           {uiCaps.showModelSelector && (
-            <span className="font-medium">{currentModelName}</span>
+            <span className="font-medium whitespace-nowrap">{currentModelName}</span>
           )}
           {uiCaps.showModelSelector && uiCaps.showPermissionSelector && (
-            <span className="text-gray-300 dark:text-gray-600">|</span>
+            <span className="text-gray-300 dark:text-gray-600 flex-shrink-0">|</span>
           )}
           {uiCaps.showPermissionSelector && (
-            <span className="text-gray-500 dark:text-gray-400">{permissionModeLabel}</span>
+            <span className="text-gray-500 dark:text-gray-400 truncate">{permissionModeLabel}</span>
           )}
           {!uiCaps.showModelSelector && !uiCaps.showPermissionSelector && (
-            <span className="text-gray-500 dark:text-gray-400">{t('agentChat.settings.title', 'Settings')}</span>
+            <span className="text-gray-500 dark:text-gray-400 truncate">{t('agentChat.settings.title', 'Settings')}</span>
           )}
         </div>
-        <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 flex-shrink-0 text-gray-400 transition-transform ${isOpen ? 'transform rotate-180' : ''}`} />
       </button>
 
       {isOpen && (

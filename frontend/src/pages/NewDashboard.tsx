@@ -549,7 +549,10 @@ export const NewDashboard: React.FC = () => {
       <ProjectSelector
         agent={selectedAgent}
         onProjectSelect={(projectPath) => {
-          navigate(`/project-workspace?project=${encodeURIComponent(projectPath)}&agent=${selectedAgent.id}`);
+          openProjectWindow({
+            projectPath,
+            agentId: selectedAgent.id,
+          });
           setSelectedAgent(null);
         }}
         onClose={() => setSelectedAgent(null)}
@@ -843,18 +846,14 @@ export const NewDashboard: React.FC = () => {
           </div>
           <button
             onClick={() => {
-              const params = new URLSearchParams();
-              params.set('agent', META_AGENT_ID);
-              if (metaAgentResolvedPath) {
-                params.set('project', metaAgentResolvedPath);
-              }
               const isRealSession = currentSessionId
                 && !currentSessionId.startsWith('session_')
                 && !currentSessionId.startsWith('__pending_');
-              if (isRealSession) {
-                params.set('session', currentSessionId);
-              }
-              navigate(`/project-workspace?${params.toString()}`);
+              openProjectWindow({
+                projectPath: metaAgentResolvedPath || '',
+                agentId: META_AGENT_ID,
+                sessionId: isRealSession ? currentSessionId : undefined,
+              });
             }}
             className="p-1.5 rounded-lg text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
             title="全屏沉浸式工作"

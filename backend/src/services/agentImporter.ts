@@ -281,6 +281,19 @@ class AgentImporter {
         fs.copyFileSync(symlinkTarget, symlinkDest);
       }
 
+      // Install LAVS assets if the agent source lives in a directory with lavs.json
+      if (agentFilePath) {
+        const sourceDir = path.dirname(agentFilePath);
+        const lavsManifest = path.join(sourceDir, 'lavs.json');
+        if (fs.existsSync(lavsManifest)) {
+          const destDir = path.join(AGENTS_DIR, agentId);
+          if (!fs.existsSync(destDir)) {
+            this.copyDirectory(sourceDir, destDir);
+            console.info(`[AgentImporter] Installed LAVS assets for '${agentId}' → ${destDir}`);
+          }
+        }
+      }
+
       return {
         success: true,
         agentId,
@@ -482,6 +495,23 @@ class AgentImporter {
     }
 
     return agents;
+  }
+
+  private copyDirectory(src: string, dest: string): void {
+    if (!fs.existsSync(dest)) {
+      fs.mkdirSync(dest, { recursive: true });
+    }
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.endsWith('.md')) continue;
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isDirectory()) {
+        this.copyDirectory(srcPath, destPath);
+      } else {
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
   }
 
   /** Check if a path is a dead (dangling) symlink */

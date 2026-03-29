@@ -129,9 +129,9 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
       {/* Mobile Chat Input */}
       <div className="px-2 py-2 sm:px-3 sm:py-3">
         {/* Top row: Settings and Tools */}
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between gap-2 mb-2">
           {/* Left: Tool selector and Image upload */}
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 flex-shrink-0">
             {/* Tool selector button */}
             <div className="relative">
               <button
@@ -206,6 +206,7 @@ export const AgentChatMobileInput: React.FC<AgentChatMobileInputProps> = ({
             isAiTyping={isAiTyping}
             envVars={envVars}
             onEnvVarsChange={onEnvVarsChange}
+            className="min-w-0"
           />
         </div>
 
