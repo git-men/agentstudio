@@ -13,15 +13,12 @@ let _tauriBackendBaseUrl: string | null = null;
  * Also patches the "default" stored backend service so ServiceManagementModal
  * shows engine/version info from the actual desktop sidecar.
  *
- * IMPORTANT: Also refreshes the module-level API_BASE / MEDIA_BASE so that
- * all importers (ES live bindings) immediately see the correct URL.
+ * IMPORTANT: After this call every read of the exported `API_BASE` /
+ * `MEDIA_BASE` automatically returns the updated URL because they delegate
+ * to `getApiBase()` / `getMediaBase()` which consult `_tauriBackendBaseUrl`.
  */
 export function setTauriBackendBaseUrl(baseUrl: string): void {
   _tauriBackendBaseUrl = baseUrl.replace(/\/$/, '');
-
-  // Refresh module-level exports so all live-binding consumers get the new URL
-  API_BASE = getApiBase();
-  MEDIA_BASE = getMediaBase();
 
   try {
     const state = loadBackendServices();
@@ -104,11 +101,24 @@ export const getMediaBase = (): string => {
   return getCurrentBackendServiceUrl() + '/media';
 };
 
-// Module-level exports — refreshed by setTauriBackendBaseUrl() via ES live bindings.
-// eslint-disable-next-line import/no-mutable-exports
-let MEDIA_BASE = getMediaBase();
-// eslint-disable-next-line import/no-mutable-exports
-let API_BASE = getApiBase();
+// Dynamic string wrappers for API_BASE / MEDIA_BASE.
+// Rollup may split these exports into a separate chunk.  Cross-chunk ES live
+// bindings (`let` exports) are spec-correct but unreliable in some WebView
+// runtimes (Tauri / WKWebView).  By wrapping the values in String objects
+// whose toString/valueOf/[Symbol.toPrimitive] delegate to the getter
+// functions, every usage site (template literals, fetch(), new URL(), etc.)
+// resolves the current backend URL at call-time with no dependency on live
+// bindings.
+function dynamicString(getter: () => string): string {
+  const s = new String('');
+  Object.defineProperty(s, 'toString',          { value: getter });
+  Object.defineProperty(s, 'valueOf',            { value: getter });
+  Object.defineProperty(s, Symbol.toPrimitive,   { value: getter });
+  return s as unknown as string;
+}
+
+const MEDIA_BASE = dynamicString(getMediaBase);
+const API_BASE   = dynamicString(getApiBase);
 
 // Helper function to build API URLs
 export const buildApiUrl = (path: string): string => {
