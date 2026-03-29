@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, FolderOpen } from 'lucide-react';
+import { Plus, Search, Bot } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useProjectSessions } from '../../hooks/useAgents';
 import { sessionStoreManager } from '../../services/SessionStoreManager';
@@ -16,6 +16,7 @@ interface SessionFromBackend {
 interface ProjectSessionListPanelProps {
   projectPath: string;
   projectName?: string;
+  agentIcon?: string;
   activeSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
@@ -30,6 +31,7 @@ interface ProjectSessionListPanelProps {
 export const ProjectSessionListPanel: React.FC<ProjectSessionListPanelProps> = ({
   projectPath,
   projectName,
+  agentIcon,
   activeSessionId,
   onSessionSelect,
   onNewSession,
@@ -60,7 +62,13 @@ export const ProjectSessionListPanel: React.FC<ProjectSessionListPanelProps> = (
       {/* Project header */}
       <div className="flex-shrink-0 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center gap-2 text-gray-700 dark:text-gray-300 mb-2">
-          <FolderOpen className="w-4 h-4 text-blue-500 flex-shrink-0" />
+          <span className="flex-shrink-0 w-4 h-4 flex items-center justify-center">
+            {agentIcon && agentIcon.length <= 4 ? (
+              <span className="text-sm leading-none">{agentIcon}</span>
+            ) : (
+              <Bot className="w-4 h-4 text-blue-500" />
+            )}
+          </span>
           <span className="text-sm font-medium truncate" title={projectPath}>
             {projectName || projectPath.split('/').pop() || 'Project'}
           </span>

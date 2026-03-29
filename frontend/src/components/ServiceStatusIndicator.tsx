@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Server, Settings, CheckCircle, XCircle, ArrowLeftRight } from 'lucide-react';
+import { Settings, CheckCircle, XCircle, ArrowLeftRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useBackendServices } from '../hooks/useBackendServices';
 import { getApiBase } from '../lib/config';
@@ -164,14 +164,14 @@ export const ServiceStatusIndicator: React.FC<ServiceStatusIndicatorProps> = ({
 
   const getStatusIcon = () => {
     if (serviceStatus.isLoading) {
-      return <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />;
+      return <div className="w-2 h-2 border border-gray-400 border-t-transparent rounded-full animate-spin" />;
     }
 
     if (serviceStatus.isConnected) {
-      return <CheckCircle className="w-4 h-4 text-green-500" />;
+      return <div className="w-2 h-2 rounded-full bg-green-500 shadow-[0_0_4px_rgba(34,197,94,0.4)]" />;
     }
 
-    return <XCircle className="w-4 h-4 text-red-500" />;
+    return <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.4)]" />;
   };
 
   const getStatusText = () => {
@@ -200,43 +200,39 @@ export const ServiceStatusIndicator: React.FC<ServiceStatusIndicatorProps> = ({
 
   return (
     <div className={`relative w-full ${className}`} ref={dropdownRef}>
-      <div className="flex items-center w-full px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors rounded-md">
-        {/* Status Display */}
+      <div className="flex items-center w-full px-2 py-1 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors rounded-md gap-1.5">
+        {/* Status dot */}
         <div 
-          className="flex items-center space-x-2 flex-1 min-w-0 overflow-hidden"
+          className="flex items-center gap-1.5 flex-1 min-w-0 overflow-hidden cursor-default"
           onMouseEnter={() => setShowTooltip(true)}
           onMouseLeave={() => setShowTooltip(false)}
         >
-          <Server className="w-4 h-4 text-gray-500 flex-shrink-0" />
-          <span className={`font-medium text-sm truncate ${getStatusColor()}`}>
+          <span className="flex-shrink-0">{getStatusIcon()}</span>
+          <span className={`text-[11px] font-medium truncate ${getStatusColor()}`}>
             {getStatusText()}
           </span>
-          <span className="flex-shrink-0">{getStatusIcon()}</span>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex items-center flex-shrink-0 ml-1">
-          {/* Switch Button */}
+        <div className="flex items-center flex-shrink-0">
           <button
             onClick={() => setShowQuickSwitch(!showQuickSwitch)}
-            className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 
-                     hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
+                     hover:bg-gray-200/60 dark:hover:bg-gray-600 rounded transition-colors"
             title={t('serviceStatusIndicator.quickSwitch')}
           >
-            <ArrowLeftRight className="w-3.5 h-3.5" />
+            <ArrowLeftRight className="w-3 h-3" />
           </button>
-
-          {/* Settings Button */}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onManageServices?.();
             }}
-            className="p-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 
-                     hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+            className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
+                     hover:bg-gray-200/60 dark:hover:bg-gray-600 rounded transition-colors"
             title={t('serviceStatusIndicator.manageServices')}
           >
-            <Settings className="w-3.5 h-3.5" />
+            <Settings className="w-3 h-3" />
           </button>
         </div>
       </div>

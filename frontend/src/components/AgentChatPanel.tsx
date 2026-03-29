@@ -44,6 +44,11 @@ interface AgentChatPanelProps {
   onNewSession?: () => void;
 }
 
+/**
+ * @deprecated 原版聊天框，已由 AGUIChatPanel 取代。
+ * Chat Panel Version 设置已移除，默认使用 AGUI 组件。
+ * 此组件将在后续版本中移除。
+ */
 export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPath, onSessionChange, initialMessage, onNewSession: externalNewSession }) => {
   const { t } = useTranslation('components');
   const { isCompactMode } = useResponsiveSettings();

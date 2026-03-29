@@ -19,37 +19,17 @@ import {
   ShieldCheck,
   Shield,
   AlertCircle,
-  MessageSquare,
 } from 'lucide-react';
 import { useMobileContext } from '../../contexts/MobileContext';
 import { useVersionCheck, useSystemInfo } from '../../hooks/useVersionCheck';
 import { isTelemetryEnabled, setTelemetryEnabled } from '../../components/TelemetryProvider';
-import { useEngine } from '../../hooks/useEngine';
 
 export const GeneralSettingsPage: React.FC = () => {
   const { t, i18n } = useTranslation('pages');
   const { isMobile } = useMobileContext();
-  const { isCursorEngine, isLoading: isEngineLoading } = useEngine();
-
   // Theme and language state
   const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'auto');
   const [language, setLanguage] = useState(i18n.language);
-
-  // Chat panel version state – AGUI is the default for all engines
-  const [chatVersion, setChatVersion] = useState(() => {
-    const saved = localStorage.getItem('agentstudio:chat-version');
-    if (saved) return saved;
-    return 'agui';
-  });
-
-  // When engine finishes loading, if there is no saved preference the
-  // state is already 'agui' (the universal default). Nothing to override.
-  useEffect(() => {
-    if (!isEngineLoading && isCursorEngine) {
-      localStorage.setItem('agentstudio:chat-version', 'agui');
-      setChatVersion('agui');
-    }
-  }, [isEngineLoading, isCursorEngine]);
 
   // Version check state
   const {
@@ -96,11 +76,6 @@ export const GeneralSettingsPage: React.FC = () => {
   const handleLanguageChange = (newLanguage: string) => {
     setLanguage(newLanguage);
     i18n.changeLanguage(newLanguage);
-  };
-
-  const handleChatVersionChange = (newVersion: string) => {
-    setChatVersion(newVersion);
-    localStorage.setItem('agentstudio:chat-version', newVersion);
   };
 
   const handleCheckUpdate = () => {
@@ -222,35 +197,6 @@ export const GeneralSettingsPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Chat Panel Version Selection */}
-          <div>
-            <label className="block font-medium text-gray-900 dark:text-white mb-2 flex items-center space-x-2">
-              <MessageSquare className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
-              <span>{t('settings.general.chatVersion.label', 'Chat Panel Version')}</span>
-            </label>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">{t('settings.general.chatVersion.description', 'Choose which chat panel implementation to use')}</p>
-            <div className={`${isMobile ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-2 gap-3'}`}>
-              {[
-                { value: 'original', label: t('settings.general.chatVersion.original', 'Original'), icon: '💬', description: t('settings.general.chatVersion.originalDesc', 'Classic chat interface') },
-                { value: 'agui', label: t('settings.general.chatVersion.agui', 'AGUI (Experimental)'), icon: '🚀', description: t('settings.general.chatVersion.aguiDesc', 'TDesign-based with AGUI protocol') }
-              ].map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => handleChatVersionChange(option.value)}
-                  className={`${isMobile ? 'p-3' : 'p-4'} border-2 rounded-lg flex items-start space-x-3 transition-all text-left ${chatVersion === option.value
-                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
-                >
-                  <span className={`${isMobile ? 'text-xl' : 'text-2xl'}`}>{option.icon}</span>
-                  <div>
-                    <span className="text-sm font-medium block">{option.label}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">{option.description}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 

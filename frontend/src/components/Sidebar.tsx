@@ -27,7 +27,6 @@ import {
   Building2,
   LogOut,
   MessageSquare,
-  UsersRound,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -67,11 +66,6 @@ const getNavigationItems = (t: (key: string) => string): NavItem[] => [
     href: '/projects',
     icon: FolderOpen,
     requireModule: 'manage.projects',
-  },
-  {
-    name: t('nav.teamWorkspace') || '团队工作区',
-    href: '/team-workspace',
-    icon: UsersRound,
   },
   {
     name: t('nav.mcp'),
@@ -485,21 +479,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
       </nav>
 
       {/* Footer */}
-      <div className={`flex-shrink-0 border-t border-gray-200 dark:border-gray-700 ${collapsed ? 'p-2' : 'p-4'}`}>
+      <div className={`flex-shrink-0 border-t border-gray-200/80 dark:border-gray-700/80 ${collapsed ? 'px-2 py-2' : 'px-3 py-2'}`}>
         {collapsed ? (
-          <div className="space-y-2">
-            {/* Enterprise identity (collapsed) */}
+          <div className="flex flex-col items-center gap-1">
             {isEnterpriseAuth ? (
               <div className="relative">
                 <button
                   onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
                   title={enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
-                  className="w-full flex items-center justify-center p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  className="p-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 >
                   {enterpriseProfile?.avatarUrl ? (
-                    <img src={enterpriseProfile.avatarUrl} alt="" className="w-7 h-7 rounded-full object-cover" />
+                    <img src={enterpriseProfile.avatarUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
                   ) : (
-                    <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                    <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[8px] font-bold text-white">
                       {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
@@ -508,25 +501,24 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                 {showEnterpriseMenu && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setShowEnterpriseMenu(false)} />
-                    <div className="absolute bottom-full left-0 mb-1 w-32 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                    <div className="absolute bottom-full left-0 mb-1 w-36 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                      {enterpriseProfile?.name && (
+                        <div className="px-3 py-1.5 text-[11px] text-gray-500 dark:text-gray-400 truncate border-b border-gray-100 dark:border-gray-700">
+                          {enterpriseProfile.email || enterpriseProfile.name}
+                        </div>
+                      )}
                       <button
-                        onClick={() => {
-                          setShowEnterpriseMenu(false);
-                          enterpriseLogin();
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                        onClick={() => { setShowEnterpriseMenu(false); enterpriseLogin(); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                       >
-                        <Building2 className="w-3.5 h-3.5" />
+                        <Building2 className="w-3 h-3" />
                         重新登录
                       </button>
                       <button
-                        onClick={() => {
-                          setShowEnterpriseMenu(false);
-                          enterpriseLogout();
-                        }}
-                        className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        onClick={() => { setShowEnterpriseMenu(false); enterpriseLogout(); }}
+                        className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                       >
-                        <LogOut className="w-3.5 h-3.5" />
+                        <LogOut className="w-3 h-3" />
                         退出
                       </button>
                     </div>
@@ -537,75 +529,67 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               <button
                 onClick={() => enterpriseLogin()}
                 title="连接企业版"
-                className="w-full flex items-center justify-center p-2 rounded-lg text-gray-400 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                className="p-1.5 rounded-md text-gray-400 hover:text-blue-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
               >
-                <Building2 className="w-5 h-5" />
+                <Building2 className="w-4 h-4" />
               </button>
             )}
             {onToggleCollapse && (
               <button
                 onClick={onToggleCollapse}
                 title="展开侧边栏"
-                className="w-full flex items-center justify-center p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
               >
-                <PanelLeftOpen className="w-4 h-4" />
+                <PanelLeftOpen className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-1.5">
             <UpdateNotification compact />
 
-            {/* Enterprise identity */}
+            {/* User identity row */}
             <div className="relative">
               {isEnterpriseAuth ? (
                 <>
                   <button
                     onClick={() => setShowEnterpriseMenu(!showEnterpriseMenu)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors group"
+                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
                   >
                     {enterpriseProfile?.avatarUrl ? (
-                      <img src={enterpriseProfile.avatarUrl} alt="" className="flex-shrink-0 w-7 h-7 rounded-full object-cover" />
+                      <img src={enterpriseProfile.avatarUrl} alt="" className="flex-shrink-0 w-5 h-5 rounded-full object-cover ring-1 ring-gray-200 dark:ring-gray-600" />
                     ) : (
-                      <div className="flex-shrink-0 w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                      <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-[9px] font-semibold text-white">
                         {(enterpriseProfile?.name || enterpriseProfile?.email || '?').charAt(0).toUpperCase()}
                       </div>
                     )}
-                    <div className="flex-1 min-w-0 text-left">
-                      <div className="text-xs font-medium text-gray-700 dark:text-gray-200 truncate">
-                        {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
-                      </div>
-                      {enterpriseProfile?.email && enterpriseProfile?.name && enterpriseProfile.email !== enterpriseProfile.name && (
-                        <div className="text-[10px] text-gray-400 dark:text-gray-500 truncate">
-                          {enterpriseProfile.email}
-                        </div>
-                      )}
-                    </div>
-                    <ChevronDown className={`w-3.5 h-3.5 text-gray-400 transition-transform ${showEnterpriseMenu ? 'rotate-180' : ''}`} />
+                    <span className="flex-1 min-w-0 text-left text-[11px] font-medium text-gray-700 dark:text-gray-200 truncate">
+                      {enterpriseProfile?.name || enterpriseProfile?.email || '企业用户'}
+                    </span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showEnterpriseMenu ? 'rotate-180' : ''}`} />
                   </button>
 
                   {showEnterpriseMenu && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setShowEnterpriseMenu(false)} />
                       <div className="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 py-1">
+                        {enterpriseProfile?.email && enterpriseProfile?.name && enterpriseProfile.email !== enterpriseProfile.name && (
+                          <div className="px-3 py-1.5 text-[10px] text-gray-400 dark:text-gray-500 truncate border-b border-gray-100 dark:border-gray-700 mb-0.5">
+                            {enterpriseProfile.email}
+                          </div>
+                        )}
                         <button
-                          onClick={() => {
-                            setShowEnterpriseMenu(false);
-                            enterpriseLogin();
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          onClick={() => { setShowEnterpriseMenu(false); enterpriseLogin(); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
                         >
-                          <Building2 className="w-3.5 h-3.5" />
+                          <Building2 className="w-3 h-3" />
                           重新登录
                         </button>
                         <button
-                          onClick={() => {
-                            setShowEnterpriseMenu(false);
-                            enterpriseLogout();
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => { setShowEnterpriseMenu(false); enterpriseLogout(); }}
+                          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
-                          <LogOut className="w-3.5 h-3.5" />
+                          <LogOut className="w-3 h-3" />
                           退出企业版
                         </button>
                       </div>
@@ -615,20 +599,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               ) : (
                 <button
                   onClick={() => enterpriseLogin()}
-                  className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg border border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group"
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md border border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-colors group"
                 >
-                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 transition-colors">
-                    <Building2 className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                  <div className="flex-shrink-0 w-5 h-5 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-blue-100 dark:group-hover:bg-blue-900/40 transition-colors">
+                    <Building2 className="w-3 h-3 text-gray-400 group-hover:text-blue-500 transition-colors" />
                   </div>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
                     连接企业版
                   </span>
                 </button>
               )}
             </div>
 
-            {/* Service status + collapse toggle in same row */}
-            <div className="flex items-center gap-1">
+            {/* Service status + collapse toggle */}
+            <div className="flex items-center">
               <div className="flex-1 min-w-0">
                 <ServiceStatusIndicator onManageServices={() => setShowServiceManagement(true)} />
               </div>
@@ -636,9 +620,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                 <button
                   onClick={onToggleCollapse}
                   title="收起侧边栏"
-                  className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                  className="flex-shrink-0 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-700 rounded-md transition-colors"
                 >
-                  <PanelLeftClose className="w-4 h-4" />
+                  <PanelLeftClose className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>

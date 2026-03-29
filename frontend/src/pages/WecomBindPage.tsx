@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { openExternalUrl } from '../utils/navigation';
 import {
@@ -101,6 +101,7 @@ export const WecomBindPage: React.FC = () => {
   const [preflight, setPreflight] = useState<PreflightData | null>(null);
   const [authPolling, setAuthPolling] = useState(false);
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
+  const pendingRetryRef = useRef(false);
 
   const isWebhookValid = WEBHOOK_PATTERN.test(webhookUrl.trim());
   const canSubmit = selectedProject && isWebhookValid;
@@ -155,6 +156,7 @@ export const WecomBindPage: React.FC = () => {
     const poll = async () => {
       if (attempts >= maxAttempts) {
         setAuthPolling(false);
+        pendingRetryRef.current = false;
         setErrorMessage('OAuth 登录超时，请重试');
         return;
       }
@@ -163,8 +165,13 @@ export const WecomBindPage: React.FC = () => {
       if (result?.auth?.ready) {
         setAuthPolling(false);
         setPreflight(result);
-        setStep('form');
         showSuccess('认证成功', 'AS Enterprise 登录已完成');
+        if (pendingRetryRef.current) {
+          pendingRetryRef.current = false;
+          handleBind();
+        } else {
+          setStep('form');
+        }
         return;
       }
       setTimeout(poll, interval);
@@ -209,7 +216,9 @@ export const WecomBindPage: React.FC = () => {
       const data = await resp.json();
 
       if (!resp.ok || !data.success) {
-        if (data.error === 'enterprise_auth_required') {
+        if (data.error === 'enterprise_auth_required' || data.error === 'enterprise_token_expired') {
+          setErrorMessage('');
+          pendingRetryRef.current = true;
           startAuth();
           return;
         }

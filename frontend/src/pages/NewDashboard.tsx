@@ -539,11 +539,7 @@ export const NewDashboard: React.FC = () => {
   };
 
   const handleProjectClick = (project: Project) => {
-    const agent = agents.find(a => a.id === project.defaultAgent && a.enabled)
-      || agents.find(a => a.enabled);
-    if (agent) {
-      navigate(`/project-workspace?project=${encodeURIComponent(project.path)}&agent=${agent.id}`);
-    }
+    openProjectWindow(project.path, project.name);
   };
 
   return (

@@ -57,7 +57,6 @@ const ScheduledTasksPage = lazy(() => import('./pages/ScheduledTasksPage').then(
 const ChatPage = lazy(() => import('./pages/ChatPage').then(module => ({ default: module.ChatPage })));
 const WorkspacePage = lazy(() => import('./pages/WorkspacePage').then(module => ({ default: module.WorkspacePage })));
 const ProjectWorkspacePage = lazy(() => import('./pages/ProjectWorkspacePage').then(module => ({ default: module.ProjectWorkspacePage })));
-const TeamWorkspacePage = lazy(() => import('./pages/TeamWorkspacePage').then(module => ({ default: module.TeamWorkspacePage })));
 const ModelsPage = lazy(() => import('./pages/ModelsPage').then(module => ({ default: module.default })));
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.default })));
 const LoginPage = lazy(() => import('./pages/LoginPage').then(module => ({ default: module.LoginPage })));
@@ -148,12 +147,6 @@ const AppContent: React.FC = () => {
           <Route path="/project-workspace" element={
             <ProtectedRoute>
               <ProjectWorkspacePage />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/team-workspace" element={
-            <ProtectedRoute>
-              <TeamWorkspacePage />
             </ProtectedRoute>
           } />
 
@@ -310,7 +303,23 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
   const isMainWindow = !window.location.pathname.startsWith('/project-workspace');
   const needsLaunchGate = isTauriEnv && isMainWindow;
   const [backendStarted, setBackendStarted] = useState(!needsLaunchGate);
+  const [engineMismatch, setEngineMismatch] = useState<{ expected: string; actual: string } | null>(null);
   const { isReady, error } = useBackendReady(backendStarted);
+
+  useEffect(() => {
+    if (!isTauriEnv) return;
+    let unlisten: (() => void) | undefined;
+    (async () => {
+      const { listen } = await import('@tauri-apps/api/event');
+      unlisten = await listen<string>('engine-mismatch', (event) => {
+        try {
+          const data = JSON.parse(event.payload);
+          setEngineMismatch(data);
+        } catch { /* ignore parse errors */ }
+      });
+    })();
+    return () => { unlisten?.(); };
+  }, [isTauriEnv]);
 
   if (!isTauriEnv) return <>{children}</>;
 
@@ -343,7 +352,23 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {engineMismatch && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-[#f59e0b]/95 text-[#0f172a] px-4 py-2 text-center text-sm font-medium">
+          引擎不匹配：你选择了「{engineMismatch.expected}」，但 dev 后端正在使用「{engineMismatch.actual}」。
+          已保存你的选择，请重启 dev 服务器使其生效。
+          <button
+            onClick={() => setEngineMismatch(null)}
+            className="ml-3 px-2 py-0.5 bg-[#0f172a]/20 rounded text-xs hover:bg-[#0f172a]/30"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      {children}
+    </>
+  );
 }
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
@@ -361,8 +386,8 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* Log panel toggle (Tauri only) */}
-      {isTauri() && !logPanelVisible && (
+      {/* Log panel toggle (Tauri + dev mode only) */}
+      {isTauri() && import.meta.env.DEV && !logPanelVisible && (
         <button
           onClick={() => setLogPanelVisible(true)}
           className="fixed bottom-4 right-4 z-[60] w-9 h-9 rounded-full bg-[#1e293b] border border-[#334155] text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-[#334155] transition-all shadow-lg flex items-center justify-center"

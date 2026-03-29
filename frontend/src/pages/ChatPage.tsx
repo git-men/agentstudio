@@ -3,7 +3,6 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { isTauri } from '../lib/environment';
 import { closeCurrentWindow } from '../lib/tauriWindows';
-import { AgentChatPanel } from '../components/AgentChatPanel';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
 import { SplitLayout } from '../components/SplitLayout';
 import { RightPanelWrapper } from '../components/RightPanelWrapper';
@@ -12,20 +11,7 @@ import { useAgent } from '../hooks/useAgents';
 import { ProjectSelector } from '../components/ProjectSelector';
 import { getAgentPlugin } from '../agents/registry';
 import { useTabNotification, type TabNotificationStatus } from '../hooks/useTabNotification';
-import { useEngine } from '../hooks/useEngine';
 
-// Chat version type
-type ChatVersion = 'original' | 'agui';
-
-// LocalStorage key for chat version preference
-const CHAT_VERSION_KEY = 'agentstudio:chat-version';
-
-// AGUI is the default chat panel for all engines.
-// Cursor/CodeBuddy/Codex engines enforce it; Claude engine also benefits from
-// the richer frontend tool framework available in the AGUI panel.
-function getDefaultChatVersion(_isAguiEngine: boolean): ChatVersion {
-  return 'agui';
-}
 
 export const ChatPage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -37,45 +23,12 @@ export const ChatPage: React.FC = () => {
   const initialMessage = searchParams.get('message');
   const { data: agentData, isLoading, error } = useAgent(agentId!);
   const { setCurrentAgentAndSession, isAiTyping } = useAgentStore();
-  const { isAguiEngine, isLoading: isEngineLoading } = useEngine();
   const [showProjectSelector, setShowProjectSelector] = useState(false);
   const [hideLeftPanel, setHideLeftPanel] = useState(false);
   const [hideRightPanel, setHideRightPanel] = useState(false);
   const [lastError, setLastError] = useState<Error | null>(null);
   const [hasSeenCompletion, setHasSeenCompletion] = useState(false);
   const wasAiTypingRef = React.useRef(false);
-
-  // Chat version state with localStorage persistence
-  // Default to AGUI for all engines; respect explicit user override
-  const [chatVersion, setChatVersion] = useState<ChatVersion>(() => {
-    const saved = localStorage.getItem(CHAT_VERSION_KEY);
-    if (saved === 'agui' || saved === 'original') return saved;
-    return 'agui';
-  });
-
-  // When engine finishes loading, AGUI engines force AGUI panel.
-  // For other engines, respect the persisted preference (already 'agui' by default).
-  useEffect(() => {
-    if (!isEngineLoading) {
-      if (isAguiEngine) {
-        setChatVersion('agui');
-        localStorage.setItem(CHAT_VERSION_KEY, 'agui');
-      }
-    }
-  }, [isEngineLoading, isAguiEngine]);
-
-  // Sync chat version when changed from settings page
-  useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === CHAT_VERSION_KEY && e.newValue) {
-        if (e.newValue === 'agui' || e.newValue === 'original') {
-          setChatVersion(e.newValue);
-        }
-      }
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
 
   const agent = agentData?.agent;
 
@@ -297,9 +250,6 @@ export const ChatPage: React.FC = () => {
 
   // Render layout based on plugin configuration
   const renderLayout = () => {
-    // Select chat panel based on version preference
-    const ChatPanelComponent = chatVersion === 'agui' ? AGUIChatPanel : AgentChatPanel;
-
     // 始终使用分栏布局，右侧根据是否有自定义组件来决定显示内容
     return (
       <SplitLayout
@@ -309,7 +259,7 @@ export const ChatPage: React.FC = () => {
         onToggleRightPanel={handleToggleRightPanel}
         mobileLayout="tabs"
       >
-        <ChatPanelComponent agent={agent} projectPath={projectPath || undefined} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
+        <AGUIChatPanel agent={agent} projectPath={projectPath || undefined} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
         <RightPanelWrapper
           agent={agent}
           projectPath={projectPath || undefined}

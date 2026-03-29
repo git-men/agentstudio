@@ -90,6 +90,7 @@ export const WechatBindPage: React.FC = () => {
   const [qrStatus, setQrStatus] = useState<string>('');
   const [botKey, setBotKey] = useState('');
   const qrPollingRef = useRef(false);
+  const pendingRetryRef = useRef(false);
 
   const canSubmit = !!selectedProject;
   const selectedProjectObj = projects.find((p) => p.path === selectedProject);
@@ -147,6 +148,7 @@ export const WechatBindPage: React.FC = () => {
     const poll = async () => {
       if (attempts >= maxAttempts) {
         setAuthPolling(false);
+        pendingRetryRef.current = false;
         setErrorMessage('OAuth 登录超时，请重试');
         return;
       }
@@ -155,7 +157,12 @@ export const WechatBindPage: React.FC = () => {
       if (result?.auth?.ready) {
         setAuthPolling(false);
         setPreflight(result);
-        setStep('form');
+        if (pendingRetryRef.current) {
+          pendingRetryRef.current = false;
+          handleBind();
+        } else {
+          setStep('form');
+        }
         return;
       }
       setTimeout(poll, 2000);
@@ -265,7 +272,9 @@ export const WechatBindPage: React.FC = () => {
       const bindData = await bindResp.json();
 
       if (!bindResp.ok || !bindData.success) {
-        if (bindData.error === 'enterprise_auth_required') {
+        if (bindData.error === 'enterprise_auth_required' || bindData.error === 'enterprise_token_expired') {
+          setErrorMessage('');
+          pendingRetryRef.current = true;
           startAuth();
           return;
         }

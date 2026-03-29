@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { openExternalUrl } from '../utils/navigation';
 import {
@@ -100,6 +100,7 @@ export const QQBotBindPage: React.FC = () => {
   const [preflight, setPreflight] = useState<PreflightData | null>(null);
   const [processingSteps, setProcessingSteps] = useState<ProcessingStep[]>([]);
   const [authPolling, setAuthPolling] = useState(false);
+  const pendingRetryRef = useRef(false);
 
   const isAppIdValid = /^\d{6,20}$/.test(appId.trim());
   const isSecretValid = clientSecret.trim().length >= 8;
@@ -153,6 +154,7 @@ export const QQBotBindPage: React.FC = () => {
     const poll = async () => {
       if (attempts >= maxAttempts) {
         setAuthPolling(false);
+        pendingRetryRef.current = false;
         setErrorMessage('OAuth 登录超时，请重试');
         return;
       }
@@ -161,7 +163,12 @@ export const QQBotBindPage: React.FC = () => {
       if (result?.auth?.ready) {
         setAuthPolling(false);
         setPreflight(result);
-        setStep('form');
+        if (pendingRetryRef.current) {
+          pendingRetryRef.current = false;
+          handleBind();
+        } else {
+          setStep('form');
+        }
         return;
       }
       setTimeout(poll, 2000);
@@ -207,7 +214,9 @@ export const QQBotBindPage: React.FC = () => {
       const data = await resp.json();
 
       if (!resp.ok || !data.success) {
-        if (data.error === 'enterprise_auth_required') {
+        if (data.error === 'enterprise_auth_required' || data.error === 'enterprise_token_expired') {
+          setErrorMessage('');
+          pendingRetryRef.current = true;
           startAuth();
           return;
         }

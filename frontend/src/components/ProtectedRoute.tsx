@@ -4,9 +4,10 @@ import { useAuth } from '../hooks/useAuth';
 import { useAuthStore } from '../stores/authStore';
 import { useBackendServices } from '../hooks/useBackendServices';
 import { BackendOnboardingWizard } from './BackendOnboardingWizard';
-import { getBackendOnboardingStatus } from '../utils/onboardingStorage';
+import { getBackendOnboardingStatus, setBackendOnboardingCompleted } from '../utils/onboardingStorage';
 import { isTokenExpired, shouldRefreshToken } from '../utils/authHelpers';
 import { detectAndConfigureSameOriginBackend } from '../utils/sameOriginBackendDetection';
+import { isTauri } from '../lib/environment';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -27,6 +28,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Quick Start: Auto-detect same-origin backend before showing onboarding wizard
   useEffect(() => {
     const quickStart = async () => {
+      // In Tauri desktop mode the backend is always the bundled sidecar — no
+      // configuration wizard needed. Mark onboarding as complete and proceed.
+      if (isTauri()) {
+        setBackendOnboardingCompleted(false);
+        setIsVerifying(true);
+        return;
+      }
+
       // Check if onboarding is already completed
       const status = getBackendOnboardingStatus();
       if (status.completed) {
