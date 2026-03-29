@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Build the agentstudio-backend sidecar binary for one or more target platforms.
+ * Build the clawstudio-backend sidecar binary for one or more target platforms.
  *
  * Usage:
  *   node scripts/build-sidecar.mjs                     # current platform only
@@ -11,11 +11,11 @@
  *
  * Output binaries are placed in desktop/src-tauri/binaries/ with the naming
  * convention required by Tauri v2:
- *   agentstudio-backend-<arch>-<os>
- * e.g.  agentstudio-backend-aarch64-apple-darwin
- *       agentstudio-backend-x86_64-apple-darwin
- *       agentstudio-backend-x86_64-pc-windows-msvc.exe
- *       agentstudio-backend-x86_64-unknown-linux-gnu
+ *   clawstudio-backend-<arch>-<os>
+ * e.g.  clawstudio-backend-aarch64-apple-darwin
+ *       clawstudio-backend-x86_64-apple-darwin
+ *       clawstudio-backend-x86_64-pc-windows-msvc.exe
+ *       clawstudio-backend-x86_64-unknown-linux-gnu
  */
 
 import { execSync } from 'child_process';
@@ -69,7 +69,7 @@ function buildTarget(triple) {
   if (!bunTarget) throw new Error(`No bun target mapping for triple: ${triple}`);
 
   const isWindows = triple.includes('windows');
-  const outname = `agentstudio-backend-${triple}${isWindows ? '.exe' : ''}`;
+  const outname = `clawstudio-backend-${triple}${isWindows ? '.exe' : ''}`;
   const outfile = join(BINARIES_DIR, outname);
 
   process.stderr.write(`[build-sidecar] Building ${triple} → ${outname}\n`);

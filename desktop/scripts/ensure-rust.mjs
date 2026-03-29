@@ -149,7 +149,7 @@ function ensureSidecarBinary() {
   })();
 
   const isWindows = currentTriple.includes('windows');
-  const binaryName = `agentstudio-backend-${currentTriple}${isWindows ? '.exe' : ''}`;
+  const binaryName = `clawstudio-backend-${currentTriple}${isWindows ? '.exe' : ''}`;
   const binariesDir = join(__dirname, '..', 'src-tauri', 'binaries');
   const binaryPath = join(binariesDir, binaryName);
 
