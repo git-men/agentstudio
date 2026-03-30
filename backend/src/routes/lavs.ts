@@ -548,7 +548,7 @@ router.get('/:agentId/lavs-view', async (req, res) => {
       "connect-src 'self' https://unpkg.com https://cdn.sheetjs.com https://registry.npmmirror.com https://*.qpic.cn https://*.puui.qpic.cn",
       "img-src 'self' data: https:",
       "font-src 'self' data: https://unpkg.com https://registry.npmmirror.com",
-      "frame-ancestors 'self'",
+      "frame-ancestors 'self' http://localhost:3000 https://localhost:3000 http://localhost:3001 https://agentstudio.cc https://*.agentstudio.cc tauri://localhost",
     ].join('; '));
     // Prevent MIME type sniffing
     res.setHeader('X-Content-Type-Options', 'nosniff');

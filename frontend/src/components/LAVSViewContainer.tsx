@@ -15,7 +15,7 @@ import type { LAVSManifest } from 'lavs-client';
 import type { AgentConfig } from '../types';
 import { useAgentStore } from '../stores/useAgentStore';
 import { eventBus, EVENTS } from '../utils/eventBus';
-import { API_BASE } from '../lib/config';
+import { API_BASE, getCurrentHost } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 
 interface LAVSViewContainerProps {
@@ -40,11 +40,12 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
   // Subscribe to tool execution notifications from store
   const lastToolExecution = useAgentStore((state) => state.lastToolExecution);
 
-  // Initialize LAVS client with projectPath
+  // Initialize LAVS client with projectPath and resolved backend URL
   useEffect(() => {
     lavsClientRef.current = new LAVSClient({
       agentId: agent.id,
-      projectPath, // Pass projectPath for data isolation
+      baseURL: getCurrentHost(),
+      projectPath,
     });
   }, [agent.id, projectPath]);
 
@@ -332,10 +333,9 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     console.log('[LAVS] loadLocalComponent called', { path: _path, hasContainer: !!containerRef.current, projectPath });
     if (!containerRef.current) return;
 
-    // Construct the full URL to the component
-    // In development, this will be relative to the agent directory
-    // Pass projectPath in URL for data isolation
-    let componentURL = `/api/agents/${agent.id}/lavs-view`;
+    // Use the resolved backend host so the iframe works in Tauri prod mode
+    // where window.location.origin (tauri://localhost) differs from the API host.
+    let componentURL = `${getCurrentHost()}/api/agents/${agent.id}/lavs-view`;
     if (projectPath) {
       componentURL += `?projectPath=${encodeURIComponent(projectPath)}`;
     }
