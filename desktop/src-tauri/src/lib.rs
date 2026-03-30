@@ -450,14 +450,16 @@ fn start_backend(
 
     log::info!("Starting backend with ENGINE={engine}");
 
-    // Clean up any residual process on the default port from a previous session
-    cleanup_port(DEFAULT_BACKEND_PORT);
-
     if cfg!(debug_assertions) {
+        // Dev mode: the backend is started by beforeDevCommand (tsx watch).
+        // Do NOT cleanup_port — it would kill the running dev backend.
         // Dev mode: detect the backend started by beforeDevCommand,
         // then verify its ENGINE matches the user's selection.
         start_sidecar_dev(app, engine);
     } else {
+        // Prod mode: clean up any residual process on the default port
+        // from a previous session before spawning the sidecar binary.
+        cleanup_port(DEFAULT_BACKEND_PORT);
         spawn_backend_sidecar(app);
     }
     Ok(())
