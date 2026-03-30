@@ -468,8 +468,10 @@ export async function initializeSystemVersion(executablePath: string, engineType
       console.log(`✅ Created new system version: ${systemVersion.alias} (${systemVersion.id})`);
     }
 
-    if (storage.defaultVersionId !== systemVersion.id) {
-      console.log(`🔧 Setting system version as default provider (engine: ${engineType || 'claude-sdk'})`);
+    const currentDefault = storage.defaultVersionId;
+    const currentDefaultExists = currentDefault && storage.versions.some(v => v.id === currentDefault);
+    if (!currentDefaultExists) {
+      console.log(`🔧 Setting system version as default provider (engine: ${engineType || 'claude-sdk'}) — no valid default was set`);
       storage.defaultVersionId = systemVersion.id;
       changed = true;
     }

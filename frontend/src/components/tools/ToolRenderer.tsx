@@ -172,6 +172,7 @@ export const ToolRenderer: React.FC<ToolRendererProps> = ({ execution, onFronten
 
   switch (execution.toolName) {
     case 'Task':
+    case 'Agent':
       return <TaskTool execution={execution} />;
 
     case 'Bash':
