@@ -21,8 +21,7 @@ const ENGINE_OPTIONS: EngineOption[] = [
     value: 'claude-sdk',
     label: 'Claude Code',
     description: 'Official Claude Code SDK',
-    cliName: 'claude',
-    npmPackage: '@anthropic-ai/claude-code',
+    // claude-sdk uses the Agent SDK directly in the backend — no CLI required
   },
   {
     value: 'claude-internal-sdk',
