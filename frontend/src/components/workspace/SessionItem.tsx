@@ -1,6 +1,7 @@
-import React, { useMemo, useState, useCallback, useEffect } from 'react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
 import { useStore } from 'zustand';
-import { X } from 'lucide-react';
+import { X, Loader2, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { StoreApi } from 'zustand';
 import type { SessionState, SessionActions } from '../../stores/createSessionStore';
 import { createSessionStore } from '../../stores/createSessionStore';
@@ -51,21 +52,50 @@ export const SessionItem: React.FC<SessionItemProps> = ({
   onClick,
   onRemove,
 }) => {
-  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
+  const { t } = useTranslation('components');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
-  const handleRemoveClick = useCallback(
+  // Close popover on outside click
+  useEffect(() => {
+    if (!showConfirm) return;
+    const handler = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setShowConfirm(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showConfirm]);
+
+  const handleDeleteClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (showRemoveConfirm) {
-        onRemove?.(sessionId);
-        setShowRemoveConfirm(false);
-      } else {
-        setShowRemoveConfirm(true);
-        setTimeout(() => setShowRemoveConfirm(false), 3000);
-      }
+      if (deleting) return;
+      setShowConfirm(true);
     },
-    [sessionId, onRemove, showRemoveConfirm],
+    [deleting],
   );
+
+  const handleConfirmDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setDeleting(true);
+      setShowConfirm(false);
+      onRemove?.(sessionId);
+    },
+    [sessionId, onRemove],
+  );
+
+  const handleCancelDelete = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowConfirm(false);
+    },
+    [],
+  );
+
   const effectiveStore = storeApi ?? EMPTY_STORE;
   const isAiTyping = useStore(effectiveStore, (s) => s.isAiTyping);
   const status = useStore(effectiveStore, (s) => s.status);
@@ -93,7 +123,7 @@ export const SessionItem: React.FC<SessionItemProps> = ({
       onClick={onClick}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onClick(); }}
       className={`
-        w-full text-left px-3 py-2.5 rounded-lg transition-colors group cursor-pointer
+        relative w-full text-left px-3 py-2.5 rounded-lg transition-colors group cursor-pointer
         ${
           isActive
             ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700'
@@ -126,19 +156,50 @@ export const SessionItem: React.FC<SessionItemProps> = ({
 
         {onRemove && (
           <button
-            onClick={handleRemoveClick}
+            onClick={handleDeleteClick}
+            disabled={deleting}
             className={`
               flex-shrink-0 p-0.5 rounded transition-colors
-              ${showRemoveConfirm
-                ? 'text-red-500 bg-red-50 dark:bg-red-900/30 opacity-100'
+              ${deleting
+                ? 'text-gray-400 dark:text-gray-500 opacity-100 cursor-wait'
                 : 'text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400 opacity-0 group-hover:opacity-100'}
             `}
-            title={showRemoveConfirm ? 'Click again to confirm' : 'Remove session'}
+            title={deleting ? t('workspace.deleting', 'Deleting…') : t('workspace.deleteSession', 'Delete session')}
           >
-            <X className="w-3.5 h-3.5" />
+            {deleting
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Trash2 className="w-3.5 h-3.5" />}
           </button>
         )}
       </div>
+
+      {/* Delete confirmation popover */}
+      {showConfirm && (
+        <div
+          ref={popoverRef}
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full mt-1 z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 p-3 min-w-[180px]"
+        >
+          <p className="text-xs text-gray-600 dark:text-gray-300 mb-2">
+            {t('workspace.confirmDeleteSession', 'Delete this session?')}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleConfirmDelete}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded transition-colors"
+            >
+              <Trash2 className="w-3 h-3" />
+              {t('workspace.delete', 'Delete')}
+            </button>
+            <button
+              onClick={handleCancelDelete}
+              className="flex-1 px-2 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded transition-colors"
+            >
+              {t('workspace.cancel', 'Cancel')}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

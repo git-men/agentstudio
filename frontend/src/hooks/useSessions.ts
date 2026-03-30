@@ -82,6 +82,19 @@ export const cleanupSession = async (agentId: string, sessionId: string): Promis
   }
 };
 
+export const deleteProjectSession = async (projectPath: string, sessionId: string): Promise<void> => {
+  const url = new URL(`${API_BASE}/sessions/by-project/${encodeURIComponent(sessionId)}`);
+  url.searchParams.set('projectPath', projectPath);
+  const response = await authFetch(url.toString(), {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.error || 'Failed to delete session');
+  }
+};
+
 export const clearAllSessions = async (): Promise<{ clearedCount: number }> => {
   const response = await authFetch(`${API_BASE}/agents/sessions`, {
     method: 'DELETE',

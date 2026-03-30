@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAgent, useProjectSessions } from '../hooks/useAgents';
 import { useProjects } from '../hooks/useProjects';
+import { deleteProjectSession } from '../hooks/useSessions';
 import { useSharedStore } from '../stores/useSharedStore';
 import { sessionStoreManager } from '../services/SessionStoreManager';
 import { SessionStoreProvider } from '../stores/SessionStoreContext';
@@ -323,6 +324,7 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const handleRemoveSession = useCallback(
     (sessionId: string) => {
+      // Optimistic UI update first — remove immediately
       sessionStoreManager.dispose(sessionId);
       setSessionAgentMap((prev) => {
         const next = { ...prev };
@@ -335,8 +337,19 @@ export const ProjectWorkspacePage: React.FC = () => {
         );
         setActiveSessionId(remaining?.[0]?.id ?? null);
       }
+      // Optimistic cache update — strip the session from ALL matching query caches
+      if (projectPath) {
+        queryClient.setQueriesData(
+          { queryKey: ['project-sessions', projectPath] },
+          (old: any) => old ? { ...old, sessions: old.sessions?.filter((s: any) => s.id !== sessionId) } : old,
+        );
+        // Fire-and-forget backend deletion
+        deleteProjectSession(projectPath, sessionId).catch((err) =>
+          console.error('Failed to delete session from backend:', err),
+        );
+      }
     },
-    [activeSessionId, sessionsData],
+    [activeSessionId, sessionsData, projectPath, queryClient],
   );
 
   const handleSessionChange = useCallback(
