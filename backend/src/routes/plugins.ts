@@ -14,7 +14,7 @@ import { syncBuiltinMarketplaces, getBuiltinMarketplaceStatus } from '../service
 import { MarketplaceAddRequest, PluginInstallRequest, MarketplaceType } from '../types/plugins';
 
 // Valid marketplace types
-const VALID_MARKETPLACE_TYPES: MarketplaceType[] = ['git', 'github', 'local', 'cos'];
+const VALID_MARKETPLACE_TYPES: MarketplaceType[] = ['git', 'github', 'local', 'cos', 'archive'];
 
 const router: express.Router = express.Router();
 

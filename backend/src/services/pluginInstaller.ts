@@ -131,6 +131,8 @@ class PluginInstaller {
         await this.copyLocalMarketplace(source, marketplacePath);
       } else if (type === 'cos') {
         await this.downloadFromCOS(source, marketplacePath, cosConfig);
+      } else if (type === 'archive') {
+        await this.downloadAndExtractArchive(source, marketplacePath);
       }
 
       // Save marketplace metadata for sync operations
@@ -197,6 +199,9 @@ class PluginInstaller {
             break;
           case 'cos':
             await this.syncCOSMarketplace(marketplacePath, metadata);
+            break;
+          case 'archive':
+            await this.syncArchiveMarketplace(marketplacePath, metadata);
             break;
           case 'local':
             await this.syncLocalMarketplace(marketplacePath, metadata);
@@ -1061,7 +1066,8 @@ class PluginInstaller {
           remoteVersion = localResult.remoteVersion;
           break;
         }
-        case 'cos': {
+        case 'cos':
+        case 'archive': {
           const remoteManifest = await this.fetchRemoteManifest(metadata.source);
           if (remoteManifest) {
             remoteVersion = remoteManifest.version;

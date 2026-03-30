@@ -3,7 +3,7 @@ import * as path from 'path';
 import { pluginPaths } from './pluginPaths';
 import { pluginParser } from './pluginParser';
 import { getPluginInstaller } from './pluginInstallStrategy';
-import { InstalledPlugin, PluginMarketplace, AvailablePlugin, MarketplaceManifest } from '../types/plugins';
+import { InstalledPlugin, PluginMarketplace, AvailablePlugin, MarketplaceManifest, MarketplaceType } from '../types/plugins';
 
 /**
  * Plugin Scanner Service
@@ -57,29 +57,37 @@ class PluginScanner {
     // Count plugins
     const pluginNames = pluginPaths.listPlugins(marketplaceName);
 
-    // Try to determine source type
-    let type: 'git' | 'github' | 'local' = 'local';
+    // Determine source type: prefer metadata, fall back to heuristics
+    let type: MarketplaceType = 'local';
     let source = marketplacePath;
 
-    // Check if it's a git repository
-    const gitDir = path.join(marketplacePath, '.git');
-    if (fs.existsSync(gitDir)) {
-      type = 'git';
-      // Try to read remote URL
+    const metadataPath = path.join(marketplacePath, '.claude-plugin', '.agentstudio-metadata.json');
+    if (fs.existsSync(metadataPath)) {
       try {
-        const gitConfigPath = path.join(gitDir, 'config');
-        if (fs.existsSync(gitConfigPath)) {
-          const gitConfig = fs.readFileSync(gitConfigPath, 'utf-8');
-          const urlMatch = gitConfig.match(/url\s*=\s*(.+)/);
-          if (urlMatch) {
-            source = urlMatch[1].trim();
-            if (source.includes('github.com')) {
-              type = 'github';
+        const meta = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
+        if (meta.type) type = meta.type;
+        if (meta.source) source = meta.source;
+      } catch { /* fall through to heuristics */ }
+    } else {
+      // Heuristic: check if it's a git repository
+      const gitDir = path.join(marketplacePath, '.git');
+      if (fs.existsSync(gitDir)) {
+        type = 'git';
+        try {
+          const gitConfigPath = path.join(gitDir, 'config');
+          if (fs.existsSync(gitConfigPath)) {
+            const gitConfig = fs.readFileSync(gitConfigPath, 'utf-8');
+            const urlMatch = gitConfig.match(/url\s*=\s*(.+)/);
+            if (urlMatch) {
+              source = urlMatch[1].trim();
+              if (source.includes('github.com')) {
+                type = 'github';
+              }
             }
           }
+        } catch (error) {
+          console.error('Failed to read git config:', error);
         }
-      } catch (error) {
-        console.error('Failed to read git config:', error);
       }
     }
 

@@ -126,12 +126,15 @@ function releaseLock(): void {
 // ============================================================================
 
 /**
- * Parse a single BUILTIN_MARKETPLACES entry into a SyncTarget.
+ * Parse a single BUILTIN_MARKETPLACES entry (or DEFAULT_MARKETPLACE_SOURCE value)
+ * into a SyncTarget.
  * 
  * Format rules:
  *   - github:owner/repo[@branch]  → type: 'github'
  *   - git:url[@branch]            → type: 'git'
  *   - local:/path                 → type: 'local'
+ *   - archive:https://...         → type: 'archive' (HTTP(S) downloadable .tar.gz/.zip)
+ *   - cos:https://...             → type: 'cos' (legacy alias for archive)
  *   - /path or ./path or ../path  → type: 'local' (backward compatible, no prefix)
  */
 export function parseMarketplaceEntry(entry: string): SyncTarget | null {
@@ -154,6 +157,20 @@ export function parseMarketplaceEntry(entry: string): SyncTarget | null {
     return { name, type: 'git', source: value, branch: branch || 'main' };
   }
 
+  // archive: prefix — generic HTTP(S) downloadable archive
+  if (trimmed.startsWith('archive:')) {
+    const url = trimmed.slice('archive:'.length);
+    const name = deriveNameFromUrl(url);
+    return { name, type: 'archive', source: url };
+  }
+
+  // cos: prefix — legacy alias, treated as archive
+  if (trimmed.startsWith('cos:')) {
+    const url = trimmed.slice('cos:'.length);
+    const name = deriveNameFromUrl(url);
+    return { name, type: 'archive', source: url };
+  }
+
   // local: prefix (explicit)
   if (trimmed.startsWith('local:')) {
     const localPath = trimmed.slice('local:'.length);
@@ -162,6 +179,17 @@ export function parseMarketplaceEntry(entry: string): SyncTarget | null {
 
   // No prefix — treat as local path (backward compatible)
   return { name: path.basename(trimmed) || 'default', type: 'local', source: trimmed };
+}
+
+function deriveNameFromUrl(url: string): string {
+  try {
+    const pathname = new URL(url).pathname;
+    const base = path.basename(pathname)
+      .replace(/\.(tar\.gz|tgz|zip)$/, '');
+    return base || 'archive-marketplace';
+  } catch {
+    return 'archive-marketplace';
+  }
 }
 
 /**
@@ -188,13 +216,43 @@ export function extractBranch(source: string): { value: string; branch?: string 
 // ============================================================================
 
 /**
+ * Resolve the default marketplace source configuration.
+ * 
+ * Priority:
+ *   1. DEFAULT_MARKETPLACE_SOURCE env var (supports github:/local:/archive:/cos: prefixes)
+ *   2. Hardcoded GitHub repo (backward compatible default)
+ */
+function resolveDefaultMarketplaceSource(): SyncTarget {
+  const envSource = process.env.DEFAULT_MARKETPLACE_SOURCE;
+  if (envSource) {
+    const parsed = parseMarketplaceEntry(envSource);
+    if (parsed) {
+      parsed.name = DEFAULT_MARKETPLACE_NAME;
+      return parsed;
+    }
+    console.warn(`[DefaultMarketplace] Invalid DEFAULT_MARKETPLACE_SOURCE: "${envSource}", falling back to GitHub`);
+  }
+  return {
+    name: DEFAULT_MARKETPLACE_NAME,
+    type: 'github',
+    source: DEFAULT_MARKETPLACE_REPO,
+    branch: 'main',
+  };
+}
+
+/**
  * Initialize the AgentStudio official default marketplace.
  * 
  * Behavior:
- *   1. Already registered → skip addMarketplace, only reinstall plugins + import agents
- *   2. Not registered → clone from GitHub (HTTPS, shallow)
+ *   1. Already registered → sync latest content, reinstall plugins + import agents
+ *   2. Not registered → fetch from configured source (GitHub by default)
  * 
- * The source is always the hardcoded GitHub repo — no local discovery fallback.
+ * Source is configurable via DEFAULT_MARKETPLACE_SOURCE env var:
+ *   - github:owner/repo[@branch]  (default: jeffkit/as-marketplace)
+ *   - archive:https://...         (HTTP(S) downloadable .tar.gz/.zip)
+ *   - cos:https://...             (legacy alias for archive)
+ *   - local:/path                 (local directory)
+ * 
  * Controlled by DISABLE_DEFAULT_MARKETPLACE=true.
  */
 export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncResult> {
@@ -207,16 +265,16 @@ export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncRe
     agentsImported: 0,
   };
 
+  const sourceConfig = resolveDefaultMarketplaceSource();
+
   try {
     let alreadyExists = pluginPaths.marketplaceExists(DEFAULT_MARKETPLACE_NAME);
 
     if (alreadyExists) {
-      // Try to sync (git pull) to get latest content
       console.info('[DefaultMarketplace] Already registered, syncing latest content...');
       const syncResult = await pluginInstaller.syncMarketplace(DEFAULT_MARKETPLACE_NAME);
       if (!syncResult.success) {
-        // Sync failed (e.g., no .git dir, no metadata) — delete and re-clone
-        console.warn(`[DefaultMarketplace] Sync failed (${syncResult.error}), re-cloning...`);
+        console.warn(`[DefaultMarketplace] Sync failed (${syncResult.error}), re-fetching...`);
         const marketplacePath = pluginPaths.getMarketplacePath(DEFAULT_MARKETPLACE_NAME);
         fs.rmSync(marketplacePath, { recursive: true, force: true });
         alreadyExists = false;
@@ -224,16 +282,16 @@ export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncRe
     }
 
     if (!alreadyExists) {
-      console.info(`[DefaultMarketplace] Cloning from GitHub: ${DEFAULT_MARKETPLACE_REPO}`);
+      console.info(`[DefaultMarketplace] Fetching from ${sourceConfig.type}: ${sourceConfig.source}`);
       const result = await pluginInstaller.addMarketplace({
-        type: 'github',
-        source: DEFAULT_MARKETPLACE_REPO,
+        type: sourceConfig.type,
+        source: sourceConfig.source,
         name: DEFAULT_MARKETPLACE_NAME,
-        branch: 'main',
-        autoUpdate: { enabled: true, checkInterval: 60 },
+        branch: sourceConfig.branch,
+        autoUpdate: { enabled: true, checkInterval: sourceConfig.type === 'local' ? 5 : 60 },
       });
       if (!result.success) {
-        throw new Error(`Failed to clone marketplace: ${result.error}`);
+        throw new Error(`Failed to fetch marketplace: ${result.error}`);
       }
     }
 
@@ -421,8 +479,8 @@ async function addOrUpdateMarketplace(target: SyncTarget): Promise<void> {
       console.info(`[BuiltinMarketplaces] Re-syncing existing local: ${name}`);
       await pluginInstaller.removeMarketplace(name);
     } else {
-      // For github/git, the marketplace directory already has a .git — just reinstall plugins
-      console.info(`[BuiltinMarketplaces] Already registered (${type}): ${name}, skipping clone`);
+      // For github/git/archive, just reinstall plugins from existing content
+      console.info(`[BuiltinMarketplaces] Already registered (${type}): ${name}, skipping fetch`);
       return;
     }
   }
