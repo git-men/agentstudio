@@ -58,9 +58,15 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 interface McpPresetMarketProps {
   onInstalled?: () => void;
+  /** 只显示该分类（隐藏分类筛选栏） */
+  filterCategory?: string;
+  /** 从列表和筛选栏中排除该分类 */
+  excludeCategory?: string;
+  /** 隐藏搜索框 */
+  hideSearch?: boolean;
 }
 
-export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled }) => {
+export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled, filterCategory, excludeCategory, hideSearch }) => {
   const { t, i18n } = useTranslation('pages');
   const isZh = i18n.language?.startsWith('zh');
 
@@ -68,7 +74,7 @@ export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled })
   const [categories, setCategories] = useState<PresetCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState(filterCategory || 'all');
   const [installingId, setInstallingId] = useState<string | null>(null);
 
   // Install dialog state
@@ -96,8 +102,16 @@ export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled })
     loadPresets();
   }, [loadPresets]);
 
+  const visibleCategories = useMemo(() => {
+    if (filterCategory) return [];
+    if (excludeCategory) return categories.filter(c => c.id !== excludeCategory);
+    return categories;
+  }, [categories, filterCategory, excludeCategory]);
+
   const filteredPresets = useMemo(() => {
     return presets.filter(p => {
+      if (filterCategory) return p.category === filterCategory;
+      if (excludeCategory && p.category === excludeCategory) return false;
       const matchesCategory = selectedCategory === 'all' || p.category === selectedCategory;
       const matchesSearch = !searchQuery ||
         p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -105,7 +119,7 @@ export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled })
         p.serverName.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesCategory && matchesSearch;
     });
-  }, [presets, selectedCategory, searchQuery]);
+  }, [presets, selectedCategory, searchQuery, filterCategory, excludeCategory]);
 
   const handleInstallClick = (preset: PresetMcpServer) => {
     if (preset.installed) return;
@@ -230,35 +244,39 @@ export const McpPresetMarket: React.FC<McpPresetMarketProps> = ({ onInstalled })
     <div>
       {/* Search + Category Filter */}
       <div className="mb-6 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder={t('mcp.presets.searchPlaceholder', { defaultValue: 'Search MCP servers...' })}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-3 w-full border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-          />
-        </div>
+        {!hideSearch && (
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder={t('mcp.presets.searchPlaceholder', { defaultValue: 'Search MCP servers...' })}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-4 py-3 w-full border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+            />
+          </div>
+        )}
 
-        <div className="flex flex-wrap gap-2">
-          {categories.map(cat => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
-                selectedCategory === cat.id
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }`}
-            >
-              {cat.id !== 'all' && (
-                <span className="mr-1">{CATEGORY_ICONS[cat.id] || '📦'}</span>
-              )}
-              {isZh ? cat.labelZh : cat.label}
-            </button>
-          ))}
-        </div>
+        {!filterCategory && (
+          <div className="flex flex-wrap gap-2">
+            {visibleCategories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => setSelectedCategory(cat.id)}
+                className={`px-3 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                  selectedCategory === cat.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+              >
+                {cat.id !== 'all' && (
+                  <span className="mr-1">{CATEGORY_ICONS[cat.id] || '📦'}</span>
+                )}
+                {isZh ? cat.labelZh : cat.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Cards Grid */}
