@@ -1,13 +1,29 @@
 name: Agent CRUD 生命周期
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取 Agent 列表"
     request:
       method: GET
       url: "{{config.base_url}}/api/agents"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/agents"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         id: "e2e-test-agent"
@@ -42,7 +58,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -55,7 +71,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         id: "{{runtime.agent_id}}"
@@ -76,7 +92,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -88,7 +104,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -99,7 +115,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -109,5 +125,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/agents/{{runtime.agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

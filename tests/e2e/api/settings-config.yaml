@@ -1,13 +1,29 @@
 name: 设置与配置信息
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取配置信息"
     request:
       method: GET
       url: "{{config.base_url}}/api/config"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/settings/global-memory"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -25,7 +41,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/settings/versions"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -34,7 +50,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/version"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -43,7 +59,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/version/info"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -52,6 +68,6 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/network-info"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200

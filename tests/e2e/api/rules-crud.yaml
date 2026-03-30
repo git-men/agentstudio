@@ -2,12 +2,27 @@ name: 规则管理 CRUD 生命周期
 sequential: true
 
 setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
   - name: "清理可能残留的测试规则"
     request:
       method: DELETE
       url: "{{config.base_url}}/api/rules/global:e2e-test-rule"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
 
 cases:
@@ -16,7 +31,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/rules"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -25,7 +40,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/rules"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-test-rule"
@@ -44,7 +59,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -57,7 +72,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-test-rule"
@@ -71,7 +86,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -82,7 +97,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/rules/{{runtime.rule_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -92,5 +107,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/rules/global:e2e-test-rule"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

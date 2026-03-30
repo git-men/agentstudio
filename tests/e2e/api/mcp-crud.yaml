@@ -1,13 +1,29 @@
 name: MCP 服务管理 CRUD
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取 MCP 配置列表"
     request:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-test-mcp"
@@ -32,7 +48,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -41,7 +57,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-test-mcp"
@@ -57,7 +73,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -66,7 +82,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -76,5 +92,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/mcp/e2e-test-mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

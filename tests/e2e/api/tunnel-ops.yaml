@@ -2,12 +2,27 @@ name: 隧道连接与批量操作
 sequential: true
 
 setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
   - name: "创建测试隧道 A"
     request:
       method: POST
       url: "{{config.base_url}}/api/tunnel/add"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         label: "Ops 测试隧道 A"
@@ -27,7 +42,7 @@ setup:
       method: POST
       url: "{{config.base_url}}/api/tunnel/add"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         label: "Ops 测试隧道 B"
@@ -50,7 +65,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -62,7 +77,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/disconnect"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -75,7 +90,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/connect"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
     expect:
       status: 200
@@ -88,7 +103,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -99,7 +114,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/non-existent-id/connect"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
     expect:
       status: 500
@@ -109,7 +124,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/non-existent-id/disconnect"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -120,7 +135,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/disconnect-all"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -132,7 +147,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/list"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -144,7 +159,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/connect-all"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -156,7 +171,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/list"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -171,7 +186,7 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_a_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
 
   - name: "清理隧道 B"
@@ -179,5 +194,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_b_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

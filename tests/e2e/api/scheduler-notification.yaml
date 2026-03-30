@@ -1,13 +1,29 @@
 name: 定时任务 IM 通知配置
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "创建带通知配置的定时任务（always 策略）"
     request:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-notify-always"
@@ -33,7 +49,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -47,7 +63,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-notify-agent-decided"
@@ -73,7 +89,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -86,7 +102,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-notify-always"
@@ -108,7 +124,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -121,7 +137,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-notify-custom-channel"
@@ -150,7 +166,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_channel_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -166,7 +182,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-no-notify"
@@ -189,7 +205,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_no_notify_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -201,7 +217,7 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_always_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
 
   - name: "清理 agent_decided 策略任务"
@@ -209,7 +225,7 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
 
   - name: "清理自定义渠道任务"
@@ -217,7 +233,7 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_channel_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
 
   - name: "清理无通知任务"
@@ -225,5 +241,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_no_notify_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

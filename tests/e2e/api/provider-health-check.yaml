@@ -1,13 +1,29 @@
 name: 模型供应商可用性检查
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取 Claude 版本列表，确认系统版本存在"
     request:
       method: GET
       url: "{{config.base_url}}/api/settings/claude-versions"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -21,7 +37,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions/claude/test"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
     expect:
       status: 200
@@ -35,7 +51,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions/non-existent-id/test"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
     expect:
       status: 404
@@ -45,7 +61,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-test-provider"
@@ -68,7 +84,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}/test"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
     expect:
       status: 200
@@ -80,7 +96,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}/set-default"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -89,7 +105,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/settings/claude-versions"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -101,5 +117,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

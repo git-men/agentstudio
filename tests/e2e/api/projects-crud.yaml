@@ -1,13 +1,29 @@
 name: 项目 CRUD 生命周期
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取项目列表"
     request:
       method: GET
       url: "{{config.base_url}}/api/projects"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/projects/create"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         projectName: "e2e-test-project"
@@ -35,7 +51,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/projects"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -44,7 +60,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         description: "E2E test project - updated"
@@ -56,7 +72,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -67,7 +83,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -77,5 +93,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/projects/by-id/{{runtime.project_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

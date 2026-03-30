@@ -22,7 +22,6 @@ service:
 
   vars:
     base_url: http://localhost:14936
-    auth_header: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhdXRoZW50aWNhdGVkIjp0cnVlLCJpc3N1ZWRBdCI6MTc3Mjk4MjY3MiwiZXhwaXJlc0F0IjoxODA0NTE4NjcyLCJpYXQiOjE3NzI5ODI2NzIsImV4cCI6MTgwNDUxODY3Mn0.Zh2tYt0hUNXFqvMScxHREj6g2nedh3_sTaSfw106pZs"
 
 isolation:
   portRange: [14900, 14999]

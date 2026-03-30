@@ -1,13 +1,29 @@
 name: 定时任务 CRUD 生命周期
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取定时任务列表"
     request:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -25,7 +41,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-cron-test"
@@ -48,7 +64,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -59,7 +75,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         name: "e2e-cron-test-updated"
@@ -78,7 +94,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}/toggle"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -87,7 +103,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -96,7 +112,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/task-executor/stats"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -105,7 +121,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/task-executor/health"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -115,5 +131,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/scheduled-tasks/{{runtime.task_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

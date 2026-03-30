@@ -5,11 +5,26 @@ variables:
   test_agent_id: "e2e-yaml-{{timestamp}}"
 
 setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
   - name: "注入认证令牌"
     browser:
       action: setLocalStorage
       storage:
-        auth-storage: '{"state":{"token":"{{config.auth_header}}","authenticated":true},"version":0}'
+        auth-storage: '{"state":{"token":"{{runtime.login_token}}","authenticated":true},"version":0}'
   - name: "进入仪表盘"
     browser:
       action: goto
@@ -135,5 +150,5 @@ teardown:
       method: DELETE
       path: "/api/agents/{{test_agent_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true

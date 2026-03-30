@@ -8,6 +8,21 @@ setup:
       timeout: "120s"
 
 cases:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
   - name: "服务启动后健康检查正常"
     request:
       method: GET
@@ -20,7 +35,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -33,7 +48,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -47,7 +62,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -61,7 +76,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -75,7 +90,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -89,7 +104,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -103,7 +118,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/mcp"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -118,7 +133,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/mcp/agentstudio-admin/validate"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -130,7 +145,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/mcp/agentstudio-admin/validate"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:

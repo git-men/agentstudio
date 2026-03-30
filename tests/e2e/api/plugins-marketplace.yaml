@@ -1,13 +1,29 @@
 name: 插件与市场
 sequential: true
 
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
 cases:
   - name: "获取市场列表"
     request:
       method: GET
       url: "{{config.base_url}}/api/plugins/marketplaces"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -16,7 +32,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/plugins/available"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -25,7 +41,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/plugins/installed"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -34,7 +50,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/plugins/marketplaces/check-all-updates"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
 
@@ -43,6 +59,6 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/marketplace-skills"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200

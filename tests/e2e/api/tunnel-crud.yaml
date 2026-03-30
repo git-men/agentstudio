@@ -8,6 +8,21 @@ setup:
       timeout: "120s"
 
 cases:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
   # --- 列表与基础 API ---
 
   - name: "隧道列表 API 返回 200"
@@ -15,7 +30,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/list"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -33,7 +48,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/server-info"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body: {}
     expect:
@@ -46,7 +61,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/check-name"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 400
 
@@ -57,7 +72,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/add"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         serverUrl: "https://example.com"
@@ -71,7 +86,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/add"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         token: "tun_test_token"
@@ -85,7 +100,7 @@ cases:
       method: POST
       url: "{{config.base_url}}/api/tunnel/add"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         label: "E2E 测试隧道"
@@ -113,7 +128,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/list"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -125,7 +140,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/config"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -137,7 +152,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -149,7 +164,7 @@ cases:
       method: PUT
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/config"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
         label: "E2E 测试隧道 (已更新)"
@@ -167,7 +182,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/non-existent-id/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -176,7 +191,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -187,7 +202,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -196,7 +211,7 @@ cases:
       method: DELETE
       url: "{{config.base_url}}/api/tunnel/non-existent-id"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 404
 
@@ -207,7 +222,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/status"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -218,7 +233,7 @@ cases:
       method: GET
       url: "{{config.base_url}}/api/tunnel/config"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     expect:
       status: 200
       body:
@@ -230,5 +245,5 @@ teardown:
       method: DELETE
       url: "{{config.base_url}}/api/tunnel/{{runtime.tunnel_id}}"
       headers:
-        Authorization: "{{config.auth_header}}"
+        Authorization: "Bearer {{runtime.login_token}}"
     ignoreError: true
