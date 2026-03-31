@@ -1189,6 +1189,9 @@ router.delete('/by-project/:sessionId', async (req, res) => {
     // Clean up from in-memory SessionManager
     await sessionManager.removeSession(sessionId).catch(() => {});
 
+    // Clean up custom name mapping if present
+    sessionNameService.clearName(sessionId).catch(() => {});
+
     res.json({ success: deleted });
   } catch (error) {
     console.error('Failed to delete project session:', error);
@@ -1533,6 +1536,10 @@ router.delete('/:agentId/:sessionId', (req, res) => {
     // Use project-specific AgentStorage for sessions
     const agentStorage = getAgentStorageForRequest(req);
     const deleted = agentStorage.deleteSession(agentId, sessionId);
+
+    // Clean up custom name mapping if present
+    sessionNameService.clearName(sessionId).catch(() => {});
+
     res.json({ success: deleted });
   } catch (error) {
     console.error('Failed to delete agent session:', error);
