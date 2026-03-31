@@ -1112,13 +1112,14 @@ router.get('/by-project', async (req, res) => {
 });
 
 // PATCH /api/sessions/by-project/:sessionId - 重命名会话（Project 视图）
-router.patch('/by-project/:sessionId', async (req, res) => {
+async function handleRenameSession(req: express.Request, res: express.Response): Promise<void> {
   try {
     const { sessionId } = req.params;
     const { title } = req.body;
     const trimmed = typeof title === 'string' ? title.trim() : '';
     if (!trimmed || trimmed.length > 100) {
-      return res.status(400).json({ error: 'title 无效：不能为空且不超过 100 字符' });
+      res.status(400).json({ error: 'title 无效：不能为空且不超过 100 字符' });
+      return;
     }
     await sessionNameService.setName(sessionId, trimmed);
     res.json({ success: true });
@@ -1126,7 +1127,9 @@ router.patch('/by-project/:sessionId', async (req, res) => {
     console.error('Failed to rename session:', error);
     res.status(500).json({ error: 'Failed to rename session' });
   }
-});
+}
+
+router.patch('/by-project/:sessionId', handleRenameSession);
 
 // DELETE /api/sessions/by-project/:sessionId - Delete a session by project path
 router.delete('/by-project/:sessionId', async (req, res) => {
@@ -1514,21 +1517,7 @@ router.post('/:agentId', (req, res) => {
 });
 
 // PATCH /api/sessions/:agentId/:sessionId - 重命名会话（Agent 视图）
-router.patch('/:agentId/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const { title } = req.body;
-    const trimmed = typeof title === 'string' ? title.trim() : '';
-    if (!trimmed || trimmed.length > 100) {
-      return res.status(400).json({ error: 'title 无效：不能为空且不超过 100 字符' });
-    }
-    await sessionNameService.setName(sessionId, trimmed);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Failed to rename session:', error);
-    res.status(500).json({ error: 'Failed to rename session' });
-  }
-});
+router.patch('/:agentId/:sessionId', handleRenameSession);
 
 // DELETE /api/sessions/:agentId/:sessionId - Delete session
 router.delete('/:agentId/:sessionId', (req, res) => {

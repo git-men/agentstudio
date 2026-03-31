@@ -20,6 +20,8 @@ function getFilePath(): string {
 
 class SessionNameService {
   private names = new Map<string, string>();
+  /** Serializes concurrent disk writes to prevent race conditions */
+  private writeQueue: Promise<void> = Promise.resolve();
 
   /** 同步加载文件；在 app.listen() 之前调用 */
   initialize(): void {
@@ -70,7 +72,12 @@ class SessionNameService {
     });
   }
 
-  private async saveToDisk(): Promise<void> {
+  private saveToDisk(): Promise<void> {
+    this.writeQueue = this.writeQueue.then(() => this.flushToDisk());
+    return this.writeQueue;
+  }
+
+  private async flushToDisk(): Promise<void> {
     const dir = getConfigDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     const filePath = getFilePath();
