@@ -70,9 +70,7 @@ export async function sendToIM(params: DispatchIMParams): Promise<DispatchIMResu
   }
 
   const { baseUrl, headers } = conn;
-  // Upgrade HTTP to HTTPS to avoid 307 redirect stripping Authorization headers
-  const effectiveBaseUrl = baseUrl.replace(/^http:\/\//, 'https://');
-  const url = `${effectiveBaseUrl}/api/im/send`;
+  const url = `${baseUrl}/api/im/send`;
 
   const body = {
     message_content: params.messageContent,
