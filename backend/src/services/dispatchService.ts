@@ -26,17 +26,16 @@ interface DispatchIMResult {
 }
 
 function getDispatchConnection(): { baseUrl: string; headers: Record<string, string> } | null {
-  // Primary: tunnel config (same source as wecomBotTools)
+  // Primary: tunnel config — use the same entry for both serverUrl and enterpriseToken
   const configs = tunnelService.getAllConfigs();
   const config = configs[0];
   if (config?.serverUrl) {
     const baseUrl = config.serverUrl.replace(/\/+$/, '');
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    const raw = (tunnelService as any).configs?.values()?.next()?.value as
-      | { enterpriseToken?: string }
-      | undefined;
-    if (raw?.enterpriseToken) {
-      headers['Authorization'] = `Bearer ${raw.enterpriseToken}`;
+    const rawConfigs = (tunnelService as any).configs as Map<string, { enterpriseToken?: string }> | undefined;
+    const rawConfig = rawConfigs?.get(config.id);
+    if (rawConfig?.enterpriseToken) {
+      headers['Authorization'] = `Bearer ${rawConfig.enterpriseToken}`;
     }
     return { baseUrl, headers };
   }
