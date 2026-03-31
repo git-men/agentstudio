@@ -1,11 +1,11 @@
-import { useState, FormEvent, useEffect } from 'react';
+import { useState, FormEvent, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../hooks/useAuth';
 import { useBackendServices } from '../hooks/useBackendServices';
 import { resetBackendOnboarding } from '../utils/onboardingStorage';
 import { ErrorMessage } from '../components/ErrorMessage';
-import { Server, ChevronDown, ChevronUp, Settings, Trash2, Plus, CheckCircle, XCircle, AlertCircle, Rocket, Unlock } from 'lucide-react';
+import { Server, ChevronDown, ChevronUp, Settings, Trash2, Plus, CheckCircle, XCircle, AlertCircle, Rocket, Unlock, Loader2 } from 'lucide-react';
 
 export function LoginPage() {
   const { t } = useTranslation('pages');
@@ -33,63 +33,91 @@ export function LoginPage() {
   const [checkingPasswordRequired, setCheckingPasswordRequired] = useState(true);
   const [passwordRequired, setPasswordRequired] = useState(true);
   const [autoLoginAttempted, setAutoLoginAttempted] = useState(false);
+  const [backendUnavailable, setBackendUnavailable] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/';
 
-  // Check if password is required on mount and when service changes
-  useEffect(() => {
-    let isMounted = true;
+  const doCheckAndAutoLogin = useCallback(async (isMountedRef: { current: boolean }) => {
+    if (!currentService) {
+      setCheckingPasswordRequired(false);
+      return;
+    }
 
-    const checkAndAutoLogin = async () => {
-      if (!currentService) {
-        setCheckingPasswordRequired(false);
-        return;
-      }
+    setCheckingPasswordRequired(true);
 
-      setCheckingPasswordRequired(true);
-      setAutoLoginAttempted(false);
+    try {
+      const result = await checkPasswordRequired();
 
-      try {
-        const result = await checkPasswordRequired();
-        
-        if (!isMounted) return;
+      if (!isMountedRef.current) return;
 
-        if (result.success) {
-          setPasswordRequired(result.passwordRequired);
+      if (result.success) {
+        setBackendUnavailable(false);
+        setPasswordRequired(result.passwordRequired);
 
-          // Auto login if password is not required
-          if (!result.passwordRequired && !autoLoginAttempted) {
-            setAutoLoginAttempted(true);
-            const loginSuccess = await loginWithoutPassword();
-            if (loginSuccess && isMounted) {
-              // Use navigate with reload to ensure API_BASE is re-initialized
-              // while respecting the router's basename
-              navigate(from, { replace: true });
-              window.location.reload();
-            }
+        if (!result.passwordRequired) {
+          setAutoLoginAttempted(true);
+          const loginSuccess = await loginWithoutPassword();
+          if (loginSuccess && isMountedRef.current) {
+            navigate(from, { replace: true });
+            window.location.reload();
           }
-        } else {
-          // Default to requiring password on error
-          setPasswordRequired(true);
         }
-      } catch (err) {
-        console.error('Failed to check password requirement:', err);
-        if (isMounted) {
-          setPasswordRequired(true);
-        }
-      } finally {
-        if (isMounted) {
-          setCheckingPasswordRequired(false);
-        }
+      } else if (result.isNetworkError) {
+        setBackendUnavailable(true);
+        setRetryCount(prev => prev + 1);
+      } else {
+        setBackendUnavailable(false);
+        setPasswordRequired(true);
       }
-    };
+    } catch (err) {
+      console.error('Failed to check password requirement:', err);
+      if (isMountedRef.current) {
+        setBackendUnavailable(true);
+        setRetryCount(prev => prev + 1);
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setCheckingPasswordRequired(false);
+      }
+    }
+  }, [currentService, checkPasswordRequired, loginWithoutPassword, navigate, from]);
 
-    checkAndAutoLogin();
+  // Check password requirement on mount and when service changes
+  useEffect(() => {
+    const isMountedRef = { current: true };
+    setAutoLoginAttempted(false);
+    setBackendUnavailable(false);
+    setRetryCount(0);
+
+    doCheckAndAutoLogin(isMountedRef);
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentService?.id]); // Only re-run when service changes
+
+  // Auto-retry when backend is unavailable
+  useEffect(() => {
+    if (!backendUnavailable || checkingPasswordRequired) return;
+
+    const isMountedRef = { current: true };
+    retryTimerRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        doCheckAndAutoLogin(isMountedRef);
+      }
+    }, 2000);
+
+    return () => {
+      isMountedRef.current = false;
+      if (retryTimerRef.current) {
+        clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, [backendUnavailable, retryCount, checkingPasswordRequired, doCheckAndAutoLogin]);
 
   const testConnection = async (serviceUrl: string, serviceId?: string) => {
     if (serviceId) {
@@ -202,7 +230,20 @@ export function LoginPage() {
           </div>
 
           {/* Login Form or Auto-Login Status */}
-          {checkingPasswordRequired ? (
+          {backendUnavailable ? (
+            // Backend not reachable - show waiting state with auto-retry
+            <div className="space-y-6 text-center">
+              <div className="flex flex-col items-center space-y-3">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <span className="text-gray-600 dark:text-gray-400">
+                  {t('login.backendStarting', '后端服务启动中，请稍候...')}
+                </span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">
+                  {t('login.autoRetrying', '正在自动重试连接')} ({retryCount})
+                </span>
+              </div>
+            </div>
+          ) : checkingPasswordRequired ? (
             // Loading state while checking password requirement
             <div className="space-y-6 text-center">
               <div className="flex items-center justify-center space-x-3">

@@ -120,6 +120,10 @@
     "messageCount": "{{count}} 条消息",
     "newSession": "新建会话",
     "deleteSession": "删除会话",
+    "confirmDeleteSession": "确定删除此会话？",
+    "delete": "删除",
+    "cancel": "取消",
+    "deleting": "删除中…",
     "renameSession": "重命名会话"
   },
   "toolSelector": {
@@ -1390,6 +1394,11 @@
     "removeSession": "移除会话",
     "removeConfirm": "再次点击确认",
     "sessionRemoved": "会话已移除",
+    "deleteSession": "删除会话",
+    "confirmDeleteSession": "确定删除此会话？",
+    "delete": "删除",
+    "cancel": "取消",
+    "deleting": "删除中…",
     "status": {
       "idle": "空闲",
       "running": "运行中",

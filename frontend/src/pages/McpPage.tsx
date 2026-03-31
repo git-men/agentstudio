@@ -19,7 +19,8 @@ import {
   ChevronUp,
   Copy,
   Store,
-  Settings2
+  Settings2,
+  Star
 } from 'lucide-react';
 import { McpPresetMarket } from '../components/McpPresetMarket';
 import {
@@ -57,13 +58,14 @@ interface McpServerConfig {
 
 
 
-type McpTab = 'my-servers' | 'marketplace';
+type McpTab = 'my-servers' | 'marketplace' | 'internal';
 
 export const McpPage: React.FC = () => {
   const { t } = useTranslation('pages');
   const { isMobile } = useMobileContext();
   const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<McpTab>('my-servers');
+  const [isInternalAccessible, setIsInternalAccessible] = useState(false);
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [readOnly, setReadOnly] = useState(false);
@@ -121,6 +123,21 @@ export const McpPage: React.FC = () => {
   // Load configs on component mount
   React.useEffect(() => {
     loadMcpConfigs();
+  }, []);
+
+  // Check if agentstudio.woa.com is accessible (internal network)
+  React.useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    fetch('https://agentstudio.woa.com', {
+      signal: controller.signal,
+      mode: 'no-cors',
+      cache: 'no-store',
+    })
+      .then(() => setIsInternalAccessible(true))
+      .catch(() => setIsInternalAccessible(false))
+      .finally(() => clearTimeout(timeout));
+    return () => { controller.abort(); clearTimeout(timeout); };
   }, []);
 
   // Debounce search query
@@ -525,14 +542,31 @@ export const McpPage: React.FC = () => {
             }`}
           >
             <Store className="w-4 h-4" />
-            {t('mcp.tabs.marketplace', { defaultValue: 'Recommended MCPs' })}
+            {t('mcp.tabs.marketplace', { defaultValue: '推荐 MCP' })}
           </button>
+          {isInternalAccessible && (
+            <button
+              onClick={() => setActiveTab('internal')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'internal'
+                  ? 'border-blue-600 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+              }`}
+            >
+              <Star className="w-4 h-4" />
+              {t('mcp.tabs.internal', { defaultValue: '鹅厂精选' })}
+            </button>
+          )}
         </div>
 
       </div>
 
       {activeTab === 'marketplace' && (
-        <McpPresetMarket onInstalled={loadMcpConfigs} />
+        <McpPresetMarket onInstalled={loadMcpConfigs} excludeCategory="internal" />
+      )}
+
+      {activeTab === 'internal' && isInternalAccessible && (
+        <McpPresetMarket onInstalled={loadMcpConfigs} filterCategory="internal" hideSearch />
       )}
 
       {activeTab === 'my-servers' && <>

@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../../frontend/dist",
     "devUrl": "http://localhost:3100",
-    "beforeDevCommand": "PORT=4200 TAURI_DESKTOP=1 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_PORT=4200 VITE_API_BASE=/api pnpm --filter frontend dev",
-    "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && cross-env VITE_TAURI=true pnpm --filter frontend build"
+    "beforeDevCommand": "PORT=4938 TAURI_DESKTOP=1 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_PORT=4938 VITE_API_BASE=/api pnpm --filter frontend dev",
+    "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && VITE_TAURI=true pnpm --filter frontend build"
   },
   "bundle": {
     "active": true,

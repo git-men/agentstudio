@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { LAVSClient } from 'lavs-client';
 import type { LAVSManifest } from 'lavs-client';
+import { getCurrentHost } from '../lib/config';
 
 export function useAgentLAVS(agentId: string) {
   const [hasLAVS, setHasLAVS] = useState(false);
@@ -26,7 +27,7 @@ export function useAgentLAVS(agentId: string) {
 
     const checkLAVS = async () => {
       try {
-        const client = new LAVSClient({ agentId });
+        const client = new LAVSClient({ agentId, baseURL: getCurrentHost() });
         const manifestData = await client.getManifest();
 
         setHasLAVS(true);

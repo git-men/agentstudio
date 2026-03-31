@@ -120,6 +120,10 @@
     "messageCount": "{{count}} messages",
     "newSession": "New Session",
     "deleteSession": "Delete Session",
+    "confirmDeleteSession": "Delete this session?",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleting": "Deleting…",
     "renameSession": "Rename Session"
   },
   "toolSelector": {
@@ -1393,6 +1397,11 @@
     "removeSession": "Remove session",
     "removeConfirm": "Click again to confirm",
     "sessionRemoved": "Session removed",
+    "deleteSession": "Delete session",
+    "confirmDeleteSession": "Delete this session?",
+    "delete": "Delete",
+    "cancel": "Cancel",
+    "deleting": "Deleting…",
     "status": {
       "idle": "Idle",
       "running": "Running",

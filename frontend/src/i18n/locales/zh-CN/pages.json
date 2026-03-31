@@ -71,7 +71,9 @@
     "checkingConnection": "正在检查连接...",
     "autoLoggingIn": "正在自动登录...",
     "noPasswordRequired": "此服务未设置密码，可直接登录",
-    "enterSystem": "进入系统"
+    "enterSystem": "进入系统",
+    "backendStarting": "后端服务启动中，请稍候...",
+    "autoRetrying": "正在自动重试连接"
   },
   "landing": {
     "pageTitle": "ClawStudio - Agent 工作台 | 多模型 AI Agent 协作工作台",

@@ -1110,6 +1110,74 @@ router.get('/by-project', async (req, res) => {
   }
 });
 
+// DELETE /api/sessions/by-project/:sessionId - Delete a session by project path
+router.delete('/by-project/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
+
+    if (!projectPath) {
+      return res.status(400).json({ error: 'projectPath query parameter is required' });
+    }
+
+    // Try engine-level deletion first
+    const defaultEngine = engineManager.getEngine(engineManager.getDefaultEngineType());
+    if (defaultEngine.deleteSession) {
+      const deleted = await defaultEngine.deleteSession(projectPath, sessionId);
+      if (deleted) {
+        // Also clean up from in-memory SessionManager if active
+        await sessionManager.removeSession(sessionId).catch(() => {});
+        return res.json({ success: true });
+      }
+    }
+
+    // Fallback: delete Claude history .jsonl file
+    const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
+    const allDirs = getAllProjectsDirs();
+    let deleted = false;
+
+    for (const projectsDir of allDirs) {
+      const historyDir = path.join(projectsDir, claudeProjectPath);
+      const filePath = path.join(historyDir, `${sessionId}.jsonl`);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+        console.log(`🗑️  Deleted session file: ${filePath}`);
+        deleted = true;
+        break;
+      }
+    }
+
+    // Also try .cc-sessions storage
+    if (!deleted) {
+      const agentStorage = new AgentStorage(projectPath);
+      // Try deleting from all agent subdirectories
+      const sessionsBaseDir = path.join(projectPath, '.cc-sessions');
+      if (fs.existsSync(sessionsBaseDir)) {
+        const agentDirs = fs.readdirSync(sessionsBaseDir).filter(f => {
+          try { return fs.statSync(path.join(sessionsBaseDir, f)).isDirectory(); } catch { return false; }
+        });
+        for (const agentDir of agentDirs) {
+          const filePath = path.join(sessionsBaseDir, agentDir, `${sessionId}.json`);
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+            console.log(`🗑️  Deleted .cc-sessions file: ${filePath}`);
+            deleted = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // Clean up from in-memory SessionManager
+    await sessionManager.removeSession(sessionId).catch(() => {});
+
+    res.json({ success: deleted });
+  } catch (error) {
+    console.error('Failed to delete project session:', error);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
 // GET /api/sessions/:agentId - Get agent sessions
 router.get('/:agentId', async (req, res) => {
   try {
