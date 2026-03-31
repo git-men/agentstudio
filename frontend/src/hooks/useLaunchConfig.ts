@@ -53,20 +53,21 @@ export function useLaunchConfig() {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
 
-        const [saved, accessible] = await Promise.all([
-          invoke<LaunchConfig>('load_launch_config').catch(() => null),
-          invoke<boolean>('check_domain_accessible', { domain: 'agentstudio.woa.com' }).catch(() => false),
-        ]);
-
+        // Load saved config first so the UI can render quickly
+        const saved = await invoke<LaunchConfig>('load_launch_config').catch(() => null);
         if (saved) {
           setConfig(saved);
-        } else if (accessible) {
+        }
+        setLoading(false);
+
+        // Domain check runs in the background — UI shows all engines until it resolves
+        const accessible = await invoke<boolean>('check_domain_accessible', { domain: 'agentstudio.woa.com' }).catch(() => false);
+        if (!saved && accessible) {
           setConfig({ engine: 'claude-internal-sdk' });
         }
         setInternalAccessible(accessible);
       } catch (e) {
         console.warn('Failed to load launch config:', e);
-      } finally {
         setLoading(false);
       }
     })();

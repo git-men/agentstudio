@@ -24,7 +24,8 @@ export const useSkills = (options?: {
   return useQuery({
     queryKey: skillKeys.list(options || {}),
     queryFn: () => skillsAPI.getAllSkills(options),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 30 * 1000, // 30 seconds - skills can change on disk anytime
+    refetchOnMount: 'always', // Always refetch when page is visited
   });
 };
 
@@ -32,7 +33,8 @@ export const useUserSkills = (includeDisabled = false) => {
   return useQuery({
     queryKey: skillKeys.list({ scope: 'user', includeDisabled }),
     queryFn: () => skillsAPI.getAllSkills({ scope: 'user', includeDisabled }),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchOnMount: 'always',
   });
 };
 
@@ -40,7 +42,8 @@ export const useProjectSkills = (includeDisabled = false) => {
   return useQuery({
     queryKey: skillKeys.list({ scope: 'project', includeDisabled }),
     queryFn: () => skillsAPI.getAllSkills({ scope: 'project', includeDisabled }),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchOnMount: 'always',
   });
 };
 

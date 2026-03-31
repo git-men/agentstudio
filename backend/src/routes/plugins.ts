@@ -11,6 +11,7 @@ import {
   updateMarketplaceAutoUpdateConfig,
 } from '../services/marketplaceUpdateService';
 import { syncBuiltinMarketplaces, getBuiltinMarketplaceStatus } from '../services/builtinMarketplaceService';
+import { cleanBeforeInstall, flushMCPConfig } from '../services/pluginInstallStrategy';
 import { MarketplaceAddRequest, PluginInstallRequest, MarketplaceType } from '../types/plugins';
 
 // Valid marketplace types
@@ -80,10 +81,53 @@ router.post('/marketplaces', async (req, res) => {
 
     // Get marketplace info
     const marketplaceName = request.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+
+    // Auto-install all plugins and import agents from the new marketplace
+    let pluginsInstalled = 0;
+    let pluginsFailed = 0;
+    let agentsImported = 0;
+    try {
+      cleanBeforeInstall();
+      const pluginNames = pluginPaths.listPlugins(marketplaceName);
+      for (const pluginName of pluginNames) {
+        try {
+          const installResult = await pluginInstaller.installPlugin({
+            pluginName,
+            marketplaceName,
+            marketplaceId: marketplaceName,
+          });
+          if (installResult.success) {
+            pluginsInstalled++;
+          } else {
+            pluginsFailed++;
+            console.warn(`[AddMarketplace] Plugin ${pluginName}: ${installResult.error}`);
+          }
+        } catch (pluginError) {
+          pluginsFailed++;
+          console.error(`[AddMarketplace] Failed to install ${pluginName}:`, pluginError);
+        }
+      }
+      flushMCPConfig();
+
+      // Import agents from marketplace
+      try {
+        const agentResult = await agentImporter.importAgentsFromMarketplace(marketplaceName);
+        agentsImported = agentResult.importedCount;
+      } catch (agentError) {
+        console.error(`[AddMarketplace] Failed to import agents from ${marketplaceName}:`, agentError);
+      }
+
+      console.info(`[AddMarketplace] ${marketplaceName}: ${pluginsInstalled}/${pluginNames.length} plugins installed, ${agentsImported} agents imported`);
+    } catch (autoInstallError) {
+      console.error(`[AddMarketplace] Auto-install failed for ${marketplaceName}:`, autoInstallError);
+    }
+
     const marketplace = await pluginScanner.scanMarketplace(marketplaceName);
 
-    const parts = [`${result.pluginCount} plugins`];
-    if (result.agentCount && result.agentCount > 0) {
+    const parts = [`${result.pluginCount} plugins (${pluginsInstalled} installed)`];
+    if (agentsImported > 0) {
+      parts.push(`${agentsImported} agents imported`);
+    } else if (result.agentCount && result.agentCount > 0) {
       parts.push(`${result.agentCount} agents`);
     }
 

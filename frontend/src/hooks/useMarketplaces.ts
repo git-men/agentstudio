@@ -48,6 +48,8 @@ export const useMarketplaces = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plugin-marketplaces'] });
       queryClient.invalidateQueries({ queryKey: ['plugins-available'] });
+      queryClient.invalidateQueries({ queryKey: ['plugins-installed'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-skills'] });
       showSuccess(t('plugins.messages.marketplaceAddSuccess'));
     },
     onError: (error: Error) => {
@@ -72,6 +74,8 @@ export const useMarketplaces = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['plugin-marketplaces'] });
       queryClient.invalidateQueries({ queryKey: ['plugins-available'] });
+      queryClient.invalidateQueries({ queryKey: ['plugins-installed'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-skills'] });
       showSuccess(t('plugins.messages.marketplaceSyncSuccess'));
     },
     onError: (error: Error) => {
