@@ -7,6 +7,7 @@ import { closeSession } from '../hooks/useSessions';
 import { useSharedStore } from '../stores/useSharedStore';
 import { sessionStoreManager } from '../services/SessionStoreManager';
 import { SessionStoreProvider } from '../stores/SessionStoreContext';
+import { showError } from '../utils/toast';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { SessionListPanel } from '../components/workspace/SessionListPanel';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
@@ -119,9 +120,14 @@ export const WorkspacePage: React.FC = () => {
 
   const handleRenameSession = useCallback(
     async (sessionId: string, newTitle: string) => {
-      await renameSession({ sessionId, title: newTitle });
+      try {
+        await renameSession({ sessionId, title: newTitle });
+      } catch (err) {
+        console.error('[handleRenameSession] 重命名失败:', err);
+        showError(t('workspace.renameSession.error', '重命名失败，请稍后重试'));
+      }
     },
-    [renameSession],
+    [renameSession, t],
   );
 
   const handleSessionChange = useCallback(

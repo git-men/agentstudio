@@ -8,6 +8,7 @@ import { deleteProjectSession } from '../hooks/useSessions';
 import { useSharedStore } from '../stores/useSharedStore';
 import { sessionStoreManager } from '../services/SessionStoreManager';
 import { SessionStoreProvider } from '../stores/SessionStoreContext';
+import { showError } from '../utils/toast';
 import { WorkspaceLayout } from '../components/workspace/WorkspaceLayout';
 import { ProjectSessionListPanel } from '../components/workspace/ProjectSessionListPanel';
 import { ProjectToolbar } from '../components/workspace/ProjectToolbar';
@@ -360,13 +361,18 @@ export const ProjectWorkspacePage: React.FC = () => {
         console.warn('[handleRenameSession] projectPath 和 activeAgentId 均为空，跳过重命名');
         return;
       }
-      await renameSession({
-        sessionId,
-        title: newTitle,
-        projectPath: projectPath || undefined,
-      });
+      try {
+        await renameSession({
+          sessionId,
+          title: newTitle,
+          projectPath: projectPath || undefined,
+        });
+      } catch (err) {
+        console.error('[handleRenameSession] 重命名失败:', err);
+        showError(t('workspace.renameSession.error', '重命名失败，请稍后重试'));
+      }
     },
-    [renameSession, projectPath, activeAgentId],
+    [renameSession, projectPath, activeAgentId, t],
   );
 
   const handleSessionChange = useCallback(
