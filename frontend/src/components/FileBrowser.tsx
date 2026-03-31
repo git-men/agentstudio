@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
@@ -17,8 +17,12 @@ import {
   ChevronRight,
   FolderPlus,
   FileText,
-  FileJson
+  FileJson,
+  CheckSquare,
+  Square
 } from 'lucide-react';
+
+const LAST_BROWSE_PATH_KEY = 'fileBrowser_lastBrowsePath';
 
 interface FileItem {
   name: string;
@@ -41,8 +45,10 @@ interface FileBrowserProps {
   allowFiles?: boolean;
   allowDirectories?: boolean;
   allowNewDirectory?: boolean;
-  restrictToProject?: boolean; // 限制在项目目录内
+  restrictToProject?: boolean;
+  multiSelect?: boolean;
   onSelect: (path: string, isDirectory: boolean) => void;
+  onMultiSelect?: (items: { path: string; isDirectory: boolean }[]) => void;
   onClose: () => void;
 }
 
@@ -53,7 +59,9 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   allowDirectories = true,
   allowNewDirectory = false,
   restrictToProject = false,
+  multiSelect = false,
   onSelect,
+  onMultiSelect,
   onClose
 }) => {
   const { t } = useTranslation('components');
@@ -63,6 +71,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [showHidden, setShowHidden] = useState(false);
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
+  const [selectedPaths, setSelectedPaths] = useState<Map<string, boolean>>(new Map());
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creatingFolder, setCreatingFolder] = useState(false);
@@ -88,6 +97,10 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
       const result: FileBrowserData = await response.json();
       setData(result);
+
+      try {
+        localStorage.setItem(LAST_BROWSE_PATH_KEY, result.currentPath);
+      } catch { /* ignore */ }
     } catch (error) {
       console.error('Failed to fetch directory:', error);
       setError(error instanceof Error ? error.message : t('fileBrowser.errors.loadFailed'));
@@ -97,12 +110,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
   };
 
   useEffect(() => {
-    fetchDirectory(initialPath);
-  }, [initialPath]);
+    const effectivePath = initialPath || (() => {
+      try {
+        return localStorage.getItem(LAST_BROWSE_PATH_KEY) || undefined;
+      } catch { return undefined; }
+    })();
+    fetchDirectory(effectivePath);
+  }, [initialPath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggleSelection = useCallback((item: FileItem) => {
+    const isSelectable = (item.isDirectory && allowDirectories) || (!item.isDirectory && allowFiles);
+    if (!isSelectable) return;
+
+    setSelectedPaths(prev => {
+      const next = new Map(prev);
+      if (next.has(item.path)) {
+        next.delete(item.path);
+      } else {
+        next.set(item.path, item.isDirectory);
+      }
+      return next;
+    });
+  }, [allowDirectories, allowFiles]);
 
   const handleItemClick = (item: FileItem) => {
     if (item.isDirectory) {
       fetchDirectory(item.path);
+    } else if (multiSelect) {
+      toggleSelection(item);
     } else {
       setSelectedPath(item.path);
     }
@@ -110,9 +145,29 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const handleItemSelect = (item: FileItem) => {
     if ((item.isDirectory && allowDirectories) || (!item.isDirectory && allowFiles)) {
-      onSelect(item.path, item.isDirectory);
+      if (multiSelect) {
+        toggleSelection(item);
+      } else {
+        onSelect(item.path, item.isDirectory);
+      }
     }
   };
+
+  const handleConfirmMultiSelect = useCallback(() => {
+    if (selectedPaths.size === 0) return;
+    if (onMultiSelect) {
+      const items = Array.from(selectedPaths.entries()).map(([path, isDir]) => ({
+        path,
+        isDirectory: isDir,
+      }));
+      onMultiSelect(items);
+    } else {
+      for (const [path, isDir] of selectedPaths.entries()) {
+        onSelect(path, isDir);
+      }
+    }
+    onClose();
+  }, [selectedPaths, onMultiSelect, onSelect, onClose]);
 
   const goToParent = () => {
     if (data?.parentPath && (!restrictToProject || data.parentPath.startsWith(initialPath || ''))) {
@@ -277,21 +332,34 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
               {isMobile ? (
                 /* Compact list for small screens - filenames only */
                 <div className="divide-y divide-gray-100 dark:divide-gray-800">
-                  {filteredItems.map((item, index) => (
+                  {filteredItems.map((item, index) => {
+                    const isSelected = multiSelect && selectedPaths.has(item.path);
+                    const isSelectable = (item.isDirectory && allowDirectories) || (!item.isDirectory && allowFiles);
+                    return (
                     <button
                       key={index}
                       onClick={() => {
-                        if (!item.isDirectory && allowFiles) {
-                          handleItemSelect(item);
-                        } else if (item.isDirectory) {
+                        if (item.isDirectory) {
                           handleItemClick(item);
+                        } else if (multiSelect && allowFiles) {
+                          toggleSelection(item);
+                        } else if (allowFiles) {
+                          handleItemSelect(item);
                         }
                       }}
                       disabled={!item.isDirectory && !allowFiles}
                       className={`w-full flex items-center space-x-2 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-40 ${
+                        isSelected ? 'bg-blue-50 dark:bg-blue-900/30' :
                         selectedPath === item.path ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                       }`}
                     >
+                      {multiSelect && isSelectable && !item.isDirectory && (
+                        isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                        )
+                      )}
                       {item.isDirectory ? (
                         <Folder className="w-4 h-4 text-blue-500 flex-shrink-0" />
                       ) : (
@@ -306,13 +374,17 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                         <ChevronRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                       )}
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 /* Full table for desktop */
                 <table className="w-full">
                   <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                     <tr>
+                      {multiSelect && (
+                        <th className="w-10 px-2 py-2"></th>
+                      )}
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.name')}</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.size')}</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.modified')}</th>
@@ -320,13 +392,33 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {filteredItems.map((item, index) => (
+                    {filteredItems.map((item, index) => {
+                      const isSelected = multiSelect && selectedPaths.has(item.path);
+                      const isSelectable = (item.isDirectory && allowDirectories) || (!item.isDirectory && allowFiles);
+                      return (
                       <tr
                         key={index}
                         className={`hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors ${
+                          isSelected ? 'bg-blue-50 dark:bg-blue-900/30' :
                           selectedPath === item.path ? 'bg-blue-50 dark:bg-blue-900/30' : ''
                         }`}
                       >
+                        {multiSelect && (
+                          <td className="w-10 px-2 py-3 text-center">
+                            {isSelectable && (
+                              <button
+                                onClick={() => toggleSelection(item)}
+                                className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              >
+                                {isSelected ? (
+                                  <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                                ) : (
+                                  <Square className="w-4 h-4" />
+                                )}
+                              </button>
+                            )}
+                          </td>
+                        )}
                         <td className="px-4 py-3 flex items-center space-x-2">
                           <div className="flex items-center space-x-2 flex-1 min-w-0">
                             {item.isDirectory ? (
@@ -340,10 +432,12 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                             )}
                             <button
                               onClick={() => {
-                                if (!item.isDirectory && allowFiles) {
-                                  handleItemSelect(item);
-                                } else {
+                                if (item.isDirectory) {
                                   handleItemClick(item);
+                                } else if (multiSelect) {
+                                  toggleSelection(item);
+                                } else if (allowFiles) {
+                                  handleItemSelect(item);
                                 }
                               }}
                               className={`text-left truncate hover:text-blue-600 dark:hover:text-blue-400 ${
@@ -385,20 +479,20 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                                 {t('fileBrowser.actions.preview')}
                               </button>
                             )}
-                            <button
-                              onClick={() => handleItemSelect(item)}
-                              disabled={
-                                (item.isDirectory && !allowDirectories) ||
-                                (!item.isDirectory && !allowFiles)
-                              }
-                              className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              {t('fileBrowser.actions.select')}
-                            </button>
+                            {!multiSelect && (
+                              <button
+                                onClick={() => handleItemSelect(item)}
+                                disabled={!isSelectable}
+                                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                              >
+                                {t('fileBrowser.actions.select')}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -416,16 +510,29 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         {/* Footer */}
         <div className={`${isMobile ? 'px-3 py-2' : 'p-4'} border-t border-gray-200 dark:border-gray-700 flex justify-between items-center`}>
           <div className={`${isMobile ? 'text-xs' : 'text-sm'} text-gray-500 dark:text-gray-400`}>
-            {filteredItems.length > 0 && (
+            {multiSelect && selectedPaths.size > 0 ? (
+              <span>{t('fileBrowser.footer.selectedCount', { count: selectedPaths.size })}</span>
+            ) : filteredItems.length > 0 ? (
               <span>{t('fileBrowser.footer.itemsCount', { count: filteredItems.length })}</span>
+            ) : null}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={onClose}
+              className={`${isMobile ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors`}
+            >
+              {t('fileBrowser.actions.cancel')}
+            </button>
+            {multiSelect && (
+              <button
+                onClick={handleConfirmMultiSelect}
+                disabled={selectedPaths.size === 0}
+                className={`${isMobile ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors`}
+              >
+                {t('fileBrowser.actions.confirm', { count: selectedPaths.size })}
+              </button>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className={`${isMobile ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm'} text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 transition-colors`}
-          >
-            {t('fileBrowser.actions.cancel')}
-          </button>
         </div>
       </div>
       

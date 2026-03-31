@@ -245,7 +245,9 @@
       "title": "添加附件",
       "image": "图片",
       "file": "项目文件",
-      "selectFile": "选择项目文件"
+      "addFile": "添加文件",
+      "selectFile": "选择项目文件",
+      "selectFileGeneral": "选择文件"
     },
     "screenCapture": {
       "title": "截取屏幕（或使用系统截图后粘贴）"
@@ -353,6 +355,7 @@
     "actions": {
       "select": "选择",
       "cancel": "取消",
+      "confirm": "确认 ({{count}})",
       "createFolder": "创建目录",
       "creating": "创建中...",
       "preview": "预览",
@@ -366,7 +369,8 @@
       "folderNamePlaceholder": "输入目录名称"
     },
     "footer": {
-      "itemsCount": "{{count}} 个项目"
+      "itemsCount": "{{count}} 个项目",
+      "selectedCount": "已选择 {{count}} 个文件"
     },
     "errors": {
       "error": "错误",

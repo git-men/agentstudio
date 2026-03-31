@@ -229,7 +229,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
   // File reference browser (separate from @ trigger)
   const [showFileReferenceBrowser, setShowFileReferenceBrowser] = useState(false);
 
-  const handleFileReferenceSelect = useCallback((filePath: string, _isDirectory: boolean) => {
+  const toRelativePath = useCallback((filePath: string) => {
     let relativePath = filePath.replace(/\\/g, '/');
     if (projectPath) {
       const normalizedProjectPath = projectPath.replace(/\\/g, '/');
@@ -240,6 +240,11 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
         relativePath = relativePath.substring(cleanProjectPath.length + 1);
       }
     }
+    return relativePath;
+  }, [projectPath]);
+
+  const handleFileReferenceSelect = useCallback((filePath: string, _isDirectory: boolean) => {
+    const relativePath = toRelativePath(filePath);
 
     const currentValue = inputMessage;
     const textarea = textareaRef.current;
@@ -260,7 +265,31 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
         textarea.focus();
       }
     }, 0);
-  }, [inputMessage, projectPath, textareaRef, onSetInputMessage]);
+  }, [inputMessage, textareaRef, onSetInputMessage, toRelativePath]);
+
+  const handleMultiFileReferenceSelect = useCallback((items: { path: string; isDirectory: boolean }[]) => {
+    const references = items.map(item => '@' + toRelativePath(item.path)).join(' ');
+
+    const currentValue = inputMessage;
+    const textarea = textareaRef.current;
+    const cursorPos = textarea?.selectionStart ?? currentValue.length;
+    const prefix = cursorPos > 0 && currentValue[cursorPos - 1] !== ' ' ? ' ' : '';
+    const newValue =
+      currentValue.substring(0, cursorPos) +
+      prefix + references + ' ' +
+      currentValue.substring(cursorPos);
+
+    onSetInputMessage(newValue);
+    setShowFileReferenceBrowser(false);
+
+    setTimeout(() => {
+      if (textarea) {
+        const newPos = cursorPos + prefix.length + references.length + 1;
+        textarea.setSelectionRange(newPos, newPos);
+        textarea.focus();
+      }
+    }, 0);
+  }, [inputMessage, textareaRef, onSetInputMessage, toRelativePath]);
 
   // Handle input changes with command and file selection logic
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -610,18 +639,21 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           onScreenCapture={captureScreen}
           isScreenCaptureSupported={isScreenCaptureSupported}
           onFileReference={() => setShowFileReferenceBrowser(true)}
+          fileLabel={agent?.id === 'meta-agent' ? t('agentChat.attachment.addFile') : undefined}
         />
       </div>
 
       {/* File Reference Browser (from attachment menu) */}
       {showFileReferenceBrowser && (
         <FileBrowser
-          title={t('agentChat.attachment.selectFile')}
+          title={agent?.id === 'meta-agent' ? t('agentChat.attachment.selectFileGeneral') : t('agentChat.attachment.selectFile')}
           initialPath={projectPath}
           allowFiles={true}
           allowDirectories={true}
-          restrictToProject={true}
+          restrictToProject={agent?.id === 'meta-agent' ? false : !!projectPath}
+          multiSelect={true}
           onSelect={handleFileReferenceSelect}
+          onMultiSelect={handleMultiFileReferenceSelect}
           onClose={() => setShowFileReferenceBrowser(false)}
         />
       )}

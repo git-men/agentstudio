@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 interface AttachmentMenuProps {
   disabled?: boolean;
   hasSelectedImages: boolean;
+  fileLabel?: string;
   onImageClick: () => void;
   onFileClick: () => void;
 }
@@ -12,6 +13,7 @@ interface AttachmentMenuProps {
 export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
   disabled = false,
   hasSelectedImages,
+  fileLabel,
   onImageClick,
   onFileClick
 }) => {
@@ -70,7 +72,7 @@ export const AttachmentMenu: React.FC<AttachmentMenuProps> = ({
             className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
           >
             <FileText className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <span>{t('agentChat.attachment.file')}</span>
+            <span>{fileLabel || t('agentChat.attachment.file')}</span>
           </button>
         </div>
       )}

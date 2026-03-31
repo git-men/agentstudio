@@ -271,18 +271,23 @@ router.get('/browse', (req, res) => {
     const { path: requestedPath, showHiddenFiles } = req.query;
     
     // Default to home directory if no path provided
-    const browsePath = requestedPath ? String(requestedPath) : os.homedir();
+    let browsePath = requestedPath ? String(requestedPath) : os.homedir();
     
     // Parse showHiddenFiles parameter (default to false)
     const includeHidden = showHiddenFiles === 'true';
 
-    // Security check: ensure path is safe
+    // Expand ~ to home directory
+    if (browsePath.startsWith('~')) {
+      browsePath = path.join(os.homedir(), browsePath.slice(1));
+    }
+
+    // Security check: ensure path is safe; fall back to home if invalid
     if (browsePath.includes('..') || !path.isAbsolute(browsePath)) {
-      return res.status(400).json({ error: 'Invalid path' });
+      browsePath = os.homedir();
     }
     
     if (!fs.existsSync(browsePath)) {
-      return res.status(404).json({ error: 'Path not found' });
+      browsePath = os.homedir();
     }
     
     const stats = fs.statSync(browsePath);

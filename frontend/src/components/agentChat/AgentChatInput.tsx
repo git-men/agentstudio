@@ -62,6 +62,9 @@ export interface AgentChatInputProps {
 
   /** File reference (project file browser) */
   onFileReference?: () => void;
+
+  /** Custom label for the file button in attachment menu */
+  fileLabel?: string;
 }
 
 export const AgentChatInput: React.FC<AgentChatInputProps> = ({
@@ -109,7 +112,8 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onNewSession,
   onScreenCapture,
   isScreenCaptureSupported,
-  onFileReference
+  onFileReference,
+  fileLabel
 }) => {
   // Default capabilities if not provided (Claude engine defaults)
   const uiCaps = engineUICapabilities || {
@@ -188,6 +192,7 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
               <AttachmentMenu
                 disabled={isAiTyping}
                 hasSelectedImages={selectedImages.length > 0}
+                fileLabel={fileLabel}
                 onImageClick={() => fileInputRef.current?.click()}
                 onFileClick={() => onFileReference?.()}
               />

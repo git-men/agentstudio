@@ -245,7 +245,9 @@
       "title": "Add Attachment",
       "image": "Image",
       "file": "Project File",
-      "selectFile": "Select Project File"
+      "addFile": "Add File",
+      "selectFile": "Select Project File",
+      "selectFileGeneral": "Select File"
     },
     "screenCapture": {
       "title": "Capture Screen (or paste a screenshot with system shortcut)"
@@ -353,6 +355,7 @@
     "actions": {
       "select": "Select",
       "cancel": "Cancel",
+      "confirm": "Confirm ({{count}})",
       "createFolder": "Create Folder",
       "creating": "Creating...",
       "preview": "Preview",
@@ -366,7 +369,8 @@
       "folderNamePlaceholder": "Enter folder name"
     },
     "footer": {
-      "itemsCount": "{{count}} items"
+      "itemsCount": "{{count}} items",
+      "selectedCount": "{{count}} files selected"
     },
     "errors": {
       "error": "Error",
