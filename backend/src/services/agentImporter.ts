@@ -113,6 +113,14 @@ class AgentImporter {
       }
     }
 
+    // Fallback 2: scan inside plugins/*/agents/ directories
+    if (agentDefs.length === 0) {
+      agentDefs = this.scanPluginAgentFiles(marketplaceName);
+      if (agentDefs.length > 0) {
+        console.info(`[AgentImporter] Discovered ${agentDefs.length} agent(s) by scanning plugin directories for '${marketplaceName}'`);
+      }
+    }
+
     if (agentDefs.length === 0) {
       return {
         marketplaceName,
@@ -488,10 +496,143 @@ class AgentImporter {
           } catch (parseError) {
             console.warn(`[AgentImporter] Failed to parse ${agentMdPath}:`, parseError);
           }
+          continue;
+        }
+
+        // Layout 4: {name}/agent.md
+        const agentMdGenericPath = path.join(entryPath, 'agent.md');
+        if (fs.existsSync(agentMdGenericPath)) {
+          try {
+            const content = fs.readFileSync(agentMdGenericPath, 'utf-8');
+            const parsed = parseAgentMd(content);
+            if (parsed) {
+              agents.push({
+                name: (parsed as any).name || entry.name,
+                source: `agents/${entry.name}/agent.md`,
+                description: (parsed as any).description,
+                version: (parsed as any).version,
+              });
+            }
+          } catch (parseError) {
+            console.warn(`[AgentImporter] Failed to parse ${agentMdGenericPath}:`, parseError);
+          }
         }
       }
     } catch (error) {
       console.warn(`[AgentImporter] Failed to scan agent files for '${marketplaceName}':`, error);
+    }
+
+    return agents;
+  }
+
+  /**
+   * Scan agents/ directories inside each plugin of a marketplace.
+   * Reuses the same layout detection as scanAgentFiles but scoped to plugins/{name}/agents/.
+   */
+  private scanPluginAgentFiles(marketplaceName: string): MarketplaceAgent[] {
+    const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
+    const pluginsDir = path.join(marketplacePath, 'plugins');
+    if (!fs.existsSync(pluginsDir)) {
+      return [];
+    }
+
+    const agents: MarketplaceAgent[] = [];
+    try {
+      const pluginEntries = fs.readdirSync(pluginsDir, { withFileTypes: true });
+      for (const pluginEntry of pluginEntries) {
+        if (!pluginEntry.isDirectory() || pluginEntry.name.startsWith('.')) continue;
+
+        const agentsDir = path.join(pluginsDir, pluginEntry.name, 'agents');
+        if (!fs.existsSync(agentsDir) || !fs.statSync(agentsDir).isDirectory()) continue;
+
+        const entries = fs.readdirSync(agentsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name.startsWith('.')) continue;
+
+          // Layout 1: single-file .md agent
+          if (!entry.isDirectory() && entry.name.endsWith('.md')) {
+            const mdPath = path.join(agentsDir, entry.name);
+            try {
+              const content = fs.readFileSync(mdPath, 'utf-8');
+              const parsed = parseAgentMd(content);
+              if (parsed) {
+                agents.push({
+                  name: (parsed as any).name || entry.name.slice(0, -3),
+                  source: `plugins/${pluginEntry.name}/agents/${entry.name}`,
+                  description: (parsed as any).description,
+                  version: (parsed as any).version,
+                });
+              }
+            } catch (parseError) {
+              console.warn(`[AgentImporter] Failed to parse ${mdPath}:`, parseError);
+            }
+            continue;
+          }
+
+          if (!entry.isDirectory()) continue;
+          const entryPath = path.join(agentsDir, entry.name);
+          const relPrefix = `plugins/${pluginEntry.name}/agents/${entry.name}`;
+
+          // Layout 2: {name}/agent.json
+          const agentJsonPath = path.join(entryPath, 'agent.json');
+          if (fs.existsSync(agentJsonPath)) {
+            try {
+              const content = fs.readFileSync(agentJsonPath, 'utf-8');
+              const agentConfig = JSON.parse(content);
+              agents.push({
+                name: agentConfig.name || entry.name,
+                source: `${relPrefix}/agent.json`,
+                description: agentConfig.description,
+                version: agentConfig.version,
+              });
+            } catch (parseError) {
+              console.warn(`[AgentImporter] Failed to parse ${agentJsonPath}:`, parseError);
+            }
+            continue;
+          }
+
+          // Layout 3: {name}/{name}.md
+          const namedMdPath = path.join(entryPath, `${entry.name}.md`);
+          if (fs.existsSync(namedMdPath)) {
+            try {
+              const content = fs.readFileSync(namedMdPath, 'utf-8');
+              const parsed = parseAgentMd(content);
+              if (parsed) {
+                agents.push({
+                  name: (parsed as any).name || entry.name,
+                  source: `${relPrefix}/${entry.name}.md`,
+                  description: (parsed as any).description,
+                  version: (parsed as any).version,
+                });
+              }
+            } catch (parseError) {
+              console.warn(`[AgentImporter] Failed to parse ${namedMdPath}:`, parseError);
+            }
+            continue;
+          }
+
+          // Layout 4: {name}/agent.md
+          const agentMdPath = path.join(entryPath, 'agent.md');
+          if (fs.existsSync(agentMdPath)) {
+            try {
+              const content = fs.readFileSync(agentMdPath, 'utf-8');
+              const parsed = parseAgentMd(content);
+              if (parsed) {
+                agents.push({
+                  name: (parsed as any).name || entry.name,
+                  source: `${relPrefix}/agent.md`,
+                  description: (parsed as any).description,
+                  version: (parsed as any).version,
+                });
+              }
+            } catch (parseError) {
+              console.warn(`[AgentImporter] Failed to parse ${agentMdPath}:`, parseError);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.warn(`[AgentImporter] Failed to scan plugin agent files for '${marketplaceName}':`, error);
     }
 
     return agents;
