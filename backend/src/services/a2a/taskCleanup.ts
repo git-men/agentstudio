@@ -59,8 +59,8 @@ async function taskDirectoryExists(workingDirectory: string): Promise<boolean> {
  * Clean up orphaned tasks across all projects
  *
  * Scans all registered projects' .a2a/tasks/ directories and marks any tasks
- * with status='running' as 'failed' (indicating they were orphaned
- * due to server restart).
+ * with status='running' or 'pending' as 'failed' (indicating they were orphaned
+ * due to server restart — no executor is tracking them anymore).
  *
  * @returns Count of tasks cleaned up
  */
@@ -78,29 +78,40 @@ export async function cleanupOrphanedTasks(): Promise<number> {
 
     // Process each project
     for (const workingDirectory of workingDirectories) {
-      // Check if project has tasks directory
       const hasTasksDir = await taskDirectoryExists(workingDirectory);
 
       if (!hasTasksDir) {
-        continue; // No tasks for this project
+        continue;
       }
 
       try {
-        // Get all running tasks for this project
+        // Collect both running and pending tasks — after a restart, neither
+        // has an executor/worker backing them, so both are orphaned.
         const runningTasks = await taskManager.listTasks(workingDirectory, 'running');
+        const pendingTasks = await taskManager.listTasks(workingDirectory, 'pending');
+        const orphanedTasks = [...runningTasks, ...pendingTasks];
 
-        if (runningTasks.length === 0) {
-          continue; // No orphaned tasks
+        if (orphanedTasks.length === 0) {
+          continue;
         }
 
-        console.info(`[TaskCleanup] Found ${runningTasks.length} orphaned tasks in ${workingDirectory}`);
+        console.info(
+          `[TaskCleanup] Found ${orphanedTasks.length} orphaned tasks in ${workingDirectory}` +
+          ` (${runningTasks.length} running, ${pendingTasks.length} pending)`
+        );
 
-        // Mark each running task as failed
-        for (const task of runningTasks) {
+        for (const task of orphanedTasks) {
           try {
+            // pending tasks must transition through running first
+            if (task.status === 'pending') {
+              await taskManager.updateTaskStatus(workingDirectory, task.id, 'running', {
+                startedAt: task.createdAt,
+              });
+            }
+
             await taskManager.updateTaskStatus(workingDirectory, task.id, 'failed', {
               errorDetails: {
-                message: 'Task was orphaned due to server restart',
+                message: `Task was orphaned due to server restart (was ${task.status})`,
                 code: 'TASK_ORPHANED',
               },
               completedAt: new Date().toISOString(),
@@ -108,7 +119,7 @@ export async function cleanupOrphanedTasks(): Promise<number> {
 
             totalCleaned++;
 
-            console.info(`[TaskCleanup] Cleaned orphaned task: ${task.id}`);
+            console.info(`[TaskCleanup] Cleaned orphaned ${task.status} task: ${task.id}`);
           } catch (error) {
             console.error(`[TaskCleanup] Failed to clean task ${task.id}:`, error);
           }

@@ -32,6 +32,7 @@ interface WorkerInstance {
   task: TaskDefinition;
   startTime: number;
   timeout?: NodeJS.Timeout;
+  completionReceived?: boolean;
 }
 
 interface QueuedTask {
@@ -333,12 +334,21 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
     }, timeoutMs);
 
     // Store worker instance
-    this.workers.set(task.id, {
+    const workerInstance: WorkerInstance = {
       worker,
       task,
       startTime,
       timeout,
-    });
+      completionReceived: false,
+    };
+    this.workers.set(task.id, workerInstance);
+
+    // Immediately transition A2A async tasks to 'running' state
+    if (task.type === 'a2a_async') {
+      this.transitionA2ATaskToRunning(task).catch(err => {
+        console.warn(`[TaskExecutor] Failed to transition A2A task ${task.id} to running:`, err);
+      });
+    }
 
     // Set up health check timer
     this.setupWorkerHealthCheck(task.id, worker);
@@ -346,12 +356,13 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
     // Handle messages from worker
     worker.on('message', (message: { type: string; data?: unknown }) => {
       if (message.type === 'log') {
-        // Log message - could be stored or emitted
         console.debug(`[TaskWorker:${task.id}]`, message.data);
       } else if (message.type === 'complete') {
+        workerInstance.completionReceived = true;
         const result = message.data as TaskResult;
         this.handleTaskComplete(task.id, result);
       } else if (message.type === 'error') {
+        workerInstance.completionReceived = true;
         const error = message.data as Partial<TaskResult>;
         this.handleTaskComplete(task.id, {
           taskId: task.id,
@@ -364,8 +375,9 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
     });
 
     // Handle worker errors
-    worker.on('error', (error) => {
+    worker.on('error', (error: Error) => {
       console.error(`[TaskExecutor] Worker error for task ${task.id}:`, error);
+      workerInstance.completionReceived = true;
       this.handleTaskComplete(task.id, {
         taskId: task.id,
         status: 'failed',
@@ -375,23 +387,30 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
       });
     });
 
-    // Handle worker exit
+    // Handle worker exit — catch cases where worker exits without sending completion
     worker.on('exit', (code) => {
-      if (code !== 0 && !this.workers.has(task.id)) {
-        // Worker already terminated by timeout handler
-        return;
+      if (!this.workers.has(task.id)) {
+        return; // Already cleaned up by completion handler or timeout
       }
 
-      if (code !== 0) {
-        console.error(`[TaskExecutor] Worker stopped with exit code ${code} for task ${task.id}`);
-        this.handleTaskComplete(task.id, {
-          taskId: task.id,
-          status: 'failed',
-          error: `Worker stopped with exit code ${code}`,
-          completedAt: new Date().toISOString(),
-          executionTimeMs: Date.now() - startTime,
-        });
+      const inst = this.workers.get(task.id)!;
+
+      if (inst.completionReceived) {
+        return; // Normal exit after sending completion message
       }
+
+      // Worker exited without sending a completion message — mark as failed
+      const errorMsg = code !== 0
+        ? `Worker stopped with exit code ${code}`
+        : 'Worker exited unexpectedly without completing the task';
+      console.error(`[TaskExecutor] ${errorMsg} for task ${task.id}`);
+      this.handleTaskComplete(task.id, {
+        taskId: task.id,
+        status: 'failed',
+        error: errorMsg,
+        completedAt: new Date().toISOString(),
+        executionTimeMs: Date.now() - startTime,
+      });
     });
   }
 
@@ -442,15 +461,33 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
     });
   }
 
+  /**
+   * Transition A2A async task to 'running' state via TaskManager.
+   * Called immediately when a worker thread starts executing the task.
+   */
+  private async transitionA2ATaskToRunning(task: TaskDefinition): Promise<void> {
+    const { taskManager } = await import('../a2a/taskManager.js');
+    const currentTask = await taskManager.getTask(task.projectPath, task.id);
+    if (currentTask && currentTask.status === 'pending') {
+      await taskManager.updateTaskStatus(
+        task.projectPath,
+        task.id,
+        'running',
+        { startedAt: new Date().toISOString() }
+      );
+      console.info(`[TaskExecutor] A2A task ${task.id} transitioned to running`);
+    }
+  }
+
   private async storeResult(task: TaskDefinition, result: TaskResult): Promise<void> {
     try {
       if (task.type === 'a2a_async') {
         // Store result for A2A task
         const { taskManager } = await import('../a2a/taskManager.js');
 
-        // First, ensure task is in 'running' state (pending → running transition)
-        // This is needed because the task was created as 'pending' and we need
-        // a valid state transition: pending → running → completed/failed
+        // Ensure task is in 'running' state before transitioning to a terminal state.
+        // Normally done in startTask(), but handle edge cases (e.g. race condition,
+        // previous transition failure) as a fallback.
         try {
           const currentTask = await taskManager.getTask(task.projectPath, task.id);
           if (currentTask && currentTask.status === 'pending') {
@@ -462,7 +499,7 @@ export class BuiltinTaskExecutor implements ITaskExecutor {
             );
           }
         } catch (transitionError) {
-          console.warn(`[TaskExecutor] Could not transition A2A task ${task.id} to running:`, transitionError);
+          console.warn(`[TaskExecutor] Could not ensure running state for A2A task ${task.id}:`, transitionError);
         }
 
         // Prepare output and error for storage and webhook
