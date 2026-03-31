@@ -4,6 +4,7 @@ import * as os from 'os';
 import * as path from 'path';
 
 let testDir: string;
+let importCounter = 0;
 
 beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'session-name-test-'));
@@ -17,7 +18,7 @@ afterEach(() => {
 
 async function getService() {
   // cache-bust to get fresh singleton per test
-  const mod = await import('../sessionNameService.js?' + Date.now());
+  const mod = await import('../sessionNameService.js?' + ++importCounter);
   return mod.sessionNameService;
 }
 

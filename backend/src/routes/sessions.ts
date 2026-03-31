@@ -1190,7 +1190,9 @@ router.delete('/by-project/:sessionId', async (req, res) => {
     await sessionManager.removeSession(sessionId).catch(() => {});
 
     // Clean up custom name mapping if present
-    sessionNameService.clearName(sessionId).catch(() => {});
+    sessionNameService.clearName(sessionId).catch((err) => {
+      console.error('[SessionName] Failed to clear session name:', err);
+    });
 
     res.json({ success: deleted });
   } catch (error) {
@@ -1538,7 +1540,9 @@ router.delete('/:agentId/:sessionId', (req, res) => {
     const deleted = agentStorage.deleteSession(agentId, sessionId);
 
     // Clean up custom name mapping if present
-    sessionNameService.clearName(sessionId).catch(() => {});
+    sessionNameService.clearName(sessionId).catch((err) => {
+      console.error('[SessionName] Failed to clear session name:', err);
+    });
 
     res.json({ success: deleted });
   } catch (error) {

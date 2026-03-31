@@ -79,8 +79,8 @@ class SessionNameService {
       version: 1,
       names: Object.fromEntries(this.names),
     };
-    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(tmpPath, filePath);
+    await fs.promises.writeFile(tmpPath, JSON.stringify(data, null, 2), 'utf-8');
+    await fs.promises.rename(tmpPath, filePath);
   }
 }
 
