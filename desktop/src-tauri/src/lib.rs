@@ -1117,7 +1117,6 @@ pub fn run() {
             }
             // macOS: user clicks the Dock icon when all windows are hidden —
             // bring the main window back to the foreground.
-            #[cfg(target_os = "macos")]
             RunEvent::Reopen {
                 has_visible_windows,
                 ..
