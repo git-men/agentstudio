@@ -9,6 +9,7 @@ import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEn
 import { getSystemMcpServers } from '../services/mcpAdmin/autoBootstrap.js';
 import { PRESET_MCP_SERVERS, PRESET_CATEGORIES } from '../data/preset-mcp-servers.js';
 import { getKnotMcpServers } from '../services/knotMcpService.js';
+import { atomicWriteFileSync } from '../utils/fileUtils.js';
 
 const router: express.Router = express.Router();
 const execAsync = promisify(exec);
@@ -203,10 +204,8 @@ export const writeMcpConfig = (config: McpConfigFile): void => {
     throw new Error(`MCP configuration is read-only for engine: ${getEngineType()}`);
   }
 
-  ensureConfigDirectory(configPath);
-  
   try {
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+    atomicWriteFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('Failed to write MCP config:', error);
     throw error;

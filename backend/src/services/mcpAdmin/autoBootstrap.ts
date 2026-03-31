@@ -17,6 +17,7 @@ import * as path from 'path';
 import { generateAdminApiKey, listAdminApiKeys } from './adminApiKeyService.js';
 import { AGENTSTUDIO_HOME, MCP_SERVER_CONFIG_FILE } from '../../config/paths.js';
 import { getMcpAdminServer } from './mcpAdminServer.js';
+import { atomicWriteJsonSync } from '../../utils/fileUtils.js';
 
 const SYSTEM_KEY_DESCRIPTION = 'System Auto-Bootstrap (agentstudio-admin)';
 const SERVER_NAME = 'agentstudio-admin';
@@ -81,11 +82,7 @@ function backupNativeConfig(): void {
 }
 
 function writeNativeConfig(config: NativeMcpConfig): void {
-  const dir = path.dirname(MCP_SERVER_CONFIG_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  fs.writeFileSync(MCP_SERVER_CONFIG_FILE, JSON.stringify(config, null, 2));
+  atomicWriteJsonSync(MCP_SERVER_CONFIG_FILE, config);
 }
 
 /**

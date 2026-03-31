@@ -17,6 +17,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { getEnginePaths } from '../config/engineConfig.js';
+import { atomicWriteFileSync } from '../utils/fileUtils.js';
 import { ParsedPlugin, PluginComponent } from '../types/plugins.js';
 
 /** MCP server config entry */
@@ -166,8 +167,7 @@ class PluginCopyInstall {
     }
 
     const mcpConfig = { mcpServers: this.mcpConfigAccumulator };
-    fs.mkdirSync(path.dirname(mcpConfigPath), { recursive: true });
-    fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
+    atomicWriteFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
     console.log(`[PluginCopyInstall] MCP config written (${Object.keys(this.mcpConfigAccumulator).length} servers): ${mcpConfigPath}`);
   }
 

@@ -4,6 +4,7 @@ import { pluginPaths } from './pluginPaths';
 import { ParsedPlugin } from '../types/plugins';
 import { getEnginePaths, getClaudeMirrorPaths } from '../config/engineConfig';
 import type { EnginePathConfig } from '../types/engine';
+import { atomicWriteFileSync } from '../utils/fileUtils.js';
 
 /**
  * Plugin Symlink Service
@@ -194,7 +195,7 @@ class PluginSymlink {
       console.log(`Registered MCP server: ${name} in ${mcpConfigPath} (from ${pluginName})`);
     }
 
-    fs.writeFileSync(mcpConfigPath, JSON.stringify(existingConfig, null, 2), 'utf-8');
+    atomicWriteFileSync(mcpConfigPath, JSON.stringify(existingConfig, null, 2));
   }
 
   private async removeMcpServers(parsedPlugin: ParsedPlugin): Promise<void> {
@@ -220,7 +221,7 @@ class PluginSymlink {
         }
 
         if (removed) {
-          fs.writeFileSync(mcpConfigPath, JSON.stringify(config, null, 2), 'utf-8');
+          atomicWriteFileSync(mcpConfigPath, JSON.stringify(config, null, 2));
         }
       } catch (error) {
         console.error(`Failed to remove MCP servers from ${pluginName}:`, error);

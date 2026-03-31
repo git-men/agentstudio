@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
+import { atomicWriteFileSync } from '../../utils/fileUtils.js';
 
 const MCP_SERVER_NAME = 'frontend-tools';
 
@@ -49,11 +50,7 @@ export async function writeMcpConfig(
     url,
   };
 
-  if (!fs.existsSync(configDir)) {
-    fs.mkdirSync(configDir, { recursive: true });
-  }
-
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+  atomicWriteFileSync(configPath, JSON.stringify(config, null, 2));
   console.log(`[McpConfig] Wrote ${configPath} → ${MCP_SERVER_NAME}: ${url}`);
 }
 
@@ -91,11 +88,7 @@ export async function writeCodexMcpToml(
     url,
   };
 
-  if (!fs.existsSync(codexDir)) {
-    fs.mkdirSync(codexDir, { recursive: true });
-  }
-
-  fs.writeFileSync(configPath, stringifyToml(config), 'utf-8');
+  atomicWriteFileSync(configPath, stringifyToml(config));
   console.log(`[McpConfig] Wrote TOML ${configPath} → ${serverName}: ${url}`);
 }
 
@@ -120,7 +113,7 @@ export async function removeCodexMcpTomlEntry(
     if (!(serverName in mcpServers)) return;
 
     delete mcpServers[serverName];
-    fs.writeFileSync(configPath, stringifyToml(config), 'utf-8');
+    atomicWriteFileSync(configPath, stringifyToml(config));
     console.log(`[McpConfig] Removed TOML entry ${serverName} from ${configPath}`);
   } catch (error) {
     console.warn(`[McpConfig] Failed to remove TOML entry ${serverName}:`, error);
