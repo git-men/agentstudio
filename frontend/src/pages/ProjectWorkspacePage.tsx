@@ -356,13 +356,17 @@ export const ProjectWorkspacePage: React.FC = () => {
 
   const handleRenameSession = useCallback(
     async (sessionId: string, newTitle: string) => {
+      if (!projectPath && !activeAgentId) {
+        console.warn('[handleRenameSession] projectPath 和 activeAgentId 均为空，跳过重命名');
+        return;
+      }
       await renameSession({
         sessionId,
         title: newTitle,
         projectPath: projectPath || undefined,
       });
     },
-    [renameSession, projectPath],
+    [renameSession, projectPath, activeAgentId],
   );
 
   const handleSessionChange = useCallback(
