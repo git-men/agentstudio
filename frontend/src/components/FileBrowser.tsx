@@ -220,6 +220,31 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
 
   const filteredItems = data?.items.filter(item => showHidden || !item.isHidden) || [];
 
+  const selectableItems = filteredItems.filter(
+    item => (item.isDirectory && allowDirectories) || (!item.isDirectory && allowFiles)
+  );
+  const allSelected = multiSelect && selectableItems.length > 0 && selectableItems.every(item => selectedPaths.has(item.path));
+
+  const handleToggleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setSelectedPaths(prev => {
+        const next = new Map(prev);
+        for (const item of selectableItems) {
+          next.delete(item.path);
+        }
+        return next;
+      });
+    } else {
+      setSelectedPaths(prev => {
+        const next = new Map(prev);
+        for (const item of selectableItems) {
+          next.set(item.path, item.isDirectory);
+        }
+        return next;
+      });
+    }
+  }, [allSelected, selectableItems]);
+
   const formatSize = (size: number | null) => {
     if (size === null) return '';
     if (size < 1024) return `${size} B`;
@@ -383,7 +408,21 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
                   <thead className="bg-gray-100 dark:bg-gray-800 sticky top-0">
                     <tr>
                       {multiSelect && (
-                        <th className="w-10 px-2 py-2"></th>
+                        <th className="w-10 px-2 py-2">
+                          {selectableItems.length > 0 && (
+                            <button
+                              onClick={handleToggleSelectAll}
+                              className="text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+                              title={allSelected ? t('fileBrowser.actions.deselectAll') : t('fileBrowser.actions.selectAll')}
+                            >
+                              {allSelected ? (
+                                <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                              ) : (
+                                <Square className="w-4 h-4" />
+                              )}
+                            </button>
+                          )}
+                        </th>
                       )}
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.name')}</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">{t('fileBrowser.table.size')}</th>

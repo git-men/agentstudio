@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Image, X } from 'lucide-react';
 import { AgentChatInput } from './AgentChatInput';
 import { AgentChatMobileInput } from './AgentChatMobileInput';
@@ -228,6 +228,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
 
   // File reference browser (separate from @ trigger)
   const [showFileReferenceBrowser, setShowFileReferenceBrowser] = useState(false);
+  const [fileReferences, setFileReferences] = useState<{ path: string; isDirectory: boolean }[]>([]);
 
   const toRelativePath = useCallback((filePath: string) => {
     let relativePath = filePath.replace(/\\/g, '/');
@@ -243,53 +244,67 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
     return relativePath;
   }, [projectPath]);
 
-  const handleFileReferenceSelect = useCallback((filePath: string, _isDirectory: boolean) => {
-    const relativePath = toRelativePath(filePath);
-
-    const currentValue = inputMessage;
-    const textarea = textareaRef.current;
-    const cursorPos = textarea?.selectionStart ?? currentValue.length;
-    const prefix = cursorPos > 0 && currentValue[cursorPos - 1] !== ' ' ? ' ' : '';
-    const newValue =
-      currentValue.substring(0, cursorPos) +
-      prefix + '@' + relativePath + ' ' +
-      currentValue.substring(cursorPos);
-
-    onSetInputMessage(newValue);
+  const handleFileReferenceSelect = useCallback((filePath: string, isDirectory: boolean) => {
+    setFileReferences(prev => {
+      if (prev.some(ref => ref.path === filePath)) return prev;
+      return [...prev, { path: filePath, isDirectory }];
+    });
     setShowFileReferenceBrowser(false);
-
-    setTimeout(() => {
-      if (textarea) {
-        const newPos = cursorPos + prefix.length + 1 + relativePath.length + 1;
-        textarea.setSelectionRange(newPos, newPos);
-        textarea.focus();
-      }
-    }, 0);
-  }, [inputMessage, textareaRef, onSetInputMessage, toRelativePath]);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [textareaRef]);
 
   const handleMultiFileReferenceSelect = useCallback((items: { path: string; isDirectory: boolean }[]) => {
-    const references = items.map(item => '@' + toRelativePath(item.path)).join(' ');
-
-    const currentValue = inputMessage;
-    const textarea = textareaRef.current;
-    const cursorPos = textarea?.selectionStart ?? currentValue.length;
-    const prefix = cursorPos > 0 && currentValue[cursorPos - 1] !== ' ' ? ' ' : '';
-    const newValue =
-      currentValue.substring(0, cursorPos) +
-      prefix + references + ' ' +
-      currentValue.substring(cursorPos);
-
-    onSetInputMessage(newValue);
+    setFileReferences(prev => {
+      const existingPaths = new Set(prev.map(r => r.path));
+      const newItems = items.filter(item => !existingPaths.has(item.path));
+      return [...prev, ...newItems];
+    });
     setShowFileReferenceBrowser(false);
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [textareaRef]);
 
-    setTimeout(() => {
-      if (textarea) {
-        const newPos = cursorPos + prefix.length + references.length + 1;
-        textarea.setSelectionRange(newPos, newPos);
-        textarea.focus();
-      }
-    }, 0);
-  }, [inputMessage, textareaRef, onSetInputMessage, toRelativePath]);
+  const handleRemoveFileReference = useCallback((path: string) => {
+    setFileReferences(prev => prev.filter(ref => ref.path !== path));
+  }, []);
+
+  const handleAtFileReferencesAdd = useCallback((items: { path: string; isDirectory: boolean }[]) => {
+    setFileReferences(prev => {
+      const existingPaths = new Set(prev.map(r => r.path));
+      const newItems = items.filter(item => !existingPaths.has(item.path));
+      return [...prev, ...newItems];
+    });
+  }, []);
+
+  const [pendingFileSend, setPendingFileSend] = useState(false);
+
+  const handleSendWithFiles = useCallback(() => {
+    if (fileReferences.length > 0) {
+      const refs = fileReferences.map(ref => '@' + toRelativePath(ref.path)).join(' ');
+      const currentMsg = inputMessage.trim();
+      const combined = currentMsg ? refs + ' ' + currentMsg : refs;
+      onSetInputMessage(combined);
+      setFileReferences([]);
+      setPendingFileSend(true);
+    } else {
+      onSend();
+    }
+  }, [fileReferences, inputMessage, onSetInputMessage, onSend, toRelativePath]);
+
+  useEffect(() => {
+    if (pendingFileSend) {
+      setPendingFileSend(false);
+      onSend();
+    }
+  }, [pendingFileSend, onSend]);
+
+  const handleKeyDownWithFiles = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && fileReferences.length > 0) {
+      e.preventDefault();
+      handleSendWithFiles();
+      return;
+    }
+    handleKeyDown(e);
+  }, [handleKeyDown, handleSendWithFiles, fileReferences]);
 
   // Handle input changes with command and file selection logic
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -509,6 +524,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           onSetSelectedCommandIndex={onSetSelectedCommandIndex}
           onSetShowFileBrowser={onSetShowFileBrowser}
           onSetAtSymbolPosition={onSetAtSymbolPosition}
+          onFileReferencesAdd={handleAtFileReferencesAdd}
         />
 
         <ConfirmDialog
@@ -622,9 +638,9 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           agent={agent}
           textareaRef={textareaRef}
           fileInputRef={fileInputRef}
-          onSend={onSend}
+          onSend={handleSendWithFiles}
           onStopGeneration={handleStopGeneration}
-          onKeyDown={handleKeyDown}
+          onKeyDown={handleKeyDownWithFiles}
           onImageSelect={handleImageSelect}
           onPaste={handlePaste}
           onDragOver={handleDragOver}
@@ -640,6 +656,8 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           isScreenCaptureSupported={isScreenCaptureSupported}
           onFileReference={() => setShowFileReferenceBrowser(true)}
           fileLabel={agent?.id === 'meta-agent' ? t('agentChat.attachment.addFile') : undefined}
+          fileReferences={fileReferences}
+          onRemoveFileReference={handleRemoveFileReference}
         />
       </div>
 
@@ -675,6 +693,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
         onSetSelectedCommandIndex={onSetSelectedCommandIndex}
         onSetShowFileBrowser={onSetShowFileBrowser}
         onSetAtSymbolPosition={onSetAtSymbolPosition}
+        onFileReferencesAdd={handleAtFileReferencesAdd}
       />
 
       <ConfirmDialog

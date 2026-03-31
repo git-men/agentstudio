@@ -247,7 +247,8 @@
       "file": "项目文件",
       "addFile": "添加文件",
       "selectFile": "选择项目文件",
-      "selectFileGeneral": "选择文件"
+      "selectFileGeneral": "选择文件",
+      "fileTag": "文件"
     },
     "screenCapture": {
       "title": "截取屏幕（或使用系统截图后粘贴）"
@@ -356,6 +357,8 @@
       "select": "选择",
       "cancel": "取消",
       "confirm": "确认 ({{count}})",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
       "createFolder": "创建目录",
       "creating": "创建中...",
       "preview": "预览",

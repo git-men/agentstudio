@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import React from 'react';
+import React, { useCallback } from 'react';
 import { CommandSelector } from '../CommandSelector';
 import { FileBrowser } from '../FileBrowser';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,7 @@ export interface AgentCommandSelectorProps {
   onSetSelectedCommandIndex: (index: number) => void;
   onSetShowFileBrowser: (show: boolean) => void;
   onSetAtSymbolPosition: (position: number | null) => void;
+  onFileReferencesAdd: (items: { path: string; isDirectory: boolean }[]) => void;
 }
 
 // 为键盘处理器单独定义接口，包含所有需要的参数
@@ -58,7 +59,8 @@ export const AgentCommandSelector: React.FC<AgentCommandSelectorProps> = ({
   onSetShowCommandSelector,
   onSetSelectedCommandIndex,
   onSetShowFileBrowser,
-  onSetAtSymbolPosition
+  onSetAtSymbolPosition,
+  onFileReferencesAdd
 }) => {
   const { t } = useTranslation('components');
 
@@ -79,43 +81,26 @@ export const AgentCommandSelector: React.FC<AgentCommandSelectorProps> = ({
     onSetShowCommandSelector(false);
   };
 
-  const handleFileSelect = (filePath: string, _isDirectory: boolean) => {
-    if (!textareaRef.current || atSymbolPosition === null) return;
-    
-    // Calculate relative path from project root
-    let relativePath = filePath.replace(/\\/g, '/'); // Normalize to forward slashes
-    
-    // If we have a project path, calculate relative path
-    if (projectPath) {
-      const normalizedProjectPath = projectPath.replace(/\\/g, '/');
-      // Remove trailing slash from project path for consistent comparison
-      const cleanProjectPath = normalizedProjectPath.endsWith('/') 
-        ? normalizedProjectPath.slice(0, -1) 
-        : normalizedProjectPath;
-      
-      // Calculate relative path if the file is within the project
-      if (relativePath.startsWith(cleanProjectPath)) {
-        relativePath = relativePath.substring(cleanProjectPath.length + 1); // +1 for the slash
-      }
+  const closeFileBrowserAndCleanup = useCallback(() => {
+    if (atSymbolPosition !== null) {
+      const beforeAt = inputMessage.substring(0, atSymbolPosition);
+      const afterAt = inputMessage.substring(atSymbolPosition + 1);
+      onSetInputMessage((beforeAt + afterAt).trim());
     }
-    
-    const beforeAt = inputMessage.substring(0, atSymbolPosition);
-    const afterAt = inputMessage.substring(atSymbolPosition + 1);
-    const newValue = beforeAt + '@' + relativePath + ' ' + afterAt;
-    
-    onSetInputMessage(newValue);
     onSetShowFileBrowser(false);
     onSetAtSymbolPosition(null);
-    
-    // Set cursor position after the inserted file path and space
-    setTimeout(() => {
-      if (textareaRef.current) {
-        const newCursorPosition = atSymbolPosition + 1 + relativePath.length + 1; // +1 for '@', +1 for space
-        textareaRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-        textareaRef.current.focus();
-      }
-    }, 0);
-  };
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [atSymbolPosition, inputMessage, onSetInputMessage, onSetShowFileBrowser, onSetAtSymbolPosition, textareaRef]);
+
+  const handleFileSelect = useCallback((filePath: string, isDirectory: boolean) => {
+    onFileReferencesAdd([{ path: filePath, isDirectory }]);
+    closeFileBrowserAndCleanup();
+  }, [onFileReferencesAdd, closeFileBrowserAndCleanup]);
+
+  const handleMultiFileSelect = useCallback((items: { path: string; isDirectory: boolean }[]) => {
+    onFileReferencesAdd(items);
+    closeFileBrowserAndCleanup();
+  }, [onFileReferencesAdd, closeFileBrowserAndCleanup]);
 
   const handleFileBrowserClose = () => {
     onSetShowFileBrowser(false);
@@ -156,8 +141,10 @@ export const AgentCommandSelector: React.FC<AgentCommandSelectorProps> = ({
           initialPath={projectPath}
           allowFiles={true}
           allowDirectories={true}
-          restrictToProject={true}
+          restrictToProject={false}
+          multiSelect={true}
           onSelect={handleFileSelect}
+          onMultiSelect={handleMultiFileSelect}
           onClose={handleFileBrowserClose}
         />
       )}

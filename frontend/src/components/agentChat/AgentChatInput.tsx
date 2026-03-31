@@ -1,5 +1,5 @@
 import React, { ChangeEvent, useCallback } from 'react';
-import { Send, Square, Image, Wrench, Plus, Scissors } from 'lucide-react';
+import { Send, Square, Image, Wrench, Plus, Scissors, FileText as FileIcon, X } from 'lucide-react';
 import { UnifiedToolSelector } from '../UnifiedToolSelector';
 import { SettingsDropdown } from '../SettingsDropdown';
 import { VoiceInputButton } from '../VoiceInputButton';
@@ -65,6 +65,10 @@ export interface AgentChatInputProps {
 
   /** Custom label for the file button in attachment menu */
   fileLabel?: string;
+
+  /** File references shown as tags above input */
+  fileReferences?: { path: string; isDirectory: boolean }[];
+  onRemoveFileReference?: (path: string) => void;
 }
 
 export const AgentChatInput: React.FC<AgentChatInputProps> = ({
@@ -113,7 +117,9 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
   onScreenCapture,
   isScreenCaptureSupported,
   onFileReference,
-  fileLabel
+  fileLabel,
+  fileReferences = [],
+  onRemoveFileReference
 }) => {
   // Default capabilities if not provided (Claude engine defaults)
   const uiCaps = engineUICapabilities || {
@@ -148,6 +154,31 @@ export const AgentChatInput: React.FC<AgentChatInputProps> = ({
             <Image className="w-6 h-6" />
             <span>{t('agentChat.dropImageHere')}</span>
           </div>
+        </div>
+      )}
+
+      {/* File Reference Tags */}
+      {fileReferences.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 px-3 pt-3 pb-1">
+          {fileReferences.map(ref => {
+            const fileName = ref.path.split('/').pop() || ref.path;
+            return (
+              <div
+                key={ref.path}
+                className="group flex items-center gap-1 px-2 py-1 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-md max-w-[180px] cursor-default"
+                title={ref.path}
+              >
+                <FileIcon className="w-3.5 h-3.5 text-blue-500 dark:text-blue-400 flex-shrink-0" />
+                <span className="text-xs text-blue-700 dark:text-blue-300 truncate">{fileName}</span>
+                <button
+                  onClick={() => onRemoveFileReference?.(ref.path)}
+                  className="flex-shrink-0 text-blue-400 hover:text-blue-600 dark:text-blue-500 dark:hover:text-blue-300 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 

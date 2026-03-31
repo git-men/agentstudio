@@ -356,6 +356,8 @@
       "select": "Select",
       "cancel": "Cancel",
       "confirm": "Confirm ({{count}})",
+      "selectAll": "Select All",
+      "deselectAll": "Deselect All",
       "createFolder": "Create Folder",
       "creating": "Creating...",
       "preview": "Preview",
