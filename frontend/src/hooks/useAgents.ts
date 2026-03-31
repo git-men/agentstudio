@@ -438,6 +438,10 @@ export const useInterruptSession = () => {
   });
 };
 
+interface SessionListCache {
+  sessions: Array<{ id: string; title?: string }>;
+}
+
 export const useRenameSession = (agentId: string) => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -473,20 +477,20 @@ export const useRenameSession = (agentId: string) => {
       const snapshots = queryClient.getQueriesData({ queryKey: activeKey });
 
       // Optimistic update across all matching queries
-      const updater = (old: any) =>
+      const updater = (old: SessionListCache | undefined) =>
         old
           ? {
               ...old,
-              sessions: old.sessions?.map((s: any) =>
+              sessions: old.sessions?.map((s) =>
                 s.id === sessionId ? { ...s, title } : s
               ),
             }
           : old;
-      queryClient.setQueriesData({ queryKey: activeKey }, updater);
+      queryClient.setQueriesData<SessionListCache>({ queryKey: activeKey }, updater);
 
       return { snapshots, projectPath };
     },
-    onError: (_err: unknown, { projectPath }: { projectPath?: string }, context: any) => {
+    onError: (_err: unknown, { projectPath }: { projectPath?: string }, context: { snapshots: [unknown, SessionListCache | undefined][]; projectPath?: string } | undefined) => {
       if (context?.snapshots) {
         const activeKey = projectPath ? ['project-sessions', projectPath] : ['agent-sessions', agentId];
         // Restore each snapshotted query individually

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -8,12 +8,12 @@ let importCounter = 0;
 
 beforeEach(() => {
   testDir = fs.mkdtempSync(path.join(os.tmpdir(), 'session-name-test-'));
-  process.env._CLAWSTUDIO_CONFIG_OVERRIDE = testDir;
+  vi.stubEnv('_CLAWSTUDIO_CONFIG_OVERRIDE', testDir);
 });
 
 afterEach(() => {
   fs.rmSync(testDir, { recursive: true, force: true });
-  delete process.env._CLAWSTUDIO_CONFIG_OVERRIDE;
+  vi.unstubAllEnvs();
 });
 
 async function getService() {
