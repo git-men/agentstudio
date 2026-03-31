@@ -39,7 +39,9 @@ export function LoginPage() {
 
   const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || '/';
 
-  const doCheckAndAutoLogin = useCallback(async (isMountedRef: { current: boolean }) => {
+  const doCheckAndAutoLogin = useCallback(async (cancellationRef?: { current: boolean }) => {
+    const isCancelled = () => cancellationRef ? !cancellationRef.current : false;
+
     if (!currentService) {
       setCheckingPasswordRequired(false);
       return;
@@ -50,7 +52,7 @@ export function LoginPage() {
     try {
       const result = await checkPasswordRequired();
 
-      if (!isMountedRef.current) return;
+      if (isCancelled()) return;
 
       if (result.success) {
         setBackendUnavailable(false);
@@ -59,7 +61,7 @@ export function LoginPage() {
         if (!result.passwordRequired) {
           setAutoLoginAttempted(true);
           const loginSuccess = await loginWithoutPassword();
-          if (loginSuccess && isMountedRef.current) {
+          if (loginSuccess && !isCancelled()) {
             navigate(from, { replace: true });
             window.location.reload();
           }
@@ -73,12 +75,12 @@ export function LoginPage() {
       }
     } catch (err) {
       console.error('Failed to check password requirement:', err);
-      if (isMountedRef.current) {
+      if (!isCancelled()) {
         setBackendUnavailable(true);
         setRetryCount(prev => prev + 1);
       }
     } finally {
-      if (isMountedRef.current) {
+      if (!isCancelled()) {
         setCheckingPasswordRequired(false);
       }
     }
@@ -86,15 +88,15 @@ export function LoginPage() {
 
   // Check password requirement on mount and when service changes
   useEffect(() => {
-    const isMountedRef = { current: true };
+    const cancellationRef = { current: true };
     setAutoLoginAttempted(false);
     setBackendUnavailable(false);
     setRetryCount(0);
 
-    doCheckAndAutoLogin(isMountedRef);
+    doCheckAndAutoLogin(cancellationRef);
 
     return () => {
-      isMountedRef.current = false;
+      cancellationRef.current = false;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentService?.id]); // Only re-run when service changes
@@ -103,15 +105,11 @@ export function LoginPage() {
   useEffect(() => {
     if (!backendUnavailable || checkingPasswordRequired) return;
 
-    const isMountedRef = { current: true };
     retryTimerRef.current = setTimeout(() => {
-      if (isMountedRef.current) {
-        doCheckAndAutoLogin(isMountedRef);
-      }
+      doCheckAndAutoLogin();
     }, 2000);
 
     return () => {
-      isMountedRef.current = false;
       if (retryTimerRef.current) {
         clearTimeout(retryTimerRef.current);
         retryTimerRef.current = null;
