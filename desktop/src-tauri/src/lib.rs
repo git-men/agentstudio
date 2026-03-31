@@ -10,7 +10,7 @@ use tauri_plugin_updater::UpdaterExt;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_BACKEND_PORT: u16 = 4200;
+const DEFAULT_BACKEND_PORT: u16 = 4938;
 
 const ALLOWED_NPM_PACKAGES: &[&str] = &[
     "@anthropic-ai/claude-code",
