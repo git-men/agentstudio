@@ -29,6 +29,58 @@ import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/auto
 const execAsync = promisify(exec);
 
 /**
+ * On Windows, resolve an npm global executable path to its actual .js entry point.
+ *
+ * npm global installs create three files:
+ *   - `claude-internal`     (POSIX shell script — cannot spawn on Windows)
+ *   - `claude-internal.cmd` (batch wrapper — spawn returns EINVAL without shell:true)
+ *   - `claude-internal.ps1` (PowerShell wrapper)
+ *
+ * The Claude Agent SDK uses child_process.spawn() without shell:true, so neither
+ * the shell script nor .cmd can be executed. The SDK checks if the path ends with
+ * a JS extension (.js/.mjs/.ts etc.) — if not, it treats it as a native binary
+ * and tries to spawn it directly, which fails.
+ *
+ * This function parses the .cmd file to extract the actual .js entry path that
+ * the SDK can spawn via `node <path.js>`.
+ *
+ * @param executablePath - Path like "C:\Users\x\AppData\Roaming\npm\claude-internal"
+ * @returns The resolved .js path, or null if it cannot be determined
+ */
+function resolveWindowsNpmGlobalJsEntry(executablePath: string): string | null {
+  try {
+    const cmdPath = executablePath.endsWith('.cmd') ? executablePath : `${executablePath}.cmd`;
+    if (!fs.existsSync(cmdPath)) return null;
+
+    const content = fs.readFileSync(cmdPath, 'utf-8');
+
+    // npm .cmd wrappers end with a line like:
+    //   "%_prog%"  "%dp0%\node_modules\@tencent\claude-code-internal\dist\claude-code-internal.js" %*
+    // We extract the .js path relative to %dp0% (the directory containing the .cmd file)
+    const match = content.match(/%dp0%\\([^"]+\.js)/i) || content.match(/%dp0%\/([^"]+\.js)/i);
+    if (!match) {
+      console.warn(`⚠️  Could not parse .js entry from: ${cmdPath}`);
+      return null;
+    }
+
+    const basedir = path.dirname(cmdPath);
+    const jsRelPath = match[1].replace(/\//g, path.sep);
+    const jsAbsPath = path.resolve(basedir, jsRelPath);
+
+    if (fs.existsSync(jsAbsPath)) {
+      console.log(`🎯 Resolved Windows npm global → JS entry: ${jsAbsPath}`);
+      return jsAbsPath;
+    }
+
+    console.warn(`⚠️  Resolved JS path does not exist: ${jsAbsPath}`);
+    return null;
+  } catch (error) {
+    console.error(`Failed to resolve Windows npm global JS entry for: ${executablePath}`, error);
+    return null;
+  }
+}
+
+/**
  * Get the path to the system-installed Claude executable
  * Only used when user explicitly wants to use system installation
  *
@@ -67,32 +119,21 @@ export async function getSystemClaudeExecutablePath(cliName?: string): Promise<s
       }
     }
 
-    // On Windows, handle .cmd files
+    // On Windows, npm global installs create:
+    //   1. A POSIX shell script (e.g. "claude-internal") — cannot be spawned on Windows
+    //   2. A .cmd wrapper (e.g. "claude-internal.cmd") — cannot be spawned by SDK (EINVAL)
+    // The SDK's spawn expects either a native binary or a .js file.
+    // We parse the .cmd to extract the actual .js entry point.
     if (isWindows) {
-      let pathToCheck = cleanPath;
-      
-      // If path doesn't end with .cmd, try adding it
-      if (!pathToCheck.endsWith('.cmd')) {
-        const cmdPath = `${pathToCheck}.cmd`;
-        if (fs.existsSync(cmdPath)) {
-          pathToCheck = cmdPath;
-          console.log(`📦 Found Windows .cmd wrapper at: ${cmdPath}`);
-          console.log(`   Using SDK bundled CLI for better compatibility`);
-          return null; // Let SDK use bundled CLI
-        }
-      }
-      
-      // Verify the path exists
-      if (!fs.existsSync(pathToCheck)) {
-        console.warn(`⚠️  Claude executable not found at: ${pathToCheck}`);
-        console.warn(`   SDK will use bundled CLI instead`);
-        return null;
+      const jsEntryPath = resolveWindowsNpmGlobalJsEntry(cleanPath);
+      if (jsEntryPath) {
+        return jsEntryPath;
       }
 
-      // If the path points to a .cmd file, let SDK use its bundled version
-      if (pathToCheck.endsWith('.cmd')) {
-        console.log(`📦 Found Windows .cmd wrapper at: ${pathToCheck}`);
-        console.log(`   Using SDK bundled CLI for better compatibility`);
+      // Verify the path exists
+      if (!fs.existsSync(cleanPath)) {
+        console.warn(`⚠️  Claude executable not found at: ${cleanPath}`);
+        console.warn(`   SDK will use bundled CLI instead`);
         return null;
       }
     }
@@ -318,8 +359,26 @@ export async function buildQueryOptions(
         if (resolvedConfig.provider.executablePath) {
           const configuredPath = resolvedConfig.provider.executablePath.trim();
 
-          // Validate the path exists before using it
-          if (fs.existsSync(configuredPath)) {
+          // On Windows, npm global installs create:
+          //   1. A POSIX shell script (e.g. "claude-internal") — cannot be spawned on Windows
+          //   2. A .cmd wrapper (e.g. "claude-internal.cmd") — cannot be spawned by SDK (EINVAL)
+          // The SDK's spawn expects either a native binary or a .js file.
+          // We parse the .cmd to extract the actual .js entry point.
+          const isWindows = process.platform === 'win32';
+          if (isWindows && !configuredPath.endsWith('.exe') && !configuredPath.endsWith('.js')) {
+            // Handles both bare names (claude-internal) and .cmd paths (claude-internal.cmd)
+            const jsEntryPath = resolveWindowsNpmGlobalJsEntry(configuredPath);
+            if (jsEntryPath) {
+              executablePath = jsEntryPath;
+              console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (resolved JS entry: ${executablePath})`);
+            } else if (fs.existsSync(configuredPath)) {
+              executablePath = configuredPath;
+              console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
+            } else {
+              console.warn(`⚠️  Configured Claude path not found: ${configuredPath}`);
+              console.warn(`   SDK will use bundled CLI for better compatibility`);
+            }
+          } else if (fs.existsSync(configuredPath)) {
             executablePath = configuredPath;
             console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
           } else {
@@ -393,6 +452,14 @@ export async function buildQueryOptions(
     settingSources: ["user", "project"],
   };
 
+  // On Windows, the SDK spawns "node" to run cli.js but child_process.spawn()
+  // without shell:true may fail to find "node" if PATH is not correctly inherited.
+  // Use process.execPath (absolute path to the current node binary) as the executable.
+  if (process.platform === 'win32') {
+    queryOptions.executable = process.execPath as any;
+    console.log(`🔧 [Windows] Using executable: ${process.execPath}`);
+  }
+
   // Only add pathToClaudeCodeExecutable if we have a valid path
   if (executablePath) {
     queryOptions.pathToClaudeCodeExecutable = executablePath;
@@ -435,7 +502,8 @@ export async function buildQueryOptions(
   const adminBinDir = getAdminCliBinDir();
   const currentPath = queryOptions.env['PATH'] || '';
   if (!currentPath.includes(adminBinDir)) {
-    queryOptions.env['PATH'] = `${adminBinDir}:${currentPath}`;
+    const pathSep = process.platform === 'win32' ? ';' : ':';
+    queryOptions.env['PATH'] = `${adminBinDir}${pathSep}${currentPath}`;
   }
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
