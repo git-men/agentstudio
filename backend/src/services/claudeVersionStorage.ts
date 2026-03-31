@@ -2,7 +2,8 @@ import { readFile, writeFile, mkdir, rename, access, constants } from 'fs/promis
 import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { ClaudeVersion, ClaudeVersionCreate, ClaudeVersionUpdate, ModelConfig } from '../types/claude-versions';
-import { CLAUDE_AGENT_DIR, CLAUDE_VERSIONS_FILE } from '../config/paths.js';
+import { CLAUDE_AGENT_DIR, CLAUDE_VERSIONS_FILE, CLAUDE_INTERNAL_VERSIONS_FILE } from '../config/paths.js';
+import { isClaudeInternalEngine } from '../config/engineConfig.js';
 
 const DEFAULT_MODELS: ModelConfig[] = [
   {
@@ -19,8 +20,13 @@ const DEFAULT_MODELS: ModelConfig[] = [
   }
 ];
 
-const VERSIONS_FILE = CLAUDE_VERSIONS_FILE;
-const BACKUP_FILE = VERSIONS_FILE + '.bak';
+function getVersionsFile(): string {
+  return isClaudeInternalEngine() ? CLAUDE_INTERNAL_VERSIONS_FILE : CLAUDE_VERSIONS_FILE;
+}
+
+function getBackupFile(): string {
+  return getVersionsFile() + '.bak';
+}
 
 interface VersionStorage {
   versions: ClaudeVersion[];
@@ -73,7 +79,7 @@ async function atomicWriteJSON(filePath: string, data: unknown): Promise<void> {
     // Create backup of the existing file before overwriting
     try {
       await access(filePath, constants.F_OK);
-      await copyFileForBackup(filePath, BACKUP_FILE);
+      await copyFileForBackup(filePath, getBackupFile());
     } catch {
       // No existing file to back up — first run
     }
@@ -116,28 +122,31 @@ function migrateVersionData(storage: VersionStorage): { storage: VersionStorage;
 export async function loadClaudeVersions(): Promise<VersionStorage> {
   await ensureClaudeAgentDir();
 
+  const versionsFile = getVersionsFile();
+  const backupFile = getBackupFile();
+
   // Try primary file first
-  const primary = await tryReadVersionStorage(VERSIONS_FILE);
+  const primary = await tryReadVersionStorage(versionsFile);
   if (primary) {
     const { storage, changed } = migrateVersionData(primary);
     if (changed) {
-      await atomicWriteJSON(VERSIONS_FILE, storage);
+      await atomicWriteJSON(versionsFile, storage);
     }
     return storage;
   }
 
   // Primary file failed or missing — try backup recovery
-  const backup = await tryReadVersionStorage(BACKUP_FILE);
+  const backup = await tryReadVersionStorage(backupFile);
   if (backup) {
-    console.warn(`[VersionStorage] Primary file unreadable, recovered from backup: ${BACKUP_FILE}`);
+    console.warn(`[VersionStorage] Primary file unreadable, recovered from backup: ${backupFile}`);
     const { storage, changed } = migrateVersionData(backup);
     // Restore primary from backup
-    await atomicWriteJSON(VERSIONS_FILE, storage);
+    await atomicWriteJSON(versionsFile, storage);
     return storage;
   }
 
   // Neither file exists or both are corrupted — fresh start
-  console.log('[VersionStorage] No existing config found, starting fresh');
+  console.log(`[VersionStorage] No existing config found (${versionsFile}), starting fresh`);
   return { versions: [], defaultVersionId: null };
 }
 
@@ -178,7 +187,7 @@ export async function saveClaudeVersions(storage: VersionStorage): Promise<void>
     versions: storage.versions,
     defaultVersionId: storage.defaultVersionId,
   };
-  await atomicWriteJSON(VERSIONS_FILE, clean);
+  await atomicWriteJSON(getVersionsFile(), clean);
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -436,13 +445,18 @@ export async function initializeSystemVersion(executablePath: string, engineType
     let changed = false;
 
     if (systemVersion) {
-      if (systemVersion.executablePath !== executablePath) {
-        systemVersion.executablePath = executablePath;
+      const targetExecPath = hasExecutable ? executablePath : undefined;
+      if (systemVersion.executablePath !== targetExecPath) {
+        systemVersion.executablePath = targetExecPath;
         changed = true;
       }
       if (systemVersion.name !== meta.name) {
         systemVersion.name = meta.name;
-        systemVersion.description = hasExecutable ? meta.description : meta.descriptionNoExec;
+        changed = true;
+      }
+      const targetDescription = hasExecutable ? meta.description : meta.descriptionNoExec;
+      if (systemVersion.description !== targetDescription) {
+        systemVersion.description = targetDescription;
         changed = true;
       }
       if (changed) {

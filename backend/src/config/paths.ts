@@ -94,6 +94,13 @@ export const PROJECTS_METADATA_FILE = join(DATA_DIR, 'projects.json');
 export const CLAUDE_VERSIONS_FILE = join(DATA_DIR, 'claude-versions.json');
 
 /**
+ * File path for Claude Internal versions configuration.
+ * Isolated from claude-versions.json to prevent cross-engine contamination.
+ * Default: ~/.agentstudio/data/claude-internal-versions.json
+ */
+export const CLAUDE_INTERNAL_VERSIONS_FILE = join(DATA_DIR, 'claude-internal-versions.json');
+
+/**
  * File path for MCP server configuration.
  * Default: ~/.agentstudio/data/mcp-server.json
  */
