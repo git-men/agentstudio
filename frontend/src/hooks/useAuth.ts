@@ -32,6 +32,7 @@ export function useAuth() {
     success: boolean;
     passwordRequired: boolean;
     error?: string;
+    isNetworkError?: boolean;
   }> => {
     try {
       const response = await fetch(`${getApiBase()}/auth/check-password-required`, {
@@ -47,7 +48,7 @@ export function useAuth() {
       if (!response.ok) {
         return {
           success: false,
-          passwordRequired: true, // Default to requiring password on error
+          passwordRequired: true,
           error: data.error || 'Failed to check password requirement',
         };
       }
@@ -60,8 +61,9 @@ export function useAuth() {
       console.error('Failed to check password requirement:', err);
       return {
         success: false,
-        passwordRequired: true, // Default to requiring password on error
+        passwordRequired: true,
         error: err instanceof Error ? err.message : 'Network error',
+        isNetworkError: true,
       };
     }
   }, []);

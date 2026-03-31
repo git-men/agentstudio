@@ -299,11 +299,16 @@ const AppContent: React.FC = () => {
  * be running via beforeDevCommand; "already running" is handled
  * gracefully by DesktopLaunchConfig.
  */
+const BACKEND_STARTED_KEY = 'tauri-backend-started';
+
 function TauriBackendGate({ children }: { children: React.ReactNode }) {
   const isTauriEnv = isTauri();
   const isMainWindow = !window.location.pathname.startsWith('/project-workspace');
   const needsLaunchGate = isTauriEnv && isMainWindow;
-  const [backendStarted, setBackendStarted] = useState(!needsLaunchGate);
+  const [backendStarted, setBackendStarted] = useState(() => {
+    if (!needsLaunchGate) return true;
+    return sessionStorage.getItem(BACKEND_STARTED_KEY) === 'true';
+  });
   const [engineMismatch, setEngineMismatch] = useState<{ expected: string; actual: string } | null>(null);
   const { isReady, error } = useBackendReady(backendStarted);
 
@@ -325,7 +330,10 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
   if (!isTauriEnv) return <>{children}</>;
 
   if (!backendStarted) {
-    return <DesktopLaunchConfig onStarted={() => setBackendStarted(true)} />;
+    return <DesktopLaunchConfig onStarted={() => {
+      sessionStorage.setItem(BACKEND_STARTED_KEY, 'true');
+      setBackendStarted(true);
+    }} />;
   }
 
   if (error) {

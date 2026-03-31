@@ -71,7 +71,9 @@
     "checkingConnection": "Checking connection...",
     "autoLoggingIn": "Auto signing in...",
     "noPasswordRequired": "No password required for this service",
-    "enterSystem": "Enter System"
+    "enterSystem": "Enter System",
+    "backendStarting": "Backend is starting up, please wait...",
+    "autoRetrying": "Auto-retrying connection"
   },
   "landing": {
     "pageTitle": "ClawStudio - Agent Workspace | Multi-Model AI Agent Workspace",

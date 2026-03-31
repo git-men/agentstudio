@@ -51,12 +51,19 @@ class PluginParser {
           throw new Error('Plugin manifest is missing required fields (name, description)');
         }
 
-        // Fill in optional fields from marketplace.json if missing
+        // Fill in / override version from marketplace.json
         if (marketplaceName) {
           const marketplaceManifest = this.readMarketplaceManifest(marketplaceName);
           if (marketplaceManifest) {
+            // Prefer plugin-specific version from marketplace plugins array
+            if (pluginName && marketplaceManifest.plugins && Array.isArray(marketplaceManifest.plugins)) {
+              const pluginDef = marketplaceManifest.plugins.find((p: any) => p.name === pluginName);
+              if (pluginDef?.version) {
+                manifest.version = pluginDef.version;
+              }
+            }
             if (!manifest.version) {
-              manifest.version = marketplaceManifest.metadata?.version || '1.0.0';
+              manifest.version = marketplaceManifest.version || '1.0.0';
             }
             if (!manifest.author) {
               manifest.author = marketplaceManifest.owner || { name: 'Unknown' };
@@ -166,7 +173,7 @@ class PluginParser {
     return {
       name: pluginDef.name,
       description: pluginDef.description || 'No description available',
-      version: pluginDef.version || marketplaceManifest.metadata?.version || '1.0.0',
+      version: pluginDef.version || marketplaceManifest.version || '1.0.0',
       author: pluginDef.author || marketplaceManifest.owner || { name: 'Unknown' },
     };
   }

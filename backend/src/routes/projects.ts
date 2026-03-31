@@ -194,7 +194,7 @@ router.put('/claude-md', async (req, res) => {
 // GET /api/projects/:dirName - Get specific project
 router.get('/:dirName', async (req, res) => {
   try {
-    const { dirName } = req.params;
+    const dirName = resolvePath(decodeURIComponent(req.params.dirName));
     const project = projectStorage.getProject(dirName);
     
     if (!project) {

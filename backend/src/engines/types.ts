@@ -491,6 +491,15 @@ export interface IAgentEngine {
    * @returns Session detail or null if not found
    */
   readSession?(projectPath: string, sessionId: string): Promise<SessionDetail | null>;
+
+  /**
+   * Delete a session by ID (optional - for session history support)
+   *
+   * @param projectPath - Absolute path to the project directory
+   * @param sessionId - Session ID to delete
+   * @returns true if the session was deleted, false if not found
+   */
+  deleteSession?(projectPath: string, sessionId: string): Promise<boolean>;
 }
 
 // =============================================================================

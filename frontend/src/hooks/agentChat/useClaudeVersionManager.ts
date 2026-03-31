@@ -25,22 +25,16 @@ export const useClaudeVersionManager = ({
   const availableModels = useMemo(() => {
     if (!claudeVersionsData?.versions) return [];
 
-    // 如果选择了版本，返回该版本的模型
     if (selectedClaudeVersion) {
       const version = claudeVersionsData.versions.find(v => v.id === selectedClaudeVersion);
-      const models = version?.models || [];
-      console.log(`📦 availableModels computed: selectedClaudeVersion=${selectedClaudeVersion}, found version=${version?.name}, models=`, models.map(m => m.id));
-      return models;
+      return version?.models || [];
     }
 
-    // 如果没有选择版本，使用默认版本的模型
     const defaultVersion = claudeVersionsData.versions.find(
       v => v.id === claudeVersionsData.defaultVersionId
     ) || claudeVersionsData.versions[0];
 
-    const models = defaultVersion?.models || [];
-    console.log(`📦 availableModels computed (using default): defaultVersion=${defaultVersion?.name}, models=`, models.map(m => m.id));
-    return models;
+    return defaultVersion?.models || [];
   }, [claudeVersionsData, selectedClaudeVersion]);
 
   // 当可用模型变化时，确保当前选择的模型仍然有效
