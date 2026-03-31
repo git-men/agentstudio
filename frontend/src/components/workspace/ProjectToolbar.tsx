@@ -47,7 +47,7 @@ const ToolbarButton: React.FC<{
   <button
     onClick={onClick}
     className={`
-      flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors
+      flex-shrink-0 flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors
       ${active
         ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300'
         : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'}
@@ -199,7 +199,10 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
   }, []);
 
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+    <div className="relative bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700">
+      {/* Fade hint on the right edge — visible only when content overflows on small screens */}
+      <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-white dark:from-gray-800 to-transparent lg:hidden" />
+    <div className="flex items-center gap-1 px-3 py-1.5 overflow-x-auto scrollbar-none [&::-webkit-scrollbar]:hidden">
       {/* Left: panel toggles — session list, files, agent view */}
       <ToolbarButton
         icon={<MessageSquare className="w-3.5 h-3.5" />}
@@ -302,6 +305,7 @@ export const ProjectToolbar: React.FC<ProjectToolbarProps> = ({
           <BackendInfoPopover info={serviceInfo} onClose={() => setShowBackendPopover(false)} />
         )}
       </div>
+    </div>
     </div>
   );
 };
