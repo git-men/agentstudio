@@ -19,6 +19,7 @@ interface SessionListPanelProps {
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   onRemoveSession?: (sessionId: string) => void;
+  onRenameSession?: (sessionId: string, newTitle: string) => void;
 }
 
 /**
@@ -33,6 +34,7 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({
   onSessionSelect,
   onNewSession,
   onRemoveSession,
+  onRenameSession,
 }) => {
   const { t } = useTranslation('components');
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,6 +103,7 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({
                 storeApi={storeApi}
                 onClick={() => onSessionSelect(session.id)}
                 onRemove={onRemoveSession}
+                onRename={onRenameSession}
               />
             );
           })

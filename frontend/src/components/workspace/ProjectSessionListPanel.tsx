@@ -21,6 +21,7 @@ interface ProjectSessionListPanelProps {
   onSessionSelect: (sessionId: string) => void;
   onNewSession: () => void;
   onRemoveSession?: (sessionId: string) => void;
+  onRenameSession?: (sessionId: string, newTitle: string) => void;
 }
 
 /**
@@ -36,6 +37,7 @@ export const ProjectSessionListPanel: React.FC<ProjectSessionListPanelProps> = (
   onSessionSelect,
   onNewSession,
   onRemoveSession,
+  onRenameSession,
 }) => {
   const { t } = useTranslation('components');
   const [searchTerm, setSearchTerm] = useState('');
@@ -115,6 +117,7 @@ export const ProjectSessionListPanel: React.FC<ProjectSessionListPanelProps> = (
                 storeApi={storeApi}
                 onClick={() => onSessionSelect(session.id)}
                 onRemove={onRemoveSession}
+                onRename={onRenameSession}
               />
             );
           })

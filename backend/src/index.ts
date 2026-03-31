@@ -66,6 +66,7 @@ import { productGateMiddleware } from './middleware/productGate.js';
 
 import { initializeMarketplaceUpdateService, shutdownMarketplaceUpdateService } from './services/marketplaceUpdateService.js';
 import { initializeEngines, getEngineStatus } from './engines/index.js';
+import { sessionNameService } from './services/sessionNameService.js';
 import gitVersionsRouter from './routes/gitVersions';
 import { initDefaultMarketplace, syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
 import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
@@ -148,6 +149,7 @@ runMigrations();
 // Initialize and log engine configuration at startup
 initializeEngine();
 logEngineConfig();
+sessionNameService.initialize();
 
 // Initialize runtime engines after dotenv + service engine config are ready.
 try {

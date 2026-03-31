@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { AgentStorage } from '../services/agentStorage';
 import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-history';
+import { sessionNameService } from '../services/sessionNameService.js';
 // Note: Cursor/CodeBuddy session reading is now handled via engine.readSessions()
 // Claude session reading still uses readClaudeHistorySessions() below (pending migration)
 import { sessionManager } from '../services/sessionManager';
@@ -1103,10 +1104,27 @@ router.get('/by-project', async (req, res) => {
       sessions = sessions.filter(s => s.title?.toLowerCase().includes(term));
     }
 
-    res.json({ sessions, projectPath });
+    res.json({ sessions: sessionNameService.applyNames(sessions), projectPath });
   } catch (error) {
     console.error('Failed to get project sessions:', error);
     res.status(500).json({ error: 'Failed to retrieve project sessions' });
+  }
+});
+
+// PATCH /api/sessions/by-project/:sessionId - 重命名会话（Project 视图）
+router.patch('/by-project/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { title } = req.body;
+    const trimmed = typeof title === 'string' ? title.trim() : '';
+    if (!trimmed || trimmed.length > 100) {
+      return res.status(400).json({ error: 'title 无效：不能为空且不超过 100 字符' });
+    }
+    await sessionNameService.setName(sessionId, trimmed);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to rename session:', error);
+    res.status(500).json({ error: 'Failed to rename session' });
   }
 });
 
@@ -1340,7 +1358,7 @@ router.get('/:agentId', async (req, res) => {
       };
     });
     
-    res.json({ sessions });
+    res.json({ sessions: sessionNameService.applyNames(sessions) });
   } catch (error) {
     console.error('Failed to get agent sessions:', error);
     res.status(500).json({ error: 'Failed to retrieve agent sessions' });
@@ -1487,6 +1505,23 @@ router.post('/:agentId', (req, res) => {
   } catch (error) {
     console.error('Failed to create agent session:', error);
     res.status(500).json({ error: 'Failed to create agent session' });
+  }
+});
+
+// PATCH /api/sessions/:agentId/:sessionId - 重命名会话（Agent 视图）
+router.patch('/:agentId/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { title } = req.body;
+    const trimmed = typeof title === 'string' ? title.trim() : '';
+    if (!trimmed || trimmed.length > 100) {
+      return res.status(400).json({ error: 'title 无效：不能为空且不超过 100 字符' });
+    }
+    await sessionNameService.setName(sessionId, trimmed);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to rename session:', error);
+    res.status(500).json({ error: 'Failed to rename session' });
   }
 });
 

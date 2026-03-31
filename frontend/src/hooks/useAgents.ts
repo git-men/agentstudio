@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AgentConfig, ChatContext, ImageData } from '../types/index.js';
 import { API_BASE } from '../lib/config.js';
 import { authFetch } from '../lib/authFetch';
@@ -435,5 +435,72 @@ export const useInterruptSession = () => {
 
       return response.json();
     }
+  });
+};
+
+export const useRenameSession = (agentId: string) => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      sessionId,
+      title,
+      projectPath,
+    }: {
+      sessionId: string;
+      title: string;
+      projectPath?: string;
+    }) => {
+      const url = projectPath
+        ? `${API_BASE}/sessions/by-project/${sessionId}?projectPath=${encodeURIComponent(projectPath)}`
+        : `${API_BASE}/sessions/${agentId}/${sessionId}`;
+      const res = await authFetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      });
+      if (!res.ok) throw new Error('Failed to rename session');
+      return res.json();
+    },
+    onMutate: async ({ sessionId, title, projectPath }) => {
+      const agentKey = ['agent-sessions', agentId];
+      const projectKey = ['project-sessions', projectPath];
+      const activeKey = projectPath ? projectKey : agentKey;
+
+      // Cancel in-flight queries for this prefix
+      await queryClient.cancelQueries({ queryKey: activeKey });
+
+      // Snapshot all matching queries (handles searchTerm variants)
+      const snapshots = queryClient.getQueriesData({ queryKey: activeKey });
+
+      // Optimistic update across all matching queries
+      const updater = (old: any) =>
+        old
+          ? {
+              ...old,
+              sessions: old.sessions?.map((s: any) =>
+                s.id === sessionId ? { ...s, title } : s
+              ),
+            }
+          : old;
+      queryClient.setQueriesData({ queryKey: activeKey }, updater);
+
+      return { snapshots, projectPath };
+    },
+    onError: (_err: unknown, { projectPath }: { projectPath?: string }, context: any) => {
+      if (context?.snapshots) {
+        const activeKey = projectPath ? ['project-sessions', projectPath] : ['agent-sessions', agentId];
+        // Restore each snapshotted query individually
+        for (const [key, data] of context.snapshots) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+    },
+    onSettled: (_data: unknown, _err: unknown, { projectPath }: { projectPath?: string }) => {
+      if (projectPath) {
+        queryClient.invalidateQueries({ queryKey: ['project-sessions', projectPath] });
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['agent-sessions', agentId] });
+      }
+    },
   });
 };

@@ -1,8 +1,7 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useAgent } from '../hooks/useAgents';
-import { useAgentSessions } from '../hooks/useAgents';
+import { useAgent, useAgentSessions, useRenameSession } from '../hooks/useAgents';
 import { useQueryClient } from '@tanstack/react-query';
 import { closeSession } from '../hooks/useSessions';
 import { useSharedStore } from '../stores/useSharedStore';
@@ -116,6 +115,15 @@ export const WorkspacePage: React.FC = () => {
     [activeSessionId, sessionsData, agentId, queryClient],
   );
 
+  const { mutateAsync: renameSession } = useRenameSession(agentId!);
+
+  const handleRenameSession = useCallback(
+    async (sessionId: string, newTitle: string) => {
+      await renameSession({ sessionId, title: newTitle });
+    },
+    [renameSession],
+  );
+
   const handleSessionChange = useCallback(
     (sessionId: string | null) => {
       if (sessionId) {
@@ -200,6 +208,7 @@ export const WorkspacePage: React.FC = () => {
             onSessionSelect={handleSessionSelect}
             onNewSession={handleNewSession}
             onRemoveSession={handleRemoveSession}
+            onRenameSession={handleRenameSession}
           />
         }
       >

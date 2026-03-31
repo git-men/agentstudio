@@ -1405,6 +1405,9 @@
     "confirmDeleteSession": "确定删除此会话？",
     "delete": "删除",
     "cancel": "取消",
+    "renameSession": "重命名会话",
+    "saveRename": "保存",
+    "sessionNamePlaceholder": "输入会话名称",
     "deleting": "删除中…",
     "status": {
       "idle": "空闲",

@@ -1407,6 +1407,9 @@
     "confirmDeleteSession": "Delete this session?",
     "delete": "Delete",
     "cancel": "Cancel",
+    "renameSession": "Rename session",
+    "saveRename": "Save",
+    "sessionNamePlaceholder": "Enter session name",
     "deleting": "Deleting…",
     "status": {
       "idle": "Idle",

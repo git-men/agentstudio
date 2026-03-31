@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
-import { useAgent, useProjectSessions } from '../hooks/useAgents';
+import { useAgent, useProjectSessions, useRenameSession } from '../hooks/useAgents';
 import { useProjects } from '../hooks/useProjects';
 import { deleteProjectSession } from '../hooks/useSessions';
 import { useSharedStore } from '../stores/useSharedStore';
@@ -352,6 +352,19 @@ export const ProjectWorkspacePage: React.FC = () => {
     [activeSessionId, sessionsData, projectPath, queryClient],
   );
 
+  const { mutateAsync: renameSession } = useRenameSession(activeAgentId ?? '');
+
+  const handleRenameSession = useCallback(
+    async (sessionId: string, newTitle: string) => {
+      await renameSession({
+        sessionId,
+        title: newTitle,
+        projectPath: projectPath || undefined,
+      });
+    },
+    [renameSession, projectPath],
+  );
+
   const handleSessionChange = useCallback(
     (sessionId: string | null) => {
       if (!sessionId) return;
@@ -442,6 +455,7 @@ export const ProjectWorkspacePage: React.FC = () => {
             onSessionSelect={handleSessionSelect}
             onNewSession={handleNewSession}
             onRemoveSession={handleRemoveSession}
+            onRenameSession={handleRenameSession}
           />
         }
         rightPanel={

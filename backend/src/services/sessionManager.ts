@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { getProjectsDir, getAllProjectsDirs } from '../config/engineConfig.js';
+import { sessionNameService } from './sessionNameService.js';
 
 /**
  * 会话配置快照
@@ -280,6 +281,8 @@ export class SessionManager {
       this.agentSessions.get(agentId)!.add(sessionId);
       
       console.log(`✅ Confirmed session ${sessionId} for agent: ${agentId} (removed temp key: ${tempKey})`);
+      // 若该临时会话有自定义名称，迁移到真实 sessionId
+      sessionNameService.migrateSession(tempKey, sessionId);
     } else {
       console.warn(`⚠️  Session not found in temp sessions when confirming sessionId: ${sessionId}`);
     }
