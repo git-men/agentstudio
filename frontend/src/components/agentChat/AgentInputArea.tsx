@@ -667,7 +667,7 @@ export const AgentInputArea: React.FC<AgentInputAreaProps> = (props) => {
           title={agent?.id === 'meta-agent' ? t('agentChat.attachment.selectFileGeneral') : t('agentChat.attachment.selectFile')}
           initialPath={projectPath}
           allowFiles={true}
-          allowDirectories={true}
+          allowDirectories={false}
           restrictToProject={agent?.id === 'meta-agent' ? false : !!projectPath}
           multiSelect={true}
           onSelect={handleFileReferenceSelect}
