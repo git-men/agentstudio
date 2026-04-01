@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
+use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
@@ -477,9 +478,67 @@ fn kill_sidecar(state: &AppState) {
     }
 }
 
-/// Kill any process listening on the given port (macOS/Linux).
+/// Kill any process listening on the given port.
 /// Prevents "address already in use" when restarting the sidecar.
+/// Works on macOS/Linux (lsof + kill) and Windows (netstat + taskkill).
 fn cleanup_port(port: u16) {
+    if cfg!(target_os = "windows") {
+        cleanup_port_windows(port);
+    } else {
+        cleanup_port_unix(port);
+    }
+}
+
+/// Windows 实现：通过 netstat 查找占用端口的 PID，再用 taskkill 终止。
+fn cleanup_port_windows(port: u16) {
+    // netstat -ano 输出示例:
+    //   TCP    127.0.0.1:4200    0.0.0.0:0    LISTENING    12345
+    let output = std::process::Command::new("netstat")
+        .args(["-ano"])
+        .output();
+    let out = match output {
+        Ok(o) => o,
+        Err(e) => {
+            log::warn!("Failed to run netstat: {e}");
+            return;
+        }
+    };
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let port_str = format!(":{port}");
+    let mut killed_pids = std::collections::HashSet::new();
+
+    for line in stdout.lines() {
+        // 只匹配 LISTENING 状态的行
+        if !line.contains("LISTENING") {
+            continue;
+        }
+        // 检查本地地址列是否包含目标端口
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        // 格式: [协议, 本地地址, 外部地址, 状态, PID]
+        if parts.len() < 5 {
+            continue;
+        }
+        let local_addr = parts[1];
+        // 精确匹配端口号（地址以 :port 结尾）
+        if !local_addr.ends_with(&port_str) {
+            continue;
+        }
+        let pid_str = parts[parts.len() - 1];
+        if let Ok(pid) = pid_str.parse::<u32>() {
+            if pid == 0 || !killed_pids.insert(pid) {
+                continue; // 跳过 PID 0（系统）和已处理的 PID
+            }
+            log::info!("Cleaning up residual process {pid} on port {port}");
+            let _ = std::process::Command::new("taskkill")
+                .args(["/F", "/PID", pid_str])
+                .output();
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+    }
+}
+
+/// macOS/Linux 实现：通过 lsof 查找占用端口的 PID，再用 kill 终止。
+fn cleanup_port_unix(port: u16) {
     let output = std::process::Command::new("lsof")
         .args(["-ti", &format!(":{port}")])
         .output();

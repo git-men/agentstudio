@@ -66,6 +66,9 @@ describe('claudeUtils', () => {
         callback(null, { stdout: '/usr/local/bin/claude\n', stderr: '' });
         return {} as any;
       });
+      vi.mocked(fs.existsSync).mockImplementation((targetPath: fs.PathLike) => {
+        return String(targetPath) === '/usr/local/bin/claude';
+      });
 
       const result = await getClaudeExecutablePath();
       expect(result).toBe('/usr/local/bin/claude');
@@ -87,6 +90,9 @@ describe('claudeUtils', () => {
         }
         return {} as any;
       });
+      vi.mocked(fs.existsSync).mockImplementation((targetPath: fs.PathLike) => {
+        return String(targetPath) === '/usr/local/bin/claude';
+      });
 
       const result = await getClaudeExecutablePath();
       expect(result).toBe('/usr/local/bin/claude');
@@ -102,7 +108,7 @@ describe('claudeUtils', () => {
       expect(result).toBeNull();
     });
 
-    it('should handle Windows .cmd files and return null for bundled CLI', async () => {
+    it('should resolve Windows .cmd files to their JS entry', async () => {
       // Save original platform
       const originalPlatform = process.platform;
       // Mock Windows platform
@@ -113,14 +119,46 @@ describe('claudeUtils', () => {
         return {} as any;
       });
 
-      // Mock fs.existsSync to return true for .cmd file
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      vi.mocked(fs.existsSync).mockImplementation((targetPath: fs.PathLike) => {
+        const normalized = String(targetPath);
+        return normalized === 'C:\\Users\\test\\AppData\\Roaming\\npm\\claude.cmd' ||
+          normalized === 'C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        '@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js" %*\r\n'
+      );
 
       const result = await getClaudeExecutablePath();
-      // Should return null to use SDK bundled CLI
-      expect(result).toBeNull();
+      expect(result).toBe('C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js');
 
       // Restore platform
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    });
+
+    it('should handle multiple Windows where results and resolve claude-internal', async () => {
+      const originalPlatform = process.platform;
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+
+      vi.mocked(exec).mockImplementation((cmd, callback: any) => {
+        callback(null, {
+          stdout: 'C:\\Users\\test\\AppData\\Roaming\\npm\\claude-internal\r\nC:\\Users\\test\\AppData\\Roaming\\npm\\claude-internal.cmd\r\n',
+          stderr: ''
+        });
+        return {} as any;
+      });
+
+      vi.mocked(fs.existsSync).mockImplementation((targetPath: fs.PathLike) => {
+        const normalized = String(targetPath);
+        return normalized === 'C:\\Users\\test\\AppData\\Roaming\\npm\\claude-internal.cmd' ||
+          normalized === 'C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js';
+      });
+      vi.mocked(fs.readFileSync).mockReturnValue(
+        '@ECHO off\r\n"%_prog%"  "%dp0%\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js" %*\r\n'
+      );
+
+      const result = await getClaudeExecutablePath();
+      expect(result).toBe('C:\\Users\\test\\AppData\\Roaming\\npm\\node_modules\\@tencent\\claude-code-internal\\dist\\claude-code-internal.js');
+
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
@@ -286,7 +324,7 @@ describe('claudeUtils', () => {
 
       const result = await buildQueryOptions(mockAgent, '/custom/project/path');
 
-      expect(result.queryOptions.cwd).toBe('/custom/project/path');
+      expect(result.queryOptions.cwd).toBe(path.join('/custom/project/path'));
     });
 
     it('should include MCP tools in allowed tools', async () => {

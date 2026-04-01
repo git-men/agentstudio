@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../../frontend/dist",
     "devUrl": "http://localhost:3100",
-    "beforeDevCommand": "PORT=4938 TAURI_DESKTOP=1 pnpm --filter agentstudio-backend run dev & PORT=3100 VITE_API_PORT=4938 VITE_API_BASE=/api pnpm --filter frontend dev",
-    "beforeBuildCommand": "node ../desktop/scripts/build-sidecar.mjs && cross-env VITE_TAURI=true pnpm --filter frontend build"
+    "beforeDevCommand": "node ../desktop/scripts/dev.mjs",
+    "beforeBuildCommand": "node ../desktop/scripts/build.mjs"
   },
   "bundle": {
     "active": true,
@@ -19,9 +19,7 @@
       "icons/128x128@2x.png",
       "icons/icon.png"
     ],
-    "externalBin": [
-      "binaries/clawstudio-backend"
-    ],
+    "externalBin": ["binaries/clawstudio-backend"],
     "macOS": {
       "entitlements": null,
       "signingIdentity": "-",
