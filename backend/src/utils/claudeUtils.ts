@@ -147,20 +147,42 @@ export async function getSystemClaudeExecutablePath(cliName?: string): Promise<s
     const { stdout: claudePath } = await execAsync(command);
     if (!claudePath) return null;
 
-    const cleanPath = claudePath.trim();
+    const pathCandidates = claudePath
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean);
+    if (pathCandidates.length === 0) return null;
+
+    const cleanPath = pathCandidates[0];
 
     // Skip local node_modules paths - we want global installation
     if (cleanPath.includes('node_modules/.bin') || cleanPath.includes('node_modules\\.bin')) {
       try {
         const allCommand = isWindows ? `where ${resolvedCliName}` : `which -a ${resolvedCliName}`;
         const { stdout: allClaudes } = await execAsync(allCommand);
-        const claudes = allClaudes.trim().split('\n');
+        const claudes = allClaudes
+          .split(/\r?\n/)
+          .map(line => line.trim())
+          .filter(Boolean);
 
         // Find the first non-local installation
         for (const claudePathOption of claudes) {
           if (!claudePathOption.includes('node_modules/.bin') &&
               !claudePathOption.includes('node_modules\\.bin')) {
-            return claudePathOption.trim();
+            if (isWindows) {
+              const jsEntryPath = resolveWindowsNpmGlobalJsEntry(claudePathOption);
+              if (jsEntryPath) {
+                return jsEntryPath;
+              }
+
+              if (fs.existsSync(claudePathOption)) {
+                return claudePathOption;
+              }
+
+              continue;
+            }
+
+            return claudePathOption;
           }
         }
       } catch (error) {
@@ -174,17 +196,20 @@ export async function getSystemClaudeExecutablePath(cliName?: string): Promise<s
     // The SDK's spawn expects either a native binary or a .js file.
     // We parse the .cmd to extract the actual .js entry point.
     if (isWindows) {
-      const jsEntryPath = resolveWindowsNpmGlobalJsEntry(cleanPath);
-      if (jsEntryPath) {
-        return jsEntryPath;
+      for (const candidatePath of pathCandidates) {
+        const jsEntryPath = resolveWindowsNpmGlobalJsEntry(candidatePath);
+        if (jsEntryPath) {
+          return jsEntryPath;
+        }
+
+        if (fs.existsSync(candidatePath)) {
+          return candidatePath;
+        }
       }
 
-      // Verify the path exists
-      if (!fs.existsSync(cleanPath)) {
-        console.warn(`⚠️  Claude executable not found at: ${cleanPath}`);
-        console.warn(`   SDK will use bundled CLI instead`);
-        return null;
-      }
+      console.warn(`⚠️  Claude executable not found at any resolved path: ${pathCandidates.join(', ')}`);
+      console.warn(`   SDK will use bundled CLI instead`);
+      return null;
     }
 
     return cleanPath;
