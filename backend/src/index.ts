@@ -356,7 +356,11 @@ const app: express.Express = express();
       }
 
       // Allow Tauri app origins (desktop app)
-      if (origin === 'tauri://localhost' || origin === 'https://tauri.localhost') {
+      if (
+        origin === "tauri://localhost" ||
+        origin === "https://tauri.localhost" ||
+        origin === "http://tauri.localhost"
+      ) {
         return callback(null, true);
       }
 

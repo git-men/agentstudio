@@ -29,6 +29,55 @@ import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/auto
 const execAsync = promisify(exec);
 
 /**
+ * Find the system-installed Node.js directory on Windows.
+ * 
+ * When running in a packaged app (clawstudio-backend.exe), process.execPath
+ * points to the bun-compiled single-file executable, which cannot be used
+ * as a Node.js runtime for spawning external JS files.
+ * 
+ * This function locates the actual Node.js installation directory so we can
+ * add it to PATH before spawning the SDK.
+ * 
+ * @returns Directory containing node.exe, or null if not found
+ */
+function findWindowsNodeDir(): string | null {
+  // Common Node.js installation paths on Windows
+  const possibleDirs = [
+    // Program Files (64-bit)
+    'C:\\Program Files\\nodejs',
+    // Program Files (x86) (32-bit)
+    'C:\\Program Files (x86)\\nodejs',
+    // User-specific installation via nvm-windows
+    path.join(process.env.USERPROFILE || '', 'scoop\\apps\\nodejs\\current'),
+    // nvm-windows default
+    path.join(process.env.APPDATA || '', 'nvm\\current'),
+  ];
+
+  for (const dir of possibleDirs) {
+    const nodeExe = path.join(dir, 'node.exe');
+    if (fs.existsSync(nodeExe)) {
+      return dir;
+    }
+  }
+
+  // Try to find via `where node` command
+  try {
+    const result = require('child_process').execFileSync('where', ['node'], { encoding: 'utf8', timeout: 2000 });
+    const lines = result.trim().split('\n');
+    if (lines.length > 0) {
+      const nodePath = lines[0].trim();
+      if (fs.existsSync(nodePath)) {
+        return path.dirname(nodePath);
+      }
+    }
+  } catch {
+    // `where` command failed, ignore
+  }
+
+  return null;
+}
+
+/**
  * On Windows, resolve an npm global executable path to its actual .js entry point.
  *
  * npm global installs create three files:
@@ -454,10 +503,22 @@ export async function buildQueryOptions(
 
   // On Windows, the SDK spawns "node" to run cli.js but child_process.spawn()
   // without shell:true may fail to find "node" if PATH is not correctly inherited.
-  // Use process.execPath (absolute path to the current node binary) as the executable.
+  // We need to ensure node.exe can be found.
+  let windowsNodeDir: string | null = null;
   if (process.platform === 'win32') {
-    queryOptions.executable = process.execPath as any;
-    console.log(`🔧 [Windows] Using executable: ${process.execPath}`);
+    // CRITICAL: In packaged app, process.execPath is clawstudio-backend.exe (a bun-compiled
+    // single-file executable). Using it as executable would run the embedded backend code
+    // instead of just the CLI, causing port conflicts and hanging issues.
+    // We must use the system-installed Node.js instead.
+    windowsNodeDir = findWindowsNodeDir();
+    // Always set executable to 'node' (SDK only accepts 'node' | 'bun' | 'deno')
+    // The actual node.exe location is handled via PATH below
+    queryOptions.executable = 'node';
+    if (windowsNodeDir) {
+      console.log(`🔧 [Windows] Found system Node.js at: ${windowsNodeDir}`);
+    } else {
+      console.warn(`⚠️ [Windows] Could not find system Node.js directory`);
+    }
   }
 
   // Only add pathToClaudeCodeExecutable if we have a valid path
@@ -500,11 +561,19 @@ export async function buildQueryOptions(
 
   // Prepend ~/.agentstudio/bin to PATH so the `agentstudio` CLI wrapper is available
   const adminBinDir = getAdminCliBinDir();
-  const currentPath = queryOptions.env['PATH'] || '';
-  if (!currentPath.includes(adminBinDir)) {
-    const pathSep = process.platform === 'win32' ? ';' : ':';
-    queryOptions.env['PATH'] = `${adminBinDir}${pathSep}${currentPath}`;
+  let currentPath = queryOptions.env['PATH'] || '';
+  const pathSep = process.platform === 'win32' ? ';' : ':';
+  
+  // On Windows, ensure Node.js directory is first in PATH
+  // This is critical for packaged apps where process.execPath is clawstudio-backend.exe
+  if (process.platform === 'win32' && windowsNodeDir && !currentPath.includes(windowsNodeDir)) {
+    currentPath = `${windowsNodeDir}${pathSep}${currentPath}`;
   }
+  
+  if (!currentPath.includes(adminBinDir)) {
+    currentPath = `${adminBinDir}${pathSep}${currentPath}`;
+  }
+  queryOptions.env['PATH'] = currentPath;
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
   // This ensures proxy settings work regardless of which form the client library checks first

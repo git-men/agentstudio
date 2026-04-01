@@ -7,23 +7,33 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = resolve(__dirname, "..", "..");
 
 /**
- * 启动子进程，设置环境变量并继承 stdio
+ * 启动子进程，使用 pipe 模式避免多进程共享 stdio 导致的冲突
  */
 function run(name, env, args) {
   const child = spawn("pnpm", args, {
     cwd: root,
     env: { ...process.env, ...env },
-    stdio: "inherit",
+    stdio: "pipe",
     shell: true,
   });
 
+  const prefix = `[${name}]`;
+
+  child.stdout.on("data", (data) => {
+    process.stdout.write(`${prefix} ${data}`);
+  });
+
+  child.stderr.on("data", (data) => {
+    process.stderr.write(`${prefix} ${data}`);
+  });
+
   child.on("error", (err) => {
-    console.error(`[${name}] 启动失败:`, err.message);
+    console.error(`${prefix} 启动失败:`, err.message);
   });
 
   child.on("exit", (code) => {
     if (code !== 0 && code !== null) {
-      console.error(`[${name}] 退出，退出码: ${code}`);
+      console.error(`${prefix} 退出，退出码: ${code}`);
     }
   });
 

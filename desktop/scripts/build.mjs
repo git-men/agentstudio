@@ -10,7 +10,8 @@ const pnpm = isWin ? "pnpm.cmd" : "pnpm";
 
 // 1. 构建 sidecar
 console.log("📦 构建 sidecar...");
-execSync("node ../desktop/scripts/build-sidecar.mjs", {
+const sidecarScript = resolve(__dirname, "build-sidecar.mjs");
+execSync(`node "${sidecarScript}"`, {
   cwd: resolve(root, "desktop", "src-tauri"),
   stdio: "inherit",
 });
