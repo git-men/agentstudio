@@ -17,6 +17,8 @@ import { useAgentStore } from '../stores/useAgentStore';
 import { eventBus, EVENTS } from '../utils/eventBus';
 import { API_BASE, getCurrentHost } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
+import { useAuthStore } from '../stores/authStore';
+import { extractToken } from '../utils/authHelpers';
 
 interface LAVSViewContainerProps {
   agent: AgentConfig;
@@ -382,6 +384,25 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     const loadPromise = new Promise<void>((resolve, reject) => {
       iframe.onload = () => {
         console.log('[LAVS] Iframe loaded successfully');
+
+        // Send auth token to iframe so it can make authenticated API calls
+        try {
+          const backendServices = localStorage.getItem('backend-services-storage');
+          let serviceId: string | null = null;
+          if (backendServices) {
+            const services = JSON.parse(backendServices);
+            serviceId = services.state?.currentService?.id || null;
+          }
+          const { getToken, token: legacyToken } = useAuthStore.getState();
+          const tokenData = serviceId ? getToken(serviceId) : legacyToken;
+          const jwt = extractToken(tokenData);
+          if (jwt && iframe.contentWindow) {
+            iframe.contentWindow.postMessage({ type: 'lavs-auth-token', token: jwt }, '*');
+          }
+        } catch (e) {
+          console.warn('[LAVS] Failed to send auth token to iframe:', e);
+        }
+
         resolve();
       };
       iframe.onerror = (err) => {
