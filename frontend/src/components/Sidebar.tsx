@@ -27,12 +27,15 @@ import {
   Building2,
   LogOut,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
 import { ServiceManagementModal } from './ServiceManagementModal';
 import { UpdateNotification } from './UpdateNotification';
 import { useMobileContext } from '../contexts/MobileContext';
+import { useDesktopUpdate } from '../contexts/DesktopUpdateContext';
+import { isTauri } from '../lib/environment';
 import useEngine from '../hooks/useEngine';
 import useProduct from '../hooks/useProduct';
 import { useEnterpriseProfile } from '../hooks/useEnterpriseProfile';
@@ -206,6 +209,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
   const [showServiceManagement, setShowServiceManagement] = useState(false);
   const [showEnterpriseMenu, setShowEnterpriseMenu] = useState(false);
   const { profile: enterpriseProfile, isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin, logout: enterpriseLogout } = useEnterpriseProfile();
+  const desktopUpdate = useDesktopUpdate();
+  const [showUpdateCheck, setShowUpdateCheck] = useState(false);
 
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -578,6 +583,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                             {enterpriseProfile.email}
                           </div>
                         )}
+                        {/* Desktop update check */}
+                        {isTauri() && desktopUpdate && (
+                          <button
+                            onClick={() => {
+                              setShowEnterpriseMenu(false);
+                              setShowUpdateCheck(true);
+                              desktopUpdate.checkForUpdate();
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            <span className="flex items-center gap-2">
+                              <RefreshCw className="w-3 h-3" />
+                              检查更新
+                            </span>
+                            <span className="text-gray-400 dark:text-gray-500">
+                              v{desktopUpdate.currentVersion || '...'}
+                            </span>
+                          </button>
+                        )}
+                        <div className="border-t border-gray-100 dark:border-gray-700 my-0.5" />
                         <button
                           onClick={() => { setShowEnterpriseMenu(false); enterpriseLogin(); }}
                           className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
@@ -672,6 +697,75 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               </li>
             ))}
           </ul>
+        </div>,
+        document.body
+      )}
+
+      {/* Update check dialog */}
+      {showUpdateCheck && desktopUpdate && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40" onClick={() => setShowUpdateCheck(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 p-5 w-80 mx-4" onClick={(e) => e.stopPropagation()}>
+            {desktopUpdate.checkStatus === 'checking' ? (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">正在检查更新…</h3>
+                </div>
+                <div className="h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                  <div className="h-full w-1/2 rounded-full bg-blue-500 animate-pulse" />
+                </div>
+              </>
+            ) : desktopUpdate.updatePayload ? (
+              <>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                    <RefreshCw className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">发现新版本</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">v{desktopUpdate.currentVersion} → v{desktopUpdate.updatePayload.version}</p>
+                  </div>
+                </div>
+                {desktopUpdate.updatePayload.notes && (
+                  <div className="my-3 p-2.5 rounded-lg bg-gray-50 dark:bg-gray-900 text-xs text-gray-600 dark:text-gray-400 max-h-24 overflow-y-auto whitespace-pre-wrap">
+                    {desktopUpdate.updatePayload.notes}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => setShowUpdateCheck(false)}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    稍后再说
+                  </button>
+                  <button
+                    onClick={() => setShowUpdateCheck(false)}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                  >
+                    立即更新
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
+                    <svg className="w-4.5 h-4.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">已是最新版本</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">当前版本 v{desktopUpdate.currentVersion}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowUpdateCheck(false)}
+                  className="w-full px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                  确定
+                </button>
+              </>
+            )}
+          </div>
         </div>,
         document.body
       )}
