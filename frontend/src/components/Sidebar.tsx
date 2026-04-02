@@ -215,6 +215,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
   const [showUpdateCheck, setShowUpdateCheck] = useState(false);
 
   useEffect(() => {
+    if (showUpdateCheck && desktopUpdate?.updatePayload) {
+      setShowUpdateCheck(false);
+    }
+  }, [showUpdateCheck, desktopUpdate?.updatePayload]);
+
+  useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       // Close if click is outside the floating menu and not on an icon button
@@ -772,10 +778,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                     稍后再说
                   </button>
                   <button
-                    onClick={() => {
-                      setShowUpdateCheck(false);
-                      desktopUpdate.checkForUpdate();
-                    }}
+                    onClick={() => setShowUpdateCheck(false)}
                     className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
                   >
                     立即更新

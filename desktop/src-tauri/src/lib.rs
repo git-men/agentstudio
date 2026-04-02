@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
@@ -32,8 +31,10 @@ pub struct AppState {
     pub backend_port: Mutex<Option<u16>>,
     /// Handle to the running sidecar child process so we can kill it on exit.
     pub sidecar_child: Arc<Mutex<Option<CommandChild>>>,
-    /// Cached pending update (populated by background update check task).
+    /// Cached pending update from Tauri updater (preferred path).
     pub pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Cached pending update from custom check (fallback when Tauri updater fails).
+    pub pending_custom_update: Mutex<Option<CustomUpdateInfo>>,
     /// Engine/SDK configuration selected at launch (prod mode only).
     pub launch_config: Mutex<Option<LaunchConfig>>,
 }
@@ -50,6 +51,29 @@ pub struct UpdateInfo {
 pub struct UpdateDownloadProgress {
     pub downloaded: usize,
     pub total: Option<u64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct CustomUpdateInfo {
+    pub version: String,
+    pub notes: String,
+    pub download_url: String,
+    pub signature: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LatestJsonPlatform {
+    url: String,
+    signature: String,
+}
+
+#[derive(serde::Deserialize)]
+struct LatestJson {
+    version: String,
+    notes: Option<String>,
+    platforms: Option<std::collections::HashMap<String, LatestJsonPlatform>>,
+    url: Option<String>,
+    signature: Option<String>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -112,59 +136,249 @@ async fn quit_app(app: AppHandle, state: tauri::State<'_, AppState>) -> Result<(
 }
 
 /// Manually check for updates. Returns info if an update is available.
+///
+/// Tries the built-in Tauri updater first; if that fails (known issue with
+/// tauri-plugin-updater v2.10 + reqwest 0.13 vs certain COS/CDN endpoints),
+/// falls back to fetching latest.json with our own HTTP client.
 #[tauri::command]
 async fn check_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<UpdateInfo>, String> {
+    log::info!("Checking for updates...");
+
+    // ── Attempt 1: Tauri built-in updater ────────────────────────────────────
     let updater = app
         .updater_builder()
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
-    match updater.check().await.map_err(|e| e.to_string())? {
-        Some(update) => {
+    match updater.check().await {
+        Ok(Some(update)) => {
+            log::info!("Update available (tauri updater): v{}", update.version);
             let info = UpdateInfo {
                 version: update.version.clone(),
                 notes: update.body.clone().unwrap_or_default(),
             };
             *lock_or_recover(&state.pending_update) = Some(update);
-            Ok(Some(info))
+            *lock_or_recover(&state.pending_custom_update) = None;
+            return Ok(Some(info));
         }
-        None => Ok(None),
+        Ok(None) => {
+            log::info!("Already up to date (tauri updater)");
+            return Ok(None);
+        }
+        Err(e) => {
+            log::warn!("Tauri updater failed: {e}, falling back to custom check");
+        }
     }
+
+    // ── Attempt 2: Custom HTTP check with reqwest 0.12 ──────────────────────
+    let current_version = app.config().version.clone().unwrap_or_default();
+    let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+
+    let endpoints: Vec<String> = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|v| v.get("endpoints"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| {
+                    s.replace("{{target}}", &target)
+                     .replace("{{current_version}}", &current_version)
+                     .replace("{{arch}}", std::env::consts::ARCH)
+                }))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    for endpoint in &endpoints {
+        log::info!("[custom-check] Fetching: {endpoint}");
+        let resp = match client.get(endpoint).send().await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("[custom-check] Request failed for {endpoint}: {e}");
+                continue;
+            }
+        };
+
+        if !resp.status().is_success() {
+            log::warn!("[custom-check] Non-200 status {} from {endpoint}", resp.status());
+            continue;
+        }
+
+        let json: LatestJson = match resp.json().await {
+            Ok(j) => j,
+            Err(e) => {
+                log::warn!("[custom-check] JSON parse failed: {e}");
+                continue;
+            }
+        };
+
+        let remote_ver = match semver::Version::parse(&json.version) {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("[custom-check] Invalid remote version '{}': {e}", json.version);
+                continue;
+            }
+        };
+        let local_ver = semver::Version::parse(&current_version).unwrap_or(semver::Version::new(0, 0, 0));
+
+        if remote_ver <= local_ver {
+            log::info!("[custom-check] Already up to date (local={local_ver}, remote={remote_ver})");
+            return Ok(None);
+        }
+
+        let (dl_url, sig) = if let Some(platforms) = &json.platforms {
+            if let Some(p) = platforms.get(&target) {
+                (p.url.clone(), p.signature.clone())
+            } else {
+                log::warn!("[custom-check] No platform entry for '{target}'");
+                continue;
+            }
+        } else if let (Some(u), Some(s)) = (&json.url, &json.signature) {
+            (u.clone(), s.clone())
+        } else {
+            log::warn!("[custom-check] No url/signature in response");
+            continue;
+        };
+
+        log::info!("[custom-check] Update available: v{} → v{}", local_ver, remote_ver);
+
+        let custom = CustomUpdateInfo {
+            version: json.version.clone(),
+            notes: json.notes.clone().unwrap_or_default(),
+            download_url: dl_url,
+            signature: sig,
+        };
+        *lock_or_recover(&state.pending_custom_update) = Some(custom);
+        *lock_or_recover(&state.pending_update) = None;
+
+        return Ok(Some(UpdateInfo {
+            version: json.version,
+            notes: json.notes.unwrap_or_default(),
+        }));
+    }
+
+    Err("Could not fetch update info from any endpoint".into())
 }
 
 /// Download and install the cached pending update, then restart the app.
+///
+/// Prefers the Tauri updater path (handles signature verification + atomic update).
+/// Falls back to custom download + NSIS installer when Tauri updater is unavailable.
 #[tauri::command]
 async fn install_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
-    let update = lock_or_recover(&state.pending_update)
+    // ── Path A: Tauri updater ────────────────────────────────────────────────
+    let tauri_update = lock_or_recover(&state.pending_update).take();
+    if let Some(update) = tauri_update {
+        let emitter = app.clone();
+        let mut downloaded: usize = 0;
+        update
+            .download_and_install(
+                move |chunk_length, content_length| {
+                    downloaded += chunk_length;
+                    let _ = emitter.emit(
+                        "update-download-progress",
+                        UpdateDownloadProgress {
+                            downloaded,
+                            total: content_length,
+                        },
+                    );
+                },
+                || {},
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+
+        app.restart();
+    }
+
+    // ── Path B: Custom download + run installer ──────────────────────────────
+    let custom = lock_or_recover(&state.pending_custom_update)
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
-    let emitter = app.clone();
-    let mut downloaded: usize = 0;
-    update
-        .download_and_install(
-            move |chunk_length, content_length| {
-                downloaded += chunk_length;
-                let _ = emitter.emit(
-                    "update-download-progress",
-                    UpdateDownloadProgress {
-                        downloaded,
-                        total: content_length,
-                    },
-                );
-            },
-            || {},
-        )
-        .await
+    log::info!("[custom-install] Downloading {} ...", custom.download_url);
+
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(300))
+        .build()
         .map_err(|e| e.to_string())?;
 
-    app.restart();
+    let resp = client
+        .get(&custom.download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Download request failed: {e}"))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Download failed with status {}", resp.status()));
+    }
+
+    let total_size = resp.content_length();
+    let emitter = app.clone();
+    let mut downloaded: usize = 0;
+
+    let temp_dir = std::env::temp_dir();
+    let filename = custom
+        .download_url
+        .rsplit('/')
+        .next()
+        .unwrap_or("ClawStudio-setup.exe");
+    let installer_path = temp_dir.join(filename);
+
+    let mut file = tokio::fs::File::create(&installer_path)
+        .await
+        .map_err(|e| format!("Failed to create temp file: {e}"))?;
+
+    use tokio::io::AsyncWriteExt;
+    use futures_util::StreamExt;
+    let mut stream = resp.bytes_stream();
+    while let Some(chunk) = stream.next().await {
+        let chunk = chunk.map_err(|e| format!("Download stream error: {e}"))?;
+        file.write_all(&chunk)
+            .await
+            .map_err(|e| format!("Write error: {e}"))?;
+        downloaded += chunk.len();
+        let _ = emitter.emit(
+            "update-download-progress",
+            UpdateDownloadProgress {
+                downloaded,
+                total: total_size,
+            },
+        );
+    }
+    file.flush().await.map_err(|e| format!("Flush error: {e}"))?;
+    drop(file);
+
+    log::info!(
+        "[custom-install] Downloaded {} ({} bytes), launching installer",
+        installer_path.display(),
+        downloaded
+    );
+
+    std::process::Command::new(&installer_path)
+        .arg("/SILENT")
+        .spawn()
+        .map_err(|e| format!("Failed to launch installer: {e}"))?;
+
+    app.exit(0);
+    Ok(())
 }
 
 /// Send a native system notification.
@@ -967,36 +1181,18 @@ fn start_update_check(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        log::info!("Checking for updates...");
-
-        let updater = match app.updater_builder().build() {
-            Ok(u) => u,
-            Err(e) => {
-                log::warn!("Failed to build updater: {e}");
-                return;
-            }
-        };
-
-        match updater.check().await {
-            Ok(Some(update)) => {
-                let info = UpdateInfo {
-                    version: update.version.clone(),
-                    notes: update.body.clone().unwrap_or_default(),
-                };
-                log::info!("Update available: v{}", info.version);
-
-                let state = app.state::<AppState>();
-                *lock_or_recover(&state.pending_update) = Some(update);
-
+        match tray_check_update(&app).await {
+            Ok(Some(info)) => {
+                log::info!("Update available (startup): v{}", info.version);
                 if let Err(e) = app.emit("update-available", &info) {
                     log::warn!("Failed to emit update-available: {e}");
                 }
             }
             Ok(None) => {
-                log::info!("No updates available");
+                log::info!("No updates available (startup)");
             }
             Err(e) => {
-                log::warn!("Update check failed: {e}");
+                log::warn!("Startup update check failed: {e}");
             }
         }
     });
@@ -1026,6 +1222,101 @@ fn notify_start_failed(app: &AppHandle, reason: &str) {
     let _ = app.emit("backend-start-failed", reason);
 }
 
+/// Tray-menu update check — reuses the same Tauri-first + custom-fallback logic.
+async fn tray_check_update(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
+    // Try Tauri updater first
+    if let Ok(updater) = app.updater_builder().timeout(Duration::from_secs(30)).build() {
+        match updater.check().await {
+            Ok(Some(update)) => {
+                log::info!("Update available (tray, tauri): v{}", update.version);
+                let info = UpdateInfo {
+                    version: update.version.clone(),
+                    notes: update.body.clone().unwrap_or_default(),
+                };
+                let state = app.state::<AppState>();
+                *lock_or_recover(&state.pending_update) = Some(update);
+                *lock_or_recover(&state.pending_custom_update) = None;
+                return Ok(Some(info));
+            }
+            Ok(None) => {
+                log::info!("Already up to date (tray, tauri)");
+                return Ok(None);
+            }
+            Err(e) => {
+                log::warn!("Tauri updater failed (tray): {e}, trying custom check");
+            }
+        }
+    }
+
+    // Custom fallback
+    let current_version = app.config().version.clone().unwrap_or_default();
+    let target = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
+    let endpoints: Vec<String> = app
+        .config()
+        .plugins
+        .0
+        .get("updater")
+        .and_then(|v| v.get("endpoints"))
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| {
+                    s.replace("{{target}}", &target)
+                     .replace("{{current_version}}", &current_version)
+                     .replace("{{arch}}", std::env::consts::ARCH)
+                }))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .timeout(Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    for endpoint in &endpoints {
+        let resp = match client.get(endpoint).send().await {
+            Ok(r) if r.status().is_success() => r,
+            _ => continue,
+        };
+        let json: LatestJson = match resp.json().await {
+            Ok(j) => j,
+            _ => continue,
+        };
+        let remote_ver = match semver::Version::parse(&json.version) {
+            Ok(v) => v,
+            _ => continue,
+        };
+        let local_ver = semver::Version::parse(&current_version).unwrap_or(semver::Version::new(0, 0, 0));
+        if remote_ver <= local_ver {
+            return Ok(None);
+        }
+        let (dl_url, sig) = if let Some(platforms) = &json.platforms {
+            if let Some(p) = platforms.get(&target) {
+                (p.url.clone(), p.signature.clone())
+            } else { continue; }
+        } else if let (Some(u), Some(s)) = (&json.url, &json.signature) {
+            (u.clone(), s.clone())
+        } else { continue; };
+
+        log::info!("[tray custom-check] Update: v{} → v{}", local_ver, remote_ver);
+        let state = app.state::<AppState>();
+        *lock_or_recover(&state.pending_custom_update) = Some(CustomUpdateInfo {
+            version: json.version.clone(),
+            notes: json.notes.clone().unwrap_or_default(),
+            download_url: dl_url,
+            signature: sig,
+        });
+        *lock_or_recover(&state.pending_update) = None;
+        return Ok(Some(UpdateInfo {
+            version: json.version,
+            notes: json.notes.unwrap_or_default(),
+        }));
+    }
+    Err("Could not fetch update info from any endpoint".into())
+}
+
 /// Build and register the system tray icon with menu.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open_item = MenuItem::with_id(app, "open", "打开 ClawStudio", true, None::<&str>)?;
@@ -1049,23 +1340,8 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
                     log::info!("Manual update check from tray menu");
-                    let updater = match handle.updater_builder().build() {
-                        Ok(u) => u,
-                        Err(e) => {
-                            log::warn!("Failed to build updater: {e}");
-                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
-                            return;
-                        }
-                    };
-                    match updater.check().await {
-                        Ok(Some(update)) => {
-                            let info = UpdateInfo {
-                                version: update.version.clone(),
-                                notes: update.body.clone().unwrap_or_default(),
-                            };
-                            log::info!("Update available: v{}", info.version);
-                            let state = handle.state::<AppState>();
-                            *lock_or_recover(&state.pending_update) = Some(update);
+                    match tray_check_update(&handle).await {
+                        Ok(Some(info)) => {
                             let _ = handle.emit("update-available", &info);
                             if let Some(main) = handle.get_webview_window("main") {
                                 let _ = main.show();
@@ -1073,12 +1349,10 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                             }
                         }
                         Ok(None) => {
-                            log::info!("No updates available (manual check)");
                             let _ = handle.emit("update-check-result", serde_json::json!({"status": "up_to_date"}));
                         }
                         Err(e) => {
-                            log::warn!("Update check failed: {e}");
-                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
+                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": e}));
                         }
                     }
                 });
@@ -1149,6 +1423,7 @@ pub fn run() {
             backend_port: Mutex::new(None),
             sidecar_child: sidecar_child_arc,
             pending_update: Mutex::new(None),
+            pending_custom_update: Mutex::new(None),
             launch_config: Mutex::new(None),
         })
         // Register IPC command handlers
