@@ -28,6 +28,8 @@ import {
   LogOut,
   MessageSquare,
   RefreshCw,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
@@ -715,11 +717,42 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                   <div className="h-full w-1/2 rounded-full bg-blue-500 animate-pulse" />
                 </div>
               </>
+            ) : desktopUpdate.checkStatus === 'error' ? (
+              <>
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="w-9 h-9 rounded-full bg-red-100 dark:bg-red-900/40 flex items-center justify-center">
+                    <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">检查更新失败</h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">当前版本 v{desktopUpdate.currentVersion}</p>
+                  </div>
+                </div>
+                {desktopUpdate.checkError && (
+                  <div className="my-2 p-2.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-xs text-red-600 dark:text-red-400 max-h-24 overflow-y-auto break-all">
+                    {desktopUpdate.checkError}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button
+                    onClick={() => { desktopUpdate.checkForUpdate(); }}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                  >
+                    重试
+                  </button>
+                  <button
+                    onClick={() => setShowUpdateCheck(false)}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    关闭
+                  </button>
+                </div>
+              </>
             ) : desktopUpdate.updatePayload ? (
               <>
                 <div className="flex items-center gap-3 mb-2">
                   <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                    <RefreshCw className="w-4.5 h-4.5 text-blue-600 dark:text-blue-400" />
+                    <RefreshCw className="w-[1.125rem] h-[1.125rem] text-blue-600 dark:text-blue-400" />
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">发现新版本</h3>
@@ -739,7 +772,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                     稍后再说
                   </button>
                   <button
-                    onClick={() => setShowUpdateCheck(false)}
+                    onClick={() => {
+                      setShowUpdateCheck(false);
+                      desktopUpdate.checkForUpdate();
+                    }}
                     className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
                   >
                     立即更新
@@ -750,7 +786,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
               <>
                 <div className="flex items-center gap-3 mb-3">
                   <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/40 flex items-center justify-center">
-                    <svg className="w-4.5 h-4.5 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    <CheckCircle2 className="w-[1.125rem] h-[1.125rem] text-green-600 dark:text-green-400" />
                   </div>
                   <div>
                     <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">已是最新版本</h3>

@@ -386,7 +386,10 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
   const [currentVersion, setCurrentVersion] = React.useState('');
 
   React.useEffect(() => {
-    import('@tauri-apps/api/app').then((mod) => mod.getVersion()).then(setCurrentVersion).catch(() => {});
+    import('@tauri-apps/api/app')
+      .then((mod) => mod.getVersion())
+      .then(setCurrentVersion)
+      .catch((e) => console.warn('Failed to get app version:', e));
   }, []);
 
   React.useEffect(() => {

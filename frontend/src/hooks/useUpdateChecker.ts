@@ -91,6 +91,8 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     if (!isTauri()) return;
     setCheckStatus('checking');
     setCheckError(null);
+    setDownloadProgress(null);
+    setDismissed(false);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const result = await invoke<{ version: string; notes: string } | null>('check_update');
