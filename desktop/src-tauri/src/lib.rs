@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
@@ -35,6 +36,8 @@ pub struct AppState {
     pub pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
     /// Cached pending update from custom check (fallback when Tauri updater fails).
     pub pending_custom_update: Mutex<Option<CustomUpdateInfo>>,
+    /// Flag to cancel an in-progress download.
+    pub download_cancelled: AtomicBool,
     /// Engine/SDK configuration selected at launch (prod mode only).
     pub launch_config: Mutex<Option<LaunchConfig>>,
 }
@@ -312,6 +315,8 @@ async fn install_update(
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
+    state.download_cancelled.store(false, Ordering::SeqCst);
+
     log::info!("[custom-install] Downloading {} ...", custom.download_url);
 
     let client = reqwest::Client::builder()
@@ -350,6 +355,12 @@ async fn install_update(
     use futures_util::StreamExt;
     let mut stream = resp.bytes_stream();
     while let Some(chunk) = stream.next().await {
+        if state.download_cancelled.load(Ordering::SeqCst) {
+            log::info!("[custom-install] Download cancelled by user");
+            drop(file);
+            let _ = tokio::fs::remove_file(&installer_path).await;
+            return Err("Download cancelled".to_string());
+        }
         let chunk = chunk.map_err(|e| format!("Download stream error: {e}"))?;
         file.write_all(&chunk)
             .await
@@ -379,6 +390,11 @@ async fn install_update(
 
     app.exit(0);
     Ok(())
+}
+
+#[tauri::command]
+fn cancel_update(state: tauri::State<'_, AppState>) {
+    state.download_cancelled.store(true, Ordering::SeqCst);
 }
 
 /// Send a native system notification.
@@ -1424,6 +1440,7 @@ pub fn run() {
             sidecar_child: sidecar_child_arc,
             pending_update: Mutex::new(None),
             pending_custom_update: Mutex::new(None),
+            download_cancelled: AtomicBool::new(false),
             launch_config: Mutex::new(None),
         })
         // Register IPC command handlers
@@ -1434,6 +1451,7 @@ pub fn run() {
             quit_app,
             check_update,
             install_update,
+            cancel_update,
             send_notification,
             check_domain_accessible,
             check_cli_installed,

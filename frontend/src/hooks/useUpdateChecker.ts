@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { isTauri } from '../lib/environment';
 import type { UpdatePayload } from '../components/desktop/UpdateDialog';
 
@@ -22,8 +22,8 @@ interface UseUpdateCheckerResult {
  * Listens for the Tauri `update-available` event and exposes the payload.
  *
  * Provides `checkForUpdate()` for manual triggering (settings page, tray menu, etc.).
- * Also listens for `update-check-result` events emitted by the tray-menu handler
- * so the UI can show "already up to date" or error feedback.
+ * Also performs an automatic check on mount via IPC invoke (more reliable than
+ * event-based startup check which can be missed if the listener registers late).
  */
 export function useUpdateChecker(): UseUpdateCheckerResult {
   const [updatePayload, setUpdatePayload] = useState<UpdatePayload | null>(null);
@@ -31,6 +31,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   const [checkStatus, setCheckStatus] = useState<CheckStatus>('idle');
   const [checkError, setCheckError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const autoChecked = useRef(false);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -86,6 +87,27 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
       unlistenProgress?.();
     };
   }, [dismissed]);
+
+  // Auto-check on mount via IPC invoke — catches updates even if the Rust
+  // startup event was emitted before the listener was ready.
+  useEffect(() => {
+    if (!isTauri() || autoChecked.current) return;
+    autoChecked.current = true;
+
+    const timer = setTimeout(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const result = await invoke<{ version: string; notes: string } | null>('check_update');
+        if (result) {
+          setUpdatePayload(result);
+        }
+      } catch {
+        // Silent — startup auto-check failure is non-fatal
+      }
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const checkForUpdate = useCallback(async () => {
     if (!isTauri()) return;
