@@ -159,15 +159,58 @@ router.post('/marketplaces/:id/sync', async (req, res) => {
       });
     }
 
-    const parts = [`${result.pluginCount} plugins`];
-    if (result.agentCount && result.agentCount > 0) {
+    // Re-install all plugins and re-import agents after sync
+    let pluginsInstalled = 0;
+    let pluginsFailed = 0;
+    let agentsImported = 0;
+    try {
+      cleanBeforeInstall();
+      const pluginNames = pluginPaths.listPlugins(id);
+      for (const pluginName of pluginNames) {
+        try {
+          const installResult = await pluginInstaller.installPlugin({
+            pluginName,
+            marketplaceName: id,
+            marketplaceId: id,
+          });
+          if (installResult.success) {
+            pluginsInstalled++;
+          } else {
+            pluginsFailed++;
+            console.warn(`[SyncMarketplace] Plugin ${pluginName}: ${installResult.error}`);
+          }
+        } catch (pluginError) {
+          pluginsFailed++;
+          console.error(`[SyncMarketplace] Failed to install ${pluginName}:`, pluginError);
+        }
+      }
+      flushMCPConfig();
+
+      try {
+        const agentResult = await agentImporter.importAgentsFromMarketplace(id);
+        agentsImported = agentResult.importedCount;
+      } catch (agentError) {
+        console.error(`[SyncMarketplace] Failed to import agents from ${id}:`, agentError);
+      }
+
+      console.info(`[SyncMarketplace] ${id}: ${pluginsInstalled}/${pluginNames.length} plugins installed, ${agentsImported} agents imported`);
+    } catch (autoInstallError) {
+      console.error(`[SyncMarketplace] Auto-install failed for ${id}:`, autoInstallError);
+    }
+
+    const parts = [`${result.pluginCount} plugins (${pluginsInstalled} installed)`];
+    if (agentsImported > 0) {
+      parts.push(`${agentsImported} agents imported`);
+    } else if (result.agentCount && result.agentCount > 0) {
       parts.push(`${result.agentCount} agents`);
     }
 
     res.json({
       success: true,
       pluginCount: result.pluginCount,
+      pluginsInstalled,
       agentCount: result.agentCount,
+      agentsImported,
       message: `Marketplace synced successfully with ${parts.join(' and ')}`,
     });
   } catch (error) {
