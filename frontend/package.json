@@ -59,6 +59,7 @@
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.3.1",
     "tdesign-react": "^1.16.5",
+    "xlsx": "^0.18.5",
     "zod": "^4.3.6",
     "zustand": "^5.0.8"
   },

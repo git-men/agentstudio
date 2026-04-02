@@ -649,6 +649,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         <CSVPreview
           filePath={csvPreviewPath}
           onClose={handleCloseCSVPreview}
+          projectPath={data?.currentPath}
         />
       )}
 
@@ -657,6 +658,7 @@ export const FileBrowser: React.FC<FileBrowserProps> = ({
         <JSONLPreview
           filePath={jsonlPreviewPath}
           onClose={handleCloseJSONLPreview}
+          projectPath={data?.currentPath}
         />
       )}
     </div>

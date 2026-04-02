@@ -421,9 +421,9 @@ const app: express.Express = express();
     if (req.path.startsWith('/api/slack')) {
       return next();
     }
-    express.json({ limit: '10mb' })(req, res, next);
+    express.json({ limit: '100mb' })(req, res, next);
   });
-  app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '100mb' }));
 
   // Product gate middleware - enforce feature module access based on product edition
   app.use(productGateMiddleware);

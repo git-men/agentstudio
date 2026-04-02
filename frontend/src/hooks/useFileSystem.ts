@@ -56,10 +56,17 @@ const isImageFile = (fileName: string): boolean => {
   return imageExtensions.includes(extension);
 };
 
+// 判断文件是否为 Excel
+const isExcelFile = (fileName: string): boolean => {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  return ['xlsx', 'xls', 'xlsm', 'xlsb'].includes(extension);
+};
+
 // 读取文件内容
 export const useFileContent = (filePath?: string, projectPath?: string) => {
-  // 如果是图片文件，禁用查询（图片文件使用二进制模式加载）
+  // 如果是图片或 Excel 文件，禁用查询（它们使用二进制模式加载）
   const isImage = filePath ? isImageFile(filePath.split('/').pop() || '') : false;
+  const isExcel = filePath ? isExcelFile(filePath.split('/').pop() || '') : false;
   
   return useQuery({
     queryKey: ['file-content', filePath, projectPath],
@@ -86,7 +93,7 @@ export const useFileContent = (filePath?: string, projectPath?: string) => {
       }
       return response.json();
     },
-    enabled: !!filePath && !isImage, // 图片文件禁用查询
+    enabled: !!filePath && !isImage && !isExcel, // 图片和 Excel 文件禁用查询
     staleTime: 60000, // 1分钟内认为数据是新鲜的
     retry: false, // 不重试，直接显示错误
   });
@@ -247,15 +254,22 @@ export const useFileWrite = () => {
     mutationFn: async ({ 
       path, 
       content, 
-      projectPath 
+      projectPath,
+      encoding,
     }: { 
       path: string; 
       content: string; 
-      projectPath?: string; 
+      projectPath?: string;
+      encoding?: 'utf-8' | 'base64';
     }) => {
       const searchParams = new URLSearchParams();
       if (projectPath) {
         searchParams.append('projectPath', projectPath);
+      }
+      
+      const body: Record<string, string> = { path, content };
+      if (encoding) {
+        body.encoding = encoding;
       }
       
       const response = await authFetch(`${API_BASE}/files/write?${searchParams.toString()}`, {
@@ -263,7 +277,7 @@ export const useFileWrite = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ path, content }),
+        body: JSON.stringify(body),
       });
       
       if (!response.ok) {
@@ -316,6 +330,23 @@ export const useCreateDirectory = () => {
       queryClient.invalidateQueries({
         queryKey: ['file-system-browse', variables.parentPath],
       });
+    },
+  });
+};
+
+// 在系统文件管理器中打开文件夹
+export const useOpenInExplorer = () => {
+  return useMutation({
+    mutationFn: async ({ folderPath }: { folderPath: string }) => {
+      const response = await authFetch(`${API_BASE}/files/open-in-explorer`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folderPath }),
+      });
+      if (!response.ok) {
+        throw new Error('Failed to open folder in explorer');
+      }
+      return response.json();
     },
   });
 };

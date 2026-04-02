@@ -107,7 +107,17 @@
     "collapsePanel": "收起目录面板",
     "expandPanel": "展开目录面板",
     "sourceCode": "源码",
-    "preview": "预览"
+    "preview": "预览",
+    "openInExplorer": "在文件管理器中打开",
+    "editFile": "编辑",
+    "saveFile": "保存",
+    "saving": "保存中...",
+    "saveSuccess": "保存成功",
+    "saveFailed": "保存失败",
+    "unsavedChanges": "有未保存的更改",
+    "excelPreview": "Excel 预览",
+    "sheetLabel": "工作表",
+    "excelLoadFailed": "Excel 文件加载失败"
   },
   "sessionDropdown": {
     "title": "会话管理",

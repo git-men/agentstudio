@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, ZoomIn, ZoomOut, RotateCw, Download, ChevronLeft, ChevronRight } from 'lucide-react';
+import { downloadFile } from '../lib/downloadUtils';
 
 interface ImagePreviewProps {
   images: string[];
   initialIndex?: number;
   onClose: () => void;
+  projectPath?: string;
 }
 
-export const ImagePreview: React.FC<ImagePreviewProps> = ({ images, initialIndex = 0, onClose }) => {
+export const ImagePreview: React.FC<ImagePreviewProps> = ({ images, initialIndex = 0, onClose, projectPath }) => {
   const [currentIndex, setCurrentIndex] = useState(() => {
     if (!images || images.length === 0) return 0;
     return Math.min(initialIndex, images.length - 1);
@@ -193,13 +195,10 @@ export const ImagePreview: React.FC<ImagePreviewProps> = ({ images, initialIndex
     handleZoom(delta);
   };
 
-  // Handle download
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (currentImageUrl) {
-      const link = document.createElement('a');
-      link.href = currentImageUrl;
-      link.download = `image-${currentIndex + 1}.jpg`;
-      link.click();
+      const fileName = `image-${currentIndex + 1}.jpg`;
+      await downloadFile({ fileName, projectPath, url: currentImageUrl });
     }
   };
 

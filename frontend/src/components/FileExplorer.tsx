@@ -7,13 +7,14 @@ import { Tree, NodeApi, TreeApi } from 'react-arborist';
 const Editor = lazy(() => import('@monaco-editor/react'));
 import {
   FaFolder, FaFolderOpen, FaFile, FaCss3Alt, FaHtml5, FaJsSquare,
-  FaReact, FaMarkdown, FaImage, FaPython, FaJava, FaFilePdf, FaFileWord
+  FaReact, FaMarkdown, FaImage, FaPython, FaJava, FaFilePdf, FaFileWord,
+  FaFileExcel
 } from 'react-icons/fa';
 import { VscJson, VscCode } from 'react-icons/vsc';
 import { SiTypescript } from 'react-icons/si';
-import { useFileTree, useFileContent, type FileSystemItem } from '../hooks/useFileSystem';
+import { useFileTree, useFileContent, useFileWrite, useOpenInExplorer, type FileSystemItem } from '../hooks/useFileSystem';
 import { API_BASE } from '../lib/config';
-import { Loader2, ChevronRight, RefreshCw, X, ChevronDown, MoreHorizontal, Eye, EyeOff, PanelLeftClose, PanelLeft, Code2, MonitorPlay } from 'lucide-react';
+import { Loader2, ChevronRight, RefreshCw, X, ChevronDown, MoreHorizontal, Eye, EyeOff, PanelLeftClose, PanelLeft, Code2, MonitorPlay, FolderOpen, Save } from 'lucide-react';
 import { eventBus, EVENTS } from '../utils/eventBus';
 
 // 将 FileSystemItem 转换为 react-arborist 需要的格式
@@ -64,6 +65,10 @@ const ICON_MAP = new Map([
   ['pdf', <FaFilePdf color="#d63031" key="pdf" />],
   ['ppt', <FaFileWord color="#d63031" key="ppt" />],
   ['pptx', <FaFileWord color="#d63031" key="pptx" />],
+  ['xlsx', <FaFileExcel color="#217346" key="xlsx" />],
+  ['xls', <FaFileExcel color="#217346" key="xls" />],
+  ['xlsm', <FaFileExcel color="#217346" key="xlsm" />],
+  ['xlsb', <FaFileExcel color="#217346" key="xlsb" />],
   ['ico', <FaImage color="#a9a9a9" key="ico" />],
   ['png', <FaImage color="#a9a9a9" key="png" />],
   ['jpg', <FaImage color="#a9a9a9" key="jpg" />],
@@ -255,6 +260,11 @@ const isHtmlFile = (fileName: string): boolean => {
   return ext === 'html' || ext === 'htm';
 };
 
+const isEditableTextFile = (fileName: string): boolean => {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  return ['txt', 'md', 'markdown', 'json', 'jsonl', 'yaml', 'yml'].includes(ext);
+};
+
 // 自定义节点渲染组件
 const Node: React.FC<{ 
   node: NodeApi<FileTreeItem>; 
@@ -350,6 +360,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
   const [lastClickTime, setLastClickTime] = useState<number>(0);
   const [lastClickedPath, setLastClickedPath] = useState<string>('');
 
+  // 打开文件夹
+  const openInExplorer = useOpenInExplorer();
+
+  // 文件写入
+  const fileWriteMutation = useFileWrite();
+
+  // 文件编辑相关状态
+  const [editingContent, setEditingContent] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
   // 暗色模式检测
   const [isDarkMode, setIsDarkMode] = useState<boolean>(
     document.documentElement.classList.contains('dark')
@@ -398,6 +419,41 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
     activeTab ? activeTab.path : undefined,
     projectPath
   );
+
+  // 切换 tab 时重置编辑状态
+  useEffect(() => {
+    setEditingContent(null);
+    setIsEditing(false);
+    setHasUnsavedChanges(false);
+    setSaveError(null);
+  }, [activeTab?.path]);
+
+  // 当文件内容加载完成后，初始化编辑内容（仅对 TXT 文件）
+  useEffect(() => {
+    if (fileContentData && activeTab && isEditableTextFile(activeTab.name)) {
+      setEditingContent(fileContentData.content);
+    }
+  }, [fileContentData, activeTab?.path]);
+
+  // 保存文件（TXT）
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const handleSaveFile = useCallback(async () => {
+    if (!activeTab) return;
+    setSaveError(null);
+
+    try {
+      if (editingContent === null) return;
+      await fileWriteMutation.mutateAsync({
+        path: activeTab.path,
+        content: editingContent,
+        projectPath,
+      });
+      setHasUnsavedChanges(false);
+    } catch (err) {
+      console.error('Failed to save file:', err);
+      setSaveError(err instanceof Error ? err.message : '保存失败');
+    }
+  }, [activeTab, editingContent, projectPath, fileWriteMutation]);
 
   // 监听暗色模式变化
   useEffect(() => {
@@ -932,9 +988,12 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         }
 
         const isHtml = isHtmlFile(activeTab.name);
+        const isEditableText = isEditableTextFile(activeTab.name);
+        const isTextEditing = isEditableText && isEditing;
 
         return (
           <div className="flex flex-col h-full">
+            {/* HTML 模式切换栏 */}
             {isHtml && (
               <div className="flex items-center px-3 py-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
                 <div className="flex items-center bg-gray-200 dark:bg-gray-700 rounded-md p-0.5">
@@ -963,6 +1022,58 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                 </div>
               </div>
             )}
+            {/* 文本编辑工具栏 */}
+            {isEditableText && (
+              <div className="flex items-center justify-between px-3 py-1 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  {!isEditing ? (
+                    <button
+                      onClick={() => {
+                        setIsEditing(true);
+                        setEditingContent(fileContentData.content);
+                        setHasUnsavedChanges(false);
+                      }}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded bg-blue-500 text-white hover:bg-blue-600 transition-colors"
+                    >
+                      <Code2 className="w-3.5 h-3.5" />
+                      {t('fileExplorer.editFile', '编辑')}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleSaveFile}
+                      disabled={!hasUnsavedChanges || fileWriteMutation.isPending}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+                        hasUnsavedChanges
+                          ? 'bg-green-500 text-white hover:bg-green-600'
+                          : 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                      }`}
+                    >
+                      <Save className="w-3.5 h-3.5" />
+                      {fileWriteMutation.isPending
+                        ? t('fileExplorer.saving', '保存中...')
+                        : t('fileExplorer.saveFile', '保存')}
+                    </button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasUnsavedChanges && (
+                    <span className="text-xs text-amber-500 dark:text-amber-400">
+                      {t('fileExplorer.unsavedChanges', '有未保存的更改')}
+                    </span>
+                  )}
+                  {fileWriteMutation.isSuccess && !hasUnsavedChanges && isEditing && (
+                    <span className="text-xs text-green-500 dark:text-green-400">
+                      {t('fileExplorer.saveSuccess', '保存成功')}
+                    </span>
+                  )}
+                  {(fileWriteMutation.isError || saveError) && (
+                    <span className="text-xs text-red-500 dark:text-red-400">
+                      {saveError || t('fileExplorer.saveFailed', '保存失败')}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="flex-1 min-h-0">
               {isHtml && htmlPreviewMode === 'preview' ? (
                 <iframe
@@ -981,9 +1092,13 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
                     height="100%"
                     theme={isDarkMode ? 'vs-dark' : 'vs-light'}
                     language={getLanguageForFile(activeTab.name)}
-                    value={fileContentData.content}
+                    value={isTextEditing ? (editingContent ?? fileContentData.content) : fileContentData.content}
+                    onChange={isTextEditing ? (value) => {
+                      setEditingContent(value ?? '');
+                      setHasUnsavedChanges(true);
+                    } : undefined}
                     options={{
-                      readOnly: true,
+                      readOnly: !isTextEditing,
                       minimap: { enabled: false },
                       fontSize: 14,
                       wordWrap: 'on',
@@ -1004,6 +1119,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
               <VscCode className="w-12 h-12 mx-auto mb-4 text-gray-300 dark:text-gray-600" />
               <p>{t('fileExplorer.previewNotSupported')}</p>
               <p className="text-sm mt-2">{t('fileExplorer.fileLabel')}: {activeTab.name}</p>
+              <button
+                onClick={() => {
+                  const dirPath = activeTab.path.split('/').slice(0, -1).join('/');
+                  if (dirPath) openInExplorer.mutate({ folderPath: dirPath });
+                }}
+                disabled={openInExplorer.isPending}
+                className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-blue-500 text-white hover:bg-blue-600 transition-colors disabled:opacity-50"
+              >
+                <FolderOpen className="w-4 h-4" />
+                {t('fileExplorer.openContainingFolder', '打开所在目录')}
+              </button>
             </div>
           </div>
         );
@@ -1058,6 +1184,17 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
             <div className="flex items-center justify-between w-full">
               <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('fileExplorer.title')}</h3>
               <div className="flex items-center space-x-1">
+                {/* 在系统文件管理器中打开 */}
+                {projectPath && (
+                  <button
+                    onClick={() => openInExplorer.mutate({ folderPath: projectPath })}
+                    className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded transition-colors"
+                    title={t('fileExplorer.openInExplorer', '在文件管理器中打开')}
+                    disabled={openInExplorer.isPending}
+                  >
+                    <FolderOpen className="w-4 h-4" />
+                  </button>
+                )}
                 {/* 显示隐藏文件开关 */}
                 <button
                   onClick={toggleShowHiddenFiles}
@@ -1138,7 +1275,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       )}
 
       {/* 文件预览区域 */}
-      <div className={`flex-1 flex flex-col ${isVertical ? 'min-h-0' : 'h-full'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 ${isVertical ? 'min-h-0' : 'h-full'}`}>
         {/* 标签栏 - 统一高度 */}
         <div className="h-12 border-b border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800 flex items-center flex-shrink-0">
           {/* 展开按钮（当目录面板折叠时显示） */}
@@ -1243,7 +1380,7 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
         </div>
 
         {/* 预览内容 */}
-        <div className="flex-1 bg-gray-50 dark:bg-gray-900 min-h-0">
+        <div className="flex-1 bg-gray-50 dark:bg-gray-900 min-h-0 min-w-0 overflow-hidden">
           {renderFilePreview()}
         </div>
       </div>

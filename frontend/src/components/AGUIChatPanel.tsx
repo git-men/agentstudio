@@ -899,6 +899,7 @@ export const AGUIChatPanel: React.FC<AGUIChatPanelProps> = ({
                             message={displayMessage as unknown as Parameters<typeof ChatMessageRenderer>[0]['message']}
                             onFrontendToolSubmit={handleFrontendToolSubmit}
                             onFrontendToolCancel={handleFrontendToolCancel}
+                            projectPath={projectPath}
                         />
                     </div>
 

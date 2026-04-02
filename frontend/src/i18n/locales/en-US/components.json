@@ -107,7 +107,17 @@
     "collapsePanel": "Collapse directory panel",
     "expandPanel": "Expand directory panel",
     "sourceCode": "Source",
-    "preview": "Preview"
+    "preview": "Preview",
+    "openInExplorer": "Open in File Explorer",
+    "editFile": "Edit",
+    "saveFile": "Save",
+    "saving": "Saving...",
+    "saveSuccess": "Saved successfully",
+    "saveFailed": "Failed to save",
+    "unsavedChanges": "Unsaved changes",
+    "excelPreview": "Excel Preview",
+    "sheetLabel": "Sheet",
+    "excelLoadFailed": "Failed to load Excel file"
   },
   "sessionDropdown": {
     "title": "Session Management",

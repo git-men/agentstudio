@@ -3,10 +3,12 @@ import { X, Search, Download, Maximize2, Minimize2, ChevronLeft, ChevronRight, C
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
+import { downloadFile } from '../lib/downloadUtils';
 
 interface JSONLPreviewProps {
   filePath: string;
   onClose: () => void;
+  projectPath?: string;
 }
 
 interface ParsedLine {
@@ -16,7 +18,7 @@ interface ParsedLine {
   raw: string;
 }
 
-export const JSONLPreview: React.FC<JSONLPreviewProps> = ({ filePath, onClose }) => {
+export const JSONLPreview: React.FC<JSONLPreviewProps> = ({ filePath, onClose, projectPath }) => {
   const { t } = useTranslation('components');
   const [content, setContent] = useState<ParsedLine[]>([]);
   const [loading, setLoading] = useState(true);
@@ -151,14 +153,10 @@ export const JSONLPreview: React.FC<JSONLPreviewProps> = ({ filePath, onClose })
     }
   };
 
-  // Handle download
-  const handleDownload = () => {
-    const blob = new Blob([content.map(item => item.raw).join('\n')], { type: 'application/jsonl;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(link.href);
+  const handleDownload = async () => {
+    const text = content.map(item => item.raw).join('\n');
+    const blob = new Blob([text], { type: 'application/jsonl;charset=utf-8;' });
+    await downloadFile({ fileName, projectPath, content: text, blob });
   };
 
   // Truncate long strings

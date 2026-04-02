@@ -37,6 +37,7 @@ export interface ChatMessageListProps {
   onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
   sessionId?: string;
   projectName?: string;
+  projectPath?: string;
 }
 
 export const ChatMessageList: React.FC<ChatMessageListProps> = ({
@@ -51,6 +52,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   onFrontendToolCancel,
   sessionId,
   projectName,
+  projectPath,
 }) => {
   const { t } = useTranslation('components');
   const { dispatchToIM, getStatus, resetStatus } = useDispatchIM();
@@ -136,6 +138,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               message={displayMessage as any} 
               onFrontendToolSubmit={onFrontendToolSubmit}
               onFrontendToolCancel={onFrontendToolCancel}
+              projectPath={projectPath}
             />
           </div>
 

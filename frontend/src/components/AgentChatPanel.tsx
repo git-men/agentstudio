@@ -864,6 +864,7 @@ export const AgentChatPanel: React.FC<AgentChatPanelProps> = ({ agent, projectPa
               onScrollToBottom={scrollToBottom}
               onFrontendToolSubmit={handleFrontendToolSubmit}
               onFrontendToolCancel={handleFrontendToolCancel}
+              projectPath={projectPath}
             />
           )}
 

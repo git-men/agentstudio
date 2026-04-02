@@ -75,9 +75,10 @@ interface ChatMessageRendererProps {
   message: ChatMessage;
   onFrontendToolSubmit?: (toolCallId: string, result: unknown) => Promise<{ success: boolean; error?: string }>;
   onFrontendToolCancel?: (toolCallId: string, reason?: string) => void;
+  projectPath?: string;
 }
 
-const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onFrontendToolSubmit, onFrontendToolCancel }) => {
+const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ message, onFrontendToolSubmit, onFrontendToolCancel, projectPath }) => {
   const [previewImages, setPreviewImages] = useState<string[]>([]);
   const [previewIndex, setPreviewIndex] = useState<number>(0);
 
@@ -266,7 +267,8 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
         <ImagePreview 
           images={previewImages} 
           initialIndex={previewIndex}
-          onClose={closeImagePreview} 
+          onClose={closeImagePreview}
+          projectPath={projectPath}
         />
       </div>
     );
@@ -356,7 +358,8 @@ const ChatMessageRendererComponent: React.FC<ChatMessageRendererProps> = ({ mess
       <ImagePreview 
         images={previewImages} 
         initialIndex={previewIndex}
-        onClose={closeImagePreview} 
+        onClose={closeImagePreview}
+        projectPath={projectPath}
       />
     </div>
   );

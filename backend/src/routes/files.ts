@@ -5,6 +5,7 @@ import { join, dirname, resolve, relative } from 'path';
 import { z } from 'zod';
 import * as os from 'os';
 import * as path from 'path';
+import { exec } from 'child_process';
 // Helper function to get project ID using base64url encoding (reversible)
 const getProjectId = (projectPath: string): string => {
   return encodeProjectPath(projectPath);
@@ -41,7 +42,8 @@ const ReadFilesSchema = z.object({
 
 const WriteFileSchema = z.object({
   path: z.string(),
-  content: z.string()
+  content: z.string(),
+  encoding: z.enum(['utf-8', 'base64']).optional()
 });
 
 // Helper function to resolve and validate file path
@@ -109,12 +111,16 @@ router.get('/read', async (req, res) => {
         'webp': 'image/webp',
         'ico': 'image/x-icon',
         'bmp': 'image/bmp',
-        'tiff': 'image/tiff'
+        'tiff': 'image/tiff',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'xls': 'application/vnd.ms-excel',
+        'xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+        'xlsb': 'application/vnd.ms-excel.sheet.binary.macroEnabled.12',
       };
       
       const mimeType = mimeTypes[ext || ''] || 'application/octet-stream';
       res.setHeader('Content-Type', mimeType);
-      res.setHeader('Cache-Control', 'public, max-age=3600'); // 1小时缓存
+      res.setHeader('Cache-Control', 'no-cache');
       
       // 直接发送文件流
       const fileStream = fs.createReadStream(fullPath);
@@ -218,20 +224,32 @@ router.put('/write', async (req, res) => {
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
-    const { path, content } = validation.data;
+    const { path, content, encoding } = validation.data;
     const { projectPath } = req.query;
     const fullPath = resolveSafePath(path, typeof projectPath === 'string' ? projectPath : undefined);
+
+    console.log(`[files/write] path=${path}, encoding=${encoding}, contentLength=${content.length}, fullPath=${fullPath}`);
 
     // Ensure directory exists
     await fs.ensureDir(dirname(fullPath));
     
-    // Write the file
-    await fs.writeFile(fullPath, content, 'utf-8');
+    if (encoding === 'base64') {
+      const buffer = Buffer.from(content, 'base64');
+      console.log(`[files/write] base64 decoded to ${buffer.length} bytes`);
+      await fs.writeFile(fullPath, buffer);
+    } else {
+      await fs.writeFile(fullPath, content, 'utf-8');
+    }
+
+    // Verify file was written
+    const writtenStats = await fs.stat(fullPath);
+    console.log(`[files/write] Written successfully: ${fullPath} (${writtenStats.size} bytes)`);
 
     res.json({
       success: true,
       message: 'File written successfully',
-      path
+      path,
+      size: writtenStats.size,
     });
   } catch (error) {
     console.error('Error writing file:', error);
@@ -392,6 +410,51 @@ router.post('/create-directory', (req, res) => {
       error: 'Failed to create directory',
       details: error instanceof Error ? error.message : String(error)
     });
+  }
+});
+
+// POST /api/files/open-in-explorer - Open a folder in the system file explorer
+router.post('/open-in-explorer', (req, res) => {
+  try {
+    const { folderPath } = req.body;
+    
+    if (!folderPath || typeof folderPath !== 'string') {
+      return res.status(400).json({ error: 'Folder path is required' });
+    }
+
+    let targetPath = folderPath;
+    if (targetPath.startsWith('~')) {
+      targetPath = path.join(os.homedir(), targetPath.slice(1));
+    }
+    targetPath = path.resolve(targetPath);
+
+    if (!fs.existsSync(targetPath)) {
+      return res.status(404).json({ error: 'Path not found' });
+    }
+
+    const stats = fs.statSync(targetPath);
+    const dirToOpen = stats.isDirectory() ? targetPath : path.dirname(targetPath);
+
+    const platform = os.platform();
+    let command: string;
+    if (platform === 'darwin') {
+      command = `open "${dirToOpen}"`;
+    } else if (platform === 'win32') {
+      command = `explorer "${dirToOpen.replace(/\//g, '\\')}"`;
+    } else {
+      command = `xdg-open "${dirToOpen}"`;
+    }
+
+    exec(command, (error) => {
+      if (error) {
+        console.error('Failed to open folder:', error);
+        return res.status(500).json({ error: 'Failed to open folder in explorer' });
+      }
+      res.json({ success: true, path: dirToOpen, platform });
+    });
+  } catch (error) {
+    console.error('Open in explorer error:', error);
+    res.status(500).json({ error: 'Failed to open folder in explorer' });
   }
 });
 

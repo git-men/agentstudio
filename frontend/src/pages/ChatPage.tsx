@@ -31,6 +31,7 @@ export const ChatPage: React.FC = () => {
   const wasAiTypingRef = React.useRef(false);
 
   const agent = agentData?.agent;
+  const effectiveProjectPath = projectPath || agent?.workingDirectory || undefined;
 
   // Track AI typing state changes
   useEffect(() => {
@@ -259,10 +260,10 @@ export const ChatPage: React.FC = () => {
         onToggleRightPanel={handleToggleRightPanel}
         mobileLayout="tabs"
       >
-        <AGUIChatPanel agent={agent} projectPath={projectPath || undefined} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
+        <AGUIChatPanel agent={agent} projectPath={effectiveProjectPath} onSessionChange={handleSessionChange} initialMessage={initialMessage || undefined} />
         <RightPanelWrapper
           agent={agent}
-          projectPath={projectPath || undefined}
+          projectPath={effectiveProjectPath}
           CustomComponent={RightPanelComponent}
         />
       </SplitLayout>

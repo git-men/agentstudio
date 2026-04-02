@@ -3,13 +3,15 @@ import { X, Search, Download, Maximize2, Minimize2, ChevronLeft, ChevronRight } 
 import { useTranslation } from 'react-i18next';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
+import { downloadFile } from '../lib/downloadUtils';
 
 interface CSVPreviewProps {
   filePath: string;
   onClose: () => void;
+  projectPath?: string;
 }
 
-export const CSVPreview: React.FC<CSVPreviewProps> = ({ filePath, onClose }) => {
+export const CSVPreview: React.FC<CSVPreviewProps> = ({ filePath, onClose, projectPath }) => {
   const { t } = useTranslation('components');
   const [content, setContent] = useState<string[][]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,11 +132,9 @@ export const CSVPreview: React.FC<CSVPreviewProps> = ({ filePath, onClose }) => 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, currentPage, totalPages]);
 
-  // Handle download
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const csvContent = content.map(row => 
       row.map(cell => {
-        // Escape quotes and wrap in quotes if needed
         if (cell.includes(',') || cell.includes('"') || cell.includes('\n')) {
           return `"${cell.replace(/"/g, '""')}"`;
         }
@@ -143,11 +143,7 @@ export const CSVPreview: React.FC<CSVPreviewProps> = ({ filePath, onClose }) => 
     ).join('\n');
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = fileName;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    await downloadFile({ fileName, projectPath, content: csvContent, blob });
   };
 
   if (loading) {
