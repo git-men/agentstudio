@@ -26,9 +26,11 @@ import { useTranslation } from 'react-i18next';
 import { useProjects, Project } from '../hooks/useProjects';
 import { useAgents } from '../hooks/useAgents';
 import { useAgent } from '../hooks/useAgents';
+import { useAgentSessions } from '../hooks/useAgents';
 import { useAgentStore } from '../stores/useAgentStore';
 import { useProviderHealthCheck } from '../hooks/useProviderHealthCheck';
 import { AGUIChatPanel } from '../components/AGUIChatPanel';
+import { SessionsDropdown } from '../components/SessionsDropdown';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
 import { showError } from '../utils/toast';
@@ -376,6 +378,40 @@ export const NewDashboard: React.FC = () => {
       .then(data => { if (data?.resolved) setMetaAgentResolvedPath(data.resolved); })
       .catch(() => {});
   }, [agents]);
+
+  // ── Session history for Meta Agent panel ──
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [sessionSearchTerm, setSessionSearchTerm] = useState('');
+  const { data: metaSessionsData, refetch: refetchMetaSessions } = useAgentSessions(
+    META_AGENT_ID, sessionSearchTerm, metaAgentResolvedPath || undefined
+  );
+
+  useEffect(() => {
+    if (showSessionHistory) refetchMetaSessions();
+  }, [showSessionHistory, refetchMetaSessions]);
+
+  const handleMetaSessionSwitch = useCallback(async (sessionId: string) => {
+    const store = useAgentStore.getState();
+    if (store.isAiTyping) return;
+    store.setCurrentSessionId(sessionId);
+    saveMetaAgentSession(sessionId);
+    try {
+      const url = new URL(`${API_BASE}/sessions/${META_AGENT_ID}/${sessionId}/messages`);
+      if (metaAgentResolvedPath) url.searchParams.set('projectPath', metaAgentResolvedPath);
+      const response = await authFetch(url.toString());
+      if (response.ok) {
+        const data = await response.json();
+        const converted = (data.messages || []).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        useAgentStore.getState().loadSessionMessages(converted);
+      }
+    } catch (err) {
+      console.warn('[Dashboard] Failed to load session messages:', err);
+    }
+    setShowSessionHistory(false);
+  }, [metaAgentResolvedPath]);
 
   const [selectedAgent, setSelectedAgent] = React.useState<AgentConfig | null>(null);
 
@@ -844,22 +880,43 @@ export const NewDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-          <button
-            onClick={() => {
-              const isRealSession = currentSessionId
-                && !currentSessionId.startsWith('session_')
-                && !currentSessionId.startsWith('__pending_');
-              openProjectWindow({
-                projectPath: metaAgentResolvedPath || '',
-                agentId: META_AGENT_ID,
-                sessionId: isRealSession ? currentSessionId : undefined,
-              });
-            }}
-            className="p-1.5 rounded-lg text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
-            title="全屏沉浸式工作"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <div className="relative">
+              <button
+                onClick={() => setShowSessionHistory(!showSessionHistory)}
+                className="p-1.5 rounded-lg text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+                title="会话历史"
+              >
+                <Clock className="w-4 h-4" />
+              </button>
+              <SessionsDropdown
+                isOpen={showSessionHistory}
+                onToggle={() => setShowSessionHistory(!showSessionHistory)}
+                sessions={metaSessionsData?.sessions || []}
+                currentSessionId={currentSessionId}
+                onSwitchSession={handleMetaSessionSwitch}
+                isLoading={false}
+                searchTerm={sessionSearchTerm}
+                onSearchChange={setSessionSearchTerm}
+              />
+            </div>
+            <button
+              onClick={() => {
+                const isRealSession = currentSessionId
+                  && !currentSessionId.startsWith('session_')
+                  && !currentSessionId.startsWith('__pending_');
+                openProjectWindow({
+                  projectPath: metaAgentResolvedPath || '',
+                  agentId: META_AGENT_ID,
+                  sessionId: isRealSession ? currentSessionId : undefined,
+                });
+              }}
+              className="p-1.5 rounded-lg text-indigo-500 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-200 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 transition-colors"
+              title="全屏沉浸式工作"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Embedded chat panel */}

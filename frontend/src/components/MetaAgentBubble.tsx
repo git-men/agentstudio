@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { MessageCircle, X, Minimize2, Maximize2 } from 'lucide-react';
-import { useAgent } from '../hooks/useAgents';
+import { MessageCircle, X, Minimize2, Maximize2, Clock } from 'lucide-react';
+import { useAgent, useAgentSessions } from '../hooks/useAgents';
 import { useAgentStore } from '../stores/useAgentStore';
 import { AGUIChatPanel } from './AGUIChatPanel';
+import { SessionsDropdown } from './SessionsDropdown';
 import { useMobileContext } from '../contexts/MobileContext';
 import { API_BASE } from '../lib/config';
 import { authFetch } from '../lib/authFetch';
@@ -213,6 +214,40 @@ export const MetaAgentBubble: React.FC = () => {
     saveMetaAgentSession(newSessionId);
   }, []);
 
+  // ── Session history ──
+  const [showSessionHistory, setShowSessionHistory] = useState(false);
+  const [sessionSearchTerm, setSessionSearchTerm] = useState('');
+  const { data: metaSessionsData, refetch: refetchMetaSessions } = useAgentSessions(
+    META_AGENT_ID, sessionSearchTerm, resolvedWorkDir || undefined, isOpen
+  );
+
+  useEffect(() => {
+    if (showSessionHistory) refetchMetaSessions();
+  }, [showSessionHistory, refetchMetaSessions]);
+
+  const handleMetaSessionSwitch = useCallback(async (sessionId: string) => {
+    const store = useAgentStore.getState();
+    if (store.isAiTyping) return;
+    store.setCurrentSessionId(sessionId);
+    saveMetaAgentSession(sessionId);
+    try {
+      const url = new URL(`${API_BASE}/sessions/${META_AGENT_ID}/${sessionId}/messages`);
+      if (resolvedWorkDir) url.searchParams.set('projectPath', resolvedWorkDir);
+      const response = await authFetch(url.toString());
+      if (response.ok) {
+        const data = await response.json();
+        const converted = (data.messages || []).map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }));
+        useAgentStore.getState().loadSessionMessages(converted);
+      }
+    } catch (err) {
+      console.warn('[MetaAgentBubble] Failed to load session messages:', err);
+    }
+    setShowSessionHistory(false);
+  }, [resolvedWorkDir]);
+
   if (isLoading || error || !agent || !agent.enabled) {
     return null;
   }
@@ -272,6 +307,25 @@ export const MetaAgentBubble: React.FC = () => {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSessionHistory(!showSessionHistory)}
+                    className="p-1.5 rounded-lg text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                    title="会话历史"
+                  >
+                    <Clock className="w-4 h-4" />
+                  </button>
+                  <SessionsDropdown
+                    isOpen={showSessionHistory}
+                    onToggle={() => setShowSessionHistory(!showSessionHistory)}
+                    sessions={metaSessionsData?.sessions || []}
+                    currentSessionId={currentSessionId}
+                    onSwitchSession={handleMetaSessionSwitch}
+                    isLoading={false}
+                    searchTerm={sessionSearchTerm}
+                    onSearchChange={setSessionSearchTerm}
+                  />
+                </div>
                 <button
                   onClick={() => {
                     const params = new URLSearchParams();
