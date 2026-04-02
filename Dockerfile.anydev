@@ -71,6 +71,10 @@ RUN apt-get update && apt-get install -y \
 
 RUN npm install -g pnpm@10 pm2
 
+# --- Install claude-internal CLI (Tencent internal registry) ---
+RUN npm install -g @tencent/claude-code-internal --registry=https://mirrors.tencent.com/npm/ || \
+    echo "Warning: claude-internal CLI install failed, will need manual install"
+
 # --- Install AgentStudio ---
 WORKDIR /opt/clawstudio
 
@@ -89,8 +93,41 @@ RUN mkdir -p /opt/clawstudio/backend/public && \
     cp -r /opt/clawstudio/frontend/dist/* /opt/clawstudio/backend/public/
 
 # --- Prepare data directories ---
+# Seed defaults under /root (used as fallback before /data is ready)
 RUN mkdir -p /root/.agentstudio/{data,config,agents,run,scripts,slack-session-locks,scheduled-tasks} && \
+    mkdir -p /root/.claude-internal/projects && \
     mkdir -p /root/.claude/projects
+
+# --- AnyDev init helper (called by the template's init command) ---
+# Ensures /data directories exist, copies seed data, then creates symlinks so
+# terminal sessions (HOME=/root) and the backend (HOME=/data) share auth tokens.
+COPY <<'INITSCRIPT' /opt/clawstudio/anydev-init.sh
+#!/bin/bash
+set -e
+
+DATA_HOME="${1:-/data}"
+
+# Create persistent data directories
+mkdir -p "$DATA_HOME/.agentstudio"/{data,config,agents,run,scripts,slack-session-locks,scheduled-tasks}
+mkdir -p "$DATA_HOME/.claude-internal/projects"
+mkdir -p "$DATA_HOME/.claude/projects"
+
+# Copy seed data from image defaults (only if /data dirs are fresh)
+cp -an /root/.claude-internal/. "$DATA_HOME/.claude-internal/" 2>/dev/null || true
+cp -an /root/.claude/.           "$DATA_HOME/.claude/"          2>/dev/null || true
+cp -an /root/.agentstudio/.      "$DATA_HOME/.agentstudio/"     2>/dev/null || true
+
+# Symlink /root → /data so terminal login auth is visible to backend (HOME=/data)
+for dir in .claude-internal .claude .agentstudio; do
+  if [ ! -L "/root/$dir" ]; then
+    rm -rf "/root/$dir"
+    ln -sf "$DATA_HOME/$dir" "/root/$dir"
+  fi
+done
+
+echo "[anydev-init] Data directories ready, symlinks: /root → $DATA_HOME"
+INITSCRIPT
+RUN chmod +x /opt/clawstudio/anydev-init.sh
 
 # --- pm2 ecosystem config for AnyDev ---
 COPY <<'EOF' /opt/clawstudio/ecosystem.config.cjs
@@ -102,7 +139,8 @@ module.exports = {
     env: {
       NODE_ENV: 'production',
       PORT: '80',
-      HOME: '/root',
+      HOME: '/data',
+      ENGINE: 'claude-internal-sdk',
       CORS_ALLOWED_DOMAINS: 'devcloud.woa.com,woa.com,tas.woa.com',
     },
     max_restarts: 10,
@@ -173,7 +211,8 @@ SCRIPT
 RUN chmod +x /opt/clawstudio/register-anydev.sh
 
 ENV NODE_ENV=production \
-    PORT=80
+    PORT=80 \
+    ENGINE=claude-internal-sdk
 
 EXPOSE 80
 

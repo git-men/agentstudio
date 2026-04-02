@@ -25,7 +25,7 @@ export function useApiBase(): string {
       return `${currentService.url}/api`;
     }
 
-    // Default fallback
-    return 'http://127.0.0.1:4936/api';
+    // Default fallback: use current origin
+    return `${window.location.origin}/api`;
   }, [currentService?.url]);
 }
