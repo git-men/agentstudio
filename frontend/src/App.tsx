@@ -381,7 +381,7 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 }
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
-  const { updatePayload, dismiss, checkForUpdate, checkStatus, checkError } = useUpdateChecker();
+  const { updatePayload, dismiss, checkForUpdate, checkStatus, checkError, downloadProgress } = useUpdateChecker();
   const { logs, frontendLogs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, clearFrontendLogs } = useBackendLogs();
 
   return (
@@ -392,6 +392,7 @@ function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
           version={updatePayload.version}
           notes={updatePayload.notes}
           onDismiss={dismiss}
+          downloadProgress={downloadProgress}
         />
       )}
 

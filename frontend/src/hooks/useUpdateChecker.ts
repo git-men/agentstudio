@@ -4,12 +4,18 @@ import type { UpdatePayload } from '../components/desktop/UpdateDialog';
 
 type CheckStatus = 'idle' | 'checking' | 'up_to_date' | 'error';
 
+export interface DownloadProgress {
+  downloaded: number;
+  total: number | null;
+}
+
 interface UseUpdateCheckerResult {
   updatePayload: UpdatePayload | null;
   dismiss: () => void;
   checkForUpdate: () => Promise<void>;
   checkStatus: CheckStatus;
   checkError: string | null;
+  downloadProgress: DownloadProgress | null;
 }
 
 /**
@@ -24,12 +30,14 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
   const [dismissed, setDismissed] = useState(false);
   const [checkStatus, setCheckStatus] = useState<CheckStatus>('idle');
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
 
   useEffect(() => {
     if (!isTauri()) return;
 
     let unlistenUpdate: (() => void) | undefined;
     let unlistenResult: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
 
     const subscribe = async () => {
       try {
@@ -55,6 +63,16 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
             }
           },
         );
+
+        unlistenProgress = await listen<{ downloaded: number; total: number | null }>(
+          'update-download-progress',
+          (event) => {
+            setDownloadProgress({
+              downloaded: event.payload.downloaded,
+              total: event.payload.total,
+            });
+          },
+        );
       } catch {
         // Non-fatal: if event system is unavailable, silently skip
       }
@@ -65,6 +83,7 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     return () => {
       unlistenUpdate?.();
       unlistenResult?.();
+      unlistenProgress?.();
     };
   }, [dismissed]);
 
@@ -93,5 +112,5 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     setUpdatePayload(null);
   }, []);
 
-  return { updatePayload, dismiss, checkForUpdate, checkStatus, checkError };
+  return { updatePayload, dismiss, checkForUpdate, checkStatus, checkError, downloadProgress };
 }

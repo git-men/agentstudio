@@ -46,6 +46,12 @@ pub struct UpdateInfo {
     pub notes: String,
 }
 
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateDownloadProgress {
+    pub downloaded: usize,
+    pub total: Option<u64>,
+}
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackendLogEntry {
     pub level: String,
@@ -139,8 +145,22 @@ async fn install_update(
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
+    let emitter = app.clone();
+    let mut downloaded: usize = 0;
     update
-        .download_and_install(|_chunk_length, _content_length| {}, || {})
+        .download_and_install(
+            move |chunk_length, content_length| {
+                downloaded += chunk_length;
+                let _ = emitter.emit(
+                    "update-download-progress",
+                    UpdateDownloadProgress {
+                        downloaded,
+                        total: content_length,
+                    },
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| e.to_string())?;
 

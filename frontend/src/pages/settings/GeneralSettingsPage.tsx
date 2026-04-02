@@ -108,8 +108,8 @@ export const GeneralSettingsPage: React.FC = () => {
         <p className="text-gray-600 dark:text-gray-400">{t('settings.general.description')}</p>
       </div>
 
-      {/* Update Available Banner */}
-      {showUpdateNotification && latestVersion && (
+      {/* Update Available Banner (web only; desktop uses Tauri updater) */}
+      {showUpdateNotification && latestVersion && !isTauri() && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-4">
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-3">

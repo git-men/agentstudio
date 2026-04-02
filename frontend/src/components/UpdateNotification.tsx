@@ -18,7 +18,7 @@ export const UpdateNotification: React.FC<UpdateNotificationProps> = ({ compact 
     isLoading,
   } = useVersionCheck();
 
-  if (isLoading || !showUpdateNotification) {
+  if (isLoading || !showUpdateNotification || isTauri()) {
     return null;
   }
 

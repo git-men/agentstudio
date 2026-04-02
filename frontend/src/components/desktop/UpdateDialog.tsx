@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Download, X, RefreshCw, AlertCircle } from 'lucide-react';
+import type { DownloadProgress } from '../../hooks/useUpdateChecker';
 
 export interface UpdatePayload {
   version: string;
@@ -11,14 +12,22 @@ interface UpdateDialogProps {
   version: string;
   notes: string;
   onDismiss: () => void;
+  downloadProgress?: DownloadProgress | null;
 }
 
 type InstallState = 'idle' | 'downloading' | 'error';
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export const UpdateDialog: React.FC<UpdateDialogProps> = ({
   version,
   notes,
   onDismiss,
+  downloadProgress,
 }) => {
   const [installState, setInstallState] = useState<InstallState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -37,6 +46,11 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
   const handleRetry = () => {
     handleInstall();
   };
+
+  const percent =
+    installState === 'downloading' && downloadProgress?.total
+      ? Math.min(100, Math.round((downloadProgress.downloaded / downloadProgress.total) * 100))
+      : null;
 
   return (
     <div
@@ -77,6 +91,33 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
           </div>
         )}
 
+        {/* Download progress bar */}
+        {installState === 'downloading' && (
+          <div className="mb-4">
+            <div className="flex justify-between items-center mb-1.5 text-xs text-gray-500 dark:text-gray-400">
+              <span>
+                {percent !== null ? `正在下载… ${percent}%` : '正在下载…'}
+              </span>
+              {downloadProgress && (
+                <span>
+                  {formatBytes(downloadProgress.downloaded)}
+                  {downloadProgress.total ? ` / ${formatBytes(downloadProgress.total)}` : ''}
+                </span>
+              )}
+            </div>
+            <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+              {percent !== null ? (
+                <div
+                  className="h-full rounded-full bg-blue-600 transition-all duration-200 ease-out"
+                  style={{ width: `${percent}%` }}
+                />
+              ) : (
+                <div className="h-full w-1/3 rounded-full bg-blue-600 animate-[indeterminate_1.5s_ease-in-out_infinite]" />
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Error state */}
         {installState === 'error' && (
           <div className="mb-4 flex items-start gap-2 p-3 rounded-lg bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-400">
@@ -113,26 +154,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
               disabled
               className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 opacity-75 text-white text-sm font-medium cursor-not-allowed"
             >
-              <svg
-                className="w-4 h-4 animate-spin"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              正在下载...
+              {percent !== null ? `下载中 ${percent}%` : '正在准备…'}
             </button>
           ) : (
             <>
