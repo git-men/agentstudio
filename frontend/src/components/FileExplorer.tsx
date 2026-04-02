@@ -437,15 +437,21 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
 
   // 保存文件（TXT）
   const [saveError, setSaveError] = useState<string | null>(null);
+  const activeTabRef = useRef(activeTab);
+  const editingContentRef = useRef(editingContent);
+  activeTabRef.current = activeTab;
+  editingContentRef.current = editingContent;
+
   const handleSaveFile = useCallback(async () => {
-    if (!activeTab) return;
+    const tab = activeTabRef.current;
+    const content = editingContentRef.current;
+    if (!tab || content === null) return;
     setSaveError(null);
 
     try {
-      if (editingContent === null) return;
       await fileWriteMutation.mutateAsync({
-        path: activeTab.path,
-        content: editingContent,
+        path: tab.path,
+        content,
         projectPath,
       });
       setHasUnsavedChanges(false);
@@ -453,7 +459,19 @@ export const FileExplorer: React.FC<FileExplorerProps> = ({
       console.error('Failed to save file:', err);
       setSaveError(err instanceof Error ? err.message : '保存失败');
     }
-  }, [activeTab, editingContent, projectPath, fileWriteMutation]);
+  }, [projectPath, fileWriteMutation]);
+
+  // Ctrl+S / Cmd+S 快捷键保存
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's' && isEditing) {
+        e.preventDefault();
+        handleSaveFile();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isEditing, handleSaveFile]);
 
   // 监听暗色模式变化
   useEffect(() => {

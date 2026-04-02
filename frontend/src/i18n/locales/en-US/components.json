@@ -114,10 +114,7 @@
     "saving": "Saving...",
     "saveSuccess": "Saved successfully",
     "saveFailed": "Failed to save",
-    "unsavedChanges": "Unsaved changes",
-    "excelPreview": "Excel Preview",
-    "sheetLabel": "Sheet",
-    "excelLoadFailed": "Failed to load Excel file"
+    "unsavedChanges": "Unsaved changes"
   },
   "sessionDropdown": {
     "title": "Session Management",

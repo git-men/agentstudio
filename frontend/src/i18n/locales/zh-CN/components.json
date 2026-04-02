@@ -114,10 +114,7 @@
     "saving": "保存中...",
     "saveSuccess": "保存成功",
     "saveFailed": "保存失败",
-    "unsavedChanges": "有未保存的更改",
-    "excelPreview": "Excel 预览",
-    "sheetLabel": "工作表",
-    "excelLoadFailed": "Excel 文件加载失败"
+    "unsavedChanges": "有未保存的更改"
   },
   "sessionDropdown": {
     "title": "会话管理",

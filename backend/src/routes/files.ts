@@ -5,7 +5,7 @@ import { join, dirname, resolve, relative } from 'path';
 import { z } from 'zod';
 import * as os from 'os';
 import * as path from 'path';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 // Helper function to get project ID using base64url encoding (reversible)
 const getProjectId = (projectPath: string): string => {
   return encodeProjectPath(projectPath);
@@ -120,7 +120,8 @@ router.get('/read', async (req, res) => {
       
       const mimeType = mimeTypes[ext || ''] || 'application/octet-stream';
       res.setHeader('Content-Type', mimeType);
-      res.setHeader('Cache-Control', 'no-cache');
+      const isImageExt = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'bmp', 'tiff'].includes(ext || '');
+      res.setHeader('Cache-Control', isImageExt ? 'public, max-age=3600' : 'no-cache');
       
       // 直接发送文件流
       const fileStream = fs.createReadStream(fullPath);
@@ -216,8 +217,8 @@ router.post('/read-multiple', async (req, res) => {
   }
 });
 
-// PUT /api/files/write - Write to a single file
-router.put('/write', async (req, res) => {
+// PUT /api/files/write - Write to a single file (100mb limit for base64 binary uploads)
+router.put('/write', express.json({ limit: '100mb' }), async (req, res) => {
   try {
     const validation = WriteFileSchema.safeParse(req.body);
     if (!validation.success) {
@@ -436,16 +437,20 @@ router.post('/open-in-explorer', (req, res) => {
     const dirToOpen = stats.isDirectory() ? targetPath : path.dirname(targetPath);
 
     const platform = os.platform();
-    let command: string;
+    let bin: string;
+    let args: string[];
     if (platform === 'darwin') {
-      command = `open "${dirToOpen}"`;
+      bin = 'open';
+      args = [dirToOpen];
     } else if (platform === 'win32') {
-      command = `explorer "${dirToOpen.replace(/\//g, '\\')}"`;
+      bin = 'explorer';
+      args = [dirToOpen.replace(/\//g, '\\')];
     } else {
-      command = `xdg-open "${dirToOpen}"`;
+      bin = 'xdg-open';
+      args = [dirToOpen];
     }
 
-    exec(command, (error) => {
+    execFile(bin, args, (error) => {
       if (error) {
         console.error('Failed to open folder:', error);
         return res.status(500).json({ error: 'Failed to open folder in explorer' });
