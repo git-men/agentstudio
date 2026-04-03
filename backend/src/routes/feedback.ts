@@ -57,8 +57,11 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.get('/status', (_req, res) => {
-  res.json({ cosConfigured: true });
+router.get('/status', async (_req, res) => {
+  const { loadConfig } = await import('../config/index.js');
+  const config = await loadConfig();
+  const cosConfigured = !!(config.feedbackCosSecretId && config.feedbackCosSecretKey);
+  res.json({ cosConfigured });
 });
 
 export default router;

@@ -66,6 +66,10 @@ export interface AgentStudioConfig {
   traceEnabled?: boolean;
   traceEndpoint?: string;
   traceBkToken?: string;
+
+  // Feedback COS upload
+  feedbackCosSecretId?: string;
+  feedbackCosSecretKey?: string;
 }
 
 let cachedConfig: AgentStudioConfig | null = null;
@@ -144,6 +148,10 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     traceEnabled: process.env.TRACE_ENABLED === 'true' || configData.traceEnabled || false,
     traceEndpoint: process.env.TRACE_ENDPOINT || configData.traceEndpoint,
     traceBkToken: process.env.TRACE_BK_TOKEN || configData.traceBkToken,
+
+    // Feedback COS upload
+    feedbackCosSecretId: process.env.FEEDBACK_COS_SECRET_ID || configData.feedbackCosSecretId,
+    feedbackCosSecretKey: process.env.FEEDBACK_COS_SECRET_KEY || configData.feedbackCosSecretKey,
   };
 
   cachedConfig = finalConfig;

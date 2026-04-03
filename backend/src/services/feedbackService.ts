@@ -19,6 +19,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { AGENTSTUDIO_HOME } from '../config/paths.js';
+import { loadConfig } from '../config/index.js';
 
 // ── COS Configuration ────────────────────────────────────────────────────────
 
@@ -27,14 +28,12 @@ const COS_REGION = 'ap-guangzhou';
 const COS_ENDPOINT = 'sz.gfp.tencent-cloud.com';
 const COS_PREFIX = 'clawstudio-feedback';
 
-const BUILTIN_COS_SECRET_ID = 'mhRvUPG8Cdbau4P0s9u4zwhL';
-const BUILTIN_COS_SECRET_KEY = 'j4HgPZEFHNbjydF1Tsjfa6Z/uffFsKuLO9';
-
-function getCosCredentials(): { secretId: string; secretKey: string } {
-  return {
-    secretId: process.env.FEEDBACK_COS_SECRET_ID || BUILTIN_COS_SECRET_ID,
-    secretKey: process.env.FEEDBACK_COS_SECRET_KEY || BUILTIN_COS_SECRET_KEY,
-  };
+async function getCosCredentials(): Promise<{ secretId: string; secretKey: string } | null> {
+  const config = await loadConfig();
+  const secretId = config.feedbackCosSecretId;
+  const secretKey = config.feedbackCosSecretKey;
+  if (secretId && secretKey) return { secretId, secretKey };
+  return null;
 }
 
 // ── Rolling Log Buffer ───────────────────────────────────────────────────────
@@ -220,12 +219,13 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
   };
 
   const reportHtml = buildHtmlReport(manifest, backendLogs, frontendLogs, payload.images);
-  const creds = getCosCredentials();
+  const creds = await getCosCredentials();
 
-  const cosResult = await uploadFeedbackToCos(relativePath, manifest, backendLogs, frontendLogs, payload.images, reportHtml, creds);
-  if (cosResult.success) return cosResult;
+  if (creds) {
+    const cosResult = await uploadFeedbackToCos(relativePath, manifest, backendLogs, frontendLogs, payload.images, reportHtml, creds);
+    if (cosResult.success) return cosResult;
+  }
 
-  // COS failed, save locally as fallback
   return saveFeedbackLocally(relativePath, manifest, backendLogs, frontendLogs, payload.images, reportHtml);
 }
 
