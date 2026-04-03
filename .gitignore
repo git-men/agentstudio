@@ -63,7 +63,6 @@ coverage/
 .specify/
 specs/
 # Tauri signing keys (private key must never be committed)
-.tauri/
 desktop/.tauri/
 
 .codebuddy/
