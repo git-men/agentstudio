@@ -8,6 +8,7 @@
 import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 
 import { exec } from 'child_process';
@@ -41,16 +42,14 @@ const execAsync = promisify(exec);
  * @returns Directory containing node.exe, or null if not found
  */
 function findWindowsNodeDir(): string | null {
-  // Common Node.js installation paths on Windows
+  const home = process.env.USERPROFILE || os.homedir();
   const possibleDirs = [
-    // Program Files (64-bit)
     'C:\\Program Files\\nodejs',
-    // Program Files (x86) (32-bit)
     'C:\\Program Files (x86)\\nodejs',
-    // User-specific installation via nvm-windows
-    path.join(process.env.USERPROFILE || '', 'scoop\\apps\\nodejs\\current'),
-    // nvm-windows default
+    path.join(home, 'scoop\\apps\\nodejs\\current'),
     path.join(process.env.APPDATA || '', 'nvm\\current'),
+    path.join(home, '.local\\share\\fnm\\aliases\\default'),
+    path.join(home, '.volta\\bin'),
   ];
 
   for (const dir of possibleDirs) {
@@ -130,93 +129,191 @@ function resolveWindowsNpmGlobalJsEntry(executablePath: string): string | null {
 }
 
 /**
+ * Build a list of well-known Node.js global binary directories.
+ * Mirrors the Rust node_manager_bin_dirs() so CLI lookups work even when
+ * the process inherits a minimal PATH (common for macOS GUI apps / Tauri).
+ */
+function getWellKnownNodeBinDirs(): string[] {
+  const home = os.homedir();
+  const dirs: string[] = [];
+
+  const push = (p: string) => dirs.push(p);
+
+  // fnm
+  push(path.join(home, '.local/share/fnm/aliases/default/bin'));
+  try {
+    const fnmVersions = path.join(home, '.local/share/fnm/node-versions');
+    if (fs.existsSync(fnmVersions)) {
+      for (const entry of fs.readdirSync(fnmVersions)) {
+        push(path.join(fnmVersions, entry, 'installation/bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // nvm
+  try {
+    const nvmVersions = path.join(home, '.nvm/versions/node');
+    if (fs.existsSync(nvmVersions)) {
+      for (const entry of fs.readdirSync(nvmVersions)) {
+        push(path.join(nvmVersions, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+  push(path.join(home, '.nvm/current/bin'));
+
+  // volta
+  push(path.join(home, '.volta/bin'));
+
+  // n (tj/n)
+  push(path.join(home, 'n/bin'));
+
+  // asdf
+  push(path.join(home, '.asdf/shims'));
+  try {
+    const asdfNode = path.join(home, '.asdf/installs/nodejs');
+    if (fs.existsSync(asdfNode)) {
+      for (const entry of fs.readdirSync(asdfNode)) {
+        push(path.join(asdfNode, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // mise (formerly rtx)
+  push(path.join(home, '.local/share/mise/shims'));
+  try {
+    const miseNode = path.join(home, '.local/share/mise/installs/node');
+    if (fs.existsSync(miseNode)) {
+      for (const entry of fs.readdirSync(miseNode)) {
+        push(path.join(miseNode, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // pnpm global bin
+  push(path.join(home, '.local/share/pnpm'));
+  push(path.join(home, 'Library/pnpm'));
+
+  // bun global bin
+  push(path.join(home, '.bun/bin'));
+
+  // proto
+  push(path.join(home, '.proto/bin'));
+  push(path.join(home, '.proto/shims'));
+
+  // npm custom prefix
+  push(path.join(home, '.npm-global/bin'));
+  push(path.join(home, '.npm/bin'));
+
+  // System-wide
+  if (process.platform !== 'win32') {
+    push('/usr/local/bin');
+    push('/opt/homebrew/bin');
+  } else {
+    const appdata = process.env.APPDATA;
+    if (appdata) push(path.join(appdata, 'npm'));
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) push(path.join(localAppData, 'pnpm'));
+    push(path.join(home, 'scoop/shims'));
+    push(path.join(home, '.bun/bin'));
+  }
+
+  return dirs;
+}
+
+/**
+ * Scan well-known directories for a CLI binary (fallback when which/where fails).
+ */
+function findCliInWellKnownDirs(cliName: string): string | null {
+  const isWindows = process.platform === 'win32';
+  for (const dir of getWellKnownNodeBinDirs()) {
+    const candidate = path.join(dir, cliName);
+    if (fs.existsSync(candidate)) {
+      if (isWindows) {
+        const jsEntry = resolveWindowsNpmGlobalJsEntry(candidate);
+        if (jsEntry) return jsEntry;
+      }
+      return candidate;
+    }
+    if (isWindows) {
+      const cmdCandidate = candidate + '.cmd';
+      if (fs.existsSync(cmdCandidate)) {
+        const jsEntry = resolveWindowsNpmGlobalJsEntry(cmdCandidate);
+        if (jsEntry) return jsEntry;
+        return cmdCandidate;
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Get the path to the system-installed Claude executable
  * Only used when user explicitly wants to use system installation
  *
  * Note: When no executable path is specified, SDK will automatically
  * use its bundled CLI which is always compatible with the SDK version.
  * 
+ * Search order: (1) which/where, (2) well-known dirs, (3) login shell
+ * 
  * @param cliName - CLI executable name (e.g., 'claude' or 'claude-internal')
  */
 export async function getSystemClaudeExecutablePath(cliName?: string): Promise<string | null> {
   const resolvedCliName = cliName || 'claude';
+  const isWindows = process.platform === 'win32';
+
+  // 1. Try which/where (works when launched from terminal with full PATH)
   try {
-    const isWindows = process.platform === 'win32';
     const command = isWindows ? `where ${resolvedCliName}` : `which ${resolvedCliName}`;
-
     const { stdout: claudePath } = await execAsync(command);
-    if (!claudePath) return null;
 
-    const pathCandidates = claudePath
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(Boolean);
-    if (pathCandidates.length === 0) return null;
+    if (claudePath) {
+      const pathCandidates = claudePath
+        .split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(Boolean);
 
-    const cleanPath = pathCandidates[0];
-
-    // Skip local node_modules paths - we want global installation
-    if (cleanPath.includes('node_modules/.bin') || cleanPath.includes('node_modules\\.bin')) {
-      try {
-        const allCommand = isWindows ? `where ${resolvedCliName}` : `which -a ${resolvedCliName}`;
-        const { stdout: allClaudes } = await execAsync(allCommand);
-        const claudes = allClaudes
-          .split(/\r?\n/)
-          .map(line => line.trim())
-          .filter(Boolean);
-
-        // Find the first non-local installation
-        for (const claudePathOption of claudes) {
-          if (!claudePathOption.includes('node_modules/.bin') &&
-              !claudePathOption.includes('node_modules\\.bin')) {
-            if (isWindows) {
-              const jsEntryPath = resolveWindowsNpmGlobalJsEntry(claudePathOption);
-              if (jsEntryPath) {
-                return jsEntryPath;
-              }
-
-              if (fs.existsSync(claudePathOption)) {
-                return claudePathOption;
-              }
-
-              continue;
-            }
-
-            return claudePathOption;
-          }
+      for (const candidate of pathCandidates) {
+        if (candidate.includes('node_modules/.bin') || candidate.includes('node_modules\\.bin')) {
+          continue;
         }
-      } catch (error) {
-        // Fallback to the first path found
+        if (isWindows) {
+          const jsEntryPath = resolveWindowsNpmGlobalJsEntry(candidate);
+          if (jsEntryPath) return jsEntryPath;
+          if (fs.existsSync(candidate)) return candidate;
+          continue;
+        }
+        return candidate;
       }
     }
-
-    // On Windows, npm global installs create:
-    //   1. A POSIX shell script (e.g. "claude-internal") — cannot be spawned on Windows
-    //   2. A .cmd wrapper (e.g. "claude-internal.cmd") — cannot be spawned by SDK (EINVAL)
-    // The SDK's spawn expects either a native binary or a .js file.
-    // We parse the .cmd to extract the actual .js entry point.
-    if (isWindows) {
-      for (const candidatePath of pathCandidates) {
-        const jsEntryPath = resolveWindowsNpmGlobalJsEntry(candidatePath);
-        if (jsEntryPath) {
-          return jsEntryPath;
-        }
-
-        if (fs.existsSync(candidatePath)) {
-          return candidatePath;
-        }
-      }
-
-      console.warn(`⚠️  Claude executable not found at any resolved path: ${pathCandidates.join(', ')}`);
-      console.warn(`   SDK will use bundled CLI instead`);
-      return null;
-    }
-
-    return cleanPath;
-  } catch (error) {
-    console.error(`Failed to get system ${resolvedCliName} executable path:`, error);
-    return null;
+  } catch {
+    // which/where failed — common for GUI-launched processes with minimal PATH
   }
+
+  // 2. Scan well-known Node.js binary directories
+  const fromDirs = findCliInWellKnownDirs(resolvedCliName);
+  if (fromDirs) {
+    console.log(`🔍 Found ${resolvedCliName} via well-known dirs scan: ${fromDirs}`);
+    return fromDirs;
+  }
+
+  // 3. Last resort: ask a login shell (macOS/Linux only)
+  if (!isWindows) {
+    for (const shell of ['zsh', 'bash', 'sh']) {
+      try {
+        const { stdout } = await execAsync(`${shell} -lc "command -v ${resolvedCliName}"`, { timeout: 5000 });
+        const shellPath = stdout.trim();
+        if (shellPath && fs.existsSync(shellPath)) {
+          console.log(`🔍 Found ${resolvedCliName} via ${shell} login shell: ${shellPath}`);
+          return shellPath;
+        }
+      } catch {
+        // shell not available or command failed
+      }
+    }
+  }
+
+  console.warn(`⚠️  ${resolvedCliName} not found via which, well-known dirs, or login shell`);
+  return null;
 }
 
 /**
@@ -590,7 +687,6 @@ export async function buildQueryOptions(
   const pathSep = process.platform === 'win32' ? ';' : ':';
   
   // On Windows, ensure Node.js directory is first in PATH
-  // This is critical for packaged apps where process.execPath is clawstudio-backend.exe
   if (process.platform === 'win32' && windowsNodeDir && !currentPath.includes(windowsNodeDir)) {
     currentPath = `${windowsNodeDir}${pathSep}${currentPath}`;
   }
@@ -598,6 +694,15 @@ export async function buildQueryOptions(
   if (!currentPath.includes(adminBinDir)) {
     currentPath = `${adminBinDir}${pathSep}${currentPath}`;
   }
+
+  // Augment PATH with well-known Node dirs so SDK child processes can also
+  // find node, npm, and CLI binaries in GUI-launched (minimal PATH) scenarios
+  for (const dir of getWellKnownNodeBinDirs()) {
+    if (fs.existsSync(dir) && !currentPath.includes(dir)) {
+      currentPath = `${currentPath}${pathSep}${dir}`;
+    }
+  }
+
   queryOptions.env['PATH'] = currentPath;
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
