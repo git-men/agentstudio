@@ -36,8 +36,10 @@ import type { MarketplaceType } from '../types/plugins.js';
 // Constants
 // ============================================================================
 
-const DEFAULT_MARKETPLACE_REPO = 'jeffkit/as-marketplace';
-const DEFAULT_MARKETPLACE_NAME = 'as-marketplace';
+const DEFAULT_MARKETPLACES: Array<{ name: string; repo: string }> = [
+  { name: 'as-marketplace', repo: 'jeffkit/as-marketplace' },
+  { name: 'anthropic-agent-skills', repo: 'anthropics/skills' },
+];
 
 // ============================================================================
 // Types
@@ -216,109 +218,108 @@ export function extractBranch(source: string): { value: string; branch?: string 
 // ============================================================================
 
 /**
- * Resolve the default marketplace source configuration.
+ * Resolve a default marketplace's source configuration.
  * 
- * Priority:
- *   1. DEFAULT_MARKETPLACE_SOURCE env var (supports github:/local:/archive:/cos: prefixes)
- *   2. Hardcoded GitHub repo (backward compatible default)
+ * The primary marketplace (as-marketplace) can be overridden via
+ * DEFAULT_MARKETPLACE_SOURCE env var. Other defaults always use their
+ * hardcoded GitHub repo.
  */
-function resolveDefaultMarketplaceSource(): SyncTarget {
-  const envSource = process.env.DEFAULT_MARKETPLACE_SOURCE;
-  if (envSource) {
-    const parsed = parseMarketplaceEntry(envSource);
-    if (parsed) {
-      parsed.name = DEFAULT_MARKETPLACE_NAME;
-      return parsed;
+function resolveDefaultMarketplaceSource(mp: { name: string; repo: string }): SyncTarget {
+  if (mp.name === 'as-marketplace') {
+    const envSource = process.env.DEFAULT_MARKETPLACE_SOURCE;
+    if (envSource) {
+      const parsed = parseMarketplaceEntry(envSource);
+      if (parsed) {
+        parsed.name = mp.name;
+        return parsed;
+      }
+      console.warn(`[DefaultMarketplace] Invalid DEFAULT_MARKETPLACE_SOURCE: "${envSource}", falling back to GitHub`);
     }
-    console.warn(`[DefaultMarketplace] Invalid DEFAULT_MARKETPLACE_SOURCE: "${envSource}", falling back to GitHub`);
   }
   return {
-    name: DEFAULT_MARKETPLACE_NAME,
+    name: mp.name,
     type: 'github',
-    source: DEFAULT_MARKETPLACE_REPO,
+    source: mp.repo,
     branch: 'main',
   };
 }
 
 /**
- * Initialize the AgentStudio official default marketplace.
+ * Initialize all AgentStudio default marketplaces.
  * 
- * Behavior:
+ * Each entry in DEFAULT_MARKETPLACES is processed sequentially:
  *   1. Already registered → sync latest content, reinstall plugins + import agents
  *   2. Not registered → fetch from configured source (GitHub by default)
  * 
- * Source is configurable via DEFAULT_MARKETPLACE_SOURCE env var:
- *   - github:owner/repo[@branch]  (default: jeffkit/as-marketplace)
- *   - archive:https://...         (HTTP(S) downloadable .tar.gz/.zip)
- *   - cos:https://...             (legacy alias for archive)
- *   - local:/path                 (local directory)
+ * The primary marketplace (as-marketplace) source is configurable via
+ * DEFAULT_MARKETPLACE_SOURCE env var (github:/local:/archive:/cos: prefixes).
  * 
  * Controlled by DISABLE_DEFAULT_MARKETPLACE=true.
  */
 export async function initDefaultMarketplace(): Promise<BuiltinMarketplaceSyncResult> {
   const startTime = Date.now();
-  const mpResult = {
-    name: DEFAULT_MARKETPLACE_NAME,
-    pluginsTotal: 0,
-    pluginsInstalled: 0,
-    pluginsFailed: 0,
-    agentsImported: 0,
-  };
+  const marketplaceResults: BuiltinMarketplaceSyncResult['marketplaces'] = [];
+  let hasError = false;
 
-  const sourceConfig = resolveDefaultMarketplaceSource();
+  for (const mp of DEFAULT_MARKETPLACES) {
+    const mpResult = {
+      name: mp.name,
+      pluginsTotal: 0,
+      pluginsInstalled: 0,
+      pluginsFailed: 0,
+      agentsImported: 0,
+    };
 
-  try {
-    let alreadyExists = pluginPaths.marketplaceExists(DEFAULT_MARKETPLACE_NAME);
+    const sourceConfig = resolveDefaultMarketplaceSource(mp);
 
-    if (alreadyExists) {
-      console.info('[DefaultMarketplace] Already registered, syncing latest content...');
-      const syncResult = await pluginInstaller.syncMarketplace(DEFAULT_MARKETPLACE_NAME);
-      if (!syncResult.success) {
-        console.warn(`[DefaultMarketplace] Sync failed (${syncResult.error}), re-fetching...`);
-        const marketplacePath = pluginPaths.getMarketplacePath(DEFAULT_MARKETPLACE_NAME);
-        fs.rmSync(marketplacePath, { recursive: true, force: true });
-        alreadyExists = false;
+    try {
+      let alreadyExists = pluginPaths.marketplaceExists(mp.name);
+
+      if (alreadyExists) {
+        console.info(`[DefaultMarketplace] ${mp.name}: already registered, syncing...`);
+        const syncResult = await pluginInstaller.syncMarketplace(mp.name);
+        if (!syncResult.success) {
+          console.warn(`[DefaultMarketplace] ${mp.name}: sync failed (${syncResult.error}), re-fetching...`);
+          const marketplacePath = pluginPaths.getMarketplacePath(mp.name);
+          fs.rmSync(marketplacePath, { recursive: true, force: true });
+          alreadyExists = false;
+        }
       }
+
+      if (!alreadyExists) {
+        console.info(`[DefaultMarketplace] ${mp.name}: fetching from ${sourceConfig.type}: ${sourceConfig.source}`);
+        const result = await pluginInstaller.addMarketplace({
+          type: sourceConfig.type,
+          source: sourceConfig.source,
+          name: mp.name,
+          branch: sourceConfig.branch,
+          autoUpdate: { enabled: true, checkInterval: sourceConfig.type === 'local' ? 5 : 60 },
+        });
+        if (!result.success) {
+          throw new Error(`Failed to fetch marketplace: ${result.error}`);
+        }
+      }
+
+      await installMarketplaceContents(mp.name, mpResult);
+      console.info(`[DefaultMarketplace] ${mp.name}: ${mpResult.pluginsInstalled}/${mpResult.pluginsTotal} plugins, ${mpResult.agentsImported} agents`);
+    } catch (error) {
+      hasError = true;
+      const errMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[DefaultMarketplace] ${mp.name}: failed - ${errMsg}`);
     }
 
-    if (!alreadyExists) {
-      console.info(`[DefaultMarketplace] Fetching from ${sourceConfig.type}: ${sourceConfig.source}`);
-      const result = await pluginInstaller.addMarketplace({
-        type: sourceConfig.type,
-        source: sourceConfig.source,
-        name: DEFAULT_MARKETPLACE_NAME,
-        branch: sourceConfig.branch,
-        autoUpdate: { enabled: true, checkInterval: sourceConfig.type === 'local' ? 5 : 60 },
-      });
-      if (!result.success) {
-        throw new Error(`Failed to fetch marketplace: ${result.error}`);
-      }
-    }
-
-    // Install all plugins + import agents (idempotent)
-    await installMarketplaceContents(DEFAULT_MARKETPLACE_NAME, mpResult);
-
-    const duration = Date.now() - startTime;
-    console.info(`[DefaultMarketplace] Initialized in ${duration}ms (${mpResult.pluginsInstalled}/${mpResult.pluginsTotal} plugins, ${mpResult.agentsImported} agents)`);
-
-    return {
-      success: true,
-      marketplaces: [mpResult],
-      duration,
-      syncedAt: new Date().toISOString(),
-    };
-  } catch (error) {
-    const duration = Date.now() - startTime;
-    const errMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[DefaultMarketplace] Failed: ${errMsg}`);
-    return {
-      success: false,
-      marketplaces: [mpResult],
-      duration,
-      syncedAt: new Date().toISOString(),
-      error: errMsg,
-    };
+    marketplaceResults.push(mpResult);
   }
+
+  const duration = Date.now() - startTime;
+  console.info(`[DefaultMarketplace] All defaults initialized in ${duration}ms`);
+
+  return {
+    success: !hasError,
+    marketplaces: marketplaceResults,
+    duration,
+    syncedAt: new Date().toISOString(),
+  };
 }
 
 // ============================================================================
