@@ -24,7 +24,6 @@
  */
 
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 import { pluginPaths } from './pluginPaths.js';
 import { pluginInstaller } from './pluginInstaller.js';
@@ -78,7 +77,7 @@ let isSyncing = false;
 let lastSyncTime: string | null = null;
 let lastSyncResult: BuiltinMarketplaceSyncResult | null = null;
 
-const LOCK_FILE = path.join(process.env.HOME || process.env.USERPROFILE || os.tmpdir(), '.agentstudio-marketplace-sync.lock');
+const LOCK_FILE = path.join(process.env.HOME || '/tmp', '.agentstudio-marketplace-sync.lock');
 
 // ============================================================================
 // Lock Management

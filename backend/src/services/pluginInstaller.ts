@@ -194,22 +194,9 @@ class PluginInstaller {
         // Use metadata to determine sync method
         switch (metadata.type) {
           case 'git':
-          case 'github': {
-            const hasGitDir = fs.existsSync(path.join(marketplacePath, '.git'));
-            if (hasGitDir) {
-              await this.syncGitMarketplace(marketplacePath);
-            } else if (metadata.type === 'github' && metadata.source) {
-              const branch = metadata.branch || 'main';
-              const archiveUrl = `https://github.com/${metadata.source}/archive/refs/heads/${branch}.tar.gz`;
-              console.info(`[PluginInstaller] No .git directory, syncing github marketplace via archive: ${archiveUrl}`);
-              const tempMeta = { ...metadata, source: archiveUrl };
-              await this.syncArchiveMarketplace(marketplacePath, tempMeta);
-              await this.saveMarketplaceMetadata(marketplacePath, metadata);
-            } else {
-              throw new Error('Not a git repository and no archive fallback available');
-            }
+          case 'github':
+            await this.syncGitMarketplace(marketplacePath);
             break;
-          }
           case 'cos':
             await this.syncCOSMarketplace(marketplacePath, metadata);
             break;
@@ -784,14 +771,7 @@ class PluginInstaller {
       await spawnAsync('git', ['clone', '--branch', branch, '--depth', '1', gitUrl, targetPath]);
       console.log(`Cloned marketplace from ${gitUrl}`);
     } catch (error) {
-      if (isGitHub) {
-        console.warn(`[PluginInstaller] git clone failed (${error instanceof Error ? error.message : error}), falling back to archive download`);
-        const archiveUrl = `https://github.com/${source}/archive/refs/heads/${branch}.tar.gz`;
-        await this.downloadAndExtractArchive(archiveUrl, targetPath);
-        console.log(`Downloaded marketplace archive from ${archiveUrl}`);
-      } else {
-        throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      }
+      throw new Error(`Failed to clone repository: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
