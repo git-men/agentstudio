@@ -44,6 +44,9 @@ interface ActiveJob {
 // Scheduler enabled state (independent from initialization)
 let schedulerEnabled = false;
 
+// Global fallback timezone: SCHEDULER_TIMEZONE > TZ > Asia/Shanghai
+const GLOBAL_TIMEZONE = process.env.SCHEDULER_TIMEZONE || process.env.TZ || 'Asia/Shanghai';
+
 // ============================================================================
 // Service State
 // ============================================================================
@@ -120,7 +123,7 @@ export function initializeScheduler(customConfig?: Partial<SchedulerConfig> & { 
     config = { ...config, ...customConfig };
   }
 
-  console.info(`[Scheduler] Initializing with config: maxConcurrent=${config.maxConcurrent}`);
+  console.info(`[Scheduler] Initializing with config: maxConcurrent=${config.maxConcurrent}, globalTimezone=${GLOBAL_TIMEZONE}`);
 
   // Clean up orphaned "running" tasks from previous server runs
   cleanupOrphanedRunningTasks();
@@ -260,11 +263,13 @@ export function scheduleTask(task: ScheduledTask): boolean {
       return false;
     }
 
+    const taskTimezone = task.schedule.timezone || GLOBAL_TIMEZONE;
+
     const cronJob = cron.schedule(cronExpression, () => {
       executeTask(task.id).catch(error => {
         console.error(`[Scheduler] Error executing task ${task.id}:`, error);
       });
-    });
+    }, { timezone: taskTimezone } as Record<string, unknown>);
 
     activeJobs.set(task.id, { task, cronJob });
 
@@ -272,7 +277,7 @@ export function scheduleTask(task: ScheduledTask): boolean {
     const nextRunAt = getNextRunTime(cronExpression);
     updateTaskNextRunAt(task.id, nextRunAt);
 
-    console.info(`[Scheduler] Scheduled task ${task.id} (${task.name}) with cron: ${cronExpression}`);
+    console.info(`[Scheduler] Scheduled task ${task.id} (${task.name}) with cron: ${cronExpression}, timezone: ${taskTimezone}`);
     return true;
   } catch (error) {
     console.error(`[Scheduler] Failed to schedule task ${task.id}:`, error);

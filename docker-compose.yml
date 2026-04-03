@@ -26,6 +26,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4936
+      - TZ=${TZ:-Asia/Shanghai}
     env_file:
       - .env
     volumes:
@@ -56,6 +57,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4936
+      - TZ=${TZ:-Asia/Shanghai}
     env_file:
       - .env
     volumes:

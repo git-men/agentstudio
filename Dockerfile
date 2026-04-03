@@ -107,7 +107,8 @@ USER agentstudio
 
 ENV NODE_ENV=production \
     PORT=4936 \
-    HOME=/home/agentstudio
+    HOME=/home/agentstudio \
+    TZ=Asia/Shanghai
 
 WORKDIR /app/backend
 
@@ -170,7 +171,8 @@ USER agentstudio
 
 ENV NODE_ENV=production \
     PORT=4936 \
-    HOME=/home/agentstudio
+    HOME=/home/agentstudio \
+    TZ=Asia/Shanghai
 
 WORKDIR /app/backend
 
