@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown, Bell } from 'lucide-react';
+import { Save, Clock, Bot, FolderOpen, MessageSquare, Calendar, Play, Cpu, ChevronDown, Bell, Check } from 'lucide-react';
 import { useCreateScheduledTask, useUpdateScheduledTask, useRunScheduledTask } from '../hooks/useScheduledTasks';
 import { useProjects } from '../hooks/useProjects';
 import { useClaudeVersions } from '../hooks/useClaudeVersions';
@@ -103,6 +103,7 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
 
   // Get available models based on selected version
   const availableModels = useMemo(() => {
@@ -426,21 +427,64 @@ export const ScheduledTaskEditor: React.FC<ScheduledTaskEditorProps> = ({
           </h3>
 
           {/* Agent */}
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               执行 Agent *
             </label>
-            <select
-              value={agentId}
-              onChange={(e) => setAgentId(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            <button
+              type="button"
+              onClick={() => setShowAgentDropdown(v => !v)}
+              className="w-full flex items-center gap-3 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 text-left transition-colors"
             >
-              {agents.map((agent) => (
-                <option key={agent.id} value={agent.id}>
-                  {agent.ui?.icon || '🤖'} {agent.name}
-                </option>
-              ))}
-            </select>
+              {(() => {
+                const selected = agents.find(a => a.id === agentId);
+                if (selected) return (
+                  <>
+                    <span className="text-xl flex-shrink-0">{selected.ui?.icon || '🤖'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{selected.name}</div>
+                      {selected.description && (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{selected.description}</div>
+                      )}
+                    </div>
+                  </>
+                );
+                return <span className="text-sm text-gray-400 flex-1">选择 Agent</span>;
+              })()}
+              <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${showAgentDropdown ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showAgentDropdown && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setShowAgentDropdown(false)} />
+                <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+                  {agents.map((agent) => (
+                    <button
+                      key={agent.id}
+                      type="button"
+                      onClick={() => {
+                        setAgentId(agent.id);
+                        setShowAgentDropdown(false);
+                      }}
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                        agentId === agent.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                      }`}
+                    >
+                      <span className="text-xl flex-shrink-0">{agent.ui?.icon || '🤖'}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{agent.name}</div>
+                        {agent.description && (
+                          <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{agent.description}</div>
+                        )}
+                      </div>
+                      {agentId === agent.id && (
+                        <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
 
           {/* Project */}

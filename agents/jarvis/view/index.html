@@ -596,7 +596,7 @@
       const h = { 'Content-Type': 'application/json' };
       const t = localStorage.getItem('jwt') || localStorage.getItem('auth_token') || '';
       if (t) h['Authorization'] = 'Bearer ' + t;
-      if (pp) h['X-Project-Path'] = pp;
+      if (pp) h['X-Project-Path'] = encodeURIComponent(pp);
       const r = await fetch(apiBase() + '/' + endpoint, {
         method: 'POST', headers: h, body: JSON.stringify(input || {}),
       });

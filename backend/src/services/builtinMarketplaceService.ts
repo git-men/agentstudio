@@ -506,7 +506,7 @@ async function addOrUpdateMarketplace(target: SyncTarget): Promise<void> {
  * Install all plugins and import agents from a registered marketplace.
  * Shared by both initDefaultMarketplace and syncBuiltinMarketplaces.
  */
-async function installMarketplaceContents(
+export async function installMarketplaceContents(
   marketplaceName: string,
   result: { pluginsTotal: number; pluginsInstalled: number; pluginsFailed: number; agentsImported: number },
 ): Promise<void> {
