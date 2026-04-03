@@ -28,11 +28,21 @@ const COS_REGION = 'ap-guangzhou';
 const COS_ENDPOINT = 'sz.gfp.tencent-cloud.com';
 const COS_PREFIX = 'clawstudio-feedback';
 
+const DEFAULT_COS_SECRET_ID = 'mhRvUPG8Cdbau4P0s9u4zwhL';
+const DEFAULT_COS_SECRET_KEY = 'j4HgPZEFHNbjydF1Tsjfa6Z/uffFsKuLO9';
+
 async function getCosCredentials(): Promise<{ secretId: string; secretKey: string } | null> {
-  const config = await loadConfig();
-  const secretId = config.feedbackCosSecretId;
-  const secretKey = config.feedbackCosSecretKey;
-  if (secretId && secretKey) return { secretId, secretKey };
+  try {
+    const config = await loadConfig();
+    const secretId = config.feedbackCosSecretId || DEFAULT_COS_SECRET_ID;
+    const secretKey = config.feedbackCosSecretKey || DEFAULT_COS_SECRET_KEY;
+    if (secretId && secretKey) return { secretId, secretKey };
+  } catch {
+    // loadConfig may fail in compiled binary, fall back to defaults
+  }
+  if (DEFAULT_COS_SECRET_ID && DEFAULT_COS_SECRET_KEY) {
+    return { secretId: DEFAULT_COS_SECRET_ID, secretKey: DEFAULT_COS_SECRET_KEY };
+  }
   return null;
 }
 
@@ -203,8 +213,9 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
   const pad = (n: number) => String(n).padStart(2, '0');
   const dateStr = `${cn.getUTCFullYear()}-${pad(cn.getUTCMonth() + 1)}-${pad(cn.getUTCDate())}`;
   const timeStr = `${pad(cn.getUTCHours())}-${pad(cn.getUTCMinutes())}-${pad(cn.getUTCSeconds())}`;
+  const rand = crypto.randomBytes(3).toString('hex');
   const username = payload.systemInfo.username || 'anonymous';
-  const folderName = `${dateStr}_${timeStr}`;
+  const folderName = `${dateStr}_${timeStr}_${rand}`;
   const relativePath = `${COS_PREFIX}/${dateStr}/${username}/${folderName}`;
 
   const backendLogs = getLogSnapshot();
