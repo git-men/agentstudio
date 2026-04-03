@@ -292,6 +292,14 @@ fn node_manager_bin_dirs() -> Vec<std::path::PathBuf> {
     // n (tj/n)
     dirs.push(h.join("n/bin"));
 
+    // pnpm global bin
+    dirs.push(h.join(".local/share/pnpm"));
+    dirs.push(h.join("Library/pnpm"));
+
+    // npm custom prefix (common: ~/.npm-global)
+    dirs.push(h.join(".npm-global/bin"));
+    dirs.push(h.join(".npm/bin"));
+
     // Global npm / homebrew
     dirs.push(std::path::PathBuf::from("/usr/local/bin"));
     dirs.push(std::path::PathBuf::from("/opt/homebrew/bin"));
@@ -325,6 +333,7 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
     }
 
     // 2. Try the process-inherited PATH (works when launched from terminal).
+    // `where` on Windows may return multiple lines; take only the first.
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
     if let Ok(output) = tokio::process::Command::new(cmd)
         .arg(&cli_name)
@@ -332,7 +341,8 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
         .await
     {
         if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let raw = String::from_utf8_lossy(&output.stdout);
+            let path = raw.lines().next().unwrap_or("").trim().to_string();
             if !path.is_empty() {
                 return Some(path);
             }
@@ -786,7 +796,8 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         let sys_path = std::env::var("PATH")
             .unwrap_or_else(|_| "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".to_string());
         path_parts.push(sys_path);
-        env_map.insert("PATH".to_string(), path_parts.join(":"));
+        let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        env_map.insert("PATH".to_string(), path_parts.join(path_sep));
         sidecar_cmd = sidecar_cmd.envs(env_map);
     }
 
