@@ -19,6 +19,7 @@ interface MarketplaceUpdateConfig {
   enabled: boolean;
   defaultCheckInterval: number; // Default interval in minutes
   autoApplyUpdates: boolean; // Whether to auto-apply updates or just notify
+  initialCheckDelay: number; // Delay in seconds before first check after startup
 }
 
 interface UpdateCheckJob {
@@ -37,7 +38,8 @@ let isInitialized = false;
 let config: MarketplaceUpdateConfig = {
   enabled: true,
   defaultCheckInterval: 60, // 60 minutes default
-  autoApplyUpdates: false, // Just check by default, don't auto-update
+  autoApplyUpdates: true,
+  initialCheckDelay: 60, // 60 seconds after startup
 };
 
 const updateJobs: Map<string, UpdateCheckJob> = new Map();
@@ -111,13 +113,15 @@ async function scheduleAllUpdateChecks(): Promise<void> {
 }
 
 /**
- * Schedule an update check for a specific marketplace
+ * Schedule an update check for a specific marketplace.
+ * First check runs after initialCheckDelay (default 60s), subsequent checks at full interval.
  */
 export function scheduleUpdateCheck(marketplaceName: string, intervalMinutes: number): void {
   // Cancel existing job if any
   cancelUpdateCheck(marketplaceName);
 
   const intervalMs = intervalMinutes * 60 * 1000;
+  const initialDelayMs = config.initialCheckDelay * 1000;
   
   const job: UpdateCheckJob = {
     marketplaceName,
@@ -127,11 +131,11 @@ export function scheduleUpdateCheck(marketplaceName: string, intervalMinutes: nu
     lastResult: null,
   };
 
-  // Schedule the first check
-  job.timeoutId = setTimeout(() => runUpdateCheck(marketplaceName), intervalMs);
+  // First check uses the shorter initial delay, subsequent checks use full interval
+  job.timeoutId = setTimeout(() => runUpdateCheck(marketplaceName), initialDelayMs);
   
   updateJobs.set(marketplaceName, job);
-  console.info(`[MarketplaceUpdate] Scheduled update check for '${marketplaceName}' every ${intervalMinutes} minutes`);
+  console.info(`[MarketplaceUpdate] Scheduled update check for '${marketplaceName}' (first in ${config.initialCheckDelay}s, then every ${intervalMinutes}min)`);
 }
 
 /**
@@ -190,14 +194,12 @@ async function runUpdateCheck(marketplaceName: string): Promise<void> {
         try {
           const syncResult = await pluginInstaller.syncMarketplace(marketplaceName);
           if (syncResult.success) {
-            console.info(`[MarketplaceUpdate] Successfully updated '${marketplaceName}'`);
+            console.info(`[MarketplaceUpdate] Successfully synced '${marketplaceName}', reinstalling plugins & agents...`);
             
-            // For local type, also re-install plugins
-            if (metadata?.type === 'local') {
-              const { syncBuiltinMarketplaces } = await import('./builtinMarketplaceService');
-              console.info(`[MarketplaceUpdate] Re-installing plugins for local marketplace '${marketplaceName}'`);
-              await syncBuiltinMarketplaces(metadata.source);
-            }
+            const { installMarketplaceContents } = await import('./builtinMarketplaceService');
+            const installResult = { pluginsTotal: 0, pluginsInstalled: 0, pluginsFailed: 0, agentsImported: 0 };
+            await installMarketplaceContents(marketplaceName, installResult);
+            console.info(`[MarketplaceUpdate] '${marketplaceName}': ${installResult.pluginsInstalled}/${installResult.pluginsTotal} plugins installed, ${installResult.agentsImported} agents imported`);
           } else {
             console.error(`[MarketplaceUpdate] Failed to update '${marketplaceName}': ${syncResult.error}`);
           }

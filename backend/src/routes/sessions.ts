@@ -530,6 +530,11 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
           
           if (msg.type === 'assistant') return true;
           if (msg.type === 'user') {
+            // Filter out SDK-injected task-notification messages (background task completion signals)
+            if (msg.message?.content && typeof msg.message.content === 'string' &&
+                msg.message.content.trimStart().startsWith('<task-notification>')) {
+              return false;
+            }
             // Check if this user message contains only tool_result
             if (msg.message?.content && Array.isArray(msg.message.content)) {
               const hasNonToolResult = msg.message.content.some((block: any) => block.type !== 'tool_result');
@@ -650,8 +655,8 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
                       if (msg.toolUseResult) {
                         toolPart.toolData.toolUseResult = msg.toolUseResult;
                         
-                        // If this is a Task tool, read sub-agent message flow
-                        if (toolPart.toolData.toolName === 'Task' && msg.toolUseResult.agentId) {
+                        // If this is a Task/Agent tool, read sub-agent message flow
+                        if ((toolPart.toolData.toolName === 'Task' || toolPart.toolData.toolName === 'Agent') && msg.toolUseResult.agentId) {
                           const subAgentId = msg.toolUseResult.agentId;
                           console.log(`🔧 [TASK] Found Task tool with sub-agent: ${subAgentId}`);
                           

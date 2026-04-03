@@ -414,7 +414,7 @@ export class SessionStreamManager {
       };
       this.streamingState.activeBlocks.set(blockId, block);
     } else if (contentBlock.type === 'tool_use') {
-      if (contentBlock.name === 'Task') {
+      if (contentBlock.name === 'Task' || contentBlock.name === 'Agent') {
         const sid = this.state.sessionId || (eventData.sessionId as string) || (eventData.session_id as string);
         if (sid && contentBlock.id) {
           this.actions.registerTaskTool(contentBlock.id, sid);
@@ -890,7 +890,7 @@ export class SessionStreamManager {
             ? (block.content as Array<{ text?: string }>).map((c) => c.text || String(c)).join('')
             : JSON.stringify(block.content);
 
-        if (targetTool.toolData.toolName === 'Task' && targetTool.toolData.claudeId) {
+        if ((targetTool.toolData.toolName === 'Task' || targetTool.toolData.toolName === 'Agent') && targetTool.toolData.claudeId) {
           const taskClaudeId = targetTool.toolData.claudeId;
           if (toolResult && typeof toolResult === 'string' && toolResult.trim()) {
             this.actions.addSubAgentMessagePart(taskClaudeId, {

@@ -31,6 +31,11 @@ export class ClaudeSession {
   // 并发控制：标记会话是否正在处理请求
   private isProcessing = false;
 
+  // SDK init timeout: detects when the CLI hangs (e.g. waiting for authentication)
+  private static readonly SDK_INIT_TIMEOUT_MS = 30_000;
+  private hasReceivedSdkMessage = false;
+  private initTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(agentId: string, options: Options, resumeSessionId?: string, claudeVersionId?: string, modelId?: string) {
     console.log(`🔧 [DEBUG] ClaudeSession constructor started for agent: ${agentId}, resumeSessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId}`);
     this.agentId = agentId;
@@ -222,6 +227,12 @@ export class ClaudeSession {
     // 将消息推送到队列中
     this.messageQueue.push(message);
 
+    // Start init timeout: if SDK CLI hangs (e.g. waiting for interactive auth),
+    // send a synthetic error so the SSE client doesn't wait forever.
+    if (!this.hasReceivedSdkMessage) {
+      this.startInitTimeout(requestId);
+    }
+
     return requestId;
   }
 
@@ -242,6 +253,12 @@ export class ClaudeSession {
         const sdkMessage = response as SDKMessage;
         console.log(`🔧 [DEBUG] Received response in background handler for agent: ${this.agentId}, type: ${sdkMessage.type}`);
         this.lastActivity = Date.now();
+
+        // Clear init timeout on first message from SDK
+        if (!this.hasReceivedSdkMessage) {
+          this.hasReceivedSdkMessage = true;
+          this.clearInitTimeout();
+        }
 
         // 捕获 SDK 返回的 sessionId
         const sessionId = sdkMessage.session_id;
@@ -328,10 +345,83 @@ export class ClaudeSession {
       this.isActive = false;
       // 清除处理中标记
       this.isProcessing = false;
+
+      // Propagate error to all pending response callbacks so SSE clients
+      // receive an error event instead of hanging indefinitely.
+      this.propagateErrorToCallbacks(
+        error instanceof Error ? error.message : 'Unknown SDK error'
+      );
     } finally {
       this.isBackgroundRunning = false;
       // 确保处理中标记被清除（以防上面的 catch 没有执行到）
       this.isProcessing = false;
+      this.clearInitTimeout();
+    }
+  }
+
+  /**
+   * Start a timer that fires if the SDK doesn't produce any message within the
+   * timeout window. This catches the case where the CLI process hangs
+   * (e.g. waiting for interactive authentication in a headless container).
+   */
+  private startInitTimeout(requestId: string): void {
+    this.clearInitTimeout();
+    this.initTimeoutTimer = setTimeout(() => {
+      if (this.hasReceivedSdkMessage) return;
+
+      console.error(`⏰ [ClaudeSession] SDK init timeout (${ClaudeSession.SDK_INIT_TIMEOUT_MS}ms) for agent: ${this.agentId}`);
+      console.error(`   The Claude CLI may be waiting for authentication or is unresponsive.`);
+
+      this.isActive = false;
+      this.isProcessing = false;
+
+      this.propagateErrorToCallbacks(
+        'Claude CLI did not respond within the timeout period. ' +
+        'This usually means the CLI is waiting for authentication. ' +
+        'Please configure your API key in Settings → Suppliers.'
+      );
+
+      // Kill the hanging CLI subprocess
+      if (this.queryObject && typeof this.queryObject.close === 'function') {
+        try {
+          this.queryObject.close();
+          console.log(`🔪 Killed hanging CLI subprocess for agent: ${this.agentId}`);
+        } catch { /* ignore */ }
+      }
+    }, ClaudeSession.SDK_INIT_TIMEOUT_MS);
+  }
+
+  private clearInitTimeout(): void {
+    if (this.initTimeoutTimer) {
+      clearTimeout(this.initTimeoutTimer);
+      this.initTimeoutTimer = null;
+    }
+  }
+
+  /**
+   * Send a synthetic error result to all pending response callbacks.
+   * This ensures SSE clients receive a proper error event + result instead
+   * of being left in a loading state forever.
+   */
+  private propagateErrorToCallbacks(message: string): void {
+    for (const [requestId, callback] of this.responseCallbacks) {
+      try {
+        callback({
+          type: 'result',
+          subtype: 'error',
+          is_error: true,
+          session_id: this.claudeSessionId || undefined,
+          result: message,
+          errors: [message],
+          duration_ms: 0,
+          duration_api_ms: 0,
+          num_turns: 0,
+        } as unknown as SDKMessage);
+        console.log(`📤 Sent synthetic error to callback ${requestId}: ${message}`);
+      } catch (e) {
+        console.error(`Failed to send error to callback ${requestId}:`, e);
+      }
+      this.responseCallbacks.delete(requestId);
     }
   }
 
@@ -468,6 +558,7 @@ export class ClaudeSession {
 
     this.isActive = false;
     this.isProcessing = false;
+    this.clearInitTimeout();
 
     const pendingCallbacks = this.responseCallbacks.size;
     this.responseCallbacks.clear();

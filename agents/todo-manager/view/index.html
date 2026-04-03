@@ -626,7 +626,7 @@
           const headers = { 'Content-Type': 'application/json' };
           // Pass projectPath in X-Project-Path header for data isolation
           if (projectPath) {
-            headers['X-Project-Path'] = projectPath;
+            headers['X-Project-Path'] = encodeURIComponent(projectPath);
             console.log('[MockClient] Adding X-Project-Path header:', projectPath);
           }
 

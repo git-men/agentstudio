@@ -518,21 +518,6 @@ const app: express.Express = express();
     console.error('[HookSystem] Error initializing platform hook system:', error);
   }
 
-  // 6. Marketplace Update Service: Initialize background update checker
-  // Default to ENABLED - periodically checks for marketplace updates (especially local type)
-  const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES !== 'false'; // Default to true
-  console.info('[MarketplaceUpdate] Initializing marketplace update service...');
-  try {
-    initializeMarketplaceUpdateService({
-      enabled: enableMarketplaceUpdates,
-      defaultCheckInterval: parseInt(process.env.MARKETPLACE_UPDATE_INTERVAL || '60', 10), // Default: 60 minutes
-      autoApplyUpdates: process.env.MARKETPLACE_AUTO_APPLY_UPDATES === 'true', // Default: false
-    });
-    console.info('[MarketplaceUpdate] Marketplace update service initialized');
-  } catch (error) {
-    console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
-  }
-
   // 6a. Default Marketplace: AgentStudio official marketplace (as-marketplace)
   // Always runs unless DISABLE_DEFAULT_MARKETPLACE=true.
   // Prefers local sibling directory, falls back to GitHub clone.
@@ -567,6 +552,21 @@ const app: express.Express = express();
     } catch (error) {
       console.error('[BuiltinMarketplaces] Error:', error);
     }
+  }
+
+  // 6c. Marketplace Update Service: Initialize AFTER marketplaces are created/synced,
+  // so scheduleAllUpdateChecks can find them on disk.
+  const enableMarketplaceUpdates = process.env.ENABLE_MARKETPLACE_UPDATES !== 'false';
+  console.info('[MarketplaceUpdate] Initializing marketplace update service...');
+  try {
+    initializeMarketplaceUpdateService({
+      enabled: enableMarketplaceUpdates,
+      defaultCheckInterval: parseInt(process.env.MARKETPLACE_UPDATE_INTERVAL || '60', 10),
+      autoApplyUpdates: process.env.MARKETPLACE_AUTO_APPLY_UPDATES !== 'false',
+    });
+    console.info('[MarketplaceUpdate] Marketplace update service initialized');
+  } catch (error) {
+    console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
   }
 
   // Static files - serve embedded frontend (for npm package) or development frontend

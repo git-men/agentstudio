@@ -19,6 +19,7 @@ service:
       PORT: "4936"
       JWT_SECRET: e2e-test-secret
       JWT_EXPIRES_IN: 365d
+      ENGINE: claude-internal-sdk
 
   vars:
     base_url: http://localhost:14936

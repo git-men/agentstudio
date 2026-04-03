@@ -19,6 +19,8 @@ import {
   Zap,
   Maximize2,
   Smartphone,
+  ChevronDown,
+  Check,
 } from 'lucide-react';
 import { ProjectSelector } from '../components/ProjectSelector';
 import { FileBrowser } from '../components/FileBrowser';
@@ -419,6 +421,7 @@ export const NewDashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createForm, setCreateForm] = useState({ name: '', agentId: '', directory: '~/claude-code-projects', description: '' });
   const [showCreateFileBrowser, setShowCreateFileBrowser] = useState(false);
+  const [showCreateAgentDropdown, setShowCreateAgentDropdown] = useState(false);
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [importPath, setImportPath] = useState('');
@@ -950,18 +953,66 @@ export const NewDashboard: React.FC = () => {
                   required
                 />
               </div>
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Agent</label>
-                <select
-                  value={createForm.agentId}
-                  onChange={e => setCreateForm(f => ({ ...f, agentId: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                  required
+                <button
+                  type="button"
+                  onClick={() => setShowCreateAgentDropdown(v => !v)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 text-left transition-colors"
                 >
-                  {allEnabledAgents.map(a => (
-                    <option key={a.id} value={a.id}>{a.ui?.icon && a.ui.icon.length <= 4 ? a.ui.icon + ' ' : ''}{a.name}</option>
-                  ))}
-                </select>
+                  {(() => {
+                    const selected = allEnabledAgents.find(a => a.id === createForm.agentId);
+                    if (selected) return (
+                      <>
+                        {selected.ui?.icon && selected.ui.icon.length <= 4 && (
+                          <span className="text-xl flex-shrink-0">{selected.ui.icon}</span>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{selected.name}</div>
+                          {selected.description && (
+                            <div className="text-xs text-gray-500 dark:text-gray-400 truncate">{selected.description}</div>
+                          )}
+                        </div>
+                      </>
+                    );
+                    return <span className="text-sm text-gray-400 flex-1">选择 Agent</span>;
+                  })()}
+                  <ChevronDown className={`w-4 h-4 text-gray-400 flex-shrink-0 transition-transform ${showCreateAgentDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {showCreateAgentDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowCreateAgentDropdown(false)} />
+                    <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+                      {allEnabledAgents.map(a => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => {
+                            setCreateForm(f => ({ ...f, agentId: a.id }));
+                            setShowCreateAgentDropdown(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                            createForm.agentId === a.id ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+                          }`}
+                        >
+                          {a.ui?.icon && a.ui.icon.length <= 4 && (
+                            <span className="text-xl flex-shrink-0">{a.ui.icon}</span>
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900 dark:text-white truncate">{a.name}</div>
+                            {a.description && (
+                              <div className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{a.description}</div>
+                            )}
+                          </div>
+                          {createForm.agentId === a.id && (
+                            <Check className="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">项目目录</label>

@@ -190,7 +190,9 @@ router.post('/:agentId/lavs/:endpoint', async (req, res) => {
     const input = req.body;
 
     // Get projectPath from headers (for data isolation)
-    const projectPath = req.headers['x-project-path'] as string | undefined;
+    // Client encodes with encodeURIComponent to avoid non-Latin1 header errors
+    const rawProjectPath = req.headers['x-project-path'] as string | undefined;
+    const projectPath = rawProjectPath ? decodeURIComponent(rawProjectPath) : undefined;
     console.log(JSON.stringify({
       level: 'info',
       module: 'lavs',

@@ -1,4 +1,4 @@
-import { BackendService, BackendServicesState, DEFAULT_SERVICES } from '../types/backendServices';
+import { BackendService, BackendServicesState, getDefaultServices } from '../types/backendServices';
 
 const STORAGE_KEY = 'backendServices';
 
@@ -17,9 +17,10 @@ export const loadBackendServices = (): BackendServicesState => {
       const parsed = JSON.parse(stored);
       // Ensure we always have at least the default service
       if (!parsed.services || parsed.services.length === 0) {
+        const defaults = getDefaultServices();
         return {
-          services: DEFAULT_SERVICES,
-          currentServiceId: DEFAULT_SERVICES[0].id
+          services: defaults,
+          currentServiceId: defaults[0].id
         };
       }
       // Normalize URLs on load to fix any previously stored trailing slashes
@@ -36,9 +37,10 @@ export const loadBackendServices = (): BackendServicesState => {
   }
 
   // Return default state if nothing is stored
+  const defaults = getDefaultServices();
   return {
-    services: DEFAULT_SERVICES,
-    currentServiceId: DEFAULT_SERVICES[0].id
+    services: defaults,
+    currentServiceId: defaults[0].id
   };
 };
 

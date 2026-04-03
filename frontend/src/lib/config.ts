@@ -64,13 +64,8 @@ const getCurrentBackendServiceUrl = (): string => {
     return currentService.url;
   }
 
-  // 开发环境默认配置
-  if (import.meta.env.DEV) {
-    return 'http://127.0.0.1:4936';
-  }
-
-  // 生产环境默认使用本地开发服务器
-  return 'http://127.0.0.1:4936';
+  // Fallback: use current origin (sensible for Docker / production deployments)
+  return window.location.origin;
 };
 
 /**

@@ -20,6 +20,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
+*.db
 
 # Runtime data
 pids
@@ -89,3 +90,4 @@ desktop/src-tauri/binaries/
 # Runtime project data
 projects/
 backend/e2e-tests/.argusai/
+.argusai
