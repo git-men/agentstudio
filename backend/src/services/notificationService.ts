@@ -160,13 +160,13 @@ export function formatMessage(payload: NotificationPayload): string {
   const statusEmoji = payload.status === 'success' ? '✅' : '❌';
   const statusText = payload.status === 'success' ? '成功' : '失败';
   const duration = formatDuration(payload.executionTimeMs);
-  const summary = payload.summary || '（无输出）';
+  const content = payload.summary || '（无输出）';
 
   let message = `📋 定时任务执行通知\n\n`;
   message += `任务：${payload.taskName}\n`;
   message += `状态：${statusEmoji} ${statusText}\n`;
   message += `耗时：${duration}\n\n`;
-  message += `摘要：\n${summary}`;
+  message += content;
 
   if (payload.status === 'error' && payload.error) {
     message += `\n\n错误信息：\n${payload.error}`;
@@ -211,21 +211,11 @@ export function extractAgentSummary(output: string): string {
   const markerIndex = lowerOutput.indexOf(markerLower);
 
   if (markerIndex === -1) {
-    return truncateSummary(output);
+    return output;
   }
 
   const afterMarker = output.substring(markerIndex + markerLower.length).trimStart();
-
-  if (!afterMarker) {
-    return truncateSummary(output);
-  }
-
-  const doubleNewlineIndex = afterMarker.indexOf('\n\n');
-  const extracted = doubleNewlineIndex >= 0 && doubleNewlineIndex < 200
-    ? afterMarker.substring(0, doubleNewlineIndex)
-    : afterMarker.substring(0, 200);
-
-  return extracted.trim() || truncateSummary(output);
+  return afterMarker || output;
 }
 
 /**
@@ -289,15 +279,9 @@ export async function sendNotification(
 // Internal Helpers
 // ============================================================================
 
-function truncateSummary(text: string, maxLength = 200): string {
-  if (!text) return '（无输出）';
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength) + '...';
-}
-
 function buildSummary(task: ScheduledTask, result: TaskResult): string {
   if (task.notification?.strategy === 'agent_decided' && result.output) {
     return extractAgentSummary(result.output);
   }
-  return truncateSummary(result.output || '');
+  return result.output || '（无输出）';
 }
