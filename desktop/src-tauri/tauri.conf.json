@@ -1,6 +1,6 @@
 {
   "productName": "ClawStudio",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "identifier": "com.clawstudio.desktop",
   "build": {
     "frontendDist": "../../frontend/dist",
