@@ -149,34 +149,60 @@ async fn check_update(
 }
 
 /// Download and install the cached pending update, then restart the app.
+/// Split into download + install so we can honour cancel_update between the two phases.
 #[tauri::command]
 async fn install_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    state.download_cancelled.store(false, Ordering::SeqCst);
+
     let update = lock_or_recover(&state.pending_update)
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
     let emitter = app.clone();
-    let mut downloaded: usize = 0;
-    update
-        .download_and_install(
+    let cancel_handle = app.clone();
+    let mut phase_downloaded: usize = 0;
+    let mut active_total: u64 = 0;
+
+    let bytes = update
+        .download(
             move |chunk_length, content_length| {
-                downloaded += chunk_length;
-                let _ = emitter.emit(
-                    "update-download-progress",
-                    UpdateDownloadProgress {
-                        downloaded,
-                        total: content_length,
-                    },
-                );
+                let cl = match content_length {
+                    Some(cl) => cl,
+                    None => {
+                        phase_downloaded += chunk_length;
+                        return;
+                    }
+                };
+
+                if cl > active_total {
+                    active_total = cl;
+                    phase_downloaded = 0;
+                }
+
+                if cl == active_total {
+                    phase_downloaded += chunk_length;
+                    let _ = emitter.emit(
+                        "update-download-progress",
+                        UpdateDownloadProgress {
+                            downloaded: phase_downloaded,
+                            total: Some(active_total),
+                        },
+                    );
+                }
             },
             || {},
         )
         .await
         .map_err(|e| e.to_string())?;
 
+    if cancel_handle.state::<AppState>().download_cancelled.load(Ordering::SeqCst) {
+        return Err("Update cancelled by user".to_string());
+    }
+
+    update.install(bytes).map_err(|e| e.to_string())?;
     app.restart();
     Ok(())
 }

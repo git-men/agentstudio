@@ -98,7 +98,7 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
           <div className="mb-4">
             <div className="flex justify-between items-center mb-1.5 text-xs text-gray-500 dark:text-gray-400">
               <span>
-                {percent !== null ? `正在下载… ${percent}%` : '正在下载…'}
+                {percent !== null ? `正在下载… ${percent}%` : '正在准备下载…'}
               </span>
               {downloadProgress && (
                 <span>
@@ -108,14 +108,13 @@ export const UpdateDialog: React.FC<UpdateDialogProps> = ({
               )}
             </div>
             <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
-              {percent !== null ? (
-                <div
-                  className="h-full rounded-full bg-blue-600 transition-all duration-200 ease-out"
-                  style={{ width: `${percent}%` }}
-                />
-              ) : (
-                <div className="h-full w-1/3 rounded-full bg-blue-600 animate-[indeterminate_1.5s_ease-in-out_infinite]" />
-              )}
+              <div
+                className="h-full rounded-full bg-blue-600"
+                style={{
+                  width: percent !== null ? `${percent}%` : '0%',
+                  transition: percent !== null ? 'width 100ms linear' : 'none',
+                }}
+              />
             </div>
           </div>
         )}
