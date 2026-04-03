@@ -751,6 +751,10 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         env_map.insert("PORT".to_string(), DEFAULT_BACKEND_PORT.to_string());
         env_map.insert("TAURI_DESKTOP".to_string(), "1".to_string());
         env_map.insert("NO_UPDATE_NOTIFIER".to_string(), "1".to_string());
+        env_map.insert(
+            "DEFAULT_MARKETPLACE_SOURCE".to_string(),
+            "archive:https://static-76067.sz.gfp.tencent-cloud.com/clawstudio-desktop/as-marketplace.tar.gz".to_string(),
+        );
         if let Some(ref config) = config {
             env_map.insert("ENGINE".to_string(), config.engine.clone());
             // Pass engine as CLI arg (top priority in backend's detectEngineType)
