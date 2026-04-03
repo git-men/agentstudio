@@ -70,6 +70,8 @@ import { sessionNameService } from './services/sessionNameService.js';
 import gitVersionsRouter from './routes/gitVersions';
 import { initDefaultMarketplace, syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
 import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
+import feedbackRouter from './routes/feedback.js';
+import { installLogCapture } from './services/feedbackService.js';
 
 dotenv.config();
 
@@ -142,6 +144,9 @@ process.on('uncaughtExceptionMonitor', (error: Error & { code?: string }, origin
   safeErrorLog('[Monitor] Error:', error);
   safeErrorLog('[Monitor] Stack:', error.stack);
 });
+
+// Install log capture before any other initialization so all output is recorded
+installLogCapture();
 
 // Run directory migrations (from legacy layout to unified ~/.agentstudio/)
 runMigrations();
@@ -736,6 +741,7 @@ const app: express.Express = express();
   app.use('/api/platform-hooks', authMiddleware, platformHooksRouter); // Platform hooks (engine-agnostic)
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
+  app.use('/api/feedback', authMiddleware, feedbackRouter); // Feedback / log upload
 
   // Error handling
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

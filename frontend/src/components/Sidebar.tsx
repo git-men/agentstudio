@@ -35,6 +35,7 @@ import { useTranslation } from 'react-i18next';
 import { ServiceStatusIndicator } from './ServiceStatusIndicator';
 import { ServiceManagementModal } from './ServiceManagementModal';
 import { UpdateNotification } from './UpdateNotification';
+import { FeedbackDialog } from './desktop/FeedbackDialog';
 import { useMobileContext } from '../contexts/MobileContext';
 import { useDesktopUpdate } from '../contexts/DesktopUpdateContext';
 import { isTauri } from '../lib/environment';
@@ -213,6 +214,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
   const { profile: enterpriseProfile, isAuthenticated: isEnterpriseAuth, startLogin: enterpriseLogin, logout: enterpriseLogout } = useEnterpriseProfile();
   const desktopUpdate = useDesktopUpdate();
   const [showUpdateCheck, setShowUpdateCheck] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
 
   useEffect(() => {
     if (showUpdateCheck && desktopUpdate?.updatePayload) {
@@ -610,6 +612,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
                             </span>
                           </button>
                         )}
+                        {/* Feedback / log upload */}
+                        {isTauri() && (
+                          <button
+                            onClick={() => {
+                              setShowEnterpriseMenu(false);
+                              setShowFeedback(true);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                          >
+                            <MessageSquare className="w-3 h-3" />
+                            日志反馈
+                          </button>
+                        )}
                         <div className="border-t border-gray-100 dark:border-gray-700 my-0.5" />
                         <button
                           onClick={() => { setShowEnterpriseMenu(false); enterpriseLogin(); }}
@@ -806,6 +821,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onClose, collapsed = false, on
             )}
           </div>
         </div>,
+        document.body
+      )}
+
+      {/* Feedback dialog */}
+      {showFeedback && createPortal(
+        <FeedbackDialog onClose={() => setShowFeedback(false)} username={enterpriseProfile?.name || enterpriseProfile?.email} />,
         document.body
       )}
     </div>
