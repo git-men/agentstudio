@@ -20,6 +20,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { AGENTSTUDIO_HOME } from '../config/paths.js';
 import { loadConfig } from '../config/index.js';
+import cosDefaults from '../config/cos.json';
 
 // ── COS Configuration ────────────────────────────────────────────────────────
 
@@ -28,20 +29,17 @@ const COS_REGION = 'ap-guangzhou';
 const COS_ENDPOINT = 'sz.gfp.tencent-cloud.com';
 const COS_PREFIX = 'clawstudio-feedback';
 
-const DEFAULT_COS_SECRET_ID = 'mhRvUPG8Cdbau4P0s9u4zwhL';
-const DEFAULT_COS_SECRET_KEY = 'j4HgPZEFHNbjydF1Tsjfa6Z/uffFsKuLO9';
-
 async function getCosCredentials(): Promise<{ secretId: string; secretKey: string } | null> {
   try {
     const config = await loadConfig();
-    const secretId = config.feedbackCosSecretId || DEFAULT_COS_SECRET_ID;
-    const secretKey = config.feedbackCosSecretKey || DEFAULT_COS_SECRET_KEY;
+    const secretId = config.feedbackCosSecretId || cosDefaults.feedbackCosSecretId;
+    const secretKey = config.feedbackCosSecretKey || cosDefaults.feedbackCosSecretKey;
     if (secretId && secretKey) return { secretId, secretKey };
   } catch {
-    // loadConfig may fail in compiled binary, fall back to defaults
+    // loadConfig may fail in compiled binary, fall back to bundled defaults
   }
-  if (DEFAULT_COS_SECRET_ID && DEFAULT_COS_SECRET_KEY) {
-    return { secretId: DEFAULT_COS_SECRET_ID, secretKey: DEFAULT_COS_SECRET_KEY };
+  if (cosDefaults.feedbackCosSecretId && cosDefaults.feedbackCosSecretKey) {
+    return { secretId: cosDefaults.feedbackCosSecretId, secretKey: cosDefaults.feedbackCosSecretKey };
   }
   return null;
 }
