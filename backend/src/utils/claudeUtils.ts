@@ -369,6 +369,14 @@ export async function buildQueryOptions(
     finalPermissionMode = agent.permissionMode;
   }
 
+  // claude-internal rejects --dangerously-skip-permissions when running as
+  // root/sudo. Auto-downgrade to acceptEdits so agents with bypassPermissions
+  // still work in root-based containers (e.g. AnyDev).
+  if (finalPermissionMode === 'bypassPermissions' && process.getuid?.() === 0) {
+    console.warn('⚠️  bypassPermissions is not allowed when running as root — downgrading to acceptEdits');
+    finalPermissionMode = 'acceptEdits';
+  }
+
   // Build allowed tools list from agent configuration
   const allowedTools = (agent.allowedTools ?? [])
     .filter((tool: any) => tool.enabled)
