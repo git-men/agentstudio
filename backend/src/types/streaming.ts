@@ -2,9 +2,8 @@
  * Communication channel for AI chat requests
  * Determines streaming granularity:
  * - 'web': Fine-grained character-by-character streaming
- * - 'slack': Block-based streaming (existing behavior)
  */
-export type ChannelType = 'web' | 'slack';
+export type ChannelType = 'web';
 
 /**
  * Default channel when not specified (web for backward compatibility)

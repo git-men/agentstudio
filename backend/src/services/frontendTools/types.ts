@@ -67,7 +67,7 @@ export interface FrontendToolResult {
 /**
  * Notification channel types (carried over from the existing design).
  */
-export type ChannelType = 'sse' | 'slack' | 'wechat' | 'email';
+export type ChannelType = 'sse' | 'wechat' | 'email';
 
 /**
  * Notification channel interface for delivering frontend tool invocations

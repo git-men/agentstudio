@@ -152,22 +152,6 @@ export const PRESET_MCP_SERVERS: PresetMcpServer[] = [
     official: true,
   },
   {
-    id: 'slack',
-    name: 'Slack',
-    serverName: 'slack',
-    description: 'Team communication — channel management, messaging, search messages',
-    category: 'productivity',
-    type: 'stdio',
-    command: 'npx',
-    args: ['-y', '@anthropic/slack-mcp'],
-    requiredEnvVars: [
-      { key: 'SLACK_BOT_TOKEN', label: 'Slack Bot Token', description: 'xoxb-... bot token', isSecret: true },
-      { key: 'SLACK_TEAM_ID', label: 'Slack Team ID', description: 'Your Slack workspace team ID', isSecret: false },
-    ],
-    documentationUrl: 'https://github.com/zencoderai/slack-mcp-server',
-    official: false,
-  },
-  {
     id: 'asana',
     name: 'Asana',
     serverName: 'asana',

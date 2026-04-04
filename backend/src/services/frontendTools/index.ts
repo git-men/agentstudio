@@ -8,8 +8,6 @@ export { frontendToolBridge } from './frontendToolBridge.js';
 // Notification channels
 export { notificationChannelManager } from './notificationChannelManager.js';
 export { SSENotificationChannel, generateSSEChannelId } from './sseChannel.js';
-export { SlackNotificationChannel, generateSlackChannelId } from './slackChannel.js';
-
 // MCP integration
 export {
   createFrontendToolMcpServer,

@@ -20,7 +20,6 @@ import {
   CONFIG_DIR,
   SLIDES_DIR,
   CLAUDE_VERSIONS_FILE,
-  SLACK_SESSION_LOCKS_DIR,
   SCHEDULED_TASKS_DIR,
   SCHEDULED_TASKS_HISTORY_DIR,
   META_AGENT_WORKING_DIR,
@@ -139,7 +138,6 @@ function migrateFromClaudeAgent(): number {
 
   // Directory mappings
   totalCopied += safeCopyDir(join(src, 'agents'), AGENTS_DIR);
-  totalCopied += safeCopyDir(join(src, 'slack-session-locks'), SLACK_SESSION_LOCKS_DIR);
   totalCopied += safeCopyDir(join(src, 'scheduled-tasks'), SCHEDULED_TASKS_DIR);
 
   if (totalCopied > 0) {
@@ -234,7 +232,6 @@ function ensureDirectories(): void {
     DATA_DIR,
     SLIDES_DIR,
     join(AGENTSTUDIO_HOME, 'run'),
-    SLACK_SESSION_LOCKS_DIR,
     SCHEDULED_TASKS_DIR,
     SCHEDULED_TASKS_HISTORY_DIR,
     META_AGENT_WORKING_DIR,

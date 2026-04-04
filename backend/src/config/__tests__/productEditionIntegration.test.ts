@@ -116,7 +116,6 @@ describe('PRODUCT_EDITION=chat-only', () => {
       ['get',    '/api/hooks'],
       ['get',    '/api/rules'],
       ['get',    '/api/speech-to-text'],
-      ['get',    '/api/slack'],
       ['get',    '/api/mcp-admin'],
     ] as [string, string][])(
       '%s %s → 403 with edition in body',
