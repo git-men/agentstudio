@@ -174,16 +174,16 @@ describe('extractAgentSummary', () => {
     expect(extractAgentSummary(output)).toBe('This is the summary text.');
   });
 
-  it('extracts text until double newline', () => {
+  it('extracts full text after marker including across paragraphs', () => {
     const output = '[SHOULD-NOTIFY-USER] First paragraph.\n\nSecond paragraph.';
-    expect(extractAgentSummary(output)).toBe('First paragraph.');
+    expect(extractAgentSummary(output)).toBe('First paragraph.\n\nSecond paragraph.');
   });
 
-  it('truncates at 200 chars when no double newline', () => {
+  it('returns all text after marker regardless of length', () => {
     const longText = 'A'.repeat(300);
     const output = `[SHOULD-NOTIFY-USER] ${longText}`;
     const result = extractAgentSummary(output);
-    expect(result.length).toBe(200);
+    expect(result.length).toBe(300);
   });
 
   it('falls back to first 200 chars when no text after marker', () => {

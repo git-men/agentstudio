@@ -10,6 +10,22 @@ import * as path from 'path';
 vi.mock('fs');
 vi.mock('../pluginPaths');
 
+vi.mock('../../config/engineConfig', () => ({
+  getEnginePaths: vi.fn(() => ({
+    userConfigDir: '/test/.claude',
+    commandsDir: '/test/.claude/commands',
+    agentsDir: '/test/.claude/agents',
+    skillsDir: '/test/.claude/skills',
+    hooksDir: '/test/.claude/hooks',
+    mcpConfigPath: '/test/.claude/mcp.json',
+    mcpDir: '/test/.claude/mcp',
+    rulesDir: '/test/.claude/rules',
+    pluginsDir: '/test/.claude/plugins',
+    projectsDataDir: '/test/.claude/projects',
+  })),
+  getClaudeMirrorPaths: vi.fn(() => []),
+}));
+
 describe('PluginSymlink', () => {
   beforeEach(() => {
     vi.clearAllMocks();

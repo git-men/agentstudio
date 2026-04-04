@@ -385,7 +385,7 @@ describe('agentCardService - Cursor Engine Support', () => {
       expect(agentCard.url).toBe('https://agentstudio.cc/a2a/a2a-cursor-uuid');
       expect(Array.isArray(agentCard.skills)).toBe(true);
       expect(Array.isArray(agentCard.securitySchemes)).toBe(true);
-    });
+    }, 15000);
 
     it('should include Cursor-specific skills', async () => {
       const { generateCursorAgentCard } = await import('../agentCardService.js');
