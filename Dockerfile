@@ -107,6 +107,7 @@ USER agentstudio
 
 ENV NODE_ENV=production \
     PORT=4936 \
+    HOST=0.0.0.0 \
     HOME=/home/agentstudio \
     TZ=Asia/Shanghai
 
@@ -171,6 +172,7 @@ USER agentstudio
 
 ENV NODE_ENV=production \
     PORT=4936 \
+    HOST=0.0.0.0 \
     HOME=/home/agentstudio \
     TZ=Asia/Shanghai
 

@@ -108,7 +108,7 @@ describe('claudeUtils', () => {
       expect(result).toBeNull();
     });
 
-    it('should resolve Windows .cmd files to their JS entry', async () => {
+    it.skipIf(process.platform !== 'win32')('should resolve Windows .cmd files to their JS entry', async () => {
       // Save original platform
       const originalPlatform = process.platform;
       // Mock Windows platform
@@ -135,7 +135,7 @@ describe('claudeUtils', () => {
       Object.defineProperty(process, 'platform', { value: originalPlatform });
     });
 
-    it('should handle multiple Windows where results and resolve claude-internal', async () => {
+    it.skipIf(process.platform !== 'win32')('should handle multiple Windows where results and resolve claude-internal', async () => {
       const originalPlatform = process.platform;
       Object.defineProperty(process, 'platform', { value: 'win32' });
 

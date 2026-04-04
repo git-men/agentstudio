@@ -115,6 +115,7 @@ RUN chmod +x /opt/clawstudio/anydev-init.sh \
 
 ENV NODE_ENV=production \
     PORT=80 \
+    HOST=0.0.0.0 \
     HOME=/data \
     ENGINE=claude-internal-sdk
 

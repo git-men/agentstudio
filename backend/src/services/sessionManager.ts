@@ -5,6 +5,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { getProjectsDir, getAllProjectsDirs } from '../config/engineConfig.js';
 import { sessionNameService } from './sessionNameService.js';
+import { logger } from '../utils/logger.js';
+
+const log = logger.child('sessionManager');
 
 /**
  * 会话配置快照
@@ -49,7 +52,7 @@ export class SessionManager {
       this.cleanupIdleSessions();
     }, this.cleanupIntervalMs);
 
-    console.log(`📋 SessionManager initialized (perAgent=${this.maxSessionsPerAgent || '∞'}, global=${this.maxConcurrentSessions || '∞'})`);
+    log.info(`📋 SessionManager initialized (perAgent=${this.maxSessionsPerAgent || '∞'}, global=${this.maxConcurrentSessions || '∞'})`);
   }
 
   /**
@@ -104,17 +107,17 @@ export class SessionManager {
 
       for (const projectsDir of allDirs) {
         const sessionFile = path.join(projectsDir, claudeProjectPath, `${sessionId}.jsonl`);
-        console.log(`🔍 Checking for session file: ${sessionFile}`);
+        log.info(`🔍 Checking for session file: ${sessionFile}`);
         if (fs.existsSync(sessionFile)) {
-          console.log(`✅ Found session file: ${sessionFile}`);
+          log.info(`✅ Found session file: ${sessionFile}`);
           return true;
         }
       }
 
-      console.log(`❌ Session ${sessionId} not found in any projects directory`);
+      log.info(`❌ Session ${sessionId} not found in any projects directory`);
       return false;
     } catch (error) {
-      console.error('Error checking session existence:', error);
+      log.error('Error checking session existence:', error);
       return false;
     }
   }
@@ -135,11 +138,11 @@ export class SessionManager {
     try {
       const realPath = fs.realpathSync(resolvedPath);
       if (realPath !== resolvedPath) {
-        console.log(`🔗 [SessionManager] Resolved symlink: ${resolvedPath} -> ${realPath}`);
+        log.info(`🔗 [SessionManager] Resolved symlink: ${resolvedPath} -> ${realPath}`);
       }
       resolvedPath = realPath;
     } catch (error) {
-      console.log(`⚠️ [SessionManager] Could not resolve path: ${resolvedPath}, using as-is`);
+      log.info(`⚠️ [SessionManager] Could not resolve path: ${resolvedPath}, using as-is`);
     }
     
     // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
@@ -174,15 +177,15 @@ export class SessionManager {
 
       if (configSnapshot) {
         this.sessionConfigs.set(resumeSessionId, configSnapshot);
-        console.log(`📸 Stored config snapshot for session: ${resumeSessionId}`, configSnapshot);
+        log.info(`📸 Stored config snapshot for session: ${resumeSessionId}`, configSnapshot);
       }
 
-      console.log(`✅ Resumed persistent Claude session for agent: ${agentId} (sessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
+      log.info(`✅ Resumed persistent Claude session for agent: ${agentId} (sessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
       return session;
     }
     const tempKey = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     this.tempSessions.set(tempKey, session);
-    console.log(`🆕 Created new persistent Claude session for agent: ${agentId} (temp key: ${tempKey}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
+    log.info(`🆕 Created new persistent Claude session for agent: ${agentId} (temp key: ${tempKey}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId})`);
     return session;
   }
 
@@ -213,7 +216,7 @@ export class SessionManager {
 
     const removeCount = Math.max(0, agentSessionIds.size - this.maxSessionsPerAgent + 1);
     for (let i = 0; i < removeCount && i < sessionsToRemove.length; i++) {
-      console.log(`🔄 Enforcing per-agent limit: closing old session ${sessionsToRemove[i]} for agent ${agentId}`);
+      log.info(`🔄 Enforcing per-agent limit: closing old session ${sessionsToRemove[i]} for agent ${agentId}`);
       await this.removeSession(sessionsToRemove[i]);
     }
   }
@@ -237,7 +240,7 @@ export class SessionManager {
 
     const removeCount = totalSessions - this.maxConcurrentSessions + 1;
     for (let i = 0; i < removeCount && i < candidates.length; i++) {
-      console.log(`🔄 Enforcing global limit: closing idle session ${candidates[i].id}`);
+      log.info(`🔄 Enforcing global limit: closing idle session ${candidates[i].id}`);
       await this.removeSession(candidates[i].id);
     }
   }
@@ -270,7 +273,7 @@ export class SessionManager {
       // 存储配置快照
       if (configSnapshot) {
         this.sessionConfigs.set(sessionId, configSnapshot);
-        console.log(`📸 Stored config snapshot for confirmed session: ${sessionId}`, configSnapshot);
+        log.info(`📸 Stored config snapshot for confirmed session: ${sessionId}`, configSnapshot);
       }
       
       // 更新 agent 会话索引
@@ -280,11 +283,11 @@ export class SessionManager {
       }
       this.agentSessions.get(agentId)!.add(sessionId);
       
-      console.log(`✅ Confirmed session ${sessionId} for agent: ${agentId} (removed temp key: ${tempKey})`);
+      log.info(`✅ Confirmed session ${sessionId} for agent: ${agentId} (removed temp key: ${tempKey})`);
       // 若该临时会话有自定义名称，迁移到真实 sessionId
       sessionNameService.migrateSession(tempKey, sessionId);
     } else {
-      console.warn(`⚠️  Session not found in temp sessions when confirming sessionId: ${sessionId}`);
+      log.warn(`⚠️  Session not found in temp sessions when confirming sessionId: ${sessionId}`);
     }
   }
 
@@ -307,7 +310,7 @@ export class SessionManager {
     }
     this.agentSessions.get(agentId)!.add(aliasId);
 
-    console.log(`🔗 Registered session alias: ${aliasId} → same ClaudeSession for agent: ${agentId}`);
+    log.info(`🔗 Registered session alias: ${aliasId} → same ClaudeSession for agent: ${agentId}`);
   }
 
   /**
@@ -322,7 +325,7 @@ export class SessionManager {
     // 从原始sessionId中移除会话
     if (this.sessions.has(oldSessionId)) {
       this.sessions.delete(oldSessionId);
-      console.log(`🔄 Removed old session ${oldSessionId} from SessionManager`);
+      log.info(`🔄 Removed old session ${oldSessionId} from SessionManager`);
     }
     
     // 从心跳记录中移除原始sessionId并添加新的
@@ -340,13 +343,13 @@ export class SessionManager {
     if (oldConfig) {
       this.sessionConfigs.delete(oldSessionId);
       this.sessionConfigs.set(newSessionId, oldConfig);
-      console.log(`📸 Transferred config snapshot: ${oldSessionId} -> ${newSessionId}`);
+      log.info(`📸 Transferred config snapshot: ${oldSessionId} -> ${newSessionId}`);
     }
     
     // 从agent会话索引中移除原始sessionId
     if (this.agentSessions.has(agentId)) {
       this.agentSessions.get(agentId)!.delete(oldSessionId);
-      console.log(`🔄 Removed old session ${oldSessionId} from agent ${agentId} index`);
+      log.info(`🔄 Removed old session ${oldSessionId} from agent ${agentId} index`);
     }
     
     // 添加新的sessionId
@@ -358,7 +361,7 @@ export class SessionManager {
     }
     this.agentSessions.get(agentId)!.add(newSessionId);
     
-    console.log(`✅ Replaced session ID ${oldSessionId} -> ${newSessionId} for agent: ${agentId}`);
+    log.info(`✅ Replaced session ID ${oldSessionId} -> ${newSessionId} for agent: ${agentId}`);
   }
 
   /**
@@ -369,7 +372,7 @@ export class SessionManager {
   updateHeartbeat(sessionId: string): boolean {
     if (this.sessions.has(sessionId)) {
       this.sessionHeartbeats.set(sessionId, Date.now());
-      console.log(`💓 Updated heartbeat for session: ${sessionId}`);
+      log.info(`💓 Updated heartbeat for session: ${sessionId}`);
       return true;
     }
     return false;
@@ -451,7 +454,7 @@ export class SessionManager {
       }
     }
     
-    console.log(`🗑️  Removed Claude session: ${sessionId} for agent: ${agentId}`);
+    log.info(`🗑️  Removed Claude session: ${sessionId} for agent: ${agentId}`);
     return true;
   }
 
@@ -461,7 +464,7 @@ export class SessionManager {
    * @returns 是否成功清理
    */
   async manualCleanupSession(sessionId: string): Promise<boolean> {
-    console.log(`🧹 Manual cleanup requested for session: ${sessionId}`);
+    log.info(`🧹 Manual cleanup requested for session: ${sessionId}`);
     
     // 首先尝试从正式会话中清理
     if (this.sessions.has(sessionId)) {
@@ -475,16 +478,16 @@ export class SessionManager {
         try {
           await session.close();
         } catch (error) {
-          console.warn(`⚠️  Failed to close temp session ${sessionId}:`, error);
+          log.warn(`⚠️  Failed to close temp session ${sessionId}:`, error);
           // 即使关闭失败，也要从索引中移除
         }
         this.tempSessions.delete(sessionId);
-        console.log(`🗑️  Removed pending temp session: ${sessionId}`);
+        log.info(`🗑️  Removed pending temp session: ${sessionId}`);
         return true;
       }
     }
     
-    console.warn(`⚠️  Session not found for cleanup: ${sessionId}`);
+    log.warn(`⚠️  Session not found for cleanup: ${sessionId}`);
     return false;
   }
 
@@ -494,21 +497,21 @@ export class SessionManager {
    * @returns 是否成功中断
    */
   async interruptSession(sessionId: string): Promise<{ success: boolean; error?: string }> {
-    console.log(`🛑 Interrupt requested for session: ${sessionId}`);
+    log.info(`🛑 Interrupt requested for session: ${sessionId}`);
 
     const session = this.sessions.get(sessionId);
     if (!session) {
-      console.warn(`⚠️  Session not found: ${sessionId}`);
+      log.warn(`⚠️  Session not found: ${sessionId}`);
       return { success: false, error: 'Session not found' };
     }
 
     try {
       await session.interrupt();
-      console.log(`✅ Successfully interrupted session: ${sessionId}`);
+      log.info(`✅ Successfully interrupted session: ${sessionId}`);
       return { success: true };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`❌ Failed to interrupt session ${sessionId}:`, error);
+      log.error(`❌ Failed to interrupt session ${sessionId}:`, error);
       return { success: false, error: errorMessage };
     }
   }
@@ -527,14 +530,14 @@ export class SessionManager {
       }
 
       if (heartbeatTimedOutSessions.length > 0) {
-        console.log(`💔 Cleaning up ${heartbeatTimedOutSessions.length} heartbeat timed-out sessions (timeout: ${this.heartbeatTimeoutMs / 1000}s)`);
+        log.info(`💔 Cleaning up ${heartbeatTimedOutSessions.length} heartbeat timed-out sessions (timeout: ${this.heartbeatTimeoutMs / 1000}s)`);
         
         for (const sessionId of heartbeatTimedOutSessions) {
           await this.removeSession(sessionId);
-          console.log(`🗑️  Removed heartbeat timed-out session: ${sessionId}`);
+          log.info(`🗑️  Removed heartbeat timed-out session: ${sessionId}`);
         }
         
-        console.log(`✅ Cleaned up ${heartbeatTimedOutSessions.length} heartbeat timed-out sessions`);
+        log.info(`✅ Cleaned up ${heartbeatTimedOutSessions.length} heartbeat timed-out sessions`);
       }
     }
 
@@ -549,7 +552,7 @@ export class SessionManager {
     }
 
     if (idleTempKeys.length > 0) {
-      console.log(`🧹 Cleaning up ${idleTempKeys.length} unconfirmed temp sessions (timeout: 30min)`);
+      log.info(`🧹 Cleaning up ${idleTempKeys.length} unconfirmed temp sessions (timeout: 30min)`);
       
       // 清理临时会话
       for (const tempKey of idleTempKeys) {
@@ -557,11 +560,11 @@ export class SessionManager {
         if (session) {
           await session.close();
           this.tempSessions.delete(tempKey);
-          console.log(`🗑️  Removed idle temp session: ${tempKey}`);
+          log.info(`🗑️  Removed idle temp session: ${tempKey}`);
         }
       }
       
-      console.log(`✅ Cleaned up ${idleTempKeys.length} idle temp sessions`);
+      log.info(`✅ Cleaned up ${idleTempKeys.length} idle temp sessions`);
     }
 
     // 如果设置为无限超时，则不进行基于活动时间的自动清理
@@ -590,7 +593,7 @@ export class SessionManager {
       return;
     }
 
-    console.log(`🧹 Starting cleanup of ${idleSessionIds.length + idleActivityTempKeys.length} idle sessions`);
+    log.info(`🧹 Starting cleanup of ${idleSessionIds.length + idleActivityTempKeys.length} idle sessions`);
 
     // 清理正式会话
     for (const sessionId of idleSessionIds) {
@@ -603,11 +606,11 @@ export class SessionManager {
       if (session) {
         await session.close();
         this.tempSessions.delete(tempKey);
-        console.log(`🗑️  Removed idle temp session: ${tempKey}`);
+        log.info(`🗑️  Removed idle temp session: ${tempKey}`);
       }
     }
 
-    console.log(`✅ Cleaned up ${idleSessionIds.length + idleActivityTempKeys.length} idle sessions`);
+    log.info(`✅ Cleaned up ${idleSessionIds.length + idleActivityTempKeys.length} idle sessions`);
   }
 
   /**
@@ -695,7 +698,7 @@ export class SessionManager {
    * @returns 清理的会话数量
    */
   async clearAllSessions(): Promise<number> {
-    console.log('🧹 Clearing all sessions...');
+    log.info('🧹 Clearing all sessions...');
     
     const totalSessions = this.sessions.size + this.tempSessions.size;
     
@@ -704,7 +707,7 @@ export class SessionManager {
       try {
         await session.close();
       } catch (error) {
-        console.warn(`⚠️  Failed to close session:`, error);
+        log.warn(`⚠️  Failed to close session:`, error);
       }
     });
     
@@ -713,7 +716,7 @@ export class SessionManager {
       try {
         await session.close();
       } catch (error) {
-        console.warn(`⚠️  Failed to close temp session:`, error);
+        log.warn(`⚠️  Failed to close temp session:`, error);
       }
     });
     
@@ -725,7 +728,7 @@ export class SessionManager {
     this.sessionHeartbeats.clear();
     this.sessionConfigs.clear();
     
-    console.log(`✅ Cleared ${totalSessions} sessions`);
+    log.info(`✅ Cleared ${totalSessions} sessions`);
     return totalSessions;
   }
 
@@ -782,9 +785,9 @@ export class SessionManager {
 
     const changed = !this.compareConfigSnapshots(oldConfig, newConfig);
     if (changed) {
-      console.log(`🔍 Config changed for session ${sessionId}:`);
-      console.log(`   Old config:`, oldConfig);
-      console.log(`   New config:`, newConfig);
+      log.info(`🔍 Config changed for session ${sessionId}:`);
+      log.info(`   Old config:`, oldConfig);
+      log.info(`   New config:`, newConfig);
     }
     return changed;
   }
@@ -801,7 +804,7 @@ export class SessionManager {
    * 关闭所有会话并清理资源
    */
   async shutdown(): Promise<void> {
-    console.log('🔄 Shutting down SessionManager...');
+    log.info('🔄 Shutting down SessionManager...');
     
     clearInterval(this.cleanupInterval);
     
@@ -819,7 +822,7 @@ export class SessionManager {
     this.sessionHeartbeats.clear();
     this.sessionConfigs.clear();
     
-    console.log('✅ SessionManager shutdown complete');
+    log.info('✅ SessionManager shutdown complete');
   }
 }
 

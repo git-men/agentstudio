@@ -2,6 +2,9 @@ import { query, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { SDKMessage, SDKSystemMessage } from '@anthropic-ai/claude-agent-sdk';
 import { MessageQueue } from './messageQueue';
 import { createMockQuery, isMockEnabled } from '../testing/mockSdkQuery.js';
+import { logger } from '../utils/logger.js';
+
+const log = logger.child('claudeSession');
 
 /**
  * Claude 会话包装器 - 使用 Streaming Input Mode
@@ -37,7 +40,7 @@ export class ClaudeSession {
   private initTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(agentId: string, options: Options, resumeSessionId?: string, claudeVersionId?: string, modelId?: string) {
-    console.log(`🔧 [DEBUG] ClaudeSession constructor started for agent: ${agentId}, resumeSessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId}`);
+    log.info(`🔧 [DEBUG] ClaudeSession constructor started for agent: ${agentId}, resumeSessionId: ${resumeSessionId}, claudeVersionId: ${claudeVersionId}, modelId: ${modelId}`);
     this.agentId = agentId;
     this.options = { ...options };
     this.messageQueue = new MessageQueue();
@@ -50,13 +53,13 @@ export class ClaudeSession {
     // 如果提供了 resumeSessionId，设置为当前 claudeSessionId
     if (this.resumeSessionId) {
       this.claudeSessionId = this.resumeSessionId;
-      console.log(`🔧 [DEBUG] Set claudeSessionId to resumeSessionId: ${this.claudeSessionId}`);
+      log.info(`🔧 [DEBUG] Set claudeSessionId to resumeSessionId: ${this.claudeSessionId}`);
     }
 
-    console.log(`🔧 [DEBUG] About to call initializeClaudeStream for agent: ${agentId}`);
+    log.info(`🔧 [DEBUG] About to call initializeClaudeStream for agent: ${agentId}`);
     // 立即初始化 Claude 流（Streaming Input Mode）
     this.initializeClaudeStream();
-    console.log(`🔧 [DEBUG] ClaudeSession constructor completed for agent: ${agentId}`);
+    log.info(`🔧 [DEBUG] ClaudeSession constructor completed for agent: ${agentId}`);
   }
 
   /**
@@ -128,9 +131,9 @@ export class ClaudeSession {
 
     try {
       if (this.resumeSessionId) {
-        console.log(`🔄 Resuming persistent Claude session ${this.resumeSessionId} for agent: ${this.agentId}`);
+        log.info(`🔄 Resuming persistent Claude session ${this.resumeSessionId} for agent: ${this.agentId}`);
       } else {
-        console.log(`🆕 Starting new persistent Claude session for agent: ${this.agentId}`);
+        log.info(`🆕 Starting new persistent Claude session for agent: ${this.agentId}`);
       }
 
       // 如果有 resumeSessionId，添加到 options 中
@@ -138,17 +141,17 @@ export class ClaudeSession {
       if (this.resumeSessionId) {
         queryOptions.resume = this.resumeSessionId;
       } else {
-        console.log(`🆕 No resume parameter, starting fresh session for agent: ${this.agentId}`);
+        log.info(`🆕 No resume parameter, starting fresh session for agent: ${this.agentId}`);
       }
 
       // 使用 Streaming Input Mode - 只构造一次 query
       // 这个 query 对象会持续运行，通过 messageQueue 接收新的用户输入
-      console.log(`🔧 [DEBUG] About to call query() for agent: ${this.agentId}`);
+      log.info(`🔧 [DEBUG] About to call query() for agent: ${this.agentId}`);
 
       // query 返回的对象既是 AsyncGenerator 又有 interrupt() 等方法
       // When MOCK_SDK=true, use mock query that replays JSONL scenarios
       if (isMockEnabled()) {
-        console.log(`🧪 [MOCK] Using mock SDK query for agent: ${this.agentId}`);
+        log.info(`🧪 [MOCK] Using mock SDK query for agent: ${this.agentId}`);
         this.queryObject = createMockQuery({
           prompt: this.messageQueue,
           options: queryOptions,
@@ -165,26 +168,26 @@ export class ClaudeSession {
 
       this.isInitialized = true;
       const action = this.resumeSessionId ? 'Resumed' : 'Initialized';
-      console.log(`✨ ${action} persistent Claude streaming session for agent: ${this.agentId}`);
+      log.info(`✨ ${action} persistent Claude streaming session for agent: ${this.agentId}`);
     } catch (error) {
-      console.error(`Failed to initialize Claude session for agent ${this.agentId}:`, error);
+      log.error(`Failed to initialize Claude session for agent ${this.agentId}:`, error);
       
       // 打印更详细的错误信息
       if (error instanceof Error) {
-        console.error(`❌ [初始化错误详情]`);
-        console.error(`   - name: ${error.name}`);
-        console.error(`   - message: ${error.message}`);
-        console.error(`   - stack: ${error.stack}`);
+        log.error(`❌ [初始化错误详情]`);
+        log.error(`   - name: ${error.name}`);
+        log.error(`   - message: ${error.message}`);
+        log.error(`   - stack: ${error.stack}`);
         
         const errorAny = error as any;
-        if (errorAny.stderr) console.error(`   - stderr: ${errorAny.stderr}`);
-        if (errorAny.stdout) console.error(`   - stdout: ${errorAny.stdout}`);
-        if (errorAny.exitCode !== undefined) console.error(`   - exitCode: ${errorAny.exitCode}`);
-        if (errorAny.code !== undefined) console.error(`   - code: ${errorAny.code}`);
+        if (errorAny.stderr) log.error(`   - stderr: ${errorAny.stderr}`);
+        if (errorAny.stdout) log.error(`   - stdout: ${errorAny.stdout}`);
+        if (errorAny.exitCode !== undefined) log.error(`   - exitCode: ${errorAny.exitCode}`);
+        if (errorAny.code !== undefined) log.error(`   - code: ${errorAny.code}`);
         
         const allKeys = Object.keys(errorAny);
         if (allKeys.length > 0) {
-          console.error(`   - 所有属性: ${allKeys.join(', ')}`);
+          log.error(`   - 所有属性: ${allKeys.join(', ')}`);
         }
       }
       
@@ -199,7 +202,7 @@ export class ClaudeSession {
    * @param responseCallback 响应回调函数
    */
   async sendMessage(message: any, responseCallback: (response: SDKMessage) => void): Promise<string> {
-    console.log(`🔧 [DEBUG] sendMessage called for agent: ${this.agentId}, isActive: ${this.isActive}, isProcessing: ${this.isProcessing}, isBackgroundRunning: ${this.isBackgroundRunning}`);
+    log.info(`🔧 [DEBUG] sendMessage called for agent: ${this.agentId}, isActive: ${this.isActive}, isProcessing: ${this.isProcessing}, isBackgroundRunning: ${this.isBackgroundRunning}`);
 
     if (!this.isActive) {
       throw new Error('Session is not active');
@@ -245,13 +248,13 @@ export class ClaudeSession {
     }
 
     this.isBackgroundRunning = true;
-    console.log(`🚀 Starting background response handler for agent: ${this.agentId}`);
+    log.info(`🚀 Starting background response handler for agent: ${this.agentId}`);
 
     try {
       for await (const response of this.queryStream) {
         // 类型安全的消息处理
         const sdkMessage = response as SDKMessage;
-        console.log(`🔧 [DEBUG] Received response in background handler for agent: ${this.agentId}, type: ${sdkMessage.type}`);
+        log.info(`🔧 [DEBUG] Received response in background handler for agent: ${this.agentId}, type: ${sdkMessage.type}`);
         this.lastActivity = Date.now();
 
         // Clear init timeout on first message from SDK
@@ -264,14 +267,14 @@ export class ClaudeSession {
         const sessionId = sdkMessage.session_id;
         if (sdkMessage.type === 'system' && (sdkMessage as SDKSystemMessage).subtype === 'init' && sessionId) {
           this.claudeSessionId = sessionId;
-          console.log(`📝 Captured Claude sessionId: ${this.claudeSessionId} for agent: ${this.agentId}`);
+          log.info(`📝 Captured Claude sessionId: ${this.claudeSessionId} for agent: ${this.agentId}`);
         }
 
         // 简单的响应分发：只使用第一个回调（因为我们现在保证了没有并发）
         const requestIds = Array.from(this.responseCallbacks.keys());
         const currentRequestId = requestIds.length > 0 ? requestIds[0] : null;
 
-        console.log(`🔧 [DEBUG] Current pending requests: ${requestIds.length}, processing: ${currentRequestId}`);
+        log.info(`🔧 [DEBUG] Current pending requests: ${requestIds.length}, processing: ${currentRequestId}`);
 
         // 分发响应给对应的请求
         if (currentRequestId && this.responseCallbacks.has(currentRequestId)) {
@@ -280,66 +283,33 @@ export class ClaudeSession {
 
           // 如果是 result 事件，该请求完成，从队列中移除
           if (sdkMessage.type === 'result') {
-            console.log(`✅ Request ${currentRequestId} completed, removing from queue`);
+            log.info(`✅ Request ${currentRequestId} completed, removing from queue`);
             this.responseCallbacks.delete(currentRequestId);
             // 清除处理中标记，允许新的请求
             this.isProcessing = false;
-            console.log(`🔓 Session unlocked for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+            log.info(`🔓 Session unlocked for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
           }
         } else if (sdkMessage.type === 'result') {
           // 回调已被移除（如客户端断开），但 SDK 仍然完成了请求
           // 需要清除 isProcessing 标记，否则 session 会永远锁定
           this.isProcessing = false;
-          console.log(`🔓 Session unlocked (no callback) for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+          log.info(`🔓 Session unlocked (no callback) for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
         }
       }
     } catch (error) {
-      console.error(`Error in background response handler for agent ${this.agentId}:`, error);
+      log.error(`Error in background response handler for agent ${this.agentId}:`, error);
       
-      // 打印更详细的错误信息
       if (error instanceof Error) {
-        console.error(`❌ [详细错误信息]`);
-        console.error(`   - name: ${error.name}`);
-        console.error(`   - message: ${error.message}`);
-        console.error(`   - stack: ${error.stack}`);
-        
-        // 检查是否有额外的属性（如 stderr, stdout, exitCode 等）
         const errorAny = error as any;
-        if (errorAny.stderr) {
-          console.error(`   - stderr: ${errorAny.stderr}`);
-        }
-        if (errorAny.stdout) {
-          console.error(`   - stdout: ${errorAny.stdout}`);
-        }
-        if (errorAny.exitCode !== undefined) {
-          console.error(`   - exitCode: ${errorAny.exitCode}`);
-        }
-        if (errorAny.code !== undefined) {
-          console.error(`   - code: ${errorAny.code}`);
-        }
-        if (errorAny.signal !== undefined) {
-          console.error(`   - signal: ${errorAny.signal}`);
-        }
-        if (errorAny.cause !== undefined) {
-          console.error(`   - cause: ${JSON.stringify(errorAny.cause, null, 2)}`);
-        }
-        
-        // 打印所有可枚举属性
-        const allKeys = Object.keys(errorAny);
-        if (allKeys.length > 0) {
-          console.error(`   - 所有属性: ${allKeys.join(', ')}`);
-          for (const key of allKeys) {
-            if (!['name', 'message', 'stack', 'stderr', 'stdout', 'exitCode', 'code', 'signal', 'cause'].includes(key)) {
-              try {
-                console.error(`   - ${key}: ${JSON.stringify(errorAny[key])}`);
-              } catch {
-                console.error(`   - ${key}: [无法序列化]`);
-              }
-            }
-          }
-        }
+        log.error(`❌ [Error] ${error.name}: ${error.message}`);
+        if (errorAny.exitCode !== undefined) log.error(`   exitCode: ${errorAny.exitCode}`);
+        if (errorAny.code !== undefined) log.error(`   code: ${errorAny.code}`);
+        if (errorAny.signal !== undefined) log.error(`   signal: ${errorAny.signal}`);
+        // Omit stderr/stdout/cause full dump to avoid leaking tokens or internal state
+        if (errorAny.stderr) log.error(`   stderr: ${String(errorAny.stderr).slice(0, 500)}`);
+        if (error.stack) log.error(`   stack: ${error.stack}`);
       } else {
-        console.error(`❌ 非 Error 对象:`, JSON.stringify(error, null, 2));
+        log.error(`❌ Non-Error:`, typeof error === 'string' ? error : '[object]');
       }
       
       this.isActive = false;
@@ -369,8 +339,8 @@ export class ClaudeSession {
     this.initTimeoutTimer = setTimeout(() => {
       if (this.hasReceivedSdkMessage) return;
 
-      console.error(`⏰ [ClaudeSession] SDK init timeout (${ClaudeSession.SDK_INIT_TIMEOUT_MS}ms) for agent: ${this.agentId}`);
-      console.error(`   The Claude CLI may be waiting for authentication or is unresponsive.`);
+      log.error(`⏰ [ClaudeSession] SDK init timeout (${ClaudeSession.SDK_INIT_TIMEOUT_MS}ms) for agent: ${this.agentId}`);
+      log.error(`   The Claude CLI may be waiting for authentication or is unresponsive.`);
 
       this.isActive = false;
       this.isProcessing = false;
@@ -385,7 +355,7 @@ export class ClaudeSession {
       if (this.queryObject && typeof this.queryObject.close === 'function') {
         try {
           this.queryObject.close();
-          console.log(`🔪 Killed hanging CLI subprocess for agent: ${this.agentId}`);
+          log.info(`🔪 Killed hanging CLI subprocess for agent: ${this.agentId}`);
         } catch { /* ignore */ }
       }
     }, ClaudeSession.SDK_INIT_TIMEOUT_MS);
@@ -417,9 +387,9 @@ export class ClaudeSession {
           duration_api_ms: 0,
           num_turns: 0,
         } as unknown as SDKMessage);
-        console.log(`📤 Sent synthetic error to callback ${requestId}: ${message}`);
+        log.info(`📤 Sent synthetic error to callback ${requestId}: ${message}`);
       } catch (e) {
-        console.error(`Failed to send error to callback ${requestId}:`, e);
+        log.error(`Failed to send error to callback ${requestId}:`, e);
       }
       this.responseCallbacks.delete(requestId);
     }
@@ -431,7 +401,7 @@ export class ClaudeSession {
   cancelRequest(requestId: string): void {
     if (this.responseCallbacks.has(requestId)) {
       this.responseCallbacks.delete(requestId);
-      console.log(`🧹 Cleaned up request callback: ${requestId}`);
+      log.info(`🧹 Cleaned up request callback: ${requestId}`);
     }
   }
 
@@ -481,7 +451,7 @@ export class ClaudeSession {
       // Re-insert a callback so the background handler can forward events.
       const requestId = `reconnect_${this.nextRequestId++}_${Date.now()}`;
       this.responseCallbacks.set(requestId, newCallback);
-      console.log(`🔄 [ClaudeSession] Inserted new reconnect callback: ${requestId}`);
+      log.info(`🔄 [ClaudeSession] Inserted new reconnect callback: ${requestId}`);
       return true;
     }
 
@@ -489,7 +459,7 @@ export class ClaudeSession {
     // so replace the first (and only) callback.
     for (const [requestId] of this.responseCallbacks) {
       this.responseCallbacks.set(requestId, newCallback);
-      console.log(`🔄 [ClaudeSession] Replaced response callback for request: ${requestId}`);
+      log.info(`🔄 [ClaudeSession] Replaced response callback for request: ${requestId}`);
       return true;
     }
     return false;
@@ -519,7 +489,7 @@ export class ClaudeSession {
    * 调用 query 对象的 interrupt() 方法停止当前任务
    */
   async interrupt(): Promise<void> {
-    console.log(`🛑 Interrupting Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+    log.info(`🛑 Interrupting Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
 
     if (!this.queryObject || typeof this.queryObject.interrupt !== 'function') {
       throw new Error('Query object does not support interrupt');
@@ -527,9 +497,9 @@ export class ClaudeSession {
 
     try {
       await this.queryObject.interrupt();
-      console.log(`✅ Successfully interrupted Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+      log.info(`✅ Successfully interrupted Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
     } catch (error) {
-      console.error(`❌ Failed to interrupt Claude session for agent ${this.agentId}:`, error);
+      log.error(`❌ Failed to interrupt Claude session for agent ${this.agentId}:`, error);
       throw error;
     }
 
@@ -542,17 +512,17 @@ export class ClaudeSession {
     // recovery path.
     this.isActive = false;
     this.isProcessing = false;
-    console.log(`🛑 Session marked inactive after interrupt for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+    log.info(`🛑 Session marked inactive after interrupt for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
   }
 
   /**
    * 关闭会话并终止底层 Claude CLI 子进程
    */
   async close(): Promise<void> {
-    console.log(`🔚 Closing Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
+    log.info(`🔚 Closing Claude session for agent: ${this.agentId}, sessionId: ${this.claudeSessionId}`);
 
     if (!this.isActive) {
-      console.log(`⚠️  Session already inactive for agent: ${this.agentId}`);
+      log.info(`⚠️  Session already inactive for agent: ${this.agentId}`);
       return;
     }
 
@@ -562,7 +532,7 @@ export class ClaudeSession {
 
     const pendingCallbacks = this.responseCallbacks.size;
     this.responseCallbacks.clear();
-    console.log(`🧹 Cleared ${pendingCallbacks} pending response callbacks`);
+    log.info(`🧹 Cleared ${pendingCallbacks} pending response callbacks`);
 
     this.messageQueue.end();
 
@@ -572,14 +542,14 @@ export class ClaudeSession {
     if (this.queryObject && typeof this.queryObject.close === 'function') {
       try {
         this.queryObject.close();
-        console.log(`🔪 Terminated Claude CLI subprocess for agent: ${this.agentId}`);
+        log.info(`🔪 Terminated Claude CLI subprocess for agent: ${this.agentId}`);
       } catch (error) {
-        console.warn(`⚠️  Failed to close query object for agent ${this.agentId}:`, error);
+        log.warn(`⚠️  Failed to close query object for agent ${this.agentId}:`, error);
       }
     }
 
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    console.log(`✅ Claude session closed for agent: ${this.agentId}`);
+    log.info(`✅ Claude session closed for agent: ${this.agentId}`);
   }
 }

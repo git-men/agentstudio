@@ -125,8 +125,7 @@ describe('agents.ts - Channel-Specific Streaming', () => {
   });
 
   describe('T009-T012: Channel Parameter Validation and Configuration', () => {
-    it('T009: should validate channel parameter accepts "web" and "slack" values', async () => {
-      // Test with valid 'web' value
+    it('T009: should validate channel parameter accepts "web" value', async () => {
       const webResponse = await request(app)
         .post('/api/agents/chat')
         .send({
@@ -135,19 +134,7 @@ describe('agents.ts - Channel-Specific Streaming', () => {
           channel: 'web'
         });
 
-      // SSE endpoints return 200 and start streaming
       expect([200, 201]).toContain(webResponse.status);
-
-      // Test with valid 'slack' value
-      const slackResponse = await request(app)
-        .post('/api/agents/chat')
-        .send({
-          agentId: 'test-agent',
-          message: 'Test message',
-          channel: 'slack'
-        });
-
-      expect([200, 201]).toContain(slackResponse.status);
     });
 
     it('T009: should reject invalid channel values', async () => {
@@ -196,36 +183,6 @@ describe('agents.ts - Channel-Specific Streaming', () => {
       expect(response.headers['content-type']).toMatch(/text\/event-stream/);
     });
 
-    it('T011: should configure includePartialMessages=false when channel is "slack"', async () => {
-      // Get the current call count before our request (includes calls from T010)
-      const callCountBefore = mockHandleSessionManagement.mock.calls.length;
-
-      const response = await request(app)
-        .post('/api/agents/chat')
-        .send({
-          agentId: 'test-agent',
-          message: 'Test message',
-          channel: 'slack'
-        });
-
-      // Wait for async operations
-      await new Promise(resolve => setTimeout(resolve, 200));
-
-      // Verify that handleSessionManagement was called at least once more
-      expect(mockHandleSessionManagement.mock.calls.length).toBeGreaterThan(callCountBefore);
-
-      // Get the last call arguments (from this test's call)
-      const lastCallArgs = mockHandleSessionManagement.mock.calls[mockHandleSessionManagement.mock.calls.length - 1];
-
-      // Verify the queryOptions (4th argument, index 3) contains includePartialMessages=false
-      expect(lastCallArgs[3]).toBeDefined();
-      expect(lastCallArgs[3].includePartialMessages).toBe(false);
-
-      // Verify SSE response for Slack channel
-      expect([200, 201]).toContain(response.status);
-      expect(response.headers['content-type']).toMatch(/text\/event-stream/);
-    });
-
     it('T012: should default channel to "web" when not specified', async () => {
       const response = await request(app)
         .post('/api/agents/chat')
@@ -266,20 +223,6 @@ describe('agents.ts - Channel-Specific Streaming', () => {
           agentId: 'test-agent',
           message: 'Test message for web',
           channel: 'web',
-          sessionId: null
-        });
-
-      expect([200, 201]).toContain(response.status);
-      expect(response.headers['content-type']).toMatch(/text\/event-stream/);
-    });
-
-    it('should handle slack channel request with session management', async () => {
-      const response = await request(app)
-        .post('/api/agents/chat')
-        .send({
-          agentId: 'test-agent',
-          message: 'Test message for slack',
-          channel: 'slack',
           sessionId: null
         });
 

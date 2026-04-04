@@ -23,6 +23,21 @@ const encodeProjectPath = (projectPath: string): string => {
 
 const router: express.Router = express.Router();
 
+const SENSITIVE_DIRS = new Set([
+  '.ssh', '.gnupg', '.gpg', '.aws', '.azure', '.kube', '.docker',
+  '.password-store', '.vault-token', '.credentials',
+  '.config/gcloud', '.config/op',
+]);
+
+function isSensitivePath(targetPath: string): boolean {
+  const homedir = os.homedir();
+  const rel = path.relative(homedir, targetPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  const firstSegment = rel.split(path.sep)[0];
+  const firstTwo = rel.split(path.sep).slice(0, 2).join('/');
+  return SENSITIVE_DIRS.has(firstSegment) || SENSITIVE_DIRS.has(firstTwo);
+}
+
 // Get working directory (project root or specified project path)
 const getWorkingDir = (projectPath?: string) => {
   if (projectPath) {
@@ -304,6 +319,10 @@ router.get('/browse', (req, res) => {
     if (browsePath.includes('..') || !path.isAbsolute(browsePath)) {
       browsePath = os.homedir();
     }
+
+    if (isSensitivePath(browsePath)) {
+      return res.status(403).json({ error: 'Access to sensitive directory is denied' });
+    }
     
     if (!fs.existsSync(browsePath)) {
       browsePath = os.homedir();
@@ -343,7 +362,8 @@ router.get('/browse', (req, res) => {
         }
       })
       .filter(item => item !== null)
-      .filter(item => includeHidden || !item.isHidden) // Filter hidden files based on parameter
+      .filter(item => !isSensitivePath(item.path))
+      .filter(item => includeHidden || !item.isHidden)
       .sort((a, b) => {
         // Directories first, then by name
         if (a.isDirectory !== b.isDirectory) {

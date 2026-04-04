@@ -26,6 +26,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4936
+      - HOST=0.0.0.0
       - TZ=${TZ:-Asia/Shanghai}
     env_file:
       - .env
@@ -57,6 +58,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=4936
+      - HOST=0.0.0.0
       - TZ=${TZ:-Asia/Shanghai}
     env_file:
       - .env

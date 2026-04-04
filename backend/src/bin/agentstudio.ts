@@ -79,8 +79,12 @@ program
     }
 
     if (options.noAuth) {
-      process.env.NO_AUTH = 'true';
-      console.log('   Auth: disabled');
+      if (process.env.NODE_ENV === 'production') {
+        console.warn('⚠️  --no-auth is ignored in production mode');
+      } else {
+        process.env.NO_AUTH = 'true';
+        console.log('   Auth: disabled (development only)');
+      }
     }
 
     if (options.engine && options.engine !== 'claude-sdk') {

@@ -5,6 +5,9 @@ import { spawn, exec } from 'child_process';
 import { promisify } from 'util';
 import { parse as parseToml } from '@iarna/toml';
 import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
+import { logger } from '../utils/logger.js';
+
+const log = logger.child('mcp');
 import { isCursorEngine, isCodebuddyEngine, isCodexEngine, getEnginePaths, getEngineType, getSdkConfigPath } from '../config/engineConfig.js';
 import { getSystemMcpServers } from '../services/mcpAdmin/autoBootstrap.js';
 import { PRESET_MCP_SERVERS, PRESET_CATEGORIES } from '../data/preset-mcp-servers.js';
@@ -137,7 +140,7 @@ export function parseCodexTomlMcpConfig(content: string): McpConfigFile {
 
     return { mcpServers };
   } catch (error) {
-    console.error('Failed to parse Codex MCP config from TOML:', error);
+    log.error('Failed to parse Codex MCP config from TOML:', error);
     return { mcpServers: {} };
   }
 }
@@ -177,7 +180,7 @@ export const readMcpConfig = (): McpConfigFile => {
         }
       }
     } catch (error) {
-      console.error('Failed to read MCP config:', error);
+      log.error('Failed to read MCP config:', error);
     }
   }
 
@@ -207,7 +210,7 @@ export const writeMcpConfig = (config: McpConfigFile): void => {
   try {
     atomicWriteFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
-    console.error('Failed to write MCP config:', error);
+    log.error('Failed to write MCP config:', error);
     throw error;
   }
 };
@@ -230,7 +233,7 @@ router.get('/', (req, res) => {
       engine: getEngineType(),
     });
   } catch (error) {
-    console.error('Failed to get MCP configs:', error);
+    log.error('Failed to get MCP configs:', error);
     res.status(500).json({ error: 'Failed to retrieve MCP configurations' });
   }
 });
@@ -286,7 +289,7 @@ router.post('/', (req, res) => {
     const responseServer: McpServerConfig = { name, ...serverConfig } as McpServerConfig;
     res.json({ server: responseServer, message: 'MCP configuration saved successfully' });
   } catch (error) {
-    console.error('Failed to save MCP config:', error);
+    log.error('Failed to save MCP config:', error);
     res.status(500).json({ error: 'Failed to save MCP configuration' });
   }
 });
@@ -345,7 +348,7 @@ router.put('/:name', (req, res) => {
     const responseServer: McpServerConfig = { name, ...serverConfig } as McpServerConfig;
     res.json({ server: responseServer, message: 'MCP configuration updated successfully' });
   } catch (error) {
-    console.error('Failed to update MCP config:', error);
+    log.error('Failed to update MCP config:', error);
     res.status(500).json({ error: 'Failed to update MCP configuration' });
   }
 });
@@ -373,7 +376,7 @@ router.delete('/:name', (req, res) => {
     
     res.json({ success: true, message: 'MCP configuration deleted successfully' });
   } catch (error) {
-    console.error('Failed to delete MCP config:', error);
+    log.error('Failed to delete MCP config:', error);
     res.status(500).json({ error: 'Failed to delete MCP configuration' });
   }
 });
@@ -405,9 +408,9 @@ router.post('/:name/validate', async (req, res) => {
         // Update config with detected type
         config.mcpServers[name] = serverConfig;
         writeMcpConfig(config);
-        console.log(`Auto-detected type for ${name}: ${serverConfig.type}`);
+        log.info(`Auto-detected type for ${name}: ${serverConfig.type}`);
       } else {
-        console.log(`Auto-detected type for ${name} (not persisted due to read-only engine): ${serverConfig.type}`);
+        log.info(`Auto-detected type for ${name} (not persisted due to read-only engine): ${serverConfig.type}`);
       }
     }
 
@@ -421,7 +424,7 @@ router.post('/:name/validate', async (req, res) => {
       res.status(400).json({ error: 'Invalid MCP server type. Must be "stdio" or "http".' });
     }
   } catch (error) {
-    console.error('Failed to validate MCP server:', error);
+    log.error('Failed to validate MCP server:', error);
     res.status(500).json({
       error: 'Failed to validate MCP server',
       details: error instanceof Error ? error.message : String(error)
@@ -480,10 +483,10 @@ router.get('/claude-code', async (req, res) => {
       }
     }
 
-    console.log(`Found ${servers.length} MCP server(s) from Claude Code configuration`);
+    log.info(`Found ${servers.length} MCP server(s) from Claude Code configuration`);
     res.json({ servers });
   } catch (error) {
-    console.error('Failed to read Claude Code MCP configurations:', error);
+    log.error('Failed to read Claude Code MCP configurations:', error);
     res.status(500).json({
       error: 'Failed to read Claude Code MCP configurations',
       details: error instanceof Error ? error.message : String(error)
@@ -512,7 +515,7 @@ router.get('/presets', (_req, res) => {
       categories: PRESET_CATEGORIES,
     });
   } catch (error) {
-    console.error('Failed to load MCP presets:', error);
+    log.error('Failed to load MCP presets:', error);
     res.json({
       presets: PRESET_MCP_SERVERS.map(p => ({ ...p, installed: false })),
       categories: PRESET_CATEGORIES,
@@ -535,7 +538,7 @@ async function validateHttpMcpServer(
   // Helper function to send response only once
   const sendResponse = (statusCode: number, data: any) => {
     if (responseSent) {
-      console.log('Response already sent, skipping duplicate response');
+      log.info('Response already sent, skipping duplicate response');
       return;
     }
     responseSent = true;
@@ -547,7 +550,7 @@ async function validateHttpMcpServer(
   };
 
   try {
-    console.log('Validating HTTP MCP server:', serverConfig.url);
+    log.info('Validating HTTP MCP server:', serverConfig.url);
 
     // Test HTTP connection to MCP server
     // Merge user-configured headers with default headers
@@ -584,7 +587,7 @@ async function validateHttpMcpServer(
 
     const responseText = await response.text();
     const contentType = response.headers.get('content-type') || '';
-    console.log('HTTP MCP initialize response:', { contentType, textLength: responseText.length });
+    log.info('HTTP MCP initialize response:', { contentType, textLength: responseText.length });
 
     // Detect response format based on Content-Type and content
     let initResult: any = null;
@@ -592,7 +595,7 @@ async function validateHttpMcpServer(
 
     if (isSSE) {
       // Parse SSE format response
-      console.log('Parsing SSE format response');
+      log.info('Parsing SSE format response');
       const lines = responseText.split('\n');
 
       for (const line of lines) {
@@ -603,41 +606,41 @@ async function validateHttpMcpServer(
             // Remove 'data:' prefix and parse JSON
             const jsonStr = trimmedLine.substring(5).trim();
             initResult = JSON.parse(jsonStr);
-            console.log('Parsed SSE data:', initResult);
+            log.info('Parsed SSE data:', initResult);
             break;
           } catch (e) {
-            console.warn('Failed to parse SSE data line:', trimmedLine, e);
+            log.warn('Failed to parse SSE data line:', trimmedLine, e);
           }
         }
       }
 
       if (!initResult) {
-        console.error('Failed to find valid data line in SSE response');
+        log.error('Failed to find valid data line in SSE response');
         throw new Error('Failed to parse HTTP MCP SSE response');
       }
     } else {
       // Parse plain JSON response
-      console.log('Parsing plain JSON response');
+      log.info('Parsing plain JSON response');
       try {
         initResult = JSON.parse(responseText);
-        console.log('Parsed JSON response:', initResult);
+        log.info('Parsed JSON response:', initResult);
       } catch (e) {
-        console.error('Failed to parse JSON response:', e);
+        log.error('Failed to parse JSON response:', e);
         throw new Error('Failed to parse HTTP MCP JSON response');
       }
     }
 
-    console.log('HTTP MCP initialize parsed result:', initResult);
+    log.info('HTTP MCP initialize parsed result:', initResult);
 
     // Get tools from HTTP MCP server using proper session management
     let tools: string[] = [];
-    console.log('Getting tools from HTTP MCP server...');
+    log.info('Getting tools from HTTP MCP server...');
 
     try {
       tools = await getHttpMcpTools(serverConfig.url, serverConfig.headers);
-      console.log('Successfully retrieved tools from HTTP MCP:', tools);
+      log.info('Successfully retrieved tools from HTTP MCP:', tools);
     } catch (error) {
-      console.warn('Failed to get tools from HTTP MCP server:', error);
+      log.warn('Failed to get tools from HTTP MCP server:', error);
       // Don't fail validation just because tools retrieval failed
     }
 
@@ -663,7 +666,7 @@ async function validateHttpMcpServer(
     });
 
   } catch (error) {
-    console.error('HTTP MCP server validation failed:', error);
+    log.error('HTTP MCP server validation failed:', error);
 
     // Update server config with error status
     const currentTime = new Date().toISOString();
@@ -700,8 +703,8 @@ async function validateStdioMcpServer(
   }
 
   // Start MCP server process to test connection
-  console.log('Starting stdio MCP server:', serverConfig.command, serverConfig.args);
-  console.log('Environment variables:', serverConfig.env);
+  log.info('Starting stdio MCP server:', serverConfig.command, serverConfig.args);
+  log.info('Environment variables:', serverConfig.env);
 
   const spawnOptions: any = {
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -726,7 +729,7 @@ async function validateStdioMcpServer(
   // Helper function to send response only once
   const sendResponse = (statusCode: number, data: any) => {
     if (responseSent) {
-      console.log('Response already sent, skipping duplicate response');
+      log.info('Response already sent, skipping duplicate response');
       return;
     }
     responseSent = true;
@@ -739,7 +742,7 @@ async function validateStdioMcpServer(
 
   child.stderr?.on('data', (data) => {
     const errorStr = data.toString();
-    console.log('MCP stderr:', errorStr);
+    log.info('MCP stderr:', errorStr);
     stderr += errorStr;
   });
 
@@ -782,11 +785,11 @@ async function validateStdioMcpServer(
 
       try {
         const response = JSON.parse(line);
-        console.log('MCP response:', response);
+        log.info('MCP response:', response);
 
         // Check if initialization was successful
         if (response.id === 1 && response.result && !initializeDone) {
-          console.log('Initialize successful, sending initialized notification');
+          log.info('Initialize successful, sending initialized notification');
           initializeDone = true;
 
           // Send initialized notification
@@ -798,7 +801,7 @@ async function validateStdioMcpServer(
 
           // Send tools/list request
           setTimeout(() => {
-            console.log('Sending tools/list request');
+            log.info('Sending tools/list request');
             const toolsRequest = {
               jsonrpc: '2.0',
               id: 2,
@@ -811,17 +814,17 @@ async function validateStdioMcpServer(
 
         // Handle tools/list response
         if (response.id === 2 && response.result) {
-          console.log('Tools/list response received:', response.result);
+          log.info('Tools/list response received:', response.result);
           if (response.result.tools) {
             tools = response.result.tools.map((tool: any) => tool.name);
-            console.log('Found tools:', tools);
+            log.info('Found tools:', tools);
           }
           // Close stdin after getting tools response (even if empty)
           setTimeout(() => child.stdin?.end(), 100);
         }
       } catch (parseError) {
         // This might be a partial JSON, continue buffering
-        console.log('Parse error for line:', line.substring(0, 100) + '...');
+        log.info('Parse error for line:', line.substring(0, 100) + '...');
       }
     }
 
@@ -829,14 +832,14 @@ async function validateStdioMcpServer(
     if (buffer.trim()) {
       try {
         const response = JSON.parse(buffer);
-        console.log('MCP buffered response:', response);
+        log.info('MCP buffered response:', response);
 
         // Handle tools/list response from buffer
         if (response.id === 2 && response.result) {
-          console.log('Tools/list response received from buffer:', response.result);
+          log.info('Tools/list response received from buffer:', response.result);
           if (response.result.tools) {
             tools = response.result.tools.map((tool: any) => tool.name);
-            console.log('Found tools from buffer:', tools);
+            log.info('Found tools from buffer:', tools);
           }
           // Clear buffer and close stdin
           buffer = '';
@@ -901,7 +904,7 @@ async function validateStdioMcpServer(
         });
       }
     } catch (configError) {
-      console.error('Failed to update config with validation result:', configError);
+      log.error('Failed to update config with validation result:', configError);
 
       // Still return the validation result even if config update fails
       if (code === 0 || tools.length > 0) {
@@ -937,7 +940,7 @@ async function validateStdioMcpServer(
         }
       }
     } catch (configError) {
-      console.error('Failed to update config with error status:', configError);
+      log.error('Failed to update config with error status:', configError);
     }
 
     sendResponse(500, {
@@ -953,7 +956,7 @@ async function validateStdioMcpServer(
  * Supports both SSE and plain JSON response formats
  */
 async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>): Promise<string[]> {
-  console.log('Starting HTTP MCP tools discovery for:', url);
+  log.info('Starting HTTP MCP tools discovery for:', url);
 
   // Merge user-configured headers with default headers
   const baseHeaders: Record<string, string> = {
@@ -990,7 +993,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
 
   const initResponseText = await initResponse.text();
   const initContentType = initResponse.headers.get('content-type') || '';
-  console.log('HTTP MCP initialize response:', { contentType: initContentType, textLength: initResponseText.length });
+  log.info('HTTP MCP initialize response:', { contentType: initContentType, textLength: initResponseText.length });
 
   // Detect response format
   const isSSE = initContentType.includes('text/event-stream') || initResponseText.includes('data:');
@@ -1000,7 +1003,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
 
   if (isSSE) {
     // Parse SSE format
-    console.log('Parsing SSE format initialize response');
+    log.info('Parsing SSE format initialize response');
     const initLines = initResponseText.split('\n');
     for (const line of initLines) {
       const trimmedLine = line.trim();
@@ -1008,33 +1011,33 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
         try {
           const jsonStr = trimmedLine.substring(5).trim();
           initResult = JSON.parse(jsonStr);
-          console.log('Parsed init SSE data:', initResult);
+          log.info('Parsed init SSE data:', initResult);
           break;
         } catch (e) {
-          console.warn('Failed to parse init SSE data line:', trimmedLine, e);
+          log.warn('Failed to parse init SSE data line:', trimmedLine, e);
         }
       }
     }
   } else {
     // Parse plain JSON format
-    console.log('Parsing plain JSON initialize response');
+    log.info('Parsing plain JSON initialize response');
     try {
       initResult = JSON.parse(initResponseText);
-      console.log('Parsed init JSON:', initResult);
+      log.info('Parsed init JSON:', initResult);
     } catch (e) {
-      console.error('Failed to parse init JSON:', e);
+      log.error('Failed to parse init JSON:', e);
       throw new Error('Failed to parse initialize response');
     }
   }
 
   if (!initResult || !initResult.result) {
-    console.error('Invalid or missing initialize response');
+    log.error('Invalid or missing initialize response');
     throw new Error('Invalid initialize response from HTTP MCP server');
   }
 
   // Extract session ID from response headers
   const sessionId = initResponse.headers.get('mcp-session-id');
-  console.log('HTTP MCP session ID:', sessionId);
+  log.info('HTTP MCP session ID:', sessionId);
 
   // Step 2: Get tools list using the session ID
   // Wait a bit to ensure the session is properly established
@@ -1072,7 +1075,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
 
   const toolsResponseText = await toolsResponse.text();
   const toolsContentType = toolsResponse.headers.get('content-type') || '';
-  console.log('HTTP MCP tools/list response:', { contentType: toolsContentType, textLength: toolsResponseText.length });
+  log.info('HTTP MCP tools/list response:', { contentType: toolsContentType, textLength: toolsResponseText.length });
 
   // Parse tools response
   let toolsResult: any = null;
@@ -1080,7 +1083,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
 
   if (toolsIsSSE) {
     // Parse SSE format
-    console.log('Parsing SSE format tools/list response');
+    log.info('Parsing SSE format tools/list response');
     const toolsLines = toolsResponseText.split('\n');
     for (const line of toolsLines) {
       const trimmedLine = line.trim();
@@ -1088,27 +1091,27 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
         try {
           const jsonStr = trimmedLine.substring(5).trim();
           toolsResult = JSON.parse(jsonStr);
-          console.log('Parsed tools SSE data:', toolsResult);
+          log.info('Parsed tools SSE data:', toolsResult);
           break;
         } catch (e) {
-          console.warn('Failed to parse tools SSE data line:', trimmedLine, e);
+          log.warn('Failed to parse tools SSE data line:', trimmedLine, e);
         }
       }
     }
   } else {
     // Parse plain JSON format
-    console.log('Parsing plain JSON tools/list response');
+    log.info('Parsing plain JSON tools/list response');
     try {
       toolsResult = JSON.parse(toolsResponseText);
-      console.log('Parsed tools JSON:', toolsResult);
+      log.info('Parsed tools JSON:', toolsResult);
     } catch (e) {
-      console.error('Failed to parse tools JSON:', e);
+      log.error('Failed to parse tools JSON:', e);
       throw new Error('Failed to parse tools/list response');
     }
   }
 
   if (!toolsResult) {
-    console.error('Invalid or missing tools/list response');
+    log.error('Invalid or missing tools/list response');
     throw new Error('Invalid tools/list response from HTTP MCP server');
   }
 
@@ -1117,11 +1120,11 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
   }
 
   if (!toolsResult.result || !toolsResult.result.tools) {
-    console.log('HTTP MCP server returned no tools');
+    log.info('HTTP MCP server returned no tools');
     return [];
   }
 
   const tools = toolsResult.result.tools.map((tool: any) => tool.name);
-  console.log('Extracted tools from HTTP MCP:', tools);
+  log.info('Extracted tools from HTTP MCP:', tools);
   return tools;
 }

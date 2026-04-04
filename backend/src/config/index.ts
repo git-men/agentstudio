@@ -1,6 +1,11 @@
 import { readFile } from 'fs/promises';
 import { join } from 'path';
+import { randomBytes } from 'crypto';
 import { config } from 'dotenv';
+import { decryptSecret } from '../services/secretStore.js';
+import { logger } from '../utils/logger.js';
+
+const log = logger.child('config');
 const BACKEND_ROOT = join(__dirname, '..', '..');
 
 // Re-export path constants for convenient access
@@ -55,13 +60,6 @@ export interface AgentStudioConfig {
   linuxOptimizations?: Record<string, any>;
   service?: Record<string, any>;
   
-  // Slack Integration
-  slackSigningSecret?: string;
-  slackBotToken?: string;
-  slackDefaultAgentId?: string;
-  slackDefaultProject?: string;
-  enableSlackStreaming?: boolean;
-
   // Tracing (OTLP)
   traceEnabled?: boolean;
   traceEndpoint?: string;
@@ -108,7 +106,7 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     const localConfigData = JSON.parse(content);
     // Merge local config over global config (local takes precedence)
     configData = { ...configData, ...localConfigData };
-    console.log('✅ Loaded local config from config.local.json');
+    log.info('✅ Loaded local config from config.local.json');
   } catch {
     // Local config file doesn't exist, continue with global config
   }
@@ -118,10 +116,10 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
   // Note: For adminPassword, config file takes priority to allow clearing password via config
   const finalConfig: AgentStudioConfig = {
     port: parseInt(process.env.PORT || configData.port?.toString() || '4936'),
-    host: process.env.HOST || configData.host || '0.0.0.0',
+    host: process.env.HOST || configData.host || '127.0.0.1',
     // Password priority: config file > env var > undefined (no default password for passwordless login)
     adminPassword: 'adminPassword' in configData ? configData.adminPassword : (process.env.ADMIN_PASSWORD || undefined),
-    jwtSecret: process.env.JWT_SECRET || configData.jwtSecret || 'your-secret-key-change-this-in-production',
+    jwtSecret: process.env.JWT_SECRET || configData.jwtSecret || undefined,
     jwtExpiresIn: process.env.JWT_EXPIRES_IN || configData.jwtExpiresIn || '7d',
     tokenRefreshThreshold: process.env.TOKEN_REFRESH_THRESHOLD || configData.tokenRefreshThreshold || '24h',
     corsOrigins: process.env.CORS_ORIGINS || configData.corsOrigins || '',
@@ -132,19 +130,25 @@ export async function loadConfig(): Promise<AgentStudioConfig> {
     allowedFileTypes: configData.allowedFileTypes || ['.txt', '.md', '.js', '.ts', '.json', '.html', '.css'],
     linuxOptimizations: configData.linuxOptimizations || {},
     service: configData.service || {},
-    
-    // Slack Integration
-    slackSigningSecret: process.env.SLACK_SIGNING_SECRET || configData.slackSigningSecret,
-    slackBotToken: process.env.SLACK_BOT_TOKEN || configData.slackBotToken,
-    slackDefaultAgentId: process.env.SLACK_DEFAULT_AGENT_ID || configData.slackDefaultAgentId || 'general-chat',
-    slackDefaultProject: process.env.SLACK_DEFAULT_PROJECT || configData.slackDefaultProject,
-    enableSlackStreaming: process.env.ENABLE_SLACK_STREAMING === 'true' || configData.enableSlackStreaming || false,
 
     // Tracing (OTLP)
     traceEnabled: process.env.TRACE_ENABLED === 'true' || configData.traceEnabled || false,
     traceEndpoint: process.env.TRACE_ENDPOINT || configData.traceEndpoint,
     traceBkToken: process.env.TRACE_BK_TOKEN || configData.traceBkToken,
   };
+
+  // JWT secret validation: auto-generate if not configured
+  if (!finalConfig.jwtSecret) {
+    const generated = randomBytes(32).toString('base64url');
+    finalConfig.jwtSecret = generated;
+    log.warn('⚠️  No JWT_SECRET configured. Generated a random secret for this session.');
+    log.warn('   Set JWT_SECRET env var or jwtSecret in config.json for persistent sessions.');
+  }
+
+  // Decrypt admin password if stored encrypted
+  if (finalConfig.adminPassword) {
+    finalConfig.adminPassword = await decryptSecret(finalConfig.adminPassword, 'config:adminPassword');
+  }
 
   cachedConfig = finalConfig;
   return finalConfig;
@@ -188,16 +192,3 @@ export async function getEnvConfig(key: keyof AgentStudioConfig, defaultValue?: 
   return value !== undefined ? value : defaultValue;
 }
 
-/**
- * Get Slack configuration values
- */
-export async function getSlackConfig() {
-  const config = await loadConfig();
-  return {
-    signingSecret: config.slackSigningSecret,
-    botToken: config.slackBotToken,
-    defaultAgentId: config.slackDefaultAgentId || 'general-chat',
-    defaultProject: config.slackDefaultProject,
-    enableStreaming: config.enableSlackStreaming || true,
-  };
-}

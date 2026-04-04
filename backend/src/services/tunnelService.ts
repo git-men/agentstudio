@@ -395,7 +395,7 @@ class TunnelService {
     const wsUrl = cfg.websocketUrl || getWebSocketUrl(cfg.serverUrl);
 
     console.log(`[Tunnel:${tunnelId}] Connecting to ${wsUrl}...`);
-    console.log(`[Tunnel:${tunnelId}] Token: ${cfg.token.slice(0, 10)}...`);
+    console.log(`[Tunnel:${tunnelId}] Token: ${cfg.token.slice(0, 4)}***`);
     console.log(`[Tunnel:${tunnelId}] Target: ${targetUrl}`);
     if (force) console.log(`[Tunnel:${tunnelId}] Force mode enabled`);
 
