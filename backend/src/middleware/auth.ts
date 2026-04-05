@@ -7,7 +7,7 @@ import { verifyToken } from '../utils/jwt';
  * 1. Authorization header as "Bearer <token>"
  * 2. Query parameter "token=<token>" (for EventSource/SSE connections)
  */
-export function authMiddleware(req: Request, res: Response, next: NextFunction): void {
+export async function authMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (process.env.NO_AUTH === 'true' && process.env.NODE_ENV !== 'production') {
     return next();
   }
@@ -17,12 +17,9 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
 
   let token: string | undefined;
 
-  // Check Authorization header first
   if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7); // Remove "Bearer " prefix
-  } 
-  // Fall back to query parameter (for EventSource/SSE)
-  else if (queryToken) {
+    token = authHeader.substring(7);
+  } else if (queryToken) {
     token = queryToken;
   }
 
@@ -31,13 +28,12 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
 
   if (!payload) {
     res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
     return;
   }
 
-  // Token is valid, proceed to next middleware
   next();
 }
