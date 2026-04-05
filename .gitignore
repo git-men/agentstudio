@@ -91,3 +91,9 @@ desktop/src-tauri/binaries/
 projects/
 backend/e2e-tests/.argusai/
 .argusai
+
+# ArgusAI / Playwright E2E 生成物（勿提交）
+e2e-report.html
+**/e2e-report*.html
+# Playwright storageState：本地跑 setup 生成，含会话信息
+tests/e2e/browser/playwright/.auth/
