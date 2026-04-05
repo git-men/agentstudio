@@ -25,7 +25,10 @@
 # -----------------------------------------------------------------------------
 FROM node:20-slim AS builder
 
-RUN apt-get update && apt-get install -y \
+RUN echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80-retries && \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
@@ -61,7 +64,10 @@ FROM node:20-slim AS node
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 
-RUN apt-get update && apt-get install -y \
+RUN echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80-retries && \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y \
     curl \
     wget \
     git \
@@ -128,7 +134,10 @@ FROM oven/bun:1-slim AS bun
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uvx /usr/local/bin/uvx
 
-RUN apt-get update && apt-get install -y \
+RUN echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80-retries && \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list.d/debian.sources 2>/dev/null; \
+    sed -i 's|deb.debian.org|mirrors.tencent.com|g' /etc/apt/sources.list 2>/dev/null; \
+    apt-get update && apt-get install -y \
     curl \
     git \
     openssh-client \
