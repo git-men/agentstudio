@@ -216,6 +216,18 @@ export const writeMcpConfig = (config: McpConfigFile): void => {
 };
 
 // Get all MCP configurations
+/**
+ * @swagger
+ * /api/mcp:
+ *   get:
+ *     tags: [MCP]
+ *     summary: 获取 MCP 服务列表
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/', (req, res) => {
   try {
     const config = readMcpConfig();
@@ -239,6 +251,28 @@ router.get('/', (req, res) => {
 });
 
 // Add or update MCP configuration
+/**
+ * @swagger
+ * /api/mcp:
+ *   post:
+ *     tags: [MCP]
+ *     summary: 新增或保存 MCP 配置
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 只读
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/', (req, res) => {
   try {
     // Check if in read-only mode (Cursor engine)
@@ -295,6 +329,35 @@ router.post('/', (req, res) => {
 });
 
 // Update MCP configuration
+/**
+ * @swagger
+ * /api/mcp/{name}:
+ *   put:
+ *     tags: [MCP]
+ *     summary: 更新 MCP 配置
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 只读
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/:name', (req, res) => {
   try {
     if (isMcpReadOnlyEngine()) {
@@ -354,6 +417,27 @@ router.put('/:name', (req, res) => {
 });
 
 // Delete MCP configuration
+/**
+ * @swagger
+ * /api/mcp/{name}:
+ *   delete:
+ *     tags: [MCP]
+ *     summary: 删除 MCP 配置
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       403:
+ *         description: 只读
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:name', (req, res) => {
   try {
     // Check if in read-only mode (Cursor engine)
@@ -382,6 +466,27 @@ router.delete('/:name', (req, res) => {
 });
 
 // Validate MCP server by testing connection and getting tools
+/**
+ * @swagger
+ * /api/mcp/{name}/validate:
+ *   post:
+ *     tags: [MCP]
+ *     summary: 校验 MCP 服务连通性
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/:name/validate', async (req, res) => {
   try {
     const { name } = req.params;
@@ -435,6 +540,18 @@ router.post('/:name/validate', async (req, res) => {
 
 
 // Get MCP configurations from Agent SDK config file
+/**
+ * @swagger
+ * /api/mcp/claude-code:
+ *   get:
+ *     tags: [MCP]
+ *     summary: 从 SDK 配置读取 MCP 列表
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/claude-code', async (req, res) => {
   try {
     // Read SDK config file (e.g., ~/.claude.json or ~/.claude-internal.json)
@@ -495,6 +612,16 @@ router.get('/claude-code', async (req, res) => {
 });
 
 // GET /mcp/presets - Get preset MCP server catalog
+/**
+ * @swagger
+ * /api/mcp/presets:
+ *   get:
+ *     tags: [MCP]
+ *     summary: 获取 MCP 预设目录
+ *     responses:
+ *       200:
+ *         description: 成功
+ */
 router.get('/presets', (_req, res) => {
   try {
     const config = readMcpConfig();
@@ -609,7 +736,7 @@ async function validateHttpMcpServer(
             log.info('Parsed SSE data:', initResult);
             break;
           } catch (e) {
-            log.warn('Failed to parse SSE data line:', trimmedLine, e);
+            log.warn(`Failed to parse SSE data line: ${trimmedLine}`, e);
           }
         }
       }
@@ -703,7 +830,7 @@ async function validateStdioMcpServer(
   }
 
   // Start MCP server process to test connection
-  log.info('Starting stdio MCP server:', serverConfig.command, serverConfig.args);
+  log.info(`Starting stdio MCP server: ${serverConfig.command}`, serverConfig.args);
   log.info('Environment variables:', serverConfig.env);
 
   const spawnOptions: any = {
@@ -1014,7 +1141,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
           log.info('Parsed init SSE data:', initResult);
           break;
         } catch (e) {
-          log.warn('Failed to parse init SSE data line:', trimmedLine, e);
+          log.warn(`Failed to parse init SSE data line: ${trimmedLine}`, e);
         }
       }
     }
@@ -1094,7 +1221,7 @@ async function getHttpMcpTools(url: string, userHeaders?: Record<string, string>
           log.info('Parsed tools SSE data:', toolsResult);
           break;
         } catch (e) {
-          log.warn('Failed to parse tools SSE data line:', trimmedLine, e);
+          log.warn(`Failed to parse tools SSE data line: ${trimmedLine}`, e);
         }
       }
     }

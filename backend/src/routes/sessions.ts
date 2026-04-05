@@ -1010,6 +1010,18 @@ function convertClaudeMessageToMessageParts(msg: ClaudeHistoryMessage, allMessag
 }
 
 // GET /api/sessions/_status - Get all sessions status (for monitoring)
+/**
+ * @swagger
+ * /api/sessions/_status:
+ *   get:
+ *     tags: [Sessions]
+ *     summary: 会话运行状态（监控）
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/_status', (req, res) => {
   try {
     const sessionsInfo = sessionManager.getSessionsInfo();
@@ -1024,6 +1036,31 @@ router.get('/_status', (req, res) => {
 });
 
 // GET /api/sessions/by-project - Get sessions by project path (project-centric view)
+/**
+ * @swagger
+ * /api/sessions/by-project:
+ *   get:
+ *     tags: [Sessions]
+ *     summary: 按项目路径列出会话
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: showAutomated
+ *         schema: { type: string, enum: ['true', 'false'] }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 缺少 projectPath
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/by-project', async (req, res) => {
   try {
     const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
@@ -1134,9 +1171,60 @@ async function handleRenameSession(req: express.Request, res: express.Response):
   }
 }
 
+/**
+ * @swagger
+ * /api/sessions/by-project/{sessionId}:
+ *   patch:
+ *     tags: [Sessions]
+ *     summary: 重命名会话（按项目视图）
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.patch('/by-project/:sessionId', handleRenameSession);
 
 // DELETE /api/sessions/by-project/:sessionId - Delete a session by project path
+/**
+ * @swagger
+ * /api/sessions/by-project/{sessionId}:
+ *   delete:
+ *     tags: [Sessions]
+ *     summary: 删除项目下的会话
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 缺少 projectPath
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/by-project/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1210,6 +1298,31 @@ router.delete('/by-project/:sessionId', async (req, res) => {
 });
 
 // GET /api/sessions/:agentId - Get agent sessions
+/**
+ * @swagger
+ * /api/sessions/{agentId}:
+ *   get:
+ *     tags: [Sessions]
+ *     summary: 获取某 Agent 的会话列表
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: Agent 不存在
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:agentId', async (req, res) => {
   try {
     const { agentId } = req.params;
@@ -1379,6 +1492,32 @@ router.get('/:agentId', async (req, res) => {
 });
 
 // GET /api/sessions/:agentId/:sessionId/messages - Get session messages
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}/messages:
+ *   get:
+ *     tags: [Sessions]
+ *     summary: 获取会话消息
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:agentId/:sessionId/messages', async (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
@@ -1501,6 +1640,33 @@ router.get('/:agentId/:sessionId/messages', async (req, res) => {
 });
 
 // POST /api/sessions/:agentId - Create new session
+/**
+ * @swagger
+ * /api/sessions/{agentId}:
+ *   post:
+ *     tags: [Sessions]
+ *     summary: 创建新会话
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: Agent 不存在
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;
@@ -1522,9 +1688,62 @@ router.post('/:agentId', (req, res) => {
 });
 
 // PATCH /api/sessions/:agentId/:sessionId - 重命名会话（Agent 视图）
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}:
+ *   patch:
+ *     tags: [Sessions]
+ *     summary: 重命名会话（按 Agent 视图）
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               title:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.patch('/:agentId/:sessionId', handleRenameSession);
 
 // DELETE /api/sessions/:agentId/:sessionId - Delete session
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}:
+ *   delete:
+ *     tags: [Sessions]
+ *     summary: 删除 Agent 下的会话
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:agentId/:sessionId', (req, res) => {
   try {
     const { agentId, sessionId } = req.params;
@@ -1546,6 +1765,29 @@ router.delete('/:agentId/:sessionId', (req, res) => {
 });
 
 // POST /api/sessions/:agentId/:sessionId/heartbeat - Update session heartbeat
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}/heartbeat:
+ *   post:
+ *     tags: [Sessions]
+ *     summary: 更新会话心跳
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/:agentId/:sessionId/heartbeat', (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1575,6 +1817,29 @@ router.post('/:agentId/:sessionId/heartbeat', (req, res) => {
 });
 
 // DELETE /api/sessions/:agentId/:sessionId/cleanup - Manual cleanup session
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}/cleanup:
+ *   delete:
+ *     tags: [Sessions]
+ *     summary: 手动清理会话资源
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:agentId/:sessionId/cleanup', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -1603,6 +1868,27 @@ router.delete('/:agentId/:sessionId/cleanup', async (req, res) => {
 });
 
 // GET /api/sessions/:agentId/:sessionId/check - Check if session exists in SessionManager
+/**
+ * @swagger
+ * /api/sessions/{agentId}/{sessionId}/check:
+ *   get:
+ *     tags: [Sessions]
+ *     summary: 检查会话是否在 SessionManager 中活跃
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:agentId/:sessionId/check', (req, res) => {
   try {
     const { sessionId } = req.params;

@@ -28,6 +28,7 @@ import a2aRouter from './routes/a2a';
 import a2aJsonRpcRouter from './routes/a2aJsonRpc';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
+import { setupSwagger } from './swagger';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
 import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
@@ -272,6 +273,9 @@ const app: express.Express = express();
   } catch (error) {
     console.warn('[Engines] Failed to get engine status:', error);
   }
+
+  // Swagger API docs (before helmet to avoid CSP issues with Swagger UI assets)
+  setupSwagger(app);
 
   // Middleware
   app.use(helmet({
@@ -614,7 +618,17 @@ const app: express.Express = express();
   // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
   app.use('/api/mcp-bridge', express.json(), createHttpMcpRouter());
 
-  // Health check
+  /**
+   * @swagger
+   * /api/health:
+   *   get:
+   *     tags: [Health]
+   *     summary: 健康检查
+   *     security: []
+   *     responses:
+   *       200:
+   *         description: 服务正常
+   */
   app.get('/api/health', (req, res) => {
     try {
       const engineStatus = getEngineStatus();
@@ -824,7 +838,7 @@ const app: express.Express = express();
       // All other diagnostic output goes to stderr to avoid polluting the signal channel.
       process.stdout.write(`BACKEND_PORT=${PORT}\n`);
       process.stderr.write(`[System] Backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
-      process.stderr.write(`[System] Serving slides from: ${slidesDir}\n`);
+      process.stderr.write(`[System] Static assets served from frontend build\n`);
     });
 
     server.on('error', (error: NodeJS.ErrnoException) => {

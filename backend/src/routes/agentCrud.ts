@@ -14,6 +14,18 @@ const router: express.Router = express.Router();
 export const globalAgentStorage = new AgentStorage();
 
 // 获取活跃会话列表 (需要在通用获取agents路由之前)
+/**
+ * @swagger
+ * /api/agents/sessions:
+ *   get:
+ *     tags: [Agents]
+ *     summary: 获取活跃会话概览
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/sessions', (req, res) => {
   try {
     const activeCount = sessionManager.getActiveSessionCount();
@@ -31,6 +43,25 @@ router.get('/sessions', (req, res) => {
 });
 
 // 手动关闭指定会话
+/**
+ * @swagger
+ * /api/agents/sessions/{sessionId}:
+ *   delete:
+ *     tags: [Agents]
+ *     summary: 关闭指定会话
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/sessions/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -48,6 +79,18 @@ router.delete('/sessions/:sessionId', async (req, res) => {
 });
 
 // 清除所有会话
+/**
+ * @swagger
+ * /api/agents/sessions:
+ *   delete:
+ *     tags: [Agents]
+ *     summary: 清除所有会话
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/sessions', async (req, res) => {
   try {
     const clearedCount = await sessionManager.clearAllSessions();
@@ -63,6 +106,25 @@ router.delete('/sessions', async (req, res) => {
 });
 
 // 中断指定会话的当前请求
+/**
+ * @swagger
+ * /api/agents/sessions/{sessionId}/interrupt:
+ *   post:
+ *     tags: [Agents]
+ *     summary: 中断会话当前请求
+ *     parameters:
+ *       - in: path
+ *         name: sessionId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/sessions/:sessionId/interrupt', async (req, res) => {
   try {
     const { sessionId } = req.params;
@@ -93,6 +155,22 @@ router.post('/sessions/:sessionId/interrupt', async (req, res) => {
 });
 
 // Get all agents
+/**
+ * @swagger
+ * /api/agents:
+ *   get:
+ *     tags: [Agents]
+ *     summary: 获取 Agent 列表
+ *     parameters:
+ *       - in: query
+ *         name: enabled
+ *         schema: { type: string, enum: ['true', 'false'] }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/', (req, res) => {
   try {
     const { enabled } = req.query;
@@ -115,6 +193,25 @@ router.get('/', (req, res) => {
 });
 
 // Get specific agent
+/**
+ * @swagger
+ * /api/agents/{agentId}:
+ *   get:
+ *     tags: [Agents]
+ *     summary: 获取单个 Agent
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;
@@ -132,6 +229,28 @@ router.get('/:agentId', (req, res) => {
 });
 
 // Create new agent
+/**
+ * @swagger
+ * /api/agents:
+ *   post:
+ *     tags: [Agents]
+ *     summary: 创建 Agent
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       409:
+ *         description: 已存在
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/', (req, res) => {
   try {
     const validation = CreateAgentSchema.safeParse(req.body);
@@ -162,6 +281,33 @@ router.post('/', (req, res) => {
 });
 
 // Update agent
+/**
+ * @swagger
+ * /api/agents/{agentId}:
+ *   put:
+ *     tags: [Agents]
+ *     summary: 更新 Agent
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;
@@ -199,6 +345,25 @@ router.put('/:agentId', (req, res) => {
 });
 
 // Delete agent
+/**
+ * @swagger
+ * /api/agents/{agentId}:
+ *   delete:
+ *     tags: [Agents]
+ *     summary: 删除 Agent
+ *     parameters:
+ *       - in: path
+ *         name: agentId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:agentId', (req, res) => {
   try {
     const { agentId } = req.params;
@@ -223,6 +388,30 @@ router.delete('/:agentId', (req, res) => {
 // =================================================================================
 // Frontend Tool Result API
 // =================================================================================
+/**
+ * @swagger
+ * /api/agents/frontend-tool-result:
+ *   post:
+ *     tags: [Agents]
+ *     summary: 提交前端工具执行结果
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 禁止
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/frontend-tool-result', async (req, res) => {
   try {
     const validation = FrontendToolResultSchema.safeParse(req.body);

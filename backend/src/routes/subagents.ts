@@ -124,6 +124,25 @@ async function scanSubagents(dirPath: string): Promise<Subagent[]> {
 }
 
 // GET /api/subagents - List all subagents
+/**
+ * @swagger
+ * /api/subagents:
+ *   get:
+ *     tags: [SubAgents]
+ *     summary: 获取 SubAgent 列表
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/', async (req, res) => {
   try {
     const filter: SubagentFilter = {
@@ -161,6 +180,27 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/subagents/:id - Get specific subagent
+/**
+ * @swagger
+ * /api/subagents/{id}:
+ *   get:
+ *     tags: [SubAgents]
+ *     summary: 获取单个 SubAgent
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -201,6 +241,32 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/subagents - Create new subagent
+/**
+ * @swagger
+ * /api/subagents:
+ *   post:
+ *     tags: [SubAgents]
+ *     summary: 创建 SubAgent
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: 已创建
+ *       400:
+ *         description: 参数错误
+ *       409:
+ *         description: 已存在
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/', async (req, res) => {
   try {
     const subagentData: SubagentCreate = req.body;
@@ -269,6 +335,36 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/subagents/:id - Update subagent
+/**
+ * @swagger
+ * /api/subagents/{id}:
+ *   put:
+ *     tags: [SubAgents]
+ *     summary: 更新 SubAgent
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -328,6 +424,30 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/subagents/:id - Delete subagent
+/**
+ * @swagger
+ * /api/subagents/{id}:
+ *   delete:
+ *     tags: [SubAgents]
+ *     summary: 删除 SubAgent
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     responses:
+ *       204:
+ *         description: 已删除
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;

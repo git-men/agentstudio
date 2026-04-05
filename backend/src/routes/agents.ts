@@ -180,7 +180,39 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
   };
 }
 
-// POST /api/agents/chat - Agent-based AI chat using Claude Code SDK with session management
+/**
+ * @swagger
+ * /api/agents/chat:
+ *   post:
+ *     tags: [Agents]
+ *     summary: Agent 对话（Claude SDK，SSE 流式响应，支持重连）
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: ChatRequest（见 ChatRequestSchema）
+ *     responses:
+ *       200:
+ *         description: text/event-stream SSE 事件流
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: 请求体无效
+ *       403:
+ *         description: Agent 已禁用
+ *       404:
+ *         description: Agent 或会话不存在（重连场景）
+ *       409:
+ *         description: 重连时会话未在处理中
+ *       422:
+ *         description: Hook 拦截拒绝发送
+ *       500:
+ *         description: 服务错误（未开始 SSE 时返回 JSON）
+ */
 router.post('/chat', async (req, res) => {
   // 重试逻辑：最多重试1次
   let retryCount = 0;

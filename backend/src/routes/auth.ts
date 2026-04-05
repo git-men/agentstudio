@@ -10,9 +10,16 @@ import { enterpriseAuthService } from '../services/enterpriseAuthService.js';
 const router: Router = express.Router();
 
 /**
- * GET /api/auth/check-password-required
- * Check if password is required for login
- * Returns whether the system requires a password to authenticate
+ * @swagger
+ * /api/auth/check-password-required:
+ *   get:
+ *     tags: [Auth]
+ *     summary: 检查是否需要密码
+ *     responses:
+ *       200:
+ *         description: 返回密码是否配置
+ *       500:
+ *         description: 服务器错误
  */
 router.get('/check-password-required', async (req: Request, res: Response) => {
   try {
@@ -31,9 +38,27 @@ router.get('/check-password-required', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/auth/login
- * Authenticate with password and return JWT token
- * If no password is configured, login succeeds without password
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: 密码登录获取 JWT
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 登录成功，返回 token
+ *       400:
+ *         description: 需要密码但未提供
+ *       401:
+ *         description: 密码错误
  */
 router.post('/login', async (req: Request, res: Response) => {
   const { password } = req.body;
@@ -74,8 +99,28 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/auth/verify
- * Verify if a token is valid
+ * @swagger
+ * /api/auth/verify:
+ *   post:
+ *     tags: [Auth]
+ *     summary: 校验 JWT 是否有效
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 校验结果
+ *       400:
+ *         description: 缺少 token
+ *       401:
+ *         description: 无效或过期
  */
 router.post('/verify', async (req: Request, res: Response) => {
   const { token } = req.body;
@@ -99,8 +144,28 @@ router.post('/verify', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/auth/refresh
- * Refresh an existing token if it's within refresh threshold
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     tags: [Auth]
+ *     summary: 在阈值内刷新 JWT
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 返回原 token 或新 token
+ *       400:
+ *         description: 缺少 token
+ *       401:
+ *         description: 无效或过期
  */
 router.post('/refresh', async (req: Request, res: Response) => {
   const { token } = req.body;
@@ -141,8 +206,19 @@ router.post('/refresh', async (req: Request, res: Response) => {
 });
 
 /**
- * POST /api/auth/logout
- * Logout endpoint (client-side token removal)
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: 登出（JWT 主要由客户端清除）
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 登出成功
  */
 router.post('/logout', (req: Request, res: Response) => {
   // With JWT, logout is primarily handled client-side by removing the token
@@ -154,10 +230,18 @@ router.post('/logout', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/auth/enterprise/callback
- * OAuth callback from AS Enterprise.
- * Receives the token from the redirect, stores it for tunnel/wecom use,
- * and shows a success page to the user.
+ * @swagger
+ * /api/auth/enterprise/callback:
+ *   get:
+ *     tags: [Auth]
+ *     summary: 企业版 OAuth 回调（query 含 token、state 等），返回 HTML 结果页
+ *     responses:
+ *       200:
+ *         description: HTML 页面
+ *       400:
+ *         description: HTML 错误页
+ *       500:
+ *         description: HTML 错误页
  */
 router.get('/enterprise/callback', async (req: Request, res: Response) => {
   const token = req.query.token as string | undefined;
