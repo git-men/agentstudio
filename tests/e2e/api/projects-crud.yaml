@@ -35,7 +35,7 @@ cases:
         Authorization: "Bearer {{runtime.login_token}}"
         Content-Type: application/json
       body:
-        projectName: "e2e-test-project"
+        projectName: "e2e-test-project-{{timestamp}}"
         agentId: "meta-agent"
     expect:
       status: [200, 201]

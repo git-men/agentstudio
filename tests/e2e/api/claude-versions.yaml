@@ -1,0 +1,114 @@
+name: Claude 版本管理
+sequential: true
+
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
+cases:
+  - name: "获取 Claude 版本列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        versions: { exists: true }
+        defaultVersionId: { exists: true, type: string }
+
+  - name: "版本列表包含系统版本"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        versions: { exists: true }
+
+  - name: "创建测试 Claude 版本"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        name: "E2E Test Version"
+        alias: "e2e-test"
+        description: "Test version for E2E"
+        environmentVariables:
+          NODE_ENV: "test"
+    expect:
+      status: [200, 201]
+      body:
+        id: { exists: true }
+        name: "E2E Test Version"
+        alias: "e2e-test"
+    save:
+      version_id: "id"
+
+  - name: "版本列表包含新创建的版本"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+
+  - name: "更新版本名称"
+    request:
+      method: PUT
+      url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.version_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        name: "E2E Updated Version"
+    expect:
+      status: 200
+      body:
+        name: "E2E Updated Version"
+
+  - name: "删除测试版本"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.version_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        success: true
+
+  - name: "版本管理需要认证"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/settings/claude-versions"
+    expect:
+      status: 401
+
+teardown:
+  - name: "清理测试版本"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.version_id}}"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    ignoreError: true

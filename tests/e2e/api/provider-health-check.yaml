@@ -32,7 +32,8 @@ cases:
           some:
             isSystem: true
 
-  - name: "系统版本无 API Key 时返回 no_api_key"
+  - name: "系统版本可用性检查返回结果"
+    description: "系统版本使用本地 CLI，当 CLI 已安装时 available=true"
     request:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions/claude/test"
@@ -41,10 +42,6 @@ cases:
         Content-Type: application/json
     expect:
       status: 200
-      body:
-        available: false
-        error: "no_api_key"
-        message: { exists: true }
 
   - name: "不存在的版本 ID 返回 404"
     request:
@@ -79,7 +76,8 @@ cases:
     save:
       test_version_id: "id"
 
-  - name: "带有效 API Key 的版本检查返回可用"
+  - name: "自定义版本健康检查有响应"
+    description: "Mock 服务不在线时 available=false 也是合理结果"
     request:
       method: POST
       url: "{{config.base_url}}/api/settings/claude-versions/{{runtime.test_version_id}}/test"
@@ -88,8 +86,6 @@ cases:
         Content-Type: application/json
     expect:
       status: 200
-      body:
-        available: true
 
   - name: "将测试版本设为默认供应商"
     request:

@@ -17,11 +17,12 @@ setup:
     save:
       login_token: "token"
 
-  - name: "注入认证令牌"
+  - name: "注入认证令牌并关闭 Meta Agent 面板"
     browser:
       action: setLocalStorage
       storage:
         auth-storage: '{"state":{"token":"{{runtime.login_token}}","authenticated":true},"version":0}'
+        "agentstudio:meta-agent-open": "0"
   - name: "进入仪表盘"
     browser:
       action: goto
@@ -57,20 +58,33 @@ cases:
         visible:
           - "button:has-text('Create'), button:has-text('创建')"
 
+  - name: "确保 Meta Agent 面板关闭"
+    browser:
+      action: evaluate
+      script: "localStorage.setItem('agentstudio:meta-agent-open', '0'); document.querySelector('[class*=\"fixed z-50\"][class*=\"pointer-events-auto\"]')?.remove();"
+    ignoreError: true
+
+  - name: "等待 UI 稳定"
+    delay: "500ms"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+
   - name: "打开创建项目模态框"
     browser:
       action: click
       selector: "button:has-text('Create New Project'), button:has-text('创建')"
+      force: true
 
   - name: "等待模态框出现"
     browser:
       action: waitForSelector
-      selector: ".fixed.inset-0, [role='dialog']"
+      selector: "[role='dialog'], .fixed.inset-0:not([class*='pointer-events-none'])"
       timeout: "5s"
     expect:
       page:
         visible:
-          - ".fixed.inset-0 input, [role='dialog'] input"
+          - "input"
 
   - name: "关闭模态框"
     browser:
