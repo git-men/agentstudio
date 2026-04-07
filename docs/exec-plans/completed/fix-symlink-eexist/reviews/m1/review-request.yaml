@@ -1,0 +1,39 @@
+milestone: M1
+summary: "修复 pluginSymlink.ts EEXIST 错误：将 existsSync 替换为 lstatSync + ENOENT catch，并在最外层 catch 处理 EEXIST 竞争条件"
+changed_files:
+  - backend/src/services/pluginSymlink.ts
+  - backend/src/services/__tests__/pluginSymlink.test.ts
+verification_results:
+  lint: pass
+  typecheck: pass
+  test: pass
+  build: skip
+commit_hash: "8d13ba17713b79dd168f62d7fa220ba7ffea1e1c"
+notes: |
+  - 修复位于 fix/symlink-eexist 分支（worktree: agentstudio/.worktrees/fix/symlink-eexist）
+  - 测试添加在已有的 backend/src/services/__tests__/pluginSymlink.test.ts 文件中（非新建文件）
+  - 新增 4 个测试用例：dangling symlink 回归、幂等跳过、错误目标更新、EEXIST 竞争条件
+  - lint 结果：我们修改的文件中只有 @typescript-eslint/no-explicit-any 警告（无错误），
+    其中 catch (e: any) / catch (error: any) 是本次新增；其余警告为 pre-existing
+  - pluginSymlink.ts line 270 的 'mcpServer' unused 错误为 pre-existing（checkSymlinks 方法，未修改）
+  - typecheck 全量通过（tsc --noEmit 无输出即无错误）
+  - 节点模块首次在 worktree 中安装（pnpm install），确保工具链可用
+
+followup_fix:
+  summary: "修复 removeSymlink 对称缺陷：将 existsSync 替换为 lstatSync + ENOENT catch"
+  commit_hash: "b729677b"
+  changed_files:
+    - backend/src/services/pluginSymlink.ts
+    - backend/src/services/__tests__/pluginSymlink.test.ts
+  verification_results:
+    lint: pass (only pre-existing warnings/errors, no new issues in modified files)
+    typecheck: pass (tsc --noEmit 无输出)
+    test: pass (11/11 tests passed)
+    build: skip
+  notes: |
+    - removeSymlink 方法（第 133-146 行）原使用 existsSync，dangling symlink 返回 false 导致跳过删除
+    - 修复：改用 lstatSync + ENOENT catch，与 createSymlink 对称，能正确检测 dangling symlink
+    - 新增测试用例：removeSymlinks > should remove dangling symlink (symlink exists but target does not)
+    - 测试验证：lstatSync 返回 symlink stats 时，即使 existsSync 返回 false（dangling），也会调用 unlinkSync
+    - lint 仅有 pre-existing 警告（no-explicit-any），pluginSymlink.ts line 275 的 'mcpServer' unused 错误为 pre-existing
+    - 全量测试 11 用例全通过（含新增的 dangling symlink 移除用例）

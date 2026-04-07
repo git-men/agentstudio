@@ -1,0 +1,89 @@
+verdict: PASS
+milestone: M1
+round: 2
+findings:
+  - severity: INFO
+    location: "backend/src/services/pluginSymlink.ts:133-151 (previously HIGH)"
+    issue: |
+      [RESOLVED] removeSymlink 已从 existsSync 替换为 lstatSync + ENOENT catch（第 135-141 行），
+      与 createSymlink（第 101-105 行）完全对称。dangling symlink 现在可被正确检测并删除。
+    suggestion: "已修复，无需操作。"
+
+  - severity: INFO
+    location: "backend/src/services/__tests__/pluginSymlink.test.ts:401-447 (previously HIGH)"
+    issue: |
+      [RESOLVED] 新增 'should remove dangling symlink' 测试（第 401 行），通过 lstatSync mock
+      返回 symlink stats 同时 existsSync 返回 false，验证 unlinkSync 被正确调用。
+      回归测试已覆盖该场景。
+    suggestion: "已修复，无需操作。"
+
+  - severity: MEDIUM
+    location: "backend/src/services/pluginSymlink.ts:122-127"
+    issue: |
+      [继承 Round 1] 外层 catch 对 EEXIST 的处理仍然静默吞噬，不检查路径上实际存在的是什么。
+      在非并发场景下（如先前安装残留了指向错误目标的 symlink 且 lstatSync 未能检出），
+      此分支会静默跳过而不产生任何可操作信息。
+      此问题不阻塞合并，但建议加强 warn 日志的信息量。
+    suggestion: |
+      在 EEXIST warn 中输出预期目标路径，便于排查：
+        console.warn(
+          `Skipping ${type} symlink (EEXIST race condition): ${symlinkPath} -> expected ${sourcePath}`
+        );
+
+  - severity: MEDIUM
+    location: "backend/src/services/pluginSymlink.ts:110"
+    issue: |
+      [继承 Round 1] symlink 目标路径比较使用严格字符串相等（existingTarget === sourcePath），
+      在大小写不敏感文件系统（macOS HFS+/APFS）上，路径大小写不同时会错误触发 unlink + recreate。
+      不阻塞合并，属于后续改进项。
+    suggestion: |
+      使用 path.resolve() 规范化两侧路径后再比较：
+        if (path.resolve(existingTarget) === path.resolve(sourcePath)) { return; }
+
+  - severity: LOW
+    location: "backend/src/services/__tests__/pluginSymlink.test.ts:347"
+    issue: |
+      removeSymlinks 的 'should remove symlinks for commands' 测试（第 347 行）中，
+      vi.mocked(fs.existsSync).mockReturnValue(true) 是死代码——新的 removeSymlink 实现
+      不再调用 existsSync，该 mock 对被测逻辑无任何影响，可能误导读者认为 removeSymlink
+      仍依赖 existsSync。
+    suggestion: |
+      删除第 347 行的 existsSync mock，仅保留 lstatSync 和 unlinkSync 的 mock，使测试意图
+      与实现对齐。
+
+  - severity: LOW
+    location: "backend/src/services/__tests__/pluginSymlink.test.ts:275-317"
+    issue: |
+      [继承 Round 1] EEXIST race condition 测试仅验证"不抛异常"，未断言 console.warn 被调用。
+      若日志行为被移除或改为 error，测试不会失败，可观测性语义未受保护。
+    suggestion: |
+      添加 warn spy 断言：
+        const warnSpy = vi.spyOn(console, 'warn');
+        await expect(pluginSymlink.createSymlinks(mockParsedPlugin)).resolves.not.toThrow();
+        expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('EEXIST'));
+
+  - severity: LOW
+    location: "backend/src/services/pluginSymlink.ts:248-293"
+    issue: |
+      checkSymlinks 方法（第 254、262、270 行）仍使用 existsSync，对 dangling symlink 返回 false，
+      可能导致已安装但目标暂时不可达的插件被误判为"未安装"，触发不必要的重装流程。
+      此为本次 PR 范围外的预存问题，不阻塞合并，建议单独跟踪。
+    suggestion: |
+      后续 PR 中将 checkSymlinks 的 existsSync 替换为 lstatSync，统一路径存在检测语义。
+
+  - severity: INFO
+    location: "backend/src/services/pluginSymlink.ts:103,138"
+    issue: |
+      [继承 Round 1] lstatSync 的 ENOENT catch 在 createSymlink（第 103 行）和
+      removeSymlink（第 138 行）中均使用 `catch (e: any)`，类型不安全但两处一致，
+      且本次新增的 removeSymlink 修复与 createSymlink 保持了对称。不阻塞合并。
+    suggestion: |
+      可改为 `catch (e: unknown)` 并使用类型守卫：
+        if ((e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      视团队规范决定。
+
+summary: |
+  两个 Round 1 HIGH 问题均已正确修复：removeSymlink 使用 lstatSync + ENOENT catch 替代 existsSync，
+  与 createSymlink 完全对称；新增的 dangling symlink 回归测试（第 401-447 行）直接验证了修复效果。
+  无新引入的 CRITICAL 或 HIGH 问题。剩余 MEDIUM 和 LOW 问题均为预存或非阻塞性，可在后续迭代中处理。
+  代码可以合并。
