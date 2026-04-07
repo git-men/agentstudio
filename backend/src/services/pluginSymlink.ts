@@ -132,12 +132,17 @@ class PluginSymlink {
 
   private async removeSymlink(symlinkPath: string, type: string): Promise<void> {
     try {
-      if (fs.existsSync(symlinkPath)) {
-        const stats = fs.lstatSync(symlinkPath);
-        if (stats.isSymbolicLink()) {
-          fs.unlinkSync(symlinkPath);
-          console.log(`Removed ${type} symlink: ${symlinkPath}`);
-        }
+      let stats: fs.Stats | null = null;
+      try {
+        stats = fs.lstatSync(symlinkPath);
+      } catch (e: any) {
+        if (e.code === 'ENOENT') return; // 路径不存在，无需删除
+        throw e;
+      }
+
+      if (stats.isSymbolicLink()) {
+        fs.unlinkSync(symlinkPath);
+        console.log(`Removed ${type} symlink: ${symlinkPath}`);
       }
     } catch (error) {
       console.error(`Failed to remove ${type} symlink at ${symlinkPath}:`, error);

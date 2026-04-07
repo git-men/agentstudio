@@ -397,6 +397,54 @@ describe('PluginSymlink', () => {
       // Should not call unlinkSync for non-symlink files
       expect(fs.unlinkSync).not.toHaveBeenCalled();
     });
+
+    it('should remove dangling symlink (symlink exists but target does not)', async () => {
+      // Regression test: the old code used existsSync which returns false for dangling symlinks
+      // (target does not exist), causing the path to be skipped and the dangling symlink to
+      // persist. The new code uses lstatSync which detects the symlink inode regardless of
+      // whether the target exists.
+      const mockParsedPlugin = {
+        manifest: {
+          name: 'test-plugin',
+          version: '1.0.0',
+          description: 'Test',
+          author: { name: 'Test' }
+        },
+        components: {
+          commands: [{
+            type: 'command' as const,
+            name: 'hello',
+            path: '/test/plugins/test-plugin/commands/hello.md',
+            relativePath: 'commands/hello.md'
+          }],
+          agents: [],
+          skills: [],
+          hooks: [],
+          mcpServers: []
+        },
+        files: [],
+        path: '/test/plugins/test-plugin',
+        marketplaceName: 'test-market',
+        pluginName: 'test-plugin'
+      };
+
+      // Dangling symlink: lstatSync succeeds (inode exists) but target is gone.
+      // existsSync would return false in this scenario — not used in new code.
+      const mockLstatStats = { isSymbolicLink: () => true } as fs.Stats;
+      vi.mocked(fs.lstatSync).mockReturnValueOnce(mockLstatStats);
+      vi.mocked(fs.existsSync).mockReturnValue(false); // dangling: target not accessible
+      vi.mocked(fs.unlinkSync).mockReturnValue(undefined);
+
+      const { pluginPaths } = await import('../pluginPaths');
+      vi.mocked(pluginPaths.getCommandsDir).mockReturnValue('/test/.claude/commands');
+
+      const { pluginSymlink } = await import('../pluginSymlink');
+
+      await expect(pluginSymlink.removeSymlinks(mockParsedPlugin)).resolves.not.toThrow();
+      expect(fs.unlinkSync).toHaveBeenCalledWith(
+        expect.stringContaining('hello.md')
+      );
+    });
   });
 
   describe('checkSymlinks', () => {
