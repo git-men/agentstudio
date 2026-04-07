@@ -9,6 +9,7 @@ import { Options } from '@anthropic-ai/claude-agent-sdk';
 import { SystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
