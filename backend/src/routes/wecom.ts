@@ -240,6 +240,7 @@ router.post('/bind', async (req: Request, res: Response) => {
     const { baseUrl: dispatchUrl, headers } = client;
     const tlsOpt = dispatchUrl.startsWith('https://') ? { tls: { rejectUnauthorized: false } } : {};
 
+    const ownerAlias = enterpriseAuthService.getProfile()?.name;
     const botPayload = {
       bot_key: botKey,
       name: `${projectName}-agent`,
@@ -249,6 +250,8 @@ router.post('/bind', async (req: Request, res: Response) => {
       description: `由企微绑定向导自动创建`,
       timeout: 300,
       enabled: true,
+      access_mode: 'whitelist',
+      whitelist: ownerAlias ? [ownerAlias] : [],
     };
 
     const checkResp = await fetch(`${dispatchUrl}/api/bots/${botKey}`, {
