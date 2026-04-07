@@ -23,13 +23,24 @@ export const loadBackendServices = (): BackendServicesState => {
           currentServiceId: defaults[0].id
         };
       }
-      // Normalize URLs on load to fix any previously stored trailing slashes
+      // Normalize URLs on load to fix any previously stored trailing slashes.
+      // For the built-in Default service, always sync its URL to the current
+      // window.location.origin so that remote deployments (front-end served on
+      // the same port as the back-end) don't show a stale 127.0.0.1 address
+      // that was cached from a previous local-dev session in another browser.
+      const currentOrigin =
+        typeof window !== 'undefined' && window.location?.origin
+          ? window.location.origin
+          : null;
       return {
         ...parsed,
-        services: parsed.services.map((s: BackendService) => ({
-          ...s,
-          url: normalizeServiceUrl(s.url)
-        }))
+        services: parsed.services.map((s: BackendService) => {
+          let url = normalizeServiceUrl(s.url);
+          if (s.isDefault && currentOrigin && url !== currentOrigin) {
+            url = currentOrigin;
+          }
+          return { ...s, url };
+        })
       };
     }
   } catch (error) {
