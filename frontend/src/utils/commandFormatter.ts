@@ -9,7 +9,16 @@ interface SystemCommand {
   isSystem: true;
 }
 
-export type CommandType = SlashCommand | SystemCommand;
+interface SkillSlashItem {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  scope: 'user' | 'project';
+  isSkill: true;
+}
+
+export type CommandType = SlashCommand | SystemCommand | SkillSlashItem;
 
 /**
  * 格式化命令消息，用于发送给AI
@@ -50,6 +59,14 @@ export function formatCommandMessage(command: CommandType, args?: string, projec
     : command.description;
 
   return `<command-message>${description}</command-message><command-name>${commandContent}</command-name>`;
+}
+
+/**
+ * 格式化 Skill 调用消息，用于发送给 AI
+ */
+export function formatSkillMessage(skillName: string, skillContent: string, args?: string): string {
+  const argsSection = args ? `\n\nUser request: ${args}` : '';
+  return `<skill-invocation name="${skillName}">${skillContent}${argsSection}</skill-invocation>`;
 }
 
 /**

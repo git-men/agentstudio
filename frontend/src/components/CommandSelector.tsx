@@ -1,12 +1,14 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SlashCommand } from '../types/commands';
+import type { SkillListItem } from '../types/skills';
 import { useCommands, useProjectCommands } from '../hooks/useCommands';
-import { SystemCommand } from '../utils/commandHandler';
+import { useSkills } from '../hooks/useSkills';
+import { SystemCommand, SkillSlashItem } from '../utils/commandHandler';
 
 interface CommandSelectorProps {
   isOpen: boolean;
-  onSelect: (command: SlashCommand | SystemCommand) => void;
+  onSelect: (command: SlashCommand | SystemCommand | SkillSlashItem) => void;
   onClose?: () => void;
   searchTerm: string;
   position: { top: number; left: number };
@@ -104,6 +106,10 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
     search: searchTerm
   });
 
+  // Fetch skills
+  const { data: userSkillsData } = useSkills({ scope: 'user' });
+  const { data: projectSkillsData } = useSkills({ scope: 'project' });
+
   // Extract commands arrays from response objects
   const userCommands = userCommandsData?.commands || [];
   const projectCommands = projectCommandsData?.commands || [];
@@ -117,11 +123,38 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
     cmd.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // Combine all commands
-  const allCommands: (SlashCommand | SystemCommand)[] = [
+  // Convert skills to SkillSlashItem format
+  const convertSkills = useCallback((skills: SkillListItem[], scope: 'user' | 'project'): SkillSlashItem[] => {
+    if (!Array.isArray(skills)) return [];
+    return skills
+      .filter(s => s.enabled !== false)
+      .map(skill => ({
+        id: `skill-${skill.id}`,
+        name: skill.name,
+        description: skill.description || '',
+        content: '',
+        scope,
+        isSkill: true as const,
+      }));
+  }, []);
+
+  const skillItems = useMemo(() => {
+    const user = convertSkills(userSkillsData || [], 'user');
+    const project = convertSkills(projectSkillsData || [], 'project');
+    if (!searchTerm) return [...project, ...user];
+    const search = searchTerm.toLowerCase();
+    return [...project, ...user].filter(s =>
+      s.name.toLowerCase().includes(search) ||
+      s.description.toLowerCase().includes(search)
+    );
+  }, [userSkillsData, projectSkillsData, searchTerm, convertSkills]);
+
+  // Combine all commands and skills
+  const allCommands: (SlashCommand | SystemCommand | SkillSlashItem)[] = [
     ...filteredSystemCommands,
     ...projectCommands,
     ...userCommands,
+    ...skillItems,
   ];
 
   // Reset selectedIndex when commands change
@@ -165,18 +198,39 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
       <div className="overflow-y-auto" style={{ maxHeight: `${dynamicHeight}px` }}>
         {allCommands.map((command, index) => {
           const isSystem = 'isSystem' in command;
+          const isSkill = 'isSkill' in command;
           const isSelected = index === selectedIndex;
 
-          // Format display name for custom commands with namespace
           const getDisplayName = () => {
-            if (isSystem) {
+            if (isSystem || isSkill) {
               return command.name;
             }
-            // For custom commands, show namespace:name if namespace exists
-            if (command.namespace) {
-              return `${command.namespace}:${command.name}`;
+            if ((command as SlashCommand).namespace) {
+              return `${(command as SlashCommand).namespace}:${command.name}`;
             }
             return command.name;
+          };
+
+          const getTypeBadge = () => {
+            if (isSkill) {
+              return (
+                <span className="ml-2 flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                  {t('commandSelector.typeBadge.skill')}
+                </span>
+              );
+            }
+            if (isSystem) {
+              return (
+                <span className="ml-2 flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+                  {t('commandSelector.typeBadge.system')}
+                </span>
+              );
+            }
+            return (
+              <span className="ml-2 flex-shrink-0 px-1.5 py-0.5 text-[10px] font-medium rounded bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                {t('commandSelector.typeBadge.command')}
+              </span>
+            );
           };
 
           return (
@@ -192,13 +246,14 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
               onMouseEnter={() => onSelectedIndexChange?.(index)}
             >
               <div className="flex-1 min-w-0">
-                <div className={`text-sm font-medium truncate ${
+                <div className={`flex items-center text-sm font-medium ${
                   isSelected ? 'text-blue-900 dark:text-blue-300' : 'text-gray-900 dark:text-gray-100'
                 }`}>
-                  {getDisplayName()}
+                  <span className="truncate">{getDisplayName()}</span>
+                  {getTypeBadge()}
                 </div>
                 {command.description && (
-                  <div className={`text-xs truncate ${
+                  <div className={`text-xs truncate mt-0.5 ${
                     isSelected ? 'text-blue-700 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'
                   }`}>
                     {command.description}
@@ -215,8 +270,8 @@ export const CommandSelector: React.FC<CommandSelectorProps> = ({
 
 // Export helper function to get selected command
 export const getSelectedCommand = (
-  allCommands: (SlashCommand | SystemCommand)[],
+  allCommands: (SlashCommand | SystemCommand | SkillSlashItem)[],
   selectedIndex: number
-): SlashCommand | SystemCommand | null => {
+): SlashCommand | SystemCommand | SkillSlashItem | null => {
   return allCommands[selectedIndex] || null;
 };

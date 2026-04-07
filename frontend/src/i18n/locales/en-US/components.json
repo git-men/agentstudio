@@ -544,6 +544,11 @@
       "help": {
         "description": "Show help information"
       }
+    },
+    "typeBadge": {
+      "system": "System",
+      "command": "Command",
+      "skill": "Skill"
     }
   },
   "apiSettingsModal": {

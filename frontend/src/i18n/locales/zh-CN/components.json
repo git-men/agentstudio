@@ -545,6 +545,11 @@
       "help": {
         "description": "显示帮助信息"
       }
+    },
+    "typeBadge": {
+      "system": "系统",
+      "command": "命令",
+      "skill": "技能"
     }
   },
   "apiSettingsModal": {

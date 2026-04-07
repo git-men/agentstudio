@@ -1,12 +1,13 @@
 import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { showInfo } from '../../utils/toast';
-import { isCommandTrigger, formatCommandMessage } from '../../utils/commandFormatter';
-import { createCommandHandler, SystemCommand } from '../../utils/commandHandler';
+import { isCommandTrigger, formatCommandMessage, formatSkillMessage } from '../../utils/commandFormatter';
+import { createCommandHandler, SystemCommand, SkillSlashItem } from '../../utils/commandHandler';
 import { useAgentStore } from '../../stores/useAgentStore';
 import { useAgentChat } from '../useAgents';
 import { useAGUIChat } from '../useAGUIChat';
 import { useAIStreamHandler, type UseAIStreamHandlerProps } from './useAIStreamHandler';
+import { skillsAPI } from '../../api/skills';
 import type { ImageData } from './useImageUpload';
 import type { AgentConfig } from '../../types/index.js';
 import type { CommandType } from '../../utils/commandFormatter';
@@ -30,6 +31,8 @@ export interface UseMessageSenderProps {
   SYSTEM_COMMANDS: SystemCommand[];
   userCommands: CommandType[];
   projectCommands: CommandType[];
+  userSkills: SkillSlashItem[];
+  projectSkills: SkillSlashItem[];
   selectedCommand: CommandType | null;
   selectedRegularTools: string[];
   selectedMcpTools: string[];
@@ -84,6 +87,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     SYSTEM_COMMANDS,
     userCommands,
     projectCommands,
+    userSkills,
+    projectSkills,
     selectedCommand,
     selectedRegularTools,
     selectedMcpTools,
@@ -218,10 +223,38 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
         command = SYSTEM_COMMANDS.find(cmd => cmd.name === commandName) ||
           projectCommands.find(cmd => cmd.name === commandName) ||
           userCommands.find(cmd => cmd.name === commandName) ||
+          [...userSkills, ...projectSkills].find(s => s.name === commandName) ||
           null;
       }
 
-      if (command) {
+      // Handle skill invocation
+      if (command && 'isSkill' in command && command.isSkill) {
+        const skillArgs = inputMessage.slice(1 + commandName.length).trim() || undefined;
+        const realSkillId = command.id.replace(/^skill-/, '');
+
+        let skillContent = command.description;
+        try {
+          const content = await skillsAPI.getSkillFile(realSkillId, 'SKILL.md');
+          if (content) {
+            skillContent = content;
+          }
+        } catch {
+          console.warn(`[MessageSender] Failed to fetch SKILL.md for ${command.name}, using description`);
+        }
+
+        userMessage = formatSkillMessage(command.name, skillContent, skillArgs);
+
+        getActions().addMessage({
+          content: userMessage,
+          role: 'user',
+          images: imageData
+        });
+
+        setInputMessage('');
+        clearImages();
+        setSelectedCommand(null);
+        setShowCommandSelector(false);
+      } else if (command) {
         const result = await commandHandler.executeCommand(command);
 
         if (result.shouldSendToBackend) {
@@ -666,6 +699,8 @@ export const useMessageSender = (props: UseMessageSenderProps) => {
     SYSTEM_COMMANDS,
     userCommands,
     projectCommands,
+    userSkills,
+    projectSkills,
     selectedCommand,
     selectedRegularTools,
     selectedMcpTools,

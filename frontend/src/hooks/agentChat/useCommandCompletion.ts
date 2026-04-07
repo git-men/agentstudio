@@ -1,9 +1,11 @@
 import { useState, useCallback, useMemo, useEffect, RefObject } from 'react';
 import { useCommands, useProjectCommands } from '../useCommands';
+import { useSkills } from '../useSkills';
 import {
   type CommandType
 } from '../../utils/commandFormatter';
-import { SystemCommand } from '../../utils/commandHandler';
+import { SystemCommand, SkillSlashItem } from '../../utils/commandHandler';
+import type { SkillListItem } from '../../types/skills';
 import { useTranslation } from 'react-i18next';
 
 export interface UseCommandCompletionProps {
@@ -92,32 +94,81 @@ export const useCommandCompletion = ({
     projectId: projectPath || ''
   });
 
+  // Fetch skills
+  const { data: userSkillsData } = useSkills({ scope: 'user' });
+  const { data: projectSkillsData } = useSkills({ scope: 'project' });
+
   // Extract commands arrays from response objects (ensure they are always arrays)
   const userCommandsFiltered = Array.isArray(userCommandsFilteredData?.commands) ? userCommandsFilteredData.commands : [];
   const projectCommandsFiltered = Array.isArray(projectCommandsFilteredData?.commands) ? projectCommandsFilteredData.commands : [];
   const userCommands = Array.isArray(userCommandsData?.commands) ? userCommandsData.commands : [];
   const projectCommands = Array.isArray(projectCommandsData?.commands) ? projectCommandsData.commands : [];
 
-  // Helper function to check if a command is defined
+  // Convert skills to SkillSlashItem format for the dropdown
+  const convertSkillsToSlashItems = useCallback((skills: SkillListItem[], scope: 'user' | 'project'): SkillSlashItem[] => {
+    if (!Array.isArray(skills)) return [];
+    return skills
+      .filter(s => s.enabled !== false)
+      .map(skill => ({
+        id: `skill-${skill.id}`,
+        name: skill.name,
+        description: skill.description || '',
+        content: '',
+        scope,
+        isSkill: true as const,
+      }));
+  }, []);
+
+  const userSkills = useMemo(
+    () => convertSkillsToSlashItems(userSkillsData || [], 'user'),
+    [userSkillsData, convertSkillsToSlashItems]
+  );
+  const projectSkills = useMemo(
+    () => convertSkillsToSlashItems(projectSkillsData || [], 'project'),
+    [projectSkillsData, convertSkillsToSlashItems]
+  );
+
+  // Helper function to check if a command or skill is defined
   const isCommandDefined = useCallback((commandName: string) => {
     const systemCommand = SYSTEM_COMMANDS.find(cmd => cmd.name === commandName);
     const projectCommand = projectCommands.find(cmd => cmd.name === commandName);
     const userCommand = userCommands.find(cmd => cmd.name === commandName);
+    const skill = [...userSkills, ...projectSkills].find(s => s.name === commandName);
 
-    return !!(systemCommand || projectCommand || userCommand);
-  }, [SYSTEM_COMMANDS, projectCommands, userCommands]);
+    return !!(systemCommand || projectCommand || userCommand || skill);
+  }, [SYSTEM_COMMANDS, projectCommands, userCommands, userSkills, projectSkills]);
 
-  // Helper function to get all available command names for error messages
+  // Helper function to get all available command/skill names for error messages
   const getAllAvailableCommands = useCallback(() => {
     const systemCommands = SYSTEM_COMMANDS.map(cmd => cmd.content);
     const projectCommandsList = projectCommands.map(cmd => `/${cmd.name}`);
     const userCommandsList = userCommands.map(cmd => `/${cmd.name}`);
+    const skillsList = [...userSkills, ...projectSkills].map(s => `/${s.name}`);
 
-    return [...systemCommands, ...projectCommandsList, ...userCommandsList].join(', ');
-  }, [SYSTEM_COMMANDS, projectCommands, userCommands]);
+    return [...systemCommands, ...projectCommandsList, ...userCommandsList, ...skillsList].join(', ');
+  }, [SYSTEM_COMMANDS, projectCommands, userCommands, userSkills, projectSkills]);
 
   // Check if commands failed to load (likely authentication issue)
   const hasCommandsLoadError = userCommandsError || projectCommandsError;
+
+  // Filter skills based on search term
+  const filteredUserSkills = useMemo(() => {
+    if (!commandSearch) return userSkills;
+    const search = commandSearch.toLowerCase();
+    return userSkills.filter(s =>
+      s.name.toLowerCase().includes(search) ||
+      s.description.toLowerCase().includes(search)
+    );
+  }, [userSkills, commandSearch]);
+
+  const filteredProjectSkills = useMemo(() => {
+    if (!commandSearch) return projectSkills;
+    const search = commandSearch.toLowerCase();
+    return projectSkills.filter(s =>
+      s.name.toLowerCase().includes(search) ||
+      s.description.toLowerCase().includes(search)
+    );
+  }, [projectSkills, commandSearch]);
 
   // Memoize allCommands to prevent unnecessary re-renders (for command selector)
   const allCommands = useMemo(() => {
@@ -127,13 +178,15 @@ export const useCommandCompletion = ({
       cmd.description.toLowerCase().includes(commandSearch.toLowerCase())
     );
 
-    // Combine all commands (use filtered lists for selector)
+    // Combine all commands and skills (use filtered lists for selector)
     return [
       ...filteredSystemCommands,
       ...projectCommandsFiltered,
       ...userCommandsFiltered,
+      ...filteredProjectSkills,
+      ...filteredUserSkills,
     ];
-  }, [userCommandsFiltered, projectCommandsFiltered, commandSearch, SYSTEM_COMMANDS]);
+  }, [userCommandsFiltered, projectCommandsFiltered, commandSearch, SYSTEM_COMMANDS, filteredUserSkills, filteredProjectSkills]);
 
   // Reset selected index when commands change
   useEffect(() => {
@@ -236,6 +289,8 @@ export const useCommandCompletion = ({
     SYSTEM_COMMANDS,
     userCommands,
     projectCommands,
+    userSkills,
+    projectSkills,
     hasCommandsLoadError,
     userCommandsError,
     projectCommandsError,

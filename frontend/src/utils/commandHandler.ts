@@ -9,7 +9,16 @@ export interface SystemCommand {
   isSystem: true;
 }
 
-export type CommandType = SlashCommand | SystemCommand;
+export interface SkillSlashItem {
+  id: string;
+  name: string;
+  description: string;
+  content: string;
+  scope: 'user' | 'project';
+  isSkill: true;
+}
+
+export type CommandType = SlashCommand | SystemCommand | SkillSlashItem;
 
 // 命令执行结果类型
 export interface CommandExecutionResult {
