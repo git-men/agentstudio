@@ -1,6 +1,6 @@
 {
   "productName": "ClawStudio",
-  "version": "0.1.14",
+  "version": "0.1.28",
   "identifier": "com.clawstudio.desktop",
   "build": {
     "frontendDist": "../../frontend/dist",
@@ -20,7 +20,9 @@
       "icons/128x128@2x.png",
       "icons/icon.png"
     ],
-    "externalBin": ["binaries/clawstudio-backend"],
+    "externalBin": [
+      "binaries/clawstudio-backend"
+    ],
     "macOS": {
       "entitlements": null,
       "signingIdentity": "-",

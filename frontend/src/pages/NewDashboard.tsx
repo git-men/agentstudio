@@ -89,8 +89,8 @@ function formatRelativeTime(dateStr?: string): string {
 export const META_AGENT_PREFILL_EVENT = 'meta-agent:prefill-draft';
 
 const MIN_PANEL_WIDTH = 280;
-const DEFAULT_PANEL_WIDTH = 560;
-const MAX_PANEL_WIDTH = 860;
+const DEFAULT_PANEL_WIDTH = 380;
+const MAX_PANEL_WIDTH = 640;
 const PANEL_WIDTH_KEY = 'agentstudio:meta-agent-panel-width';
 
 /** Embedded Meta Agent chat panel for the new Dashboard right column. */
@@ -534,7 +534,10 @@ export const NewDashboard: React.FC = () => {
   const [panelWidth, setPanelWidth] = useState(() => {
     try {
       const saved = localStorage.getItem(PANEL_WIDTH_KEY);
-      return saved ? Math.min(MAX_PANEL_WIDTH, Math.max(MIN_PANEL_WIDTH, parseInt(saved, 10))) : DEFAULT_PANEL_WIDTH;
+      if (!saved) return DEFAULT_PANEL_WIDTH;
+      const v = parseInt(saved, 10);
+      if (v > MAX_PANEL_WIDTH) return DEFAULT_PANEL_WIDTH;
+      return Math.max(MIN_PANEL_WIDTH, v);
     } catch { return DEFAULT_PANEL_WIDTH; }
   });
   const isResizingRef = useRef(false);

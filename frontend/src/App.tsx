@@ -381,17 +381,32 @@ function TauriBackendGate({ children }: { children: React.ReactNode }) {
 }
 
 function DesktopUpdateLayer({ children }: { children: React.ReactNode }) {
-  const { updatePayload, dismiss, checkForUpdate, checkStatus, checkError } = useUpdateChecker();
+  const { updatePayload, dismiss, checkForUpdate, checkStatus, checkError, downloadProgress } = useUpdateChecker();
   const { logs, frontendLogs, visible: logPanelVisible, setVisible: setLogPanelVisible, clearLogs, clearFrontendLogs } = useBackendLogs();
+  const [currentVersion, setCurrentVersion] = React.useState('');
+
+  React.useEffect(() => {
+    import('@tauri-apps/api/app')
+      .then((mod) => mod.getVersion())
+      .then(setCurrentVersion)
+      .catch((e) => console.warn('Failed to get app version:', e));
+  }, []);
+
+  React.useEffect(() => {
+    const handler = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', handler);
+    return () => document.removeEventListener('contextmenu', handler);
+  }, []);
 
   return (
-    <DesktopUpdateProvider value={{ checkForUpdate, checkStatus, checkError }}>
+    <DesktopUpdateProvider value={{ checkForUpdate, checkStatus, checkError, updatePayload, currentVersion }}>
       {children}
       {updatePayload && (
         <UpdateDialog
           version={updatePayload.version}
           notes={updatePayload.notes}
           onDismiss={dismiss}
+          downloadProgress={downloadProgress}
         />
       )}
 

@@ -12,6 +12,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { useVersionCheck, useSystemInfo } from '../../hooks/useVersionCheck';
+import { isTauri } from '../../lib/environment';
 
 export const SystemInfoPage: React.FC = () => {
   const { t } = useTranslation('pages');
@@ -54,8 +55,8 @@ export const SystemInfoPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Update Available Banner */}
-      {showUpdateNotification && latestVersion && (
+      {/* Update Available Banner (web only; desktop uses Tauri updater) */}
+      {showUpdateNotification && latestVersion && !isTauri() && (
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 border border-blue-200 dark:border-blue-800 rounded-xl p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-start space-x-4">

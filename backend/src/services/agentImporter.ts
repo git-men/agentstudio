@@ -17,6 +17,7 @@ import { pluginPaths } from './pluginPaths';
 import { AgentConfig, BUILTIN_AGENTS } from '../types/agents';
 import { MarketplaceManifest, MarketplaceAgent } from '../types/plugins';
 import { AGENTS_DIR } from '../config/paths.js';
+import { robustSymlinkSync } from '../utils/fileUtils.js';
 
 /**
  * Parse an agent definition from a .md file with YAML frontmatter.
@@ -213,24 +214,16 @@ class AgentImporter {
       // For .json source files: compile to .claude-plugin/agents/{id}.json then symlink
       const isMdSource = agentFilePath ? agentFilePath.endsWith('.md') : false;
 
-      // Remove any existing symlink for this agent (both .json and .md variants)
+      // Remove any existing link/copy for this agent (both .json and .md variants)
       for (const ext of ['.json', '.md']) {
         const candidate = path.join(AGENTS_DIR, `${agentId}${ext}`);
         if (fs.existsSync(candidate) || this.isDeadSymlink(candidate)) {
           try {
             const stats = fs.lstatSync(candidate);
-            if (!stats.isSymbolicLink()) {
-              // It's a real local file — don't overwrite
-              return {
-                success: false,
-                agentId,
-                agentName: agentConfig.name || agentDef.name,
-                error: `Agent '${agentId}' already exists as a local agent`,
-              };
+            if (stats.isSymbolicLink() || stats.isFile()) {
+              fs.unlinkSync(candidate);
             }
-            fs.unlinkSync(candidate);
           } catch {
-            // lstat throws for dead symlinks; try unlinking anyway
             try { fs.unlinkSync(candidate); } catch { /* ignore */ }
           }
         }
@@ -281,13 +274,8 @@ class AgentImporter {
         symlinkDest = path.join(AGENTS_DIR, `${agentId}.json`);
       }
 
-      try {
-        fs.symlinkSync(symlinkTarget, symlinkDest);
-        console.info(`[AgentImporter] Created symlink for agent '${agentId}' → ${symlinkTarget}`);
-      } catch (error) {
-        console.warn(`[AgentImporter] Failed to create symlink for agent '${agentId}', copying instead:`, error);
-        fs.copyFileSync(symlinkTarget, symlinkDest);
-      }
+      const method = robustSymlinkSync(symlinkTarget, symlinkDest);
+      console.info(`[AgentImporter] Linked agent '${agentId}' [${method}] → ${symlinkTarget}`);
 
       // Install LAVS assets if the agent source lives in a directory with lavs.json
       if (agentFilePath) {
@@ -329,17 +317,16 @@ class AgentImporter {
       let removed = false;
       for (const ext of ['.json', '.md']) {
         const agentPath = path.join(AGENTS_DIR, `${agentId}${ext}`);
-        // lstat works on dead symlinks too
         let stats: fs.Stats | null = null;
         try { stats = fs.lstatSync(agentPath); } catch { continue; }
 
-        if (!stats.isSymbolicLink()) {
-          console.warn(`[AgentImporter] Agent '${agentId}${ext}' is not a plugin-installed agent`);
-          continue;
+        if (stats.isSymbolicLink() || stats.isFile()) {
+          fs.unlinkSync(agentPath);
+          console.info(`[AgentImporter] Uninstalled agent '${agentId}${ext}' [${stats.isSymbolicLink() ? 'symlink' : 'file'}]`);
+          removed = true;
+        } else {
+          console.warn(`[AgentImporter] Agent '${agentId}${ext}' is not a file/symlink, skipping`);
         }
-        fs.unlinkSync(agentPath);
-        console.info(`[AgentImporter] Uninstalled agent '${agentId}${ext}'`);
-        removed = true;
       }
       return removed;
     } catch (error) {
@@ -402,6 +389,26 @@ class AgentImporter {
             const ext = file.endsWith('.json') ? '.json' : '.md';
             installedAgents.push(file.slice(0, -ext.length));
           }
+        } else if (stats.isFile()) {
+          // Copy-fallback: check file content for marketplace origin
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            if (file.endsWith('.json')) {
+              const parsed = JSON.parse(content);
+              if (parsed.installPath && parsed.installPath.includes(marketplaceName)) {
+                installedAgents.push(file.slice(0, -'.json'.length));
+              } else if (parsed.author && parsed.author.includes(marketplaceName)) {
+                installedAgents.push(file.slice(0, -'.json'.length));
+              }
+            } else if (file.endsWith('.md')) {
+              // .md files copied from marketplace — check if source exists in marketplace
+              const agentId = file.slice(0, -'.md'.length);
+              const agentDir = path.join(marketplacePath, 'agents', agentId);
+              if (fs.existsSync(agentDir)) {
+                installedAgents.push(agentId);
+              }
+            }
+          } catch { /* content check failed, skip */ }
         }
       } catch {
         // Skip files that can't be read

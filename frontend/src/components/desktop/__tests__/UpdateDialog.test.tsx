@@ -59,8 +59,30 @@ describe('UpdateDialog', () => {
     fireEvent.click(installButton);
 
     await waitFor(() => {
-      expect(screen.getByText('正在下载...')).toBeTruthy();
+      expect(screen.getByText('正在准备…')).toBeTruthy();
     });
+  });
+
+  it('shows progress bar with percentage when downloadProgress is provided', async () => {
+    mockInvoke.mockReturnValue(new Promise(() => {}));
+
+    const { rerender } = render(<UpdateDialog {...defaultProps} />);
+
+    fireEvent.click(screen.getByText('立即更新'));
+
+    await waitFor(() => {
+      expect(screen.getByText('正在准备…')).toBeTruthy();
+    });
+
+    rerender(
+      <UpdateDialog
+        {...defaultProps}
+        downloadProgress={{ downloaded: 10 * 1024 * 1024, total: 33 * 1024 * 1024 }}
+      />,
+    );
+
+    // Clicking install again since rerender resets state - check progress text exists
+    expect(screen.getByText(/正在下载/)).toBeTruthy();
   });
 
   it('shows error state and retry option on install failure', async () => {

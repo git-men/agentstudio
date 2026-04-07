@@ -43,16 +43,20 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
     }
 
     setStep('checking');
+    console.log(`[EngineSetupWizard] Checking CLI: ${engine.cliName} (engine=${engine.value})`);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const path = await invoke<string | null>('check_cli_installed', { cliName: engine.cliName });
 
+      console.log(`[EngineSetupWizard] check_cli_installed result: ${path ?? 'null'}`);
       if (path) {
         onReady(path);
       } else {
+        console.warn(`[EngineSetupWizard] CLI not found: ${engine.cliName}`);
         setStep('not_installed');
       }
-    } catch {
+    } catch (err) {
+      console.error(`[EngineSetupWizard] check_cli_installed threw:`, err);
       setStep('not_installed');
     }
   }, [engine, onReady]);
@@ -83,14 +87,17 @@ export const EngineSetupWizard: React.FC<EngineSetupWizardProps> = ({
       setInstallLog(output);
 
       const path = await invoke<string | null>('check_cli_installed', { cliName: engine.cliName });
+      console.log(`[EngineSetupWizard] Post-install check_cli_installed result: ${path ?? 'null'}`);
       if (path) {
         setCliPath(path);
         setStep('ready');
       } else {
+        console.warn(`[EngineSetupWizard] CLI still not found after install: ${engine.cliName}`);
         setErrorMsg(t('engineSetupWizard.cliNotFoundAfterInstall'));
         setStep('install_failed');
       }
     } catch (e) {
+      console.error(`[EngineSetupWizard] Install failed:`, e);
       setErrorMsg(e instanceof Error ? e.message : String(e));
       setStep('install_failed');
     }

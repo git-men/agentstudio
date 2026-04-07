@@ -1,14 +1,15 @@
 /**
  * Claude Utils - Shared utilities for Claude Code SDK integration
- * 
+ *
  * This module provides common functions for interacting with Claude Code SDK,
  * used by both the main agents API and Slack integration.
  */
 
 import { Options } from '@anthropic-ai/claude-agent-sdk';
-import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
+import { SystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
@@ -25,17 +26,134 @@ export type { SessionRef };
 import { resolvePath } from '../config/paths.js';
 import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/autoBootstrap.js';
 
-import { findWindowsNodeDir, resolveWindowsNpmGlobalJsEntry, getSystemClaudeExecutablePath } from './claudeCliExecutable.js';
+import { findWindowsNodeDir, resolveWindowsNpmGlobalJsEntry, getSystemClaudeExecutablePath, getClaudeExecutablePath } from './claudeCliExecutable.js';
 import { readMcpConfig, readEngineMcpConfig } from './mcpConfigReader.js';
 
 export { getSystemClaudeExecutablePath, getClaudeExecutablePath } from './claudeCliExecutable.js';
 export { readMcpConfig } from './mcpConfigReader.js';
 export { getDefaultClaudeVersionEnv } from './claudeDefaultVersionEnv.js';
+/**
+ * Build a list of well-known Node.js global binary directories.
+ * Mirrors the Rust node_manager_bin_dirs() so CLI lookups work even when
+ * the process inherits a minimal PATH (common for macOS GUI apps / Tauri).
+ */
+function getWellKnownNodeBinDirs(): string[] {
+  const home = os.homedir();
+  const dirs: string[] = [];
+
+  const push = (p: string) => dirs.push(p);
+
+  // fnm
+  push(path.join(home, '.local/share/fnm/aliases/default/bin'));
+  try {
+    const fnmVersions = path.join(home, '.local/share/fnm/node-versions');
+    if (fs.existsSync(fnmVersions)) {
+      for (const entry of fs.readdirSync(fnmVersions)) {
+        push(path.join(fnmVersions, entry, 'installation/bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // nvm
+  try {
+    const nvmVersions = path.join(home, '.nvm/versions/node');
+    if (fs.existsSync(nvmVersions)) {
+      for (const entry of fs.readdirSync(nvmVersions)) {
+        push(path.join(nvmVersions, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+  push(path.join(home, '.nvm/current/bin'));
+
+  // volta
+  push(path.join(home, '.volta/bin'));
+
+  // n (tj/n)
+  push(path.join(home, 'n/bin'));
+
+  // asdf
+  push(path.join(home, '.asdf/shims'));
+  try {
+    const asdfNode = path.join(home, '.asdf/installs/nodejs');
+    if (fs.existsSync(asdfNode)) {
+      for (const entry of fs.readdirSync(asdfNode)) {
+        push(path.join(asdfNode, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // mise (formerly rtx)
+  push(path.join(home, '.local/share/mise/shims'));
+  try {
+    const miseNode = path.join(home, '.local/share/mise/installs/node');
+    if (fs.existsSync(miseNode)) {
+      for (const entry of fs.readdirSync(miseNode)) {
+        push(path.join(miseNode, entry, 'bin'));
+      }
+    }
+  } catch { /* ignore */ }
+
+  // pnpm global bin
+  push(path.join(home, '.local/share/pnpm'));
+  push(path.join(home, 'Library/pnpm'));
+
+  // bun global bin
+  push(path.join(home, '.bun/bin'));
+
+  // proto
+  push(path.join(home, '.proto/bin'));
+  push(path.join(home, '.proto/shims'));
+
+  // npm custom prefix
+  push(path.join(home, '.npm-global/bin'));
+  push(path.join(home, '.npm/bin'));
+
+  // System-wide
+  if (process.platform !== 'win32') {
+    push('/usr/local/bin');
+    push('/opt/homebrew/bin');
+  } else {
+    const appdata = process.env.APPDATA;
+    if (appdata) push(path.join(appdata, 'npm'));
+    const localAppData = process.env.LOCALAPPDATA;
+    if (localAppData) push(path.join(localAppData, 'pnpm'));
+    push(path.join(home, 'scoop/shims'));
+    push(path.join(home, '.bun/bin'));
+  }
+
+  return dirs;
+}
+
+/**
+ * Scan well-known directories for a CLI binary (fallback when which/where fails).
+ */
+function findCliInWellKnownDirs(cliName: string): string | null {
+  const isWindows = process.platform === 'win32';
+  for (const dir of getWellKnownNodeBinDirs()) {
+    const candidate = path.join(dir, cliName);
+    if (fs.existsSync(candidate)) {
+      if (isWindows) {
+        const jsEntry = resolveWindowsNpmGlobalJsEntry(candidate);
+        if (jsEntry) return jsEntry;
+      }
+      return candidate;
+    }
+    if (isWindows) {
+      const cmdCandidate = candidate + '.cmd';
+      if (fs.existsSync(cmdCandidate)) {
+        const jsEntry = resolveWindowsNpmGlobalJsEntry(cmdCandidate);
+        if (jsEntry) return jsEntry;
+        return cmdCandidate;
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Build query options for Claude Code SDK
  * This is the enhanced version from agents.ts with full MCP support
- * 
+ *
  * @param agent - Agent configuration
  * @param projectPath - Optional project path override
  * @param mcpTools - Optional MCP tools to enable
@@ -308,16 +426,24 @@ export async function buildQueryOptions(
   const adminBinDir = getAdminCliBinDir();
   let currentPath = queryOptions.env['PATH'] || '';
   const pathSep = process.platform === 'win32' ? ';' : ':';
-  
+
   // On Windows, ensure Node.js directory is first in PATH
-  // This is critical for packaged apps where process.execPath is clawstudio-backend.exe
   if (process.platform === 'win32' && windowsNodeDir && !currentPath.includes(windowsNodeDir)) {
     currentPath = `${windowsNodeDir}${pathSep}${currentPath}`;
   }
-  
+
   if (!currentPath.includes(adminBinDir)) {
     currentPath = `${adminBinDir}${pathSep}${currentPath}`;
   }
+
+  // Augment PATH with well-known Node dirs so SDK child processes can also
+  // find node, npm, and CLI binaries in GUI-launched (minimal PATH) scenarios
+  for (const dir of getWellKnownNodeBinDirs()) {
+    if (fs.existsSync(dir) && !currentPath.includes(dir)) {
+      currentPath = `${currentPath}${pathSep}${dir}`;
+    }
+  }
+
   queryOptions.env['PATH'] = currentPath;
 
   // Normalize proxy variables: if uppercase is set, also set lowercase (and vice versa)
@@ -441,7 +567,7 @@ export async function buildQueryOptions(
     // Use require() instead of dynamic import() for compatibility with Worker threads
     // running under tsx/cjs loader. Dynamic import() bypasses the CJS tsx loader and
     // uses ESM resolution which cannot resolve .js -> .ts file mappings.
-     
+
     const { integrateLAVSMcpServer } = require('../lavs/lavs-integration') as typeof import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }

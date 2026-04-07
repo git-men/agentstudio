@@ -1,8 +1,13 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { isTauri } from '../lib/environment';
 import type { UpdatePayload } from '../components/desktop/UpdateDialog';
 
 type CheckStatus = 'idle' | 'checking' | 'up_to_date' | 'error';
+
+export interface DownloadProgress {
+  downloaded: number;
+  total: number | null;
+}
 
 interface UseUpdateCheckerResult {
   updatePayload: UpdatePayload | null;
@@ -10,26 +15,30 @@ interface UseUpdateCheckerResult {
   checkForUpdate: () => Promise<void>;
   checkStatus: CheckStatus;
   checkError: string | null;
+  downloadProgress: DownloadProgress | null;
 }
 
 /**
  * Listens for the Tauri `update-available` event and exposes the payload.
  *
  * Provides `checkForUpdate()` for manual triggering (settings page, tray menu, etc.).
- * Also listens for `update-check-result` events emitted by the tray-menu handler
- * so the UI can show "already up to date" or error feedback.
+ * Also performs an automatic check on mount via IPC invoke (more reliable than
+ * event-based startup check which can be missed if the listener registers late).
  */
 export function useUpdateChecker(): UseUpdateCheckerResult {
   const [updatePayload, setUpdatePayload] = useState<UpdatePayload | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const [checkStatus, setCheckStatus] = useState<CheckStatus>('idle');
   const [checkError, setCheckError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<DownloadProgress | null>(null);
+  const autoChecked = useRef(false);
 
   useEffect(() => {
     if (!isTauri()) return;
 
     let unlistenUpdate: (() => void) | undefined;
     let unlistenResult: (() => void) | undefined;
+    let unlistenProgress: (() => void) | undefined;
 
     const subscribe = async () => {
       try {
@@ -55,6 +64,16 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
             }
           },
         );
+
+        unlistenProgress = await listen<{ downloaded: number; total: number | null }>(
+          'update-download-progress',
+          (event) => {
+            setDownloadProgress({
+              downloaded: event.payload.downloaded,
+              total: event.payload.total,
+            });
+          },
+        );
       } catch {
         // Non-fatal: if event system is unavailable, silently skip
       }
@@ -65,13 +84,37 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     return () => {
       unlistenUpdate?.();
       unlistenResult?.();
+      unlistenProgress?.();
     };
   }, [dismissed]);
+
+  // Auto-check on mount via IPC invoke — catches updates even if the Rust
+  // startup event was emitted before the listener was ready.
+  useEffect(() => {
+    if (!isTauri() || autoChecked.current) return;
+    autoChecked.current = true;
+
+    const timer = setTimeout(async () => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const result = await invoke<{ version: string; notes: string } | null>('check_update');
+        if (result) {
+          setUpdatePayload(result);
+        }
+      } catch {
+        // Silent — startup auto-check failure is non-fatal
+      }
+    }, 8000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const checkForUpdate = useCallback(async () => {
     if (!isTauri()) return;
     setCheckStatus('checking');
     setCheckError(null);
+    setDownloadProgress(null);
+    setDismissed(false);
     try {
       const { invoke } = await import('@tauri-apps/api/core');
       const result = await invoke<{ version: string; notes: string } | null>('check_update');
@@ -93,5 +136,5 @@ export function useUpdateChecker(): UseUpdateCheckerResult {
     setUpdatePayload(null);
   }, []);
 
-  return { updatePayload, dismiss, checkForUpdate, checkStatus, checkError };
+  return { updatePayload, dismiss, checkForUpdate, checkStatus, checkError, downloadProgress };
 }

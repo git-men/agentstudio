@@ -71,6 +71,11 @@ import { sessionNameService } from './services/sessionNameService.js';
 import gitVersionsRouter from './routes/gitVersions';
 import { initDefaultMarketplace, syncBuiltinMarketplaces } from './services/builtinMarketplaceService.js';
 import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
+import feedbackRouter from './routes/feedback.js';
+import { installLogCapture } from './services/feedbackService.js';
+import { AGENTS_DIR, AGENTSTUDIO_HOME } from './config/paths.js';
+import { pluginPaths } from './services/pluginPaths.js';
+import { getAllVersions, getDefaultVersionId } from './services/claudeVersionStorage.js';
 
 dotenv.config();
 
@@ -143,6 +148,214 @@ process.on('uncaughtExceptionMonitor', (error: Error & { code?: string }, origin
   safeErrorLog('[Monitor] Error:', error);
   safeErrorLog('[Monitor] Stack:', error.stack);
 });
+
+// Install log capture before any other initialization so all output is recorded
+installLogCapture();
+
+/**
+ * Log key runtime state at startup for remote debugging via feedback logs.
+ */
+async function logStartupDiagnostics(): Promise<void> {
+  const fs = await import('fs');
+  const path = await import('path');
+  const os = await import('os');
+
+  console.info('═══════════════════════════════════════════════════════════');
+  console.info('[Diagnostics] Startup environment snapshot');
+  console.info('═══════════════════════════════════════════════════════════');
+
+  // 0. Runtime & engine versions
+  console.info(`[Diagnostics] Node version    = ${process.version}`);
+  console.info(`[Diagnostics] Platform        = ${os.platform()} ${os.release()} (${os.arch()})`);
+  try {
+    const { execSync } = await import('child_process');
+    const cliName = getClaudeCliName();
+    const raw = execSync(`${cliName} --version`, { timeout: 5000, encoding: 'utf-8' });
+    console.info(`[Diagnostics] Engine (${cliName}) = ${raw.trim().split('\n')[0]}`);
+  } catch {
+    console.warn(`[Diagnostics] Engine version   = not found`);
+  }
+
+  // 0a+. PATH & CLI executable diagnostics
+  try {
+    const { execSync: execSyncDiag } = await import('child_process');
+    const pathEnv = process.env.PATH || process.env.Path || '';
+    const pathDirs = pathEnv.split(os.platform() === 'win32' ? ';' : ':');
+    console.info(`[Diagnostics] PATH (${pathDirs.length} entries):`);
+    for (const d of pathDirs.slice(0, 20)) {
+      console.info(`[Diagnostics]   ${d}`);
+    }
+    if (pathDirs.length > 20) {
+      console.info(`[Diagnostics]   ... and ${pathDirs.length - 20} more`);
+    }
+
+    const cliTargets = ['claude', 'claude-internal'];
+    for (const cli of cliTargets) {
+      const whichCmd = os.platform() === 'win32' ? `where ${cli}` : `which ${cli}`;
+      try {
+        const result = execSyncDiag(whichCmd, { timeout: 5000, encoding: 'utf-8' }).trim();
+        console.info(`[Diagnostics] CLI '${cli}' found via ${os.platform() === 'win32' ? 'where' : 'which'}: ${result}`);
+      } catch {
+        console.info(`[Diagnostics] CLI '${cli}' NOT found via ${os.platform() === 'win32' ? 'where' : 'which'}`);
+      }
+
+      if (os.platform() !== 'win32') {
+        for (const shell of ['zsh', 'bash']) {
+          // -lc: login shell (sources ~/.zprofile but NOT ~/.zshrc)
+          try {
+            const result = execSyncDiag(`${shell} -lc 'command -v ${cli}'`, { timeout: 8000, encoding: 'utf-8' }).trim();
+            if (result) {
+              console.info(`[Diagnostics] CLI '${cli}' found via ${shell} login shell: ${result}`);
+              continue;
+            }
+          } catch {
+            console.info(`[Diagnostics] CLI '${cli}' NOT found via ${shell} login shell`);
+          }
+          // -ic: interactive shell (sources ~/.zshrc where version managers add PATH)
+          try {
+            const raw = execSyncDiag(`${shell} -ic 'command -v ${cli}'`, { timeout: 8000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+            const result = raw.split('\n').filter((l: string) => l.trim().startsWith('/')).pop()?.trim();
+            if (result) {
+              console.info(`[Diagnostics] CLI '${cli}' found via ${shell} interactive shell: ${result}`);
+              continue;
+            }
+          } catch {
+            console.info(`[Diagnostics] CLI '${cli}' NOT found via ${shell} interactive shell`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[Diagnostics] CLI detection diagnostics failed:`, err);
+  }
+
+  // 0b. Symlink capability test (critical for Windows)
+  try {
+    const tmpDir = os.tmpdir();
+    const testTarget = path.join(tmpDir, `.as-symlink-test-target-${process.pid}`);
+    const testLink = path.join(tmpDir, `.as-symlink-test-link-${process.pid}`);
+    fs.writeFileSync(testTarget, 'test', 'utf-8');
+    let symlinkOk = false;
+    try {
+      fs.symlinkSync(testTarget, testLink);
+      try { fs.lstatSync(testLink); symlinkOk = true; } catch { /* verify failed */ }
+      try { fs.unlinkSync(testLink); } catch { /* cleanup */ }
+    } catch { /* symlink threw */ }
+    try { fs.unlinkSync(testTarget); } catch { /* cleanup */ }
+    console.info(`[Diagnostics] Symlink support = ${symlinkOk ? '✓ YES' : '✗ NO (will use copy fallback)'}`);
+  } catch {
+    console.warn(`[Diagnostics] Symlink support = unknown (test failed)`);
+  }
+
+  // 1. AGENTSTUDIO_HOME & agents directory
+  console.info(`[Diagnostics] AGENTSTUDIO_HOME = ${AGENTSTUDIO_HOME}`);
+  console.info(`[Diagnostics] AGENTS_DIR       = ${AGENTS_DIR}`);
+
+  if (fs.existsSync(AGENTS_DIR)) {
+    try {
+      const agentEntries = fs.readdirSync(AGENTS_DIR);
+      const mdFiles = agentEntries.filter(e => e.endsWith('.md'));
+      const jsonFiles = agentEntries.filter(e => e.endsWith('.json'));
+      const dirs = agentEntries.filter(e => {
+        try { return fs.lstatSync(path.join(AGENTS_DIR, e)).isDirectory(); } catch { return false; }
+      });
+      console.info(`[Diagnostics] Agents in AGENTS_DIR: ${agentEntries.length} entries (${jsonFiles.length} .json, ${mdFiles.length} .md, ${dirs.length} dirs)`);
+
+      for (const entry of agentEntries) {
+        const fullPath = path.join(AGENTS_DIR, entry);
+        const stat = fs.lstatSync(fullPath);
+        const type = stat.isSymbolicLink() ? 'symlink' : stat.isDirectory() ? 'dir' : 'file';
+        let target = '';
+        if (stat.isSymbolicLink()) {
+          try { target = ` -> ${fs.readlinkSync(fullPath)}`; } catch { target = ' -> (unreadable)'; }
+        }
+        const isMetaAgent = entry.toLowerCase().includes('meta-agent') || entry.toLowerCase().includes('meta_agent');
+        console.info(`[Diagnostics]   ${isMetaAgent ? '★' : '·'} ${entry} [${type}]${target}`);
+      }
+
+      // Explicit check: are expected agent config files loadable?
+      const knownAgentIds = ['meta-agent', 'claude-code'];
+      for (const id of knownAgentIds) {
+        const hasJson = fs.existsSync(path.join(AGENTS_DIR, `${id}.json`));
+        const hasMd = fs.existsSync(path.join(AGENTS_DIR, `${id}.md`));
+        const hasDir = fs.existsSync(path.join(AGENTS_DIR, id)) &&
+          fs.lstatSync(path.join(AGENTS_DIR, id)).isDirectory();
+        const loadable = hasJson || hasMd;
+        console.info(`[Diagnostics]   ${loadable ? '✓' : '✗'} ${id}: .json=${hasJson}, .md=${hasMd}, dir=${hasDir} → ${loadable ? 'LOADABLE' : 'NOT LOADABLE'}`);
+      }
+    } catch (err) {
+      console.error(`[Diagnostics] Failed to read AGENTS_DIR:`, err);
+    }
+  } else {
+    console.warn(`[Diagnostics] AGENTS_DIR does not exist: ${AGENTS_DIR}`);
+  }
+
+  // 2. Default provider (version)
+  try {
+    const defaultId = await getDefaultVersionId();
+    const allVersions = await getAllVersions();
+    const defaultVersion = allVersions.find(v => v.id === defaultId);
+    console.info(`[Diagnostics] Providers (${allVersions.length}):`);
+    for (const v of allVersions) {
+      const isDefault = v.id === defaultId;
+      console.info(`[Diagnostics]   ${isDefault ? '★' : '·'} ${v.name || v.id} (id=${v.id})${isDefault ? ' [DEFAULT]' : ''}`);
+    }
+    if (defaultVersion) {
+      console.info(`[Diagnostics] Default provider: ${defaultVersion.name || defaultVersion.id}`);
+    } else if (defaultId) {
+      console.info(`[Diagnostics] Default provider ID: ${defaultId} (not found in list!)`);
+    } else {
+      console.warn(`[Diagnostics] No default provider set`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read providers:`, err);
+  }
+
+  // 3. Installed marketplaces & plugins
+  try {
+    const marketplaces = pluginPaths.listMarketplaces();
+    console.info(`[Diagnostics] Marketplaces (${marketplaces.length}):`);
+    for (const mp of marketplaces) {
+      const plugins = pluginPaths.listPlugins(mp);
+      console.info(`[Diagnostics]   📦 ${mp} (${plugins.length} plugins): ${plugins.join(', ') || '(empty)'}`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read marketplaces:`, err);
+  }
+
+  // 4. Installed skills
+  try {
+    const skillsDir = pluginPaths.getSkillsDir();
+    console.info(`[Diagnostics] Skills dir: ${skillsDir}`);
+    if (fs.existsSync(skillsDir)) {
+      const skillEntries = fs.readdirSync(skillsDir);
+      const skillDirs = skillEntries.filter(e => {
+        try {
+          const sp = path.join(skillsDir, e);
+          const st = fs.lstatSync(sp);
+          return st.isDirectory() || st.isSymbolicLink();
+        } catch { return false; }
+      });
+      console.info(`[Diagnostics] Skills (${skillDirs.length}):`);
+      for (const s of skillDirs) {
+        const sp = path.join(skillsDir, s);
+        const stat = fs.lstatSync(sp);
+        const type = stat.isSymbolicLink() ? 'symlink' : 'dir';
+        let target = '';
+        if (stat.isSymbolicLink()) {
+          try { target = ` -> ${fs.readlinkSync(sp)}`; } catch { target = ' -> (unreadable)'; }
+        }
+        console.info(`[Diagnostics]   · ${s} [${type}]${target}`);
+      }
+    } else {
+      console.warn(`[Diagnostics] Skills dir does not exist: ${skillsDir}`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read skills:`, err);
+  }
+
+  console.info('═══════════════════════════════════════════════════════════');
+}
 
 // Run directory migrations (from legacy layout to unified ~/.agentstudio/)
 runMigrations();
@@ -275,7 +488,7 @@ const app: express.Express = express();
   }
 
   // Swagger API docs (before helmet to avoid CSP issues with Swagger UI assets)
-  setupSwagger(app);
+  await setupSwagger(app);
 
   // Middleware
   app.use(helmet({
@@ -566,6 +779,13 @@ const app: express.Express = express();
     console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
   }
 
+  // 7. Startup Diagnostics: log key state for remote debugging via feedback logs
+  try {
+    await logStartupDiagnostics();
+  } catch (error) {
+    console.error('[Diagnostics] Error during startup diagnostics:', error);
+  }
+
   // Static files - serve embedded frontend (for npm package) or development frontend
   // Check both npm package location (./public) and development location (../../frontend/dist)
   const fs = await import('fs');
@@ -748,6 +968,7 @@ const app: express.Express = express();
   app.use('/api/platform-hooks', authMiddleware, platformHooksRouter); // Platform hooks (engine-agnostic)
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
   app.use('/media', mediaRouter); // Public: required for HTML preview (iframe loads images/CSS/JS dynamically)
+  app.use('/api/feedback', authMiddleware, feedbackRouter); // Feedback / log upload
 
   // Error handling
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

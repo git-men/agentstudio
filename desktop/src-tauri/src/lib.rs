@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use std::path::PathBuf;
 
 use tauri::{AppHandle, Emitter, Manager, RunEvent};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState};
@@ -32,8 +32,10 @@ pub struct AppState {
     pub backend_port: Mutex<Option<u16>>,
     /// Handle to the running sidecar child process so we can kill it on exit.
     pub sidecar_child: Arc<Mutex<Option<CommandChild>>>,
-    /// Cached pending update (populated by background update check task).
+    /// Cached pending update from Tauri updater.
     pub pending_update: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Flag to cancel an in-progress download.
+    pub download_cancelled: AtomicBool,
     /// Engine/SDK configuration selected at launch (prod mode only).
     pub launch_config: Mutex<Option<LaunchConfig>>,
 }
@@ -44,6 +46,12 @@ pub struct AppState {
 pub struct UpdateInfo {
     pub version: String,
     pub notes: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct UpdateDownloadProgress {
+    pub downloaded: usize,
+    pub total: Option<u64>,
 }
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
@@ -111,13 +119,17 @@ async fn check_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<Option<UpdateInfo>, String> {
+    log::info!("Checking for updates...");
+
     let updater = app
         .updater_builder()
+        .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
-    match updater.check().await.map_err(|e| e.to_string())? {
-        Some(update) => {
+    match updater.check().await {
+        Ok(Some(update)) => {
+            log::info!("Update available: v{}", update.version);
             let info = UpdateInfo {
                 version: update.version.clone(),
                 notes: update.body.clone().unwrap_or_default(),
@@ -125,26 +137,79 @@ async fn check_update(
             *lock_or_recover(&state.pending_update) = Some(update);
             Ok(Some(info))
         }
-        None => Ok(None),
+        Ok(None) => {
+            log::info!("Already up to date");
+            Ok(None)
+        }
+        Err(e) => {
+            log::warn!("Update check failed: {e}");
+            Err(e.to_string())
+        }
     }
 }
 
 /// Download and install the cached pending update, then restart the app.
+/// Split into download + install so we can honour cancel_update between the two phases.
 #[tauri::command]
 async fn install_update(
     app: AppHandle,
     state: tauri::State<'_, AppState>,
 ) -> Result<(), String> {
+    state.download_cancelled.store(false, Ordering::SeqCst);
+
     let update = lock_or_recover(&state.pending_update)
         .take()
         .ok_or_else(|| "No pending update available".to_string())?;
 
-    update
-        .download_and_install(|_chunk_length, _content_length| {}, || {})
+    let emitter = app.clone();
+    let cancel_handle = app.clone();
+    let mut phase_downloaded: usize = 0;
+    let mut active_total: u64 = 0;
+
+    let bytes = update
+        .download(
+            move |chunk_length, content_length| {
+                let cl = match content_length {
+                    Some(cl) => cl,
+                    None => {
+                        phase_downloaded += chunk_length;
+                        return;
+                    }
+                };
+
+                if cl > active_total {
+                    active_total = cl;
+                    phase_downloaded = 0;
+                }
+
+                if cl == active_total {
+                    phase_downloaded += chunk_length;
+                    let _ = emitter.emit(
+                        "update-download-progress",
+                        UpdateDownloadProgress {
+                            downloaded: phase_downloaded,
+                            total: Some(active_total),
+                        },
+                    );
+                }
+            },
+            || {},
+        )
         .await
         .map_err(|e| e.to_string())?;
 
+    if cancel_handle.state::<AppState>().download_cancelled.load(Ordering::SeqCst) {
+        return Err("Update cancelled by user".to_string());
+    }
+
+    update.install(bytes).map_err(|e| e.to_string())?;
     app.restart();
+    Ok(())
+}
+
+#[tauri::command]
+fn cancel_update(state: tauri::State<'_, AppState>) {
+    state.download_cancelled.store(true, Ordering::SeqCst);
 }
 
 /// Send a native system notification.
@@ -227,6 +292,14 @@ fn node_manager_bin_dirs() -> Vec<std::path::PathBuf> {
     // n (tj/n)
     dirs.push(h.join("n/bin"));
 
+    // pnpm global bin
+    dirs.push(h.join(".local/share/pnpm"));
+    dirs.push(h.join("Library/pnpm"));
+
+    // npm custom prefix (common: ~/.npm-global)
+    dirs.push(h.join(".npm-global/bin"));
+    dirs.push(h.join(".npm/bin"));
+
     // Global npm / homebrew
     dirs.push(std::path::PathBuf::from("/usr/local/bin"));
     dirs.push(std::path::PathBuf::from("/opt/homebrew/bin"));
@@ -239,69 +312,149 @@ fn node_manager_bin_dirs() -> Vec<std::path::PathBuf> {
 /// manager paths, (4) login shell lookup.
 #[tauri::command]
 async fn check_cli_installed(cli_name: String) -> Option<String> {
+    log::info!("[check_cli_installed] Looking for CLI: {}", cli_name);
+
     if !cli_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        log::warn!("[check_cli_installed] Invalid CLI name: {}", cli_name);
         return None;
+    }
+
+    // Log inherited PATH for diagnostics
+    if let Ok(path_env) = std::env::var("PATH") {
+        log::info!("[check_cli_installed] Inherited PATH: {}", path_env);
+    } else {
+        log::warn!("[check_cli_installed] PATH env var not set");
     }
 
     // 1. Prefer the binary bundled alongside this executable (Tauri externalBin).
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let bundled = exe_dir.join(&cli_name);
+            log::info!("[check_cli_installed] Step 1: Checking bundled at {:?} (exists={})", bundled, bundled.exists());
             if bundled.exists() {
                 let is_stub = tokio::fs::read_to_string(&bundled)
                     .await
                     .map(|s| s.contains(STUB_SENTINEL))
                     .unwrap_or(false);
                 if !is_stub {
+                    log::info!("[check_cli_installed] Found bundled binary: {:?}", bundled);
                     return Some(bundled.to_string_lossy().to_string());
+                } else {
+                    log::info!("[check_cli_installed] Bundled binary is a stub, skipping");
                 }
             }
         }
     }
 
     // 2. Try the process-inherited PATH (works when launched from terminal).
+    // `where` on Windows may return multiple lines; take only the first.
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
-    if let Ok(output) = tokio::process::Command::new(cmd)
+    log::info!("[check_cli_installed] Step 2: Running `{} {}`", cmd, cli_name);
+    match tokio::process::Command::new(cmd)
         .arg(&cli_name)
         .output()
         .await
     {
-        if output.status.success() {
-            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !path.is_empty() {
-                return Some(path);
+        Ok(output) => {
+            if output.status.success() {
+                let raw = String::from_utf8_lossy(&output.stdout);
+                let path = raw.lines().next().unwrap_or("").trim().to_string();
+                if !path.is_empty() {
+                    log::info!("[check_cli_installed] Found via {}: {}", cmd, path);
+                    return Some(path);
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log::info!("[check_cli_installed] `{} {}` returned non-zero (status={:?}, stderr={})", cmd, cli_name, output.status.code(), stderr.trim());
             }
+        }
+        Err(e) => {
+            log::warn!("[check_cli_installed] Failed to run `{} {}`: {}", cmd, cli_name, e);
         }
     }
 
     // 3. Scan well-known node version manager directories (fnm, nvm, volta, n).
     //    This is the most reliable method for GUI-launched apps where the
     //    inherited PATH is minimal and login shells don't include fnm multishell.
-    for dir in node_manager_bin_dirs() {
+    let well_known_dirs = node_manager_bin_dirs();
+    log::info!("[check_cli_installed] Step 3: Scanning {} well-known dirs", well_known_dirs.len());
+    for dir in &well_known_dirs {
         let candidate = dir.join(&cli_name);
-        if candidate.exists() {
+        let exists = candidate.exists();
+        if exists {
+            log::info!("[check_cli_installed] Found in well-known dir: {:?}", candidate);
             return Some(candidate.to_string_lossy().to_string());
         }
     }
+    log::info!("[check_cli_installed] Not found in any well-known dir. Dirs checked: {:?}", well_known_dirs);
 
-    // 4. Last resort: ask a user's default login shell (zsh on modern macOS).
+    // 4. Ask user's login shell (zsh -lc sources ~/.zprofile but NOT ~/.zshrc).
+    // 5. Ask user's interactive shell (zsh -ic sources ~/.zshrc where version
+    //    managers like fnm/nvm/pnpm typically add PATH entries).
     if cfg!(not(target_os = "windows")) {
-        for shell in &["zsh", "bash", "sh"] {
-            if let Ok(output) = tokio::process::Command::new(shell)
-                .args(["-lc", &format!("command -v {}", cli_name)])
+        let shell_cmd = format!("command -v {}", cli_name);
+
+        // 4a. Login shells first (fast, no .zshrc overhead)
+        log::info!("[check_cli_installed] Step 4: Trying login shells (-lc)");
+        for shell in &["zsh", "bash"] {
+            match tokio::process::Command::new(shell)
+                .args(["-lc", &shell_cmd])
                 .output()
                 .await
             {
-                if output.status.success() {
+                Ok(output) if output.status.success() => {
                     let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
                     if !path.is_empty() {
+                        log::info!("[check_cli_installed] Found via {} -lc: {}", shell, path);
                         return Some(path);
                     }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::info!("[check_cli_installed] `{} -lc` failed (status={:?}, stderr={})", shell, output.status.code(), stderr.chars().take(200).collect::<String>());
+                }
+                Err(e) => {
+                    log::info!("[check_cli_installed] Shell {} not available: {}", shell, e);
+                }
+            }
+        }
+
+        // 4b. Interactive shells (-ic sources ~/.zshrc / ~/.bashrc)
+        log::info!("[check_cli_installed] Step 5: Trying interactive shells (-ic)");
+        for shell in &["zsh", "bash"] {
+            match tokio::process::Command::new(shell)
+                .args(["-ic", &shell_cmd])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+            {
+                Ok(output) if output.status.success() => {
+                    let raw = String::from_utf8_lossy(&output.stdout);
+                    let path = raw.lines()
+                        .filter(|l| !l.is_empty() && l.starts_with('/'))
+                        .last()
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    if !path.is_empty() {
+                        log::info!("[check_cli_installed] Found via {} -ic: {}", shell, path);
+                        return Some(path);
+                    }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::info!("[check_cli_installed] `{} -ic` failed (status={:?}, stderr={})", shell, output.status.code(), stderr.chars().take(200).collect::<String>());
+                }
+                Err(e) => {
+                    log::info!("[check_cli_installed] Shell {} -ic not available: {}", shell, e);
                 }
             }
         }
     }
 
+    log::warn!("[check_cli_installed] {} not found via any method", cli_name);
     None
 }
 
@@ -721,7 +874,8 @@ async fn spawn_backend_sidecar_inner(app: AppHandle, close_splash: bool) {
         let sys_path = std::env::var("PATH")
             .unwrap_or_else(|_| "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin".to_string());
         path_parts.push(sys_path);
-        env_map.insert("PATH".to_string(), path_parts.join(":"));
+        let path_sep = if cfg!(target_os = "windows") { ";" } else { ":" };
+        env_map.insert("PATH".to_string(), path_parts.join(path_sep));
         sidecar_cmd = sidecar_cmd.envs(env_map);
     }
 
@@ -947,36 +1101,18 @@ fn start_update_check(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_secs(5)).await;
 
-        log::info!("Checking for updates...");
-
-        let updater = match app.updater_builder().build() {
-            Ok(u) => u,
-            Err(e) => {
-                log::warn!("Failed to build updater: {e}");
-                return;
-            }
-        };
-
-        match updater.check().await {
-            Ok(Some(update)) => {
-                let info = UpdateInfo {
-                    version: update.version.clone(),
-                    notes: update.body.clone().unwrap_or_default(),
-                };
-                log::info!("Update available: v{}", info.version);
-
-                let state = app.state::<AppState>();
-                *lock_or_recover(&state.pending_update) = Some(update);
-
+        match tray_check_update(&app).await {
+            Ok(Some(info)) => {
+                log::info!("Update available (startup): v{}", info.version);
                 if let Err(e) = app.emit("update-available", &info) {
                     log::warn!("Failed to emit update-available: {e}");
                 }
             }
             Ok(None) => {
-                log::info!("No updates available");
+                log::info!("No updates available (startup)");
             }
             Err(e) => {
-                log::warn!("Update check failed: {e}");
+                log::warn!("Startup update check failed: {e}");
             }
         }
     });
@@ -1006,6 +1142,36 @@ fn notify_start_failed(app: &AppHandle, reason: &str) {
     let _ = app.emit("backend-start-failed", reason);
 }
 
+/// Tray-menu / startup update check using the Tauri built-in updater.
+async fn tray_check_update(app: &AppHandle) -> Result<Option<UpdateInfo>, String> {
+    let updater = app
+        .updater_builder()
+        .timeout(Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    match updater.check().await {
+        Ok(Some(update)) => {
+            log::info!("Update available (tray): v{}", update.version);
+            let info = UpdateInfo {
+                version: update.version.clone(),
+                notes: update.body.clone().unwrap_or_default(),
+            };
+            let state = app.state::<AppState>();
+            *lock_or_recover(&state.pending_update) = Some(update);
+            Ok(Some(info))
+        }
+        Ok(None) => {
+            log::info!("Already up to date (tray)");
+            Ok(None)
+        }
+        Err(e) => {
+            log::warn!("Tray update check failed: {e}");
+            Err(e.to_string())
+        }
+    }
+}
+
 /// Build and register the system tray icon with menu.
 fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open_item = MenuItem::with_id(app, "open", "打开 ClawStudio", true, None::<&str>)?;
@@ -1029,23 +1195,8 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                 let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
                     log::info!("Manual update check from tray menu");
-                    let updater = match handle.updater_builder().build() {
-                        Ok(u) => u,
-                        Err(e) => {
-                            log::warn!("Failed to build updater: {e}");
-                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
-                            return;
-                        }
-                    };
-                    match updater.check().await {
-                        Ok(Some(update)) => {
-                            let info = UpdateInfo {
-                                version: update.version.clone(),
-                                notes: update.body.clone().unwrap_or_default(),
-                            };
-                            log::info!("Update available: v{}", info.version);
-                            let state = handle.state::<AppState>();
-                            *lock_or_recover(&state.pending_update) = Some(update);
+                    match tray_check_update(&handle).await {
+                        Ok(Some(info)) => {
                             let _ = handle.emit("update-available", &info);
                             if let Some(main) = handle.get_webview_window("main") {
                                 let _ = main.show();
@@ -1053,12 +1204,10 @@ fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>>
                             }
                         }
                         Ok(None) => {
-                            log::info!("No updates available (manual check)");
                             let _ = handle.emit("update-check-result", serde_json::json!({"status": "up_to_date"}));
                         }
                         Err(e) => {
-                            log::warn!("Update check failed: {e}");
-                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": format!("{e}")}));
+                            let _ = handle.emit("update-check-result", serde_json::json!({"status": "error", "message": e}));
                         }
                     }
                 });
@@ -1129,6 +1278,7 @@ pub fn run() {
             backend_port: Mutex::new(None),
             sidecar_child: sidecar_child_arc,
             pending_update: Mutex::new(None),
+            download_cancelled: AtomicBool::new(false),
             launch_config: Mutex::new(None),
         })
         // Register IPC command handlers
@@ -1139,6 +1289,7 @@ pub fn run() {
             quit_app,
             check_update,
             install_update,
+            cancel_update,
             send_notification,
             check_domain_accessible,
             check_cli_installed,

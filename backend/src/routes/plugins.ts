@@ -48,14 +48,19 @@ router.post('/marketplaces', async (req, res) => {
   try {
     const request: MarketplaceAddRequest = req.body;
 
+    console.info(`[AddMarketplace] ▶ Request received — name=${JSON.stringify(request.name)}, type=${JSON.stringify(request.type)}, source=${JSON.stringify(request.source)}, branch=${JSON.stringify(request.branch)}`);
+    console.info(`[AddMarketplace]   Full form data: ${JSON.stringify(request)}`);
+
     // Validate request
     if (!request.name || !request.type || !request.source) {
+      console.warn(`[AddMarketplace] ✗ Validation failed: missing required fields — name=${!!request.name}, type=${!!request.type}, source=${!!request.source}`);
       return res.status(400).json({
         error: 'Missing required fields: name, type, source',
       });
     }
 
     if (!VALID_MARKETPLACE_TYPES.includes(request.type)) {
+      console.warn(`[AddMarketplace] ✗ Validation failed: invalid type=${JSON.stringify(request.type)}, allowed=${VALID_MARKETPLACE_TYPES.join(', ')}`);
       return res.status(400).json({
         error: `Invalid type. Must be one of: ${VALID_MARKETPLACE_TYPES.join(', ')}`,
       });
@@ -71,16 +76,48 @@ router.post('/marketplaces', async (req, res) => {
     // Note: archive type has been removed. COS downloads should be handled
     // externally (e.g., by as-mate) and treated as local type.
 
+    console.info(`[AddMarketplace] Calling pluginInstaller.addMarketplace...`);
     const result = await pluginInstaller.addMarketplace(request);
 
     if (!result.success) {
+      console.error(`[AddMarketplace] ✗ addMarketplace failed: ${result.error}`);
       return res.status(400).json({
         error: result.error,
       });
     }
 
+    console.info(`[AddMarketplace] ✓ Marketplace added — pluginCount=${result.pluginCount}, agentCount=${result.agentCount}`);
+
     // Get marketplace info
     const marketplaceName = request.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-');
+
+    // Log directory structure for diagnostics
+    const mktPath = pluginPaths.getMarketplacePath(marketplaceName);
+    try {
+      const fs = await import('fs');
+      const path = await import('path');
+      if (fs.existsSync(mktPath)) {
+        const topLevel = fs.readdirSync(mktPath);
+        console.info(`[AddMarketplace] Marketplace dir contents (${mktPath}): ${topLevel.join(', ')}`);
+        const pluginsSubdir = path.join(mktPath, 'plugins');
+        if (fs.existsSync(pluginsSubdir)) {
+          const pluginDirs = fs.readdirSync(pluginsSubdir);
+          console.info(`[AddMarketplace] plugins/ subdir contents: ${pluginDirs.join(', ')}`);
+        } else {
+          console.info(`[AddMarketplace] No plugins/ subdir found`);
+        }
+        const manifestPath = path.join(mktPath, '.claude-plugin', 'marketplace.json');
+        if (fs.existsSync(manifestPath)) {
+          console.info(`[AddMarketplace] marketplace.json found at ${manifestPath}`);
+        } else {
+          console.info(`[AddMarketplace] No marketplace.json at ${manifestPath}`);
+        }
+      } else {
+        console.warn(`[AddMarketplace] ✗ Marketplace dir does NOT exist: ${mktPath}`);
+      }
+    } catch (dirErr) {
+      console.warn(`[AddMarketplace] Dir inspection failed:`, dirErr);
+    }
 
     // Auto-install all plugins and import agents from the new marketplace
     let pluginsInstalled = 0;
@@ -89,6 +126,7 @@ router.post('/marketplaces', async (req, res) => {
     try {
       cleanBeforeInstall();
       const pluginNames = pluginPaths.listPlugins(marketplaceName);
+      console.info(`[AddMarketplace] listPlugins('${marketplaceName}') returned: [${pluginNames.join(', ')}] (${pluginNames.length} items)`);
       for (const pluginName of pluginNames) {
         try {
           const installResult = await pluginInstaller.installPlugin({

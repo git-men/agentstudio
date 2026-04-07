@@ -22,6 +22,7 @@ import {
 import type { PlatformHook, HookPackageEntry } from '../types/platformHooks';
 import { HOOKS_SCRIPTS_DIR } from '../config/paths';
 import { HookStorage } from './hooks/hookStorage';
+import { robustSymlinkSync } from '../utils/fileUtils.js';
 
 const execAsync = promisify(exec);
 
@@ -111,12 +112,14 @@ class PluginInstaller {
   async addMarketplace(request: MarketplaceAddRequest): Promise<MarketplaceSyncResult> {
     const { name, type, source, branch = 'main', cosConfig, autoUpdate } = request;
 
-    // Generate directory name from marketplace name
     const marketplaceName = this.sanitizeName(name);
     const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
 
-    // Check if marketplace already exists
+    console.info(`[PluginInstaller] addMarketplace — sanitizedName=${marketplaceName}, path=${marketplacePath}`);
+    console.info(`[PluginInstaller]   type=${type}, source=${source}, branch=${branch}`);
+
     if (fs.existsSync(marketplacePath)) {
+      console.warn(`[PluginInstaller] ✗ Marketplace already exists at ${marketplacePath}`);
       return {
         success: false,
         error: `Marketplace '${marketplaceName}' already exists`,
@@ -126,16 +129,23 @@ class PluginInstaller {
 
     try {
       if (type === 'git' || type === 'github') {
+        console.info(`[PluginInstaller] Cloning marketplace (isGithub=${type === 'github'})...`);
         await this.cloneMarketplace(source, marketplacePath, branch, type === 'github');
+        console.info(`[PluginInstaller] ✓ Clone completed`);
       } else if (type === 'local') {
+        console.info(`[PluginInstaller] Copying local marketplace from ${source}...`);
         await this.copyLocalMarketplace(source, marketplacePath);
+        console.info(`[PluginInstaller] ✓ Local copy completed`);
       } else if (type === 'cos') {
+        console.info(`[PluginInstaller] Downloading from COS: ${source}...`);
         await this.downloadFromCOS(source, marketplacePath, cosConfig);
+        console.info(`[PluginInstaller] ✓ COS download completed`);
       } else if (type === 'archive') {
+        console.info(`[PluginInstaller] Downloading archive: ${source}...`);
         await this.downloadAndExtractArchive(source, marketplacePath);
+        console.info(`[PluginInstaller] ✓ Archive extraction completed`);
       }
 
-      // Save marketplace metadata for sync operations
       await this.saveMarketplaceMetadata(marketplacePath, {
         type,
         source,
@@ -143,14 +153,16 @@ class PluginInstaller {
         cosConfig: type === 'cos' ? cosConfig : undefined,
         autoUpdate: autoUpdate ? {
           enabled: autoUpdate.enabled,
-          checkInterval: autoUpdate.checkInterval || 60, // Default: 1 hour
+          checkInterval: autoUpdate.checkInterval || 60,
         } : undefined,
         createdAt: new Date().toISOString(),
       });
 
-      // Count plugins and agents
       const pluginNames = pluginPaths.listPlugins(marketplaceName);
       const agentCount = await this.countMarketplaceAgents(marketplacePath);
+
+      console.info(`[PluginInstaller] ✓ addMarketplace success — ${pluginNames.length} plugins found, ${agentCount} agents found`);
+      console.info(`[PluginInstaller]   Plugins: ${pluginNames.join(', ') || '(none)'}`);
 
       return {
         success: true,
@@ -159,8 +171,14 @@ class PluginInstaller {
         syncedAt: new Date().toISOString(),
       };
     } catch (error) {
-      // Cleanup on error
+      console.error(`[PluginInstaller] ✗ addMarketplace failed:`, error);
+      console.error(`[PluginInstaller]   Error type: ${error?.constructor?.name}, message: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.stack) {
+        console.error(`[PluginInstaller]   Stack: ${error.stack}`);
+      }
+
       if (fs.existsSync(marketplacePath)) {
+        console.info(`[PluginInstaller]   Cleaning up: removing ${marketplacePath}`);
         await this.removeDirectory(marketplacePath);
       }
 
@@ -570,15 +588,22 @@ class PluginInstaller {
     if (fs.existsSync(scriptsSourceDir)) {
       fs.mkdirSync(path.dirname(scriptsTargetDir), { recursive: true });
 
-      // Create symlink for the scripts directory
-      if (fs.existsSync(scriptsTargetDir)) {
-        const stats = fs.lstatSync(scriptsTargetDir);
-        if (stats.isSymbolicLink()) {
+      // Clean up existing path (symlink or copy-fallback dir)
+      let existingStats: import('fs').Stats | null = null;
+      try {
+        existingStats = fs.lstatSync(scriptsTargetDir);
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+      if (existingStats) {
+        if (existingStats.isSymbolicLink() || existingStats.isFile()) {
           fs.unlinkSync(scriptsTargetDir);
+        } else if (existingStats.isDirectory()) {
+          fs.rmSync(scriptsTargetDir, { recursive: true, force: true });
         }
       }
-      fs.symlinkSync(scriptsSourceDir, scriptsTargetDir);
-      console.log(`[HookInstaller] Created scripts symlink: ${scriptsTargetDir} -> ${scriptsSourceDir}`);
+      const method = robustSymlinkSync(scriptsSourceDir, scriptsTargetDir);
+      console.log(`[HookInstaller] Created scripts ${method}: ${scriptsTargetDir} -> ${scriptsSourceDir}`);
     }
 
     for (const component of components.hooks) {
@@ -883,7 +908,7 @@ class PluginInstaller {
       }
     }
 
-    console.log(`Downloading COS marketplace from ${archiveUrl}`);
+    console.info(`[COS] Resolved archive URL: ${archiveUrl} (original source: ${source})`);
     await this.downloadAndExtractArchive(archiveUrl, targetPath);
   }
 
@@ -899,8 +924,7 @@ class PluginInstaller {
     const archivePath = path.join(tempDir, isZip ? 'archive.zip' : 'archive.tar.gz');
 
     try {
-      // Download archive
-      console.log(`Downloading archive from ${url}`);
+      console.info(`[ArchiveExtract] Downloading archive from ${url}`);
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -916,38 +940,44 @@ class PluginInstaller {
       // @ts-ignore - Node.js Readable works with pipeline
       await pipeline(response.body, fileStream);
 
-      console.log(`Downloaded archive to ${archivePath}`);
+      const archiveSize = fs.statSync(archivePath).size;
+      console.info(`[ArchiveExtract] Downloaded ${(archiveSize / 1024 / 1024).toFixed(2)} MB to ${archivePath}`);
 
       // Create target directory
       fs.mkdirSync(targetPath, { recursive: true });
 
       // Extract archive
       if (isZip) {
-        // Use unzip command
         await execAsync(`unzip -o "${archivePath}" -d "${targetPath}"`);
       } else {
-        // Use tar command
         await execAsync(`tar -xzf "${archivePath}" -C "${targetPath}" --strip-components=1`);
       }
 
-      console.log(`Extracted archive to ${targetPath}`);
+      console.info(`[ArchiveExtract] Extracted archive to ${targetPath}`);
 
       // Check if extraction created a single subdirectory and flatten if needed
       const entries = fs.readdirSync(targetPath);
+      console.info(`[ArchiveExtract] Extracted entries: ${entries.join(', ')} (${entries.length} items)`);
+
       if (entries.length === 1) {
         const singleEntry = path.join(targetPath, entries[0]);
         if (fs.statSync(singleEntry).isDirectory()) {
-          // Move contents up one level
+          console.info(`[ArchiveExtract] Single top-level dir '${entries[0]}', flattening`);
           const subEntries = fs.readdirSync(singleEntry);
           for (const subEntry of subEntries) {
             const srcPath = path.join(singleEntry, subEntry);
             const destPath = path.join(targetPath, subEntry);
             fs.renameSync(srcPath, destPath);
           }
-          // Remove empty directory
           fs.rmdirSync(singleEntry);
         }
       }
+
+      // Log final structure for diagnostics
+      const finalEntries = fs.readdirSync(targetPath);
+      const hasPluginsDir = finalEntries.includes('plugins');
+      const hasClaudePlugin = finalEntries.includes('.claude-plugin');
+      console.info(`[ArchiveExtract] Final structure: ${finalEntries.length} items, plugins/=${hasPluginsDir}, .claude-plugin/=${hasClaudePlugin}`);
     } finally {
       // Cleanup temp directory
       await this.removeDirectory(tempDir);

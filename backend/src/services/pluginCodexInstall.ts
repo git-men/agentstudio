@@ -11,6 +11,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { parse as parseToml, stringify as stringifyToml } from 'smol-toml';
 import type { ParsedPlugin } from '../types/plugins.js';
+import { robustSymlinkSync } from '../utils/fileUtils.js';
 import type { PluginInstaller } from './pluginInstallStrategy.js';
 
 function getCodexDir(): string {
@@ -204,19 +205,26 @@ class PluginCodexInstall implements PluginInstaller {
 
   private async createSymlink(sourcePath: string, symlinkPath: string, type: string): Promise<void> {
     try {
-      if (fs.existsSync(symlinkPath)) {
-        const stats = fs.lstatSync(symlinkPath);
-        if (stats.isSymbolicLink()) {
+      let existingStats: fs.Stats | null = null;
+      try {
+        existingStats = fs.lstatSync(symlinkPath);
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+      if (existingStats) {
+        if (existingStats.isSymbolicLink()) {
           const existingTarget = fs.readlinkSync(symlinkPath);
           if (existingTarget === sourcePath) return;
           fs.unlinkSync(symlinkPath);
-        } else {
-          throw new Error(`File already exists and is not a symlink: ${symlinkPath}`);
+        } else if (existingStats.isFile()) {
+          fs.unlinkSync(symlinkPath);
+        } else if (existingStats.isDirectory()) {
+          fs.rmSync(symlinkPath, { recursive: true, force: true });
         }
       }
       ensureDir(path.dirname(symlinkPath));
-      fs.symlinkSync(sourcePath, symlinkPath);
-      console.log(`[PluginCodexInstall] Created ${type} symlink: ${symlinkPath} -> ${sourcePath}`);
+      const method = robustSymlinkSync(sourcePath, symlinkPath);
+      console.log(`[PluginCodexInstall] Created ${type} ${method}: ${symlinkPath} -> ${sourcePath}`);
     } catch (error) {
       console.error(`[PluginCodexInstall] Failed to create ${type} symlink:`, error);
       throw error;
@@ -225,15 +233,23 @@ class PluginCodexInstall implements PluginInstaller {
 
   private async removeSymlink(symlinkPath: string, type: string): Promise<void> {
     try {
-      if (fs.existsSync(symlinkPath)) {
-        const stats = fs.lstatSync(symlinkPath);
-        if (stats.isSymbolicLink()) {
+      let stats: fs.Stats | null = null;
+      try {
+        stats = fs.lstatSync(symlinkPath);
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+      if (stats) {
+        if (stats.isSymbolicLink() || stats.isFile()) {
           fs.unlinkSync(symlinkPath);
-          console.log(`[PluginCodexInstall] Removed ${type} symlink: ${symlinkPath}`);
+          console.log(`[PluginCodexInstall] Removed ${type}: ${symlinkPath}`);
+        } else if (stats.isDirectory()) {
+          fs.rmSync(symlinkPath, { recursive: true, force: true });
+          console.log(`[PluginCodexInstall] Removed ${type} copy-fallback dir: ${symlinkPath}`);
         }
       }
     } catch (error) {
-      console.error(`[PluginCodexInstall] Failed to remove ${type} symlink:`, error);
+      console.error(`[PluginCodexInstall] Failed to remove ${type}:`, error);
     }
   }
 }

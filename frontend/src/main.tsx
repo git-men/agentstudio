@@ -5,6 +5,9 @@ import './styles/mobile.css'
 import App from './App.tsx'
 import { i18nReady } from './i18n'
 import './i18n/types'
+import { installFrontendLogCapture } from './lib/logCapture'
+
+installFrontendLogCapture();
 
 i18nReady.then(() => {
   createRoot(document.getElementById('root')!).render(
