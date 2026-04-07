@@ -751,6 +751,23 @@ const app: express.Express = express();
 
   // Error handling
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err.type === 'entity.parse.failed') {
+      const isA2ARoute = req.originalUrl.startsWith('/a2a/');
+      if (isA2ARoute) {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error: invalid JSON in request body' },
+        });
+      } else {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Invalid JSON in request body',
+        });
+      }
+      return;
+    }
+
     console.error('Error:', err);
     res.status(500).json({
       error: 'Internal server error',

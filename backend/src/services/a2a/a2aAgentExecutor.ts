@@ -50,12 +50,14 @@ function detectEngineType(agentType: string): EngineType {
 export class A2AStandardAgentExecutor implements AgentExecutor {
   private agentType: string;
   private workingDirectory: string;
+  private model?: string;
   private agentStorage: AgentStorage;
   private activeTasks = new Map<string, AbortController>();
 
-  constructor(agentType: string, workingDirectory: string) {
+  constructor(agentType: string, workingDirectory: string, model?: string) {
     this.agentType = agentType;
     this.workingDirectory = workingDirectory;
+    this.model = model;
     this.agentStorage = new AgentStorage();
   }
 
@@ -111,6 +113,7 @@ export class A2AStandardAgentExecutor implements AgentExecutor {
     const aguiConfig: AguiA2AConfig = {
       engineType,
       workspace: this.workingDirectory,
+      model: this.model,
       sessionId: contextId,
       timeout: 600000,
       requestId: `a2a-jsonrpc-${Date.now()}`,
@@ -190,6 +193,8 @@ export class A2AStandardAgentExecutor implements AgentExecutor {
       },
       this.workingDirectory,
       mcpTools.length > 0 ? mcpTools : undefined,
+      undefined,
+      this.model,
     );
     queryOptions.includePartialMessages = false;
 

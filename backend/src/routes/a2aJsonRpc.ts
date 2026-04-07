@@ -187,8 +187,9 @@ async function handleMessageSend(
   }
 
   const normalizedParams = ensureMessageFields(params);
+  const model = params?.model as string | undefined;
 
-  const executor = new A2AStandardAgentExecutor(ctx.agentType, ctx.workingDirectory);
+  const executor = new A2AStandardAgentExecutor(ctx.agentType, ctx.workingDirectory, model);
   const taskStore = new A2ATaskStoreAdapter(ctx.workingDirectory);
 
   const agentCard = buildMinimalAgentCard(ctx);
@@ -216,6 +217,7 @@ async function handleMessageStream(
   }
 
   const normalizedParams = ensureMessageFields(params);
+  const model = params?.model as string | undefined;
 
   // Set up SSE
   res.setHeader('Content-Type', 'text/event-stream');
@@ -235,7 +237,7 @@ async function handleMessageStream(
   }, 15000);
 
   try {
-    const executor = new A2AStandardAgentExecutor(ctx.agentType, ctx.workingDirectory);
+    const executor = new A2AStandardAgentExecutor(ctx.agentType, ctx.workingDirectory, model);
     const taskStore = new A2ATaskStoreAdapter(ctx.workingDirectory);
     const agentCard = buildMinimalAgentCard(ctx);
     const handler = new DefaultRequestHandler(agentCard as any, taskStore, executor);
