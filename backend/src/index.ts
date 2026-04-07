@@ -201,13 +201,26 @@ async function logStartupDiagnostics(): Promise<void> {
 
       if (os.platform() !== 'win32') {
         for (const shell of ['zsh', 'bash']) {
+          // -lc: login shell (sources ~/.zprofile but NOT ~/.zshrc)
           try {
             const result = execSyncDiag(`${shell} -lc 'command -v ${cli}'`, { timeout: 8000, encoding: 'utf-8' }).trim();
             if (result) {
               console.info(`[Diagnostics] CLI '${cli}' found via ${shell} login shell: ${result}`);
+              continue;
             }
           } catch {
             console.info(`[Diagnostics] CLI '${cli}' NOT found via ${shell} login shell`);
+          }
+          // -ic: interactive shell (sources ~/.zshrc where version managers add PATH)
+          try {
+            const raw = execSyncDiag(`${shell} -ic 'command -v ${cli}'`, { timeout: 8000, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+            const result = raw.split('\n').filter((l: string) => l.trim().startsWith('/')).pop()?.trim();
+            if (result) {
+              console.info(`[Diagnostics] CLI '${cli}' found via ${shell} interactive shell: ${result}`);
+              continue;
+            }
+          } catch {
+            console.info(`[Diagnostics] CLI '${cli}' NOT found via ${shell} interactive shell`);
           }
         }
       }

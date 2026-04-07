@@ -388,30 +388,67 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
     }
     log::info!("[check_cli_installed] Not found in any well-known dir. Dirs checked: {:?}", well_known_dirs);
 
-    // 4. Last resort: ask a user's default login shell (zsh on modern macOS).
+    // 4. Ask user's login shell (zsh -lc sources ~/.zprofile but NOT ~/.zshrc).
+    // 5. Ask user's interactive shell (zsh -ic sources ~/.zshrc where version
+    //    managers like fnm/nvm/pnpm typically add PATH entries).
     if cfg!(not(target_os = "windows")) {
-        log::info!("[check_cli_installed] Step 4: Trying login shells");
-        for shell in &["zsh", "bash", "sh"] {
-            let shell_cmd = format!("command -v {}", cli_name);
+        let shell_cmd = format!("command -v {}", cli_name);
+
+        // 4a. Login shells first (fast, no .zshrc overhead)
+        log::info!("[check_cli_installed] Step 4: Trying login shells (-lc)");
+        for shell in &["zsh", "bash"] {
             match tokio::process::Command::new(shell)
                 .args(["-lc", &shell_cmd])
                 .output()
                 .await
             {
-                Ok(output) => {
-                    if output.status.success() {
-                        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                        if !path.is_empty() {
-                            log::info!("[check_cli_installed] Found via {} -lc: {}", shell, path);
-                            return Some(path);
-                        }
-                    } else {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        log::info!("[check_cli_installed] `{} -lc '{}'` failed (status={:?}, stderr={})", shell, shell_cmd, output.status.code(), stderr.chars().take(200).collect::<String>());
+                Ok(output) if output.status.success() => {
+                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    if !path.is_empty() {
+                        log::info!("[check_cli_installed] Found via {} -lc: {}", shell, path);
+                        return Some(path);
                     }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::info!("[check_cli_installed] `{} -lc` failed (status={:?}, stderr={})", shell, output.status.code(), stderr.chars().take(200).collect::<String>());
                 }
                 Err(e) => {
                     log::info!("[check_cli_installed] Shell {} not available: {}", shell, e);
+                }
+            }
+        }
+
+        // 4b. Interactive shells (-ic sources ~/.zshrc / ~/.bashrc)
+        log::info!("[check_cli_installed] Step 5: Trying interactive shells (-ic)");
+        for shell in &["zsh", "bash"] {
+            match tokio::process::Command::new(shell)
+                .args(["-ic", &shell_cmd])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .output()
+                .await
+            {
+                Ok(output) if output.status.success() => {
+                    let raw = String::from_utf8_lossy(&output.stdout);
+                    let path = raw.lines()
+                        .filter(|l| !l.is_empty() && l.starts_with('/'))
+                        .last()
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                    if !path.is_empty() {
+                        log::info!("[check_cli_installed] Found via {} -ic: {}", shell, path);
+                        return Some(path);
+                    }
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::info!("[check_cli_installed] `{} -ic` failed (status={:?}, stderr={})", shell, output.status.code(), stderr.chars().take(200).collect::<String>());
+                }
+                Err(e) => {
+                    log::info!("[check_cli_installed] Shell {} -ic not available: {}", shell, e);
                 }
             }
         }

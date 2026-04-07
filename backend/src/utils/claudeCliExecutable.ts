@@ -199,8 +199,34 @@ export async function getSystemClaudeExecutablePath(cliName?: string): Promise<s
     return cleanPath;
   } catch (error) {
     console.error(`Failed to get system ${resolvedCliName} executable path:`, error);
-    return null;
   }
+
+  // Fallback: try login shell then interactive shell on macOS/Linux
+  if (process.platform !== 'win32') {
+    for (const flags of ['-lc', '-ic'] as const) {
+      for (const shell of ['zsh', 'bash']) {
+        try {
+          const { stdout } = await execAsync(
+            `${shell} ${flags} 'command -v ${resolvedCliName}'`,
+            { timeout: 8000 },
+          );
+          const result = stdout
+            .split('\n')
+            .filter(l => l.trim().startsWith('/'))
+            .pop()
+            ?.trim();
+          if (result) {
+            console.log(`🎯 Found ${resolvedCliName} via ${shell} ${flags}: ${result}`);
+            return result;
+          }
+        } catch {
+          // not found in this shell/mode, try next
+        }
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
