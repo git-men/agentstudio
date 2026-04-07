@@ -78,6 +78,7 @@ function buildTarget(triple) {
     'bun', 'build',
     '--compile',
     `--target=${bunTarget}`,
+    '--external', 'keytar',
     `--outfile=${outfile}`,
     BACKEND_ENTRY,
   ].join(' ');
