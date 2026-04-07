@@ -158,10 +158,81 @@ installLogCapture();
 async function logStartupDiagnostics(): Promise<void> {
   const fs = await import('fs');
   const path = await import('path');
+  const os = await import('os');
 
   console.info('═══════════════════════════════════════════════════════════');
   console.info('[Diagnostics] Startup environment snapshot');
   console.info('═══════════════════════════════════════════════════════════');
+
+  // 0. Runtime & engine versions
+  console.info(`[Diagnostics] Node version    = ${process.version}`);
+  console.info(`[Diagnostics] Platform        = ${os.platform()} ${os.release()} (${os.arch()})`);
+  try {
+    const { execSync } = await import('child_process');
+    const cliName = getClaudeCliName();
+    const raw = execSync(`${cliName} --version`, { timeout: 5000, encoding: 'utf-8' });
+    console.info(`[Diagnostics] Engine (${cliName}) = ${raw.trim().split('\n')[0]}`);
+  } catch {
+    console.warn(`[Diagnostics] Engine version   = not found`);
+  }
+
+  // 0a+. PATH & CLI executable diagnostics
+  try {
+    const { execSync: execSyncDiag } = await import('child_process');
+    const pathEnv = process.env.PATH || process.env.Path || '';
+    const pathDirs = pathEnv.split(os.platform() === 'win32' ? ';' : ':');
+    console.info(`[Diagnostics] PATH (${pathDirs.length} entries):`);
+    for (const d of pathDirs.slice(0, 20)) {
+      console.info(`[Diagnostics]   ${d}`);
+    }
+    if (pathDirs.length > 20) {
+      console.info(`[Diagnostics]   ... and ${pathDirs.length - 20} more`);
+    }
+
+    const cliTargets = ['claude', 'claude-internal'];
+    for (const cli of cliTargets) {
+      const whichCmd = os.platform() === 'win32' ? `where ${cli}` : `which ${cli}`;
+      try {
+        const result = execSyncDiag(whichCmd, { timeout: 5000, encoding: 'utf-8' }).trim();
+        console.info(`[Diagnostics] CLI '${cli}' found via ${os.platform() === 'win32' ? 'where' : 'which'}: ${result}`);
+      } catch {
+        console.info(`[Diagnostics] CLI '${cli}' NOT found via ${os.platform() === 'win32' ? 'where' : 'which'}`);
+      }
+
+      if (os.platform() !== 'win32') {
+        for (const shell of ['zsh', 'bash']) {
+          try {
+            const result = execSyncDiag(`${shell} -lc 'command -v ${cli}'`, { timeout: 8000, encoding: 'utf-8' }).trim();
+            if (result) {
+              console.info(`[Diagnostics] CLI '${cli}' found via ${shell} login shell: ${result}`);
+            }
+          } catch {
+            console.info(`[Diagnostics] CLI '${cli}' NOT found via ${shell} login shell`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(`[Diagnostics] CLI detection diagnostics failed:`, err);
+  }
+
+  // 0b. Symlink capability test (critical for Windows)
+  try {
+    const tmpDir = os.tmpdir();
+    const testTarget = path.join(tmpDir, `.as-symlink-test-target-${process.pid}`);
+    const testLink = path.join(tmpDir, `.as-symlink-test-link-${process.pid}`);
+    fs.writeFileSync(testTarget, 'test', 'utf-8');
+    let symlinkOk = false;
+    try {
+      fs.symlinkSync(testTarget, testLink);
+      try { fs.lstatSync(testLink); symlinkOk = true; } catch { /* verify failed */ }
+      try { fs.unlinkSync(testLink); } catch { /* cleanup */ }
+    } catch { /* symlink threw */ }
+    try { fs.unlinkSync(testTarget); } catch { /* cleanup */ }
+    console.info(`[Diagnostics] Symlink support = ${symlinkOk ? '✓ YES' : '✗ NO (will use copy fallback)'}`);
+  } catch {
+    console.warn(`[Diagnostics] Symlink support = unknown (test failed)`);
+  }
 
   // 1. AGENTSTUDIO_HOME & agents directory
   console.info(`[Diagnostics] AGENTSTUDIO_HOME = ${AGENTSTUDIO_HOME}`);
@@ -170,7 +241,13 @@ async function logStartupDiagnostics(): Promise<void> {
   if (fs.existsSync(AGENTS_DIR)) {
     try {
       const agentEntries = fs.readdirSync(AGENTS_DIR);
-      console.info(`[Diagnostics] Agents in AGENTS_DIR (${agentEntries.length}):`);
+      const mdFiles = agentEntries.filter(e => e.endsWith('.md'));
+      const jsonFiles = agentEntries.filter(e => e.endsWith('.json'));
+      const dirs = agentEntries.filter(e => {
+        try { return fs.lstatSync(path.join(AGENTS_DIR, e)).isDirectory(); } catch { return false; }
+      });
+      console.info(`[Diagnostics] Agents in AGENTS_DIR: ${agentEntries.length} entries (${jsonFiles.length} .json, ${mdFiles.length} .md, ${dirs.length} dirs)`);
+
       for (const entry of agentEntries) {
         const fullPath = path.join(AGENTS_DIR, entry);
         const stat = fs.lstatSync(fullPath);
@@ -182,9 +259,17 @@ async function logStartupDiagnostics(): Promise<void> {
         const isMetaAgent = entry.toLowerCase().includes('meta-agent') || entry.toLowerCase().includes('meta_agent');
         console.info(`[Diagnostics]   ${isMetaAgent ? '★' : '·'} ${entry} [${type}]${target}`);
       }
-      const hasMetaAgent = agentEntries.some(e =>
-        e.toLowerCase().includes('meta-agent') || e.toLowerCase().includes('meta_agent'));
-      console.info(`[Diagnostics] Meta Agent present: ${hasMetaAgent ? '✓ YES' : '✗ NO'}`);
+
+      // Explicit check: are expected agent config files loadable?
+      const knownAgentIds = ['meta-agent', 'claude-code'];
+      for (const id of knownAgentIds) {
+        const hasJson = fs.existsSync(path.join(AGENTS_DIR, `${id}.json`));
+        const hasMd = fs.existsSync(path.join(AGENTS_DIR, `${id}.md`));
+        const hasDir = fs.existsSync(path.join(AGENTS_DIR, id)) &&
+          fs.lstatSync(path.join(AGENTS_DIR, id)).isDirectory();
+        const loadable = hasJson || hasMd;
+        console.info(`[Diagnostics]   ${loadable ? '✓' : '✗'} ${id}: .json=${hasJson}, .md=${hasMd}, dir=${hasDir} → ${loadable ? 'LOADABLE' : 'NOT LOADABLE'}`);
+      }
     } catch (err) {
       console.error(`[Diagnostics] Failed to read AGENTS_DIR:`, err);
     }
@@ -232,7 +317,11 @@ async function logStartupDiagnostics(): Promise<void> {
     if (fs.existsSync(skillsDir)) {
       const skillEntries = fs.readdirSync(skillsDir);
       const skillDirs = skillEntries.filter(e => {
-        try { return fs.statSync(path.join(skillsDir, e)).isDirectory() || fs.lstatSync(path.join(skillsDir, e)).isSymbolicLink(); } catch { return false; }
+        try {
+          const sp = path.join(skillsDir, e);
+          const st = fs.lstatSync(sp);
+          return st.isDirectory() || st.isSymbolicLink();
+        } catch { return false; }
       });
       console.info(`[Diagnostics] Skills (${skillDirs.length}):`);
       for (const s of skillDirs) {

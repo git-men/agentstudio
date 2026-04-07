@@ -4,7 +4,7 @@ import { pluginPaths } from './pluginPaths';
 import { ParsedPlugin } from '../types/plugins';
 import { getEnginePaths, getClaudeMirrorPaths } from '../config/engineConfig';
 import type { EnginePathConfig } from '../types/engine';
-import { atomicWriteFileSync } from '../utils/fileUtils.js';
+import { atomicWriteFileSync, robustSymlinkSync } from '../utils/fileUtils.js';
 
 /**
  * Plugin Symlink Service
@@ -111,14 +111,18 @@ class PluginSymlink {
             return; // already points to correct target, idempotent skip
           }
           fs.unlinkSync(symlinkPath);
+        } else if (existingStats.isFile()) {
+          fs.unlinkSync(symlinkPath);
+        } else if (existingStats.isDirectory()) {
+          fs.rmSync(symlinkPath, { recursive: true, force: true });
         } else {
-          console.warn(`Skipping ${type} symlink, path exists and is not a symlink: ${symlinkPath}`);
+          console.warn(`Skipping ${type} link, path exists with unexpected type: ${symlinkPath}`);
           return;
         }
       }
 
-      fs.symlinkSync(sourcePath, symlinkPath);
-      console.log(`Created ${type} symlink: ${symlinkPath} -> ${sourcePath}`);
+      const method = robustSymlinkSync(sourcePath, symlinkPath);
+      console.log(`Created ${type} ${method}: ${symlinkPath} -> ${sourcePath}`);
     } catch (error: any) {
       if (error.code === 'EEXIST') {
         // Last-resort guard: concurrent or race condition, idempotent ignore
@@ -136,13 +140,19 @@ class PluginSymlink {
       try {
         stats = fs.lstatSync(symlinkPath);
       } catch (e: any) {
-        if (e.code === 'ENOENT') return; // 路径不存在，无需删除
+        if (e.code === 'ENOENT') return;
         throw e;
       }
 
       if (stats.isSymbolicLink()) {
         fs.unlinkSync(symlinkPath);
         console.log(`Removed ${type} symlink: ${symlinkPath}`);
+      } else if (stats.isDirectory()) {
+        fs.rmSync(symlinkPath, { recursive: true, force: true });
+        console.log(`Removed ${type} copy-fallback dir: ${symlinkPath}`);
+      } else if (stats.isFile()) {
+        fs.unlinkSync(symlinkPath);
+        console.log(`Removed ${type} copy-fallback file: ${symlinkPath}`);
       }
     } catch (error) {
       console.error(`Failed to remove ${type} symlink at ${symlinkPath}:`, error);

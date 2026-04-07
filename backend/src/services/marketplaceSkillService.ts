@@ -18,6 +18,7 @@ import { pluginParser } from './pluginParser';
 import { pluginScanner } from './pluginScanner';
 import { getEnginePaths, isCursorEngine } from '../config/engineConfig';
 import type { PluginComponent } from '../types/plugins';
+import { robustSymlinkSync } from '../utils/fileUtils.js';
 
 // ============================================
 // Types
@@ -204,21 +205,21 @@ class MarketplaceSkillService {
       } else {
         // Symlink mode: create symlink
         this.ensureDir(path.dirname(targetDir));
-        if (fs.existsSync(targetDir)) {
-          const stats = fs.lstatSync(targetDir);
-          if (stats.isSymbolicLink()) {
+        let existingStats: fs.Stats | null = null;
+        try {
+          existingStats = fs.lstatSync(targetDir);
+        } catch (e: any) {
+          if (e.code !== 'ENOENT') throw e;
+        }
+        if (existingStats) {
+          if (existingStats.isSymbolicLink() || existingStats.isFile()) {
             fs.unlinkSync(targetDir);
-          } else {
-            return { 
-              success: false, 
-              skillId, 
-              enabled: false, 
-              error: 'Target path exists and is not a symlink' 
-            };
+          } else if (existingStats.isDirectory()) {
+            fs.rmSync(targetDir, { recursive: true, force: true });
           }
         }
-        fs.symlinkSync(skillSourceDir, targetDir);
-        console.log(`[MarketplaceSkillService] Skill enabled (symlink): ${skillName} -> ${skillSourceDir}`);
+        const method = robustSymlinkSync(skillSourceDir, targetDir);
+        console.log(`[MarketplaceSkillService] Skill enabled (${method}): ${skillName} -> ${skillSourceDir}`);
       }
 
       return { success: true, skillId, enabled: true };
@@ -247,18 +248,20 @@ class MarketplaceSkillService {
         fs.rmSync(targetDir, { recursive: true, force: true });
         console.log(`[MarketplaceSkillService] Skill disabled (removed): ${skillName}`);
       } else {
-        // Symlink mode: remove symlink
+        // Symlink mode: remove symlink or copy-fallback directory
         const stats = fs.lstatSync(targetDir);
         if (stats.isSymbolicLink()) {
           fs.unlinkSync(targetDir);
           console.log(`[MarketplaceSkillService] Skill disabled (unlinked): ${skillName}`);
+        } else if (stats.isDirectory()) {
+          fs.rmSync(targetDir, { recursive: true, force: true });
+          console.log(`[MarketplaceSkillService] Skill disabled (removed copy-fallback dir): ${skillName}`);
         } else {
-          // It's a regular directory (user-created skill), don't remove
           return {
             success: false,
             skillId,
             enabled: true,
-            error: 'Cannot disable user-created skill via marketplace API',
+            error: 'Cannot disable: target is neither symlink nor directory',
           };
         }
       }

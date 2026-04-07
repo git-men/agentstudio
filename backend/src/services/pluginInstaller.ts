@@ -22,6 +22,7 @@ import {
 import type { PlatformHook, HookPackageEntry } from '../types/platformHooks';
 import { HOOKS_SCRIPTS_DIR } from '../config/paths';
 import { HookStorage } from './hooks/hookStorage';
+import { robustSymlinkSync } from '../utils/fileUtils.js';
 
 const execAsync = promisify(exec);
 
@@ -587,15 +588,22 @@ class PluginInstaller {
     if (fs.existsSync(scriptsSourceDir)) {
       fs.mkdirSync(path.dirname(scriptsTargetDir), { recursive: true });
 
-      // Create symlink for the scripts directory
-      if (fs.existsSync(scriptsTargetDir)) {
-        const stats = fs.lstatSync(scriptsTargetDir);
-        if (stats.isSymbolicLink()) {
+      // Clean up existing path (symlink or copy-fallback dir)
+      let existingStats: import('fs').Stats | null = null;
+      try {
+        existingStats = fs.lstatSync(scriptsTargetDir);
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+      if (existingStats) {
+        if (existingStats.isSymbolicLink() || existingStats.isFile()) {
           fs.unlinkSync(scriptsTargetDir);
+        } else if (existingStats.isDirectory()) {
+          fs.rmSync(scriptsTargetDir, { recursive: true, force: true });
         }
       }
-      fs.symlinkSync(scriptsSourceDir, scriptsTargetDir);
-      console.log(`[HookInstaller] Created scripts symlink: ${scriptsTargetDir} -> ${scriptsSourceDir}`);
+      const method = robustSymlinkSync(scriptsSourceDir, scriptsTargetDir);
+      console.log(`[HookInstaller] Created scripts ${method}: ${scriptsTargetDir} -> ${scriptsSourceDir}`);
     }
 
     for (const component of components.hooks) {

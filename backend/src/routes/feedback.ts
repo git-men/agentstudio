@@ -7,7 +7,9 @@
 
 import express, { Router } from 'express';
 import os from 'os';
+import { execSync } from 'child_process';
 import { submitFeedback } from '../services/feedbackService.js';
+import { getClaudeCliName } from '../config/engineConfig.js';
 
 const router: Router = express.Router();
 
@@ -34,6 +36,8 @@ router.post('/', async (req, res) => {
       osVersion: systemInfo?.osVersion || `${os.type()} ${os.release()}`,
       username: systemInfo?.username || 'anonymous',
       platform: systemInfo?.platform || os.platform(),
+      nodeVersion: systemInfo?.nodeVersion || process.version,
+      engineVersion: systemInfo?.engineVersion || '',
     };
 
     const result = await submitFeedback({
@@ -62,6 +66,21 @@ router.get('/status', async (_req, res) => {
   const config = await loadConfig();
   const cosConfigured = !!(config.feedbackCosSecretId && config.feedbackCosSecretKey);
   res.json({ cosConfigured });
+});
+
+router.get('/system-info', (_req, res) => {
+  const nodeVersion = process.version;
+
+  let engineVersion = 'unknown';
+  try {
+    const cliName = getClaudeCliName();
+    const raw = execSync(`${cliName} --version`, { timeout: 5000, encoding: 'utf-8' });
+    engineVersion = raw.trim().split('\n')[0];
+  } catch {
+    engineVersion = 'not found';
+  }
+
+  res.json({ nodeVersion, engineVersion });
 });
 
 export default router;

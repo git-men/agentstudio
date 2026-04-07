@@ -312,21 +312,35 @@ fn node_manager_bin_dirs() -> Vec<std::path::PathBuf> {
 /// manager paths, (4) login shell lookup.
 #[tauri::command]
 async fn check_cli_installed(cli_name: String) -> Option<String> {
+    log::info!("[check_cli_installed] Looking for CLI: {}", cli_name);
+
     if !cli_name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_' || c == '.') {
+        log::warn!("[check_cli_installed] Invalid CLI name: {}", cli_name);
         return None;
+    }
+
+    // Log inherited PATH for diagnostics
+    if let Ok(path_env) = std::env::var("PATH") {
+        log::info!("[check_cli_installed] Inherited PATH: {}", path_env);
+    } else {
+        log::warn!("[check_cli_installed] PATH env var not set");
     }
 
     // 1. Prefer the binary bundled alongside this executable (Tauri externalBin).
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let bundled = exe_dir.join(&cli_name);
+            log::info!("[check_cli_installed] Step 1: Checking bundled at {:?} (exists={})", bundled, bundled.exists());
             if bundled.exists() {
                 let is_stub = tokio::fs::read_to_string(&bundled)
                     .await
                     .map(|s| s.contains(STUB_SENTINEL))
                     .unwrap_or(false);
                 if !is_stub {
+                    log::info!("[check_cli_installed] Found bundled binary: {:?}", bundled);
                     return Some(bundled.to_string_lossy().to_string());
+                } else {
+                    log::info!("[check_cli_installed] Bundled binary is a stub, skipping");
                 }
             }
         }
@@ -335,48 +349,75 @@ async fn check_cli_installed(cli_name: String) -> Option<String> {
     // 2. Try the process-inherited PATH (works when launched from terminal).
     // `where` on Windows may return multiple lines; take only the first.
     let cmd = if cfg!(target_os = "windows") { "where" } else { "which" };
-    if let Ok(output) = tokio::process::Command::new(cmd)
+    log::info!("[check_cli_installed] Step 2: Running `{} {}`", cmd, cli_name);
+    match tokio::process::Command::new(cmd)
         .arg(&cli_name)
         .output()
         .await
     {
-        if output.status.success() {
-            let raw = String::from_utf8_lossy(&output.stdout);
-            let path = raw.lines().next().unwrap_or("").trim().to_string();
-            if !path.is_empty() {
-                return Some(path);
+        Ok(output) => {
+            if output.status.success() {
+                let raw = String::from_utf8_lossy(&output.stdout);
+                let path = raw.lines().next().unwrap_or("").trim().to_string();
+                if !path.is_empty() {
+                    log::info!("[check_cli_installed] Found via {}: {}", cmd, path);
+                    return Some(path);
+                }
+            } else {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log::info!("[check_cli_installed] `{} {}` returned non-zero (status={:?}, stderr={})", cmd, cli_name, output.status.code(), stderr.trim());
             }
+        }
+        Err(e) => {
+            log::warn!("[check_cli_installed] Failed to run `{} {}`: {}", cmd, cli_name, e);
         }
     }
 
     // 3. Scan well-known node version manager directories (fnm, nvm, volta, n).
     //    This is the most reliable method for GUI-launched apps where the
     //    inherited PATH is minimal and login shells don't include fnm multishell.
-    for dir in node_manager_bin_dirs() {
+    let well_known_dirs = node_manager_bin_dirs();
+    log::info!("[check_cli_installed] Step 3: Scanning {} well-known dirs", well_known_dirs.len());
+    for dir in &well_known_dirs {
         let candidate = dir.join(&cli_name);
-        if candidate.exists() {
+        let exists = candidate.exists();
+        if exists {
+            log::info!("[check_cli_installed] Found in well-known dir: {:?}", candidate);
             return Some(candidate.to_string_lossy().to_string());
         }
     }
+    log::info!("[check_cli_installed] Not found in any well-known dir. Dirs checked: {:?}", well_known_dirs);
 
     // 4. Last resort: ask a user's default login shell (zsh on modern macOS).
     if cfg!(not(target_os = "windows")) {
+        log::info!("[check_cli_installed] Step 4: Trying login shells");
         for shell in &["zsh", "bash", "sh"] {
-            if let Ok(output) = tokio::process::Command::new(shell)
-                .args(["-lc", &format!("command -v {}", cli_name)])
+            let shell_cmd = format!("command -v {}", cli_name);
+            match tokio::process::Command::new(shell)
+                .args(["-lc", &shell_cmd])
                 .output()
                 .await
             {
-                if output.status.success() {
-                    let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                    if !path.is_empty() {
-                        return Some(path);
+                Ok(output) => {
+                    if output.status.success() {
+                        let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                        if !path.is_empty() {
+                            log::info!("[check_cli_installed] Found via {} -lc: {}", shell, path);
+                            return Some(path);
+                        }
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        log::info!("[check_cli_installed] `{} -lc '{}'` failed (status={:?}, stderr={})", shell, shell_cmd, output.status.code(), stderr.chars().take(200).collect::<String>());
                     }
+                }
+                Err(e) => {
+                    log::info!("[check_cli_installed] Shell {} not available: {}", shell, e);
                 }
             }
         }
     }
 
+    log::warn!("[check_cli_installed] {} not found via any method", cli_name);
     None
 }
 

@@ -194,6 +194,8 @@ export interface FeedbackPayload {
     osVersion: string;
     username: string;
     platform: string;
+    nodeVersion?: string;
+    engineVersion?: string;
   };
 }
 
@@ -454,6 +456,8 @@ function buildHtmlReport(
     <div class="sys-item"><div class="label">操作系统</div><div class="value">${escapeHtml(systemInfo.osVersion)}</div></div>
     <div class="sys-item"><div class="label">平台</div><div class="value">${escapeHtml(systemInfo.platform)}</div></div>
     <div class="sys-item"><div class="label">用户</div><div class="value">${escapeHtml(systemInfo.username || 'anonymous')}</div></div>
+    <div class="sys-item"><div class="label">Node 版本</div><div class="value">${escapeHtml(systemInfo.nodeVersion || 'N/A')}</div></div>
+    <div class="sys-item"><div class="label">Engine 版本</div><div class="value">${escapeHtml(systemInfo.engineVersion || 'N/A')}</div></div>
   </div>
 </div>
 

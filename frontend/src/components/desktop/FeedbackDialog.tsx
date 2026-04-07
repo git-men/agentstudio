@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, ImagePlus, Loader2, CheckCircle2, AlertCircle, Trash2, MessageSquareWarning } from 'lucide-react';
 import { API_BASE } from '../../lib/config';
 import { authFetch } from '../../lib/authFetch';
@@ -25,6 +25,22 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ onClose, usernam
   const [errorMessage, setErrorMessage] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const desktopUpdate = useDesktopUpdate();
+
+  const [nodeVersion, setNodeVersion] = useState<string>('...');
+  const [engineVersion, setEngineVersion] = useState<string>('...');
+
+  useEffect(() => {
+    authFetch(`${API_BASE}/feedback/system-info`)
+      .then(r => r.json())
+      .then((data: { nodeVersion?: string; engineVersion?: string }) => {
+        if (data.nodeVersion) setNodeVersion(data.nodeVersion);
+        if (data.engineVersion) setEngineVersion(data.engineVersion);
+      })
+      .catch(() => {
+        setNodeVersion('unknown');
+        setEngineVersion('unknown');
+      });
+  }, []);
 
   const osVersion = navigator.userAgent.includes('Windows')
     ? `Windows ${navigator.userAgent.match(/Windows NT ([\d.]+)/)?.[1] || ''}`
@@ -107,6 +123,8 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ onClose, usernam
             osVersion,
             username: username || '',
             platform: navigator.platform,
+            nodeVersion,
+            engineVersion,
           },
         }),
       });
@@ -237,6 +255,8 @@ export const FeedbackDialog: React.FC<FeedbackDialogProps> = ({ onClose, usernam
           <div className="flex flex-wrap gap-3">
             <InfoChip label="App 版本" value={desktopUpdate?.currentVersion || '...'} />
             <InfoChip label="系统版本" value={osVersion} />
+            <InfoChip label="Node" value={nodeVersion} />
+            <InfoChip label="Engine" value={engineVersion} />
             {username && <InfoChip label="用户" value={username} />}
           </div>
         </div>
