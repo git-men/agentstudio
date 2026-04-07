@@ -2,6 +2,8 @@ import express from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+
+const isDev = process.env.NODE_ENV !== 'production';
 import { AgentStorage } from '../services/agentStorage';
 import { ClaudeHistoryMessage, ClaudeHistorySession } from '../types/claude-history';
 import { sessionNameService } from '../services/sessionNameService.js';
@@ -31,11 +33,11 @@ function convertProjectPathToClaudeFormat(projectPath: string): string {
   try {
     const realPath = fs.realpathSync(resolvedPath);
     if (realPath !== resolvedPath) {
-      console.log(`🔗 [DEBUG] Resolved symlink: ${resolvedPath} -> ${realPath}`);
+      if (isDev) console.log(`🔗 [DEBUG] Resolved symlink: ${resolvedPath} -> ${realPath}`);
     }
     resolvedPath = realPath;
   } catch (error) {
-    console.log(`⚠️ [DEBUG] Could not resolve path: ${resolvedPath}, using as-is`);
+    if (isDev) console.log(`⚠️ [DEBUG] Could not resolve path: ${resolvedPath}, using as-is`);
   }
   
   // Convert path like /Users/kongjie/Desktop/.workspace2.nosync
@@ -115,11 +117,11 @@ function readSubAgentMessageFlow(projectPath: string, agentId: string, sessionId
     }
 
     if (!agentFilePath) {
-      console.log(`⚠️ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}${sessionId ? ` (session: ${sessionId})` : ''}`);
+      if (isDev) console.log(`⚠️ [SUBAGENT] Sub-agent file not found for agentId: ${agentId}${sessionId ? ` (session: ${sessionId})` : ''}`);
       return [];
     }
     
-    console.log(`📂 [SUBAGENT] Reading sub-agent message flow: ${agentFilePath}`);
+    if (isDev) console.log(`📂 [SUBAGENT] Reading sub-agent message flow: ${agentFilePath}`);
 
     const content = fs.readFileSync(agentFilePath, 'utf-8');
     const lines = content.trim().split('\n').filter(line => line.trim());
@@ -211,7 +213,7 @@ function readSubAgentMessageFlow(projectPath: string, agentId: string, sessionId
       }
     }
 
-    console.log(`✅ [SUBAGENT] Extracted ${messageFlow.length} messages with ${messageFlow.reduce((sum, m) => sum + m.messageParts.length, 0)} parts from sub-agent ${agentId}`);
+    if (isDev) console.log(`✅ [SUBAGENT] Extracted ${messageFlow.length} messages with ${messageFlow.reduce((sum, m) => sum + m.messageParts.length, 0)} parts from sub-agent ${agentId}`);
     return messageFlow;
 
   } catch (error) {
@@ -392,7 +394,7 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
     const claudeProjectPath = convertProjectPathToClaudeFormat(projectPath);
     const allDirs = getAllProjectsDirs();
 
-    console.log(`📂 [DEBUG] Searching Claude history in dirs:`, allDirs.map(d => path.join(d, claudeProjectPath)));
+    if (isDev) console.log(`📂 [DEBUG] Searching Claude history in dirs:`, allDirs.map(d => path.join(d, claudeProjectPath)));
 
     // Collect sessions from all directories; use a Map keyed by sessionId for deduplication.
     // Earlier directories in allDirs have higher priority (they contain newer sessions).
@@ -402,11 +404,11 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
       const historyDir = path.join(projectsDir, claudeProjectPath);
 
       if (!fs.existsSync(historyDir)) {
-        console.log(`⏭️  [DEBUG] Directory not found, skipping: ${historyDir}`);
+        if (isDev) console.log(`⏭️  [DEBUG] Directory not found, skipping: ${historyDir}`);
         continue;
       }
 
-      console.log(`📂 [DEBUG] Reading from: ${historyDir}`);
+      if (isDev) console.log(`📂 [DEBUG] Reading from: ${historyDir}`);
 
       const jsonlFiles = fs.readdirSync(historyDir)
         .filter(file => file.endsWith('.jsonl'))
@@ -658,7 +660,7 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
                         // If this is a Task/Agent tool, read sub-agent message flow
                         if ((toolPart.toolData.toolName === 'Task' || toolPart.toolData.toolName === 'Agent') && msg.toolUseResult.agentId) {
                           const subAgentId = msg.toolUseResult.agentId;
-                          console.log(`🔧 [TASK] Found Task tool with sub-agent: ${subAgentId}`);
+                          if (isDev) console.log(`🔧 [TASK] Found Task tool with sub-agent: ${subAgentId}`);
                           
                           const subAgentMessageFlow = readSubAgentMessageFlow(projectPath, subAgentId, sessionId);
                           
@@ -668,7 +670,7 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
                               ...msg.toolUseResult,
                               subAgentMessageFlow
                             };
-                            console.log(`✅ [TASK] Attached ${subAgentMessageFlow.length} sub-agent messages`);
+                            if (isDev) console.log(`✅ [TASK] Attached ${subAgentMessageFlow.length} sub-agent messages`);
                           }
                         }
                       }
@@ -719,7 +721,7 @@ function readClaudeHistorySessions(projectPath: string, options?: ReadSessionsOp
     const sortedSessions = Array.from(sessionMap.values())
       .sort((a, b) => new Date(b.lastUpdated).getTime() - new Date(a.lastUpdated).getTime());
 
-    console.log(`📊 [DEBUG] Total unique sessions found: ${sortedSessions.length}`);
+    if (isDev) console.log(`📊 [DEBUG] Total unique sessions found: ${sortedSessions.length}`);
 
     return sortedSessions;
 
@@ -1329,18 +1331,18 @@ router.get('/:agentId', async (req, res) => {
     const { search } = req.query;
     const projectPath = req.query.projectPath ? resolvePath(req.query.projectPath as string) : undefined;
     
-    console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
-    console.log(`🔍 [DEBUG] Search term: "${search}"`);
-    console.log(`🔍 [DEBUG] Project path: "${projectPath}"`);
+    if (isDev) console.log(`🔍 [DEBUG] Getting sessions for agent: ${agentId}`);
+    if (isDev) console.log(`🔍 [DEBUG] Search term: "${search}"`);
+    if (isDev) console.log(`🔍 [DEBUG] Project path: "${projectPath}"`);
     
     // Verify agent exists
     const agent = globalAgentStorage.getAgent(agentId);
     if (!agent) {
-      console.log(`❌ [DEBUG] Agent not found: ${agentId}`);
+      if (isDev) console.log(`❌ [DEBUG] Agent not found: ${agentId}`);
       return res.status(404).json({ error: 'Agent not found' });
     }
     
-    console.log(`✅ [DEBUG] Agent found: ${agent.name} (${agent.id})`);
+    if (isDev) console.log(`✅ [DEBUG] Agent found: ${agent.name} (${agent.id})`);
     
     let sessions: any[] = [];
     
@@ -1350,9 +1352,9 @@ router.get('/:agentId', async (req, res) => {
       
       if (defaultEngine.readSessions) {
         // Use engine's own session reader
-        console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history sessions for project:`, projectPath);
+        if (isDev) console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history sessions for project:`, projectPath);
         const engineSessions = await defaultEngine.readSessions(projectPath);
-        console.log(`📊 [DEBUG] Found ${engineSessions.length} sessions via ${defaultEngine.type} engine`);
+        if (isDev) console.log(`📊 [DEBUG] Found ${engineSessions.length} sessions via ${defaultEngine.type} engine`);
         
         sessions = engineSessions.map((session) => ({
           id: session.id,
@@ -1364,9 +1366,9 @@ router.get('/:agentId', async (req, res) => {
         }));
       } else {
         // Fallback: Read from Claude Code history (Claude engine hasn't migrated yet)
-        console.log('📂 [DEBUG] Reading Claude history sessions for project:', projectPath);
+        if (isDev) console.log('📂 [DEBUG] Reading Claude history sessions for project:', projectPath);
         const claudeSessions = readClaudeHistorySessions(projectPath);
-        console.log(`📊 [DEBUG] Found ${claudeSessions.length} raw Claude sessions`);
+        if (isDev) console.log(`📊 [DEBUG] Found ${claudeSessions.length} raw Claude sessions`);
         
         sessions = claudeSessions.map((session) => ({
           id: session.id,
@@ -1378,11 +1380,11 @@ router.get('/:agentId', async (req, res) => {
         }));
       }
     } else {
-      console.log(`📁 [DEBUG] Using project-specific AgentStorage for sessions`);
+      if (isDev) console.log(`📁 [DEBUG] Using project-specific AgentStorage for sessions`);
       // Use project-specific AgentStorage for sessions (existing behavior)
       const agentStorage = getAgentStorageForRequest(req);
       const agentSessions = agentStorage.getAgentSessions(agentId, search as string);
-      console.log(`📊 [DEBUG] Found ${agentSessions.length} sessions from AgentStorage`);
+      if (isDev) console.log(`📊 [DEBUG] Found ${agentSessions.length} sessions from AgentStorage`);
       
       sessions = agentSessions.map((session, index) => {
         const mappedSession = {
@@ -1394,7 +1396,7 @@ router.get('/:agentId', async (req, res) => {
           messageCount: session.messages.length
         };
         
-        console.log(`🔄 [DEBUG] Mapped AgentStorage session ${index + 1}:`, mappedSession);
+        if (isDev) console.log(`🔄 [DEBUG] Mapped AgentStorage session ${index + 1}:`, mappedSession);
         return mappedSession;
       });
 
@@ -1410,7 +1412,7 @@ router.get('/:agentId', async (req, res) => {
 
       try {
         if (defaultEngine.readSessions) {
-          console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history for effective path:`, effectivePath);
+          if (isDev) console.log(`📂 [DEBUG] Reading ${defaultEngine.type} history for effective path:`, effectivePath);
           const engineSessions = await defaultEngine.readSessions(effectivePath);
           historySessions = engineSessions.map((s) => ({
             id: s.id,
@@ -1421,7 +1423,7 @@ router.get('/:agentId', async (req, res) => {
             messageCount: s.messages.length
           }));
         } else {
-          console.log(`📂 [DEBUG] Reading Claude history for effective path:`, effectivePath);
+          if (isDev) console.log(`📂 [DEBUG] Reading Claude history for effective path:`, effectivePath);
           const claudeSessions = readClaudeHistorySessions(effectivePath);
           historySessions = claudeSessions.map((s) => ({
             id: s.id,
@@ -1432,7 +1434,7 @@ router.get('/:agentId', async (req, res) => {
             messageCount: s.messages.length
           }));
         }
-        console.log(`📊 [DEBUG] Found ${historySessions.length} sessions from history fallback`);
+        if (isDev) console.log(`📊 [DEBUG] Found ${historySessions.length} sessions from history fallback`);
       } catch (historyErr) {
         console.warn('⚠️ Failed to read history sessions:', historyErr);
       }
