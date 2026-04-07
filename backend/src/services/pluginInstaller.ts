@@ -908,7 +908,7 @@ class PluginInstaller {
       }
     }
 
-    console.log(`Downloading COS marketplace from ${archiveUrl}`);
+    console.info(`[COS] Resolved archive URL: ${archiveUrl} (original source: ${source})`);
     await this.downloadAndExtractArchive(archiveUrl, targetPath);
   }
 
@@ -918,14 +918,14 @@ class PluginInstaller {
    */
   private async downloadAndExtractArchive(url: string, targetPath: string): Promise<void> {
     const tempDir = path.join(os.tmpdir(), `marketplace-download-${Date.now()}`);
-    fs.mkdirSync(tempDir, { recursive: true });
+    const extractDir = path.join(tempDir, 'extracted');
+    fs.mkdirSync(extractDir, { recursive: true });
 
     const isZip = url.endsWith('.zip');
     const archivePath = path.join(tempDir, isZip ? 'archive.zip' : 'archive.tar.gz');
 
     try {
-      // Download archive
-      console.log(`Downloading archive from ${url}`);
+      console.info(`[ArchiveExtract] Downloading archive from ${url}`);
       const response = await fetch(url);
       
       if (!response.ok) {
@@ -936,45 +936,58 @@ class PluginInstaller {
         throw new Error('No response body');
       }
 
-      // Save to file
       const fileStream = createWriteStream(archivePath);
       // @ts-ignore - Node.js Readable works with pipeline
       await pipeline(response.body, fileStream);
 
-      console.log(`Downloaded archive to ${archivePath}`);
+      const archiveSize = fs.statSync(archivePath).size;
+      console.info(`[ArchiveExtract] Downloaded ${(archiveSize / 1024 / 1024).toFixed(2)} MB to ${archivePath}`);
 
-      // Create target directory
-      fs.mkdirSync(targetPath, { recursive: true });
-
-      // Extract archive
+      // Extract to temp dir first (no --strip-components to preserve original structure)
       if (isZip) {
-        // Use unzip command
-        await execAsync(`unzip -o "${archivePath}" -d "${targetPath}"`);
+        await execAsync(`unzip -o "${archivePath}" -d "${extractDir}"`);
       } else {
-        // Use tar command
-        await execAsync(`tar -xzf "${archivePath}" -C "${targetPath}" --strip-components=1`);
+        await execAsync(`tar -xzf "${archivePath}" -C "${extractDir}"`);
       }
 
-      console.log(`Extracted archive to ${targetPath}`);
+      // Analyze extracted structure
+      let sourceDir = extractDir;
+      const topEntries = fs.readdirSync(extractDir).filter(e => !e.startsWith('.'));
+      console.info(`[ArchiveExtract] Top-level entries after extraction: ${topEntries.join(', ')} (${topEntries.length} items)`);
 
-      // Check if extraction created a single subdirectory and flatten if needed
-      const entries = fs.readdirSync(targetPath);
-      if (entries.length === 1) {
-        const singleEntry = path.join(targetPath, entries[0]);
-        if (fs.statSync(singleEntry).isDirectory()) {
-          // Move contents up one level
-          const subEntries = fs.readdirSync(singleEntry);
-          for (const subEntry of subEntries) {
-            const srcPath = path.join(singleEntry, subEntry);
-            const destPath = path.join(targetPath, subEntry);
-            fs.renameSync(srcPath, destPath);
-          }
-          // Remove empty directory
-          fs.rmdirSync(singleEntry);
+      // If there's a single top-level directory, unwrap it
+      if (topEntries.length === 1) {
+        const candidate = path.join(extractDir, topEntries[0]);
+        if (fs.statSync(candidate).isDirectory()) {
+          console.info(`[ArchiveExtract] Single top-level dir '${topEntries[0]}', unwrapping`);
+          sourceDir = candidate;
         }
       }
+
+      // Log what we're about to copy
+      const finalEntries = fs.readdirSync(sourceDir);
+      console.info(`[ArchiveExtract] Final source entries: ${finalEntries.join(', ')} (${finalEntries.length} items)`);
+
+      // Check for plugin structure indicators
+      const hasPluginsDir = finalEntries.includes('plugins');
+      const hasClaudePlugin = finalEntries.includes('.claude-plugin');
+      const hasPluginJson = finalEntries.some(e => {
+        try {
+          return fs.existsSync(path.join(sourceDir, e, '.claude-plugin', 'plugin.json'));
+        } catch { return false; }
+      });
+      console.info(`[ArchiveExtract] Structure check: plugins/=${hasPluginsDir}, .claude-plugin/=${hasClaudePlugin}, flat-plugin-json=${hasPluginJson}`);
+
+      // Copy to target
+      fs.mkdirSync(targetPath, { recursive: true });
+      for (const entry of finalEntries) {
+        const src = path.join(sourceDir, entry);
+        const dest = path.join(targetPath, entry);
+        fs.cpSync(src, dest, { recursive: true });
+      }
+
+      console.info(`[ArchiveExtract] Extracted to ${targetPath}`);
     } finally {
-      // Cleanup temp directory
       await this.removeDirectory(tempDir);
     }
   }

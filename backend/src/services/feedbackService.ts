@@ -221,10 +221,13 @@ export async function submitFeedback(payload: FeedbackPayload): Promise<Feedback
   const backendLogs = getLogSnapshot();
   const frontendLogs = payload.frontendLogs || '';
 
+  // Format timestamp in UTC+8 (China Standard Time)
+  const cnTimestamp = `${cn.getUTCFullYear()}-${pad(cn.getUTCMonth() + 1)}-${pad(cn.getUTCDate())}T${pad(cn.getUTCHours())}:${pad(cn.getUTCMinutes())}:${pad(cn.getUTCSeconds())}+08:00`;
+
   const manifest = {
     description: payload.description,
     systemInfo: payload.systemInfo,
-    timestamp: now.toISOString(),
+    timestamp: cnTimestamp,
     imageCount: payload.images.length,
     images: payload.images.map((img, i) => `image-${i}-${img.filename}`),
   };
