@@ -277,16 +277,17 @@ class AgentImporter {
       const method = robustSymlinkSync(symlinkTarget, symlinkDest);
       console.info(`[AgentImporter] Linked agent '${agentId}' [${method}] → ${symlinkTarget}`);
 
-      // Install LAVS assets if the agent source lives in a directory with lavs.json
+      // Sync LAVS assets if the agent source lives in a directory with lavs.json
       if (agentFilePath) {
         const sourceDir = path.dirname(agentFilePath);
         const lavsManifest = path.join(sourceDir, 'lavs.json');
         if (fs.existsSync(lavsManifest)) {
           const destDir = path.join(AGENTS_DIR, agentId);
-          if (!fs.existsSync(destDir)) {
-            this.copyDirectory(sourceDir, destDir);
-            console.info(`[AgentImporter] Installed LAVS assets for '${agentId}' → ${destDir}`);
+          if (fs.existsSync(destDir)) {
+            fs.rmSync(destDir, { recursive: true, force: true });
           }
+          this.copyDirectory(sourceDir, destDir);
+          console.info(`[AgentImporter] Synced LAVS assets for '${agentId}' → ${destDir}`);
         }
       }
 
