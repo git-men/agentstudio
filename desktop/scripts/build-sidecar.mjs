@@ -79,6 +79,8 @@ function buildTarget(triple) {
     '--compile',
     `--target=${bunTarget}`,
     '--external', 'keytar',
+    '--external', 'swagger-jsdoc',
+    '--external', 'swagger-ui-express',
     `--outfile=${outfile}`,
     BACKEND_ENTRY,
   ].join(' ');

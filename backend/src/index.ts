@@ -475,7 +475,7 @@ const app: express.Express = express();
   }
 
   // Swagger API docs (before helmet to avoid CSP issues with Swagger UI assets)
-  setupSwagger(app);
+  await setupSwagger(app);
 
   // Middleware
   app.use(helmet({
