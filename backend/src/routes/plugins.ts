@@ -48,14 +48,19 @@ router.post('/marketplaces', async (req, res) => {
   try {
     const request: MarketplaceAddRequest = req.body;
 
+    console.info(`[AddMarketplace] ▶ Request received — name=${JSON.stringify(request.name)}, type=${JSON.stringify(request.type)}, source=${JSON.stringify(request.source)}, branch=${JSON.stringify(request.branch)}`);
+    console.info(`[AddMarketplace]   Full form data: ${JSON.stringify(request)}`);
+
     // Validate request
     if (!request.name || !request.type || !request.source) {
+      console.warn(`[AddMarketplace] ✗ Validation failed: missing required fields — name=${!!request.name}, type=${!!request.type}, source=${!!request.source}`);
       return res.status(400).json({
         error: 'Missing required fields: name, type, source',
       });
     }
 
     if (!VALID_MARKETPLACE_TYPES.includes(request.type)) {
+      console.warn(`[AddMarketplace] ✗ Validation failed: invalid type=${JSON.stringify(request.type)}, allowed=${VALID_MARKETPLACE_TYPES.join(', ')}`);
       return res.status(400).json({
         error: `Invalid type. Must be one of: ${VALID_MARKETPLACE_TYPES.join(', ')}`,
       });
@@ -71,13 +76,17 @@ router.post('/marketplaces', async (req, res) => {
     // Note: archive type has been removed. COS downloads should be handled
     // externally (e.g., by as-mate) and treated as local type.
 
+    console.info(`[AddMarketplace] Calling pluginInstaller.addMarketplace...`);
     const result = await pluginInstaller.addMarketplace(request);
 
     if (!result.success) {
+      console.error(`[AddMarketplace] ✗ addMarketplace failed: ${result.error}`);
       return res.status(400).json({
         error: result.error,
       });
     }
+
+    console.info(`[AddMarketplace] ✓ Marketplace added — pluginCount=${result.pluginCount}, agentCount=${result.agentCount}`);
 
     // Get marketplace info
     const marketplaceName = request.name.toLowerCase().replace(/[^a-z0-9-_]/g, '-');

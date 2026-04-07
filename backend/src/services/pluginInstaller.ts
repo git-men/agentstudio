@@ -111,12 +111,14 @@ class PluginInstaller {
   async addMarketplace(request: MarketplaceAddRequest): Promise<MarketplaceSyncResult> {
     const { name, type, source, branch = 'main', cosConfig, autoUpdate } = request;
 
-    // Generate directory name from marketplace name
     const marketplaceName = this.sanitizeName(name);
     const marketplacePath = pluginPaths.getMarketplacePath(marketplaceName);
 
-    // Check if marketplace already exists
+    console.info(`[PluginInstaller] addMarketplace — sanitizedName=${marketplaceName}, path=${marketplacePath}`);
+    console.info(`[PluginInstaller]   type=${type}, source=${source}, branch=${branch}`);
+
     if (fs.existsSync(marketplacePath)) {
+      console.warn(`[PluginInstaller] ✗ Marketplace already exists at ${marketplacePath}`);
       return {
         success: false,
         error: `Marketplace '${marketplaceName}' already exists`,
@@ -126,16 +128,23 @@ class PluginInstaller {
 
     try {
       if (type === 'git' || type === 'github') {
+        console.info(`[PluginInstaller] Cloning marketplace (isGithub=${type === 'github'})...`);
         await this.cloneMarketplace(source, marketplacePath, branch, type === 'github');
+        console.info(`[PluginInstaller] ✓ Clone completed`);
       } else if (type === 'local') {
+        console.info(`[PluginInstaller] Copying local marketplace from ${source}...`);
         await this.copyLocalMarketplace(source, marketplacePath);
+        console.info(`[PluginInstaller] ✓ Local copy completed`);
       } else if (type === 'cos') {
+        console.info(`[PluginInstaller] Downloading from COS: ${source}...`);
         await this.downloadFromCOS(source, marketplacePath, cosConfig);
+        console.info(`[PluginInstaller] ✓ COS download completed`);
       } else if (type === 'archive') {
+        console.info(`[PluginInstaller] Downloading archive: ${source}...`);
         await this.downloadAndExtractArchive(source, marketplacePath);
+        console.info(`[PluginInstaller] ✓ Archive extraction completed`);
       }
 
-      // Save marketplace metadata for sync operations
       await this.saveMarketplaceMetadata(marketplacePath, {
         type,
         source,
@@ -143,14 +152,16 @@ class PluginInstaller {
         cosConfig: type === 'cos' ? cosConfig : undefined,
         autoUpdate: autoUpdate ? {
           enabled: autoUpdate.enabled,
-          checkInterval: autoUpdate.checkInterval || 60, // Default: 1 hour
+          checkInterval: autoUpdate.checkInterval || 60,
         } : undefined,
         createdAt: new Date().toISOString(),
       });
 
-      // Count plugins and agents
       const pluginNames = pluginPaths.listPlugins(marketplaceName);
       const agentCount = await this.countMarketplaceAgents(marketplacePath);
+
+      console.info(`[PluginInstaller] ✓ addMarketplace success — ${pluginNames.length} plugins found, ${agentCount} agents found`);
+      console.info(`[PluginInstaller]   Plugins: ${pluginNames.join(', ') || '(none)'}`);
 
       return {
         success: true,
@@ -159,8 +170,14 @@ class PluginInstaller {
         syncedAt: new Date().toISOString(),
       };
     } catch (error) {
-      // Cleanup on error
+      console.error(`[PluginInstaller] ✗ addMarketplace failed:`, error);
+      console.error(`[PluginInstaller]   Error type: ${error?.constructor?.name}, message: ${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error && error.stack) {
+        console.error(`[PluginInstaller]   Stack: ${error.stack}`);
+      }
+
       if (fs.existsSync(marketplacePath)) {
+        console.info(`[PluginInstaller]   Cleaning up: removing ${marketplacePath}`);
         await this.removeDirectory(marketplacePath);
       }
 
