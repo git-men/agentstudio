@@ -5,11 +5,11 @@
  * GET  /api/feedback/status — check COS configuration status
  */
 
-import express from 'express';
+import express, { Router } from 'express';
 import os from 'os';
 import { submitFeedback } from '../services/feedbackService.js';
 
-const router = express.Router();
+const router: Router = express.Router();
 
 const VERSION = process.env.npm_package_version || '0.0.0';
 
