@@ -73,6 +73,9 @@ import { initDefaultMarketplace, syncBuiltinMarketplaces } from './services/buil
 import { createHttpMcpRouter } from './services/frontendTools/httpMcpServer.js';
 import feedbackRouter from './routes/feedback.js';
 import { installLogCapture } from './services/feedbackService.js';
+import { AGENTS_DIR, AGENTSTUDIO_HOME } from './config/paths.js';
+import { pluginPaths } from './services/pluginPaths.js';
+import { getAllVersions, getDefaultVersionId } from './services/claudeVersionStorage.js';
 
 dotenv.config();
 
@@ -148,6 +151,109 @@ process.on('uncaughtExceptionMonitor', (error: Error & { code?: string }, origin
 
 // Install log capture before any other initialization so all output is recorded
 installLogCapture();
+
+/**
+ * Log key runtime state at startup for remote debugging via feedback logs.
+ */
+async function logStartupDiagnostics(): Promise<void> {
+  const fs = await import('fs');
+  const path = await import('path');
+
+  console.info('═══════════════════════════════════════════════════════════');
+  console.info('[Diagnostics] Startup environment snapshot');
+  console.info('═══════════════════════════════════════════════════════════');
+
+  // 1. AGENTSTUDIO_HOME & agents directory
+  console.info(`[Diagnostics] AGENTSTUDIO_HOME = ${AGENTSTUDIO_HOME}`);
+  console.info(`[Diagnostics] AGENTS_DIR       = ${AGENTS_DIR}`);
+
+  if (fs.existsSync(AGENTS_DIR)) {
+    try {
+      const agentEntries = fs.readdirSync(AGENTS_DIR);
+      console.info(`[Diagnostics] Agents in AGENTS_DIR (${agentEntries.length}):`);
+      for (const entry of agentEntries) {
+        const fullPath = path.join(AGENTS_DIR, entry);
+        const stat = fs.lstatSync(fullPath);
+        const type = stat.isSymbolicLink() ? 'symlink' : stat.isDirectory() ? 'dir' : 'file';
+        let target = '';
+        if (stat.isSymbolicLink()) {
+          try { target = ` -> ${fs.readlinkSync(fullPath)}`; } catch { target = ' -> (unreadable)'; }
+        }
+        const isMetaAgent = entry.toLowerCase().includes('meta-agent') || entry.toLowerCase().includes('meta_agent');
+        console.info(`[Diagnostics]   ${isMetaAgent ? '★' : '·'} ${entry} [${type}]${target}`);
+      }
+      const hasMetaAgent = agentEntries.some(e =>
+        e.toLowerCase().includes('meta-agent') || e.toLowerCase().includes('meta_agent'));
+      console.info(`[Diagnostics] Meta Agent present: ${hasMetaAgent ? '✓ YES' : '✗ NO'}`);
+    } catch (err) {
+      console.error(`[Diagnostics] Failed to read AGENTS_DIR:`, err);
+    }
+  } else {
+    console.warn(`[Diagnostics] AGENTS_DIR does not exist: ${AGENTS_DIR}`);
+  }
+
+  // 2. Default provider (version)
+  try {
+    const defaultId = await getDefaultVersionId();
+    const allVersions = await getAllVersions();
+    const defaultVersion = allVersions.find(v => v.id === defaultId);
+    console.info(`[Diagnostics] Providers (${allVersions.length}):`);
+    for (const v of allVersions) {
+      const isDefault = v.id === defaultId;
+      console.info(`[Diagnostics]   ${isDefault ? '★' : '·'} ${v.name || v.id} (id=${v.id})${isDefault ? ' [DEFAULT]' : ''}`);
+    }
+    if (defaultVersion) {
+      console.info(`[Diagnostics] Default provider: ${defaultVersion.name || defaultVersion.id}`);
+    } else if (defaultId) {
+      console.info(`[Diagnostics] Default provider ID: ${defaultId} (not found in list!)`);
+    } else {
+      console.warn(`[Diagnostics] No default provider set`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read providers:`, err);
+  }
+
+  // 3. Installed marketplaces & plugins
+  try {
+    const marketplaces = pluginPaths.listMarketplaces();
+    console.info(`[Diagnostics] Marketplaces (${marketplaces.length}):`);
+    for (const mp of marketplaces) {
+      const plugins = pluginPaths.listPlugins(mp);
+      console.info(`[Diagnostics]   📦 ${mp} (${plugins.length} plugins): ${plugins.join(', ') || '(empty)'}`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read marketplaces:`, err);
+  }
+
+  // 4. Installed skills
+  try {
+    const skillsDir = pluginPaths.getSkillsDir();
+    console.info(`[Diagnostics] Skills dir: ${skillsDir}`);
+    if (fs.existsSync(skillsDir)) {
+      const skillEntries = fs.readdirSync(skillsDir);
+      const skillDirs = skillEntries.filter(e => {
+        try { return fs.statSync(path.join(skillsDir, e)).isDirectory() || fs.lstatSync(path.join(skillsDir, e)).isSymbolicLink(); } catch { return false; }
+      });
+      console.info(`[Diagnostics] Skills (${skillDirs.length}):`);
+      for (const s of skillDirs) {
+        const sp = path.join(skillsDir, s);
+        const stat = fs.lstatSync(sp);
+        const type = stat.isSymbolicLink() ? 'symlink' : 'dir';
+        let target = '';
+        if (stat.isSymbolicLink()) {
+          try { target = ` -> ${fs.readlinkSync(sp)}`; } catch { target = ' -> (unreadable)'; }
+        }
+        console.info(`[Diagnostics]   · ${s} [${type}]${target}`);
+      }
+    } else {
+      console.warn(`[Diagnostics] Skills dir does not exist: ${skillsDir}`);
+    }
+  } catch (err) {
+    console.error(`[Diagnostics] Failed to read skills:`, err);
+  }
+
+  console.info('═══════════════════════════════════════════════════════════');
+}
 
 // Run directory migrations (from legacy layout to unified ~/.agentstudio/)
 runMigrations();
@@ -569,6 +675,13 @@ const app: express.Express = express();
     console.info('[MarketplaceUpdate] Marketplace update service initialized');
   } catch (error) {
     console.error('[MarketplaceUpdate] Error initializing marketplace update service:', error);
+  }
+
+  // 7. Startup Diagnostics: log key state for remote debugging via feedback logs
+  try {
+    await logStartupDiagnostics();
+  } catch (error) {
+    console.error('[Diagnostics] Error during startup diagnostics:', error);
   }
 
   // Static files - serve embedded frontend (for npm package) or development frontend
