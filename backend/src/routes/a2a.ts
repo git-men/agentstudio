@@ -168,6 +168,22 @@ router.use(a2aRateLimiter);
  * @response 404 - Agent not found
  * @response 429 - Rate limit exceeded
  */
+/**
+ * @swagger
+ * /a2a/{a2aAgentId}/.well-known/agent-card.json:
+ *   get:
+ *     tags: [A2A]
+ *     summary: 获取 Agent Card（A2A 发现）
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/.well-known/agent-card.json', async (req: A2ARequest, res: Response) => {
   try {
     const { a2aContext } = req;
@@ -271,6 +287,28 @@ router.get('/.well-known/agent-card.json', async (req: A2ARequest, res: Response
  * @response 401 - Unauthorized
  * @response 429 - Rate limit exceeded
  * @response 500 - Processing error
+ */
+/**
+ * @swagger
+ * /a2a/{a2aAgentId}/messages:
+ *   post:
+ *     tags: [A2A]
+ *     summary: 同步发送消息（A2A）
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
  */
 router.post('/messages', async (req: A2ARequest, res: Response) => {
   try {
@@ -924,6 +962,28 @@ router.post('/messages', async (req: A2ARequest, res: Response) => {
  * @response 429 - Rate limit exceeded
  * @response 500 - Task creation error
  */
+/**
+ * @swagger
+ * /a2a/{a2aAgentId}/tasks:
+ *   post:
+ *     tags: [A2A]
+ *     summary: 创建异步任务（A2A）
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       202:
+ *         description: 已接受
+ *       400:
+ *         description: 参数错误
+ *       401:
+ *         description: 未授权
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/tasks', a2aStrictRateLimiter, async (req: A2ARequest, res: Response) => {
   try {
     const { a2aContext } = req;
@@ -1063,6 +1123,27 @@ router.post('/tasks', a2aStrictRateLimiter, async (req: A2ARequest, res: Respons
  * @response 404 - Task not found
  * @response 429 - Rate limit exceeded
  */
+/**
+ * @swagger
+ * /a2a/{a2aAgentId}/tasks/{taskId}:
+ *   get:
+ *     tags: [A2A]
+ *     summary: 查询异步任务状态
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/tasks/:taskId', async (req: A2ARequest, res: Response) => {
   try {
     const { a2aContext } = req;
@@ -1153,6 +1234,27 @@ router.get('/tasks/:taskId', async (req: A2ARequest, res: Response) => {
  * @response 401 - Unauthorized
  * @response 404 - Task not found
  * @response 429 - Rate limit exceeded
+ */
+/**
+ * @swagger
+ * /a2a/{a2aAgentId}/tasks/{taskId}:
+ *   delete:
+ *     tags: [A2A]
+ *     summary: 取消异步任务
+ *     parameters:
+ *       - in: path
+ *         name: taskId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       401:
+ *         description: 未授权
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
  */
 router.delete('/tasks/:taskId', async (req: A2ARequest, res: Response) => {
   try {

@@ -71,6 +71,10 @@ interface TunnelServerInfo {
   websocket: { url: string };
   protocols: string[];
   instruction?: string;
+  auth?: {
+    required: boolean;
+    type: string | null;
+  };
 }
 
 type WizardStep = 'server' | 'domain';
@@ -299,9 +303,14 @@ export const WebSocketTunnelPage: React.FC = () => {
         },
         protocols: data.protocols || ['https', 'http'],
         instruction: data.instruction,
+        auth: data.auth,
       };
       setServerInfo(info);
-      showSuccess(`已连接到 ${info.name} v${info.version}`);
+      if (info.auth?.required && !accessToken.trim()) {
+        showInfo(`${info.name} 要求认证，请先填写 Access Token`);
+      } else {
+        showSuccess(`已连接到 ${info.name} v${info.version}`);
+      }
       setWizardStep('domain');
     } catch (err) {
       showError(err instanceof Error ? err.message : '获取服务器信息失败');
@@ -333,6 +342,10 @@ export const WebSocketTunnelPage: React.FC = () => {
   const handleCreateTunnel = async () => {
     if (!tunnelName.trim()) {
       showError('请输入隧道名称');
+      return;
+    }
+    if (serverInfo?.auth?.required && !accessToken.trim()) {
+      showError('该服务器要求认证，请返回上一步填写 Access Token');
       return;
     }
     setSaving(true);
@@ -592,7 +605,12 @@ export const WebSocketTunnelPage: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Access Token <span className="font-normal text-gray-400">（可选）</span>
+                Access Token{' '}
+                {serverInfo?.auth?.required ? (
+                  <span className="font-normal text-red-500">（必填）</span>
+                ) : (
+                  <span className="font-normal text-gray-400">（可选）</span>
+                )}
               </label>
               <input
                 type="password"
@@ -618,7 +636,7 @@ export const WebSocketTunnelPage: React.FC = () => {
               配置隧道域名
             </h2>
             <button
-              onClick={() => { setServerInfo(null); setWizardStep('server'); }}
+              onClick={() => { setWizardStep('server'); }}
               className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300"
             >
               更换服务器
@@ -630,6 +648,18 @@ export const WebSocketTunnelPage: React.FC = () => {
               <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
                 <CheckCircle2 className="w-4 h-4" />
                 <span>已连接到 <strong>{serverInfo.name}</strong> v{serverInfo.version}</span>
+              </div>
+            </div>
+          )}
+
+          {serverInfo?.auth?.required && !accessToken.trim() && (
+            <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+                <div className="text-sm text-red-800 dark:text-red-200">
+                  <p className="font-medium mb-1">需要认证</p>
+                  <p>该服务器要求提供 Access Token 才能创建隧道。请点击「更换服务器」返回上一步填写 Token。</p>
+                </div>
               </div>
             </div>
           )}
@@ -749,7 +779,7 @@ export const WebSocketTunnelPage: React.FC = () => {
             <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
               <button
                 onClick={handleCreateTunnel}
-                disabled={saving || !tunnelName.trim()}
+                disabled={saving || !tunnelName.trim() || (serverInfo?.auth?.required && !accessToken.trim())}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg disabled:opacity-50"
               >
                 {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}

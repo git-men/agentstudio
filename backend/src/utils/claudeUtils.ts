@@ -1,133 +1,36 @@
 /**
  * Claude Utils - Shared utilities for Claude Code SDK integration
- * 
+ *
  * This module provides common functions for interacting with Claude Code SDK,
  * used by both the main agents API and Slack integration.
  */
 
 import { Options } from '@anthropic-ai/claude-agent-sdk';
-import { SystemPrompt, PresetSystemPrompt } from '../types/agents.js';
+import { SystemPrompt } from '../types/agents.js';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-import { getDefaultVersionId, getAllVersionsInternal, getVersionByIdInternal } from '../services/claudeVersionStorage.js';
 import { integrateA2AMcpServer } from '../services/a2a/a2aIntegration.js';
 import { integrateFrontendTools, type SessionRef } from '../services/frontendTools/index.js';
 import { integrateA2UIMcpServer } from '../services/a2ui/a2uiIntegration.js';
 import { resolveConfig } from './configResolver.js';
 import { ProjectMetadataStorage } from '../services/projectMetadataStorage.js';
+import { logger } from './logger.js';
+
+const log = logger.child('claudeUtils');
 
 const projectStorage = new ProjectMetadataStorage();
 
 export type { SessionRef };
-import { MCP_SERVER_CONFIG_FILE, AGENTSTUDIO_HOME, resolvePath } from '../config/paths.js';
-import { getEnginePaths } from '../config/engineConfig.js';
+import { resolvePath } from '../config/paths.js';
 import { getAdminCliEnvVars, getAdminCliBinDir } from '../services/mcpAdmin/autoBootstrap.js';
 
-const execAsync = promisify(exec);
+import { findWindowsNodeDir, resolveWindowsNpmGlobalJsEntry, getSystemClaudeExecutablePath, getClaudeExecutablePath } from './claudeCliExecutable.js';
+import { readMcpConfig, readEngineMcpConfig } from './mcpConfigReader.js';
 
-/**
- * Find the system-installed Node.js directory on Windows.
- * 
- * When running in a packaged app (clawstudio-backend.exe), process.execPath
- * points to the bun-compiled single-file executable, which cannot be used
- * as a Node.js runtime for spawning external JS files.
- * 
- * This function locates the actual Node.js installation directory so we can
- * add it to PATH before spawning the SDK.
- * 
- * @returns Directory containing node.exe, or null if not found
- */
-function findWindowsNodeDir(): string | null {
-  const home = process.env.USERPROFILE || os.homedir();
-  const possibleDirs = [
-    'C:\\Program Files\\nodejs',
-    'C:\\Program Files (x86)\\nodejs',
-    path.join(home, 'scoop\\apps\\nodejs\\current'),
-    path.join(process.env.APPDATA || '', 'nvm\\current'),
-    path.join(home, '.local\\share\\fnm\\aliases\\default'),
-    path.join(home, '.volta\\bin'),
-  ];
-
-  for (const dir of possibleDirs) {
-    const nodeExe = path.join(dir, 'node.exe');
-    if (fs.existsSync(nodeExe)) {
-      return dir;
-    }
-  }
-
-  // Try to find via `where node` command
-  try {
-    const result = require('child_process').execFileSync('where', ['node'], { encoding: 'utf8', timeout: 2000 });
-    const lines = result.trim().split('\n');
-    if (lines.length > 0) {
-      const nodePath = lines[0].trim();
-      if (fs.existsSync(nodePath)) {
-        return path.dirname(nodePath);
-      }
-    }
-  } catch {
-    // `where` command failed, ignore
-  }
-
-  return null;
-}
-
-/**
- * On Windows, resolve an npm global executable path to its actual .js entry point.
- *
- * npm global installs create three files:
- *   - `claude-internal`     (POSIX shell script — cannot spawn on Windows)
- *   - `claude-internal.cmd` (batch wrapper — spawn returns EINVAL without shell:true)
- *   - `claude-internal.ps1` (PowerShell wrapper)
- *
- * The Claude Agent SDK uses child_process.spawn() without shell:true, so neither
- * the shell script nor .cmd can be executed. The SDK checks if the path ends with
- * a JS extension (.js/.mjs/.ts etc.) — if not, it treats it as a native binary
- * and tries to spawn it directly, which fails.
- *
- * This function parses the .cmd file to extract the actual .js entry path that
- * the SDK can spawn via `node <path.js>`.
- *
- * @param executablePath - Path like "C:\Users\x\AppData\Roaming\npm\claude-internal"
- * @returns The resolved .js path, or null if it cannot be determined
- */
-function resolveWindowsNpmGlobalJsEntry(executablePath: string): string | null {
-  try {
-    const cmdPath = executablePath.endsWith('.cmd') ? executablePath : `${executablePath}.cmd`;
-    if (!fs.existsSync(cmdPath)) return null;
-
-    const content = fs.readFileSync(cmdPath, 'utf-8');
-
-    // npm .cmd wrappers end with a line like:
-    //   "%_prog%"  "%dp0%\node_modules\@tencent\claude-code-internal\dist\claude-code-internal.js" %*
-    // We extract the .js path relative to %dp0% (the directory containing the .cmd file)
-    const match = content.match(/%dp0%\\([^"]+\.js)/i) || content.match(/%dp0%\/([^"]+\.js)/i);
-    if (!match) {
-      console.warn(`⚠️  Could not parse .js entry from: ${cmdPath}`);
-      return null;
-    }
-
-    const basedir = path.dirname(cmdPath);
-    const jsRelPath = match[1].replace(/\//g, path.sep);
-    const jsAbsPath = path.resolve(basedir, jsRelPath);
-
-    if (fs.existsSync(jsAbsPath)) {
-      console.log(`🎯 Resolved Windows npm global → JS entry: ${jsAbsPath}`);
-      return jsAbsPath;
-    }
-
-    console.warn(`⚠️  Resolved JS path does not exist: ${jsAbsPath}`);
-    return null;
-  } catch (error) {
-    console.error(`Failed to resolve Windows npm global JS entry for: ${executablePath}`, error);
-    return null;
-  }
-}
-
+export { getSystemClaudeExecutablePath, getClaudeExecutablePath } from './claudeCliExecutable.js';
+export { readMcpConfig } from './mcpConfigReader.js';
+export { getDefaultClaudeVersionEnv } from './claudeDefaultVersionEnv.js';
 /**
  * Build a list of well-known Node.js global binary directories.
  * Mirrors the Rust node_manager_bin_dirs() so CLI lookups work even when
@@ -252,9 +155,9 @@ function findCliInWellKnownDirs(cliName: string): string | null {
  *
  * Note: When no executable path is specified, SDK will automatically
  * use its bundled CLI which is always compatible with the SDK version.
- * 
+ *
  * Search order: (1) which/where, (2) well-known dirs, (3) login shell
- * 
+ *
  * @param cliName - CLI executable name (e.g., 'claude' or 'claude-internal')
  */
 export async function getSystemClaudeExecutablePath(cliName?: string): Promise<string | null> {
@@ -340,30 +243,6 @@ export function readMcpConfig(): { mcpServers: Record<string, any> } {
 }
 
 /**
- * Read engine-native MCP configuration (e.g. ~/.cursor/mcp.json or ~/.claude/mcp.json).
- * These entries do NOT have an `active` status; they are always enabled.
- */
-function readEngineMcpConfig(): Record<string, any> {
-  try {
-    const enginePaths = getEnginePaths();
-    const engineMcpPath = enginePaths.mcpConfigPath;
-
-    // Skip if engine path is the same as AgentStudio config (avoid duplicates)
-    if (engineMcpPath === MCP_SERVER_CONFIG_FILE) {
-      return {};
-    }
-
-    if (fs.existsSync(engineMcpPath)) {
-      const config = JSON.parse(fs.readFileSync(engineMcpPath, 'utf-8'));
-      return config.mcpServers || {};
-    }
-  } catch (error) {
-    console.error('Failed to read engine MCP configuration:', error);
-  }
-  return {};
-}
-
-/**
  * Get default Claude version environment variables
  */
 export async function getDefaultClaudeVersionEnv(): Promise<Record<string, string> | null> {
@@ -417,7 +296,7 @@ export async function getDefaultClaudeVersionEnv(): Promise<Record<string, strin
 /**
  * Build query options for Claude Code SDK
  * This is the enhanced version from agents.ts with full MCP support
- * 
+ *
  * @param agent - Agent configuration
  * @param projectPath - Optional project path override
  * @param mcpTools - Optional MCP tools to enable
@@ -466,6 +345,14 @@ export async function buildQueryOptions(
     finalPermissionMode = agent.permissionMode;
   }
 
+  // claude-internal rejects --dangerously-skip-permissions when running as
+  // root/sudo. Auto-downgrade to acceptEdits so agents with bypassPermissions
+  // still work in root-based containers (e.g. AnyDev).
+  if (finalPermissionMode === 'bypassPermissions' && process.getuid?.() === 0) {
+    log.warn('⚠️  bypassPermissions is not allowed when running as root — downgrading to acceptEdits');
+    finalPermissionMode = 'acceptEdits';
+  }
+
   // Build allowed tools list from agent configuration
   const allowedTools = (agent.allowedTools ?? [])
     .filter((tool: any) => tool.enabled)
@@ -510,7 +397,7 @@ export async function buildQueryOptions(
   try {
     // Special case: if defaultEnv is provided (e.g., Slack integration), use it directly
     if (defaultEnv) {
-      console.log(`🎯 Using provided default environment variables (SDK bundled CLI)`);
+      log.info(`🎯 Using provided default environment variables (SDK bundled CLI)`);
       environmentVariables = defaultEnv;
       finalModel = model || 'sonnet';
     } else {
@@ -541,49 +428,46 @@ export async function buildQueryOptions(
             const jsEntryPath = resolveWindowsNpmGlobalJsEntry(configuredPath);
             if (jsEntryPath) {
               executablePath = jsEntryPath;
-              console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (resolved JS entry: ${executablePath})`);
+              log.info(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (resolved JS entry: ${executablePath})`);
             } else if (fs.existsSync(configuredPath)) {
               executablePath = configuredPath;
-              console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
+              log.info(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
             } else {
-              console.warn(`⚠️  Configured Claude path not found: ${configuredPath}`);
-              console.warn(`   SDK will use bundled CLI for better compatibility`);
+              log.warn(`⚠️  Configured Claude path not found: ${configuredPath}`);
+              log.warn(`   SDK will use bundled CLI for better compatibility`);
             }
           } else if (fs.existsSync(configuredPath)) {
             executablePath = configuredPath;
-            console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
+            log.info(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (custom path: ${executablePath})`);
           } else {
-            console.warn(`⚠️  Configured Claude path not found: ${configuredPath}`);
-            console.warn(`   This often happens on Windows when npm's claude wrapper (.cmd) is detected`);
-            console.warn(`   SDK will use bundled CLI for better compatibility`);
+            log.warn(`⚠️  Configured Claude path not found: ${configuredPath}`);
+            log.warn(`   This often happens on Windows when npm's claude wrapper (.cmd) is detected`);
+            log.warn(`   SDK will use bundled CLI for better compatibility`);
             // Leave executablePath as null to use SDK bundled CLI
           }
         } else {
-          console.log(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (SDK bundled CLI)`);
+          log.info(`🎯 Using Claude version: ${resolvedConfig.provider.alias} (SDK bundled CLI)`);
         }
         environmentVariables = resolvedConfig.provider.environmentVariables || {};
 
         // Log environment variables details
         const envVarKeys = Object.keys(environmentVariables);
         if (envVarKeys.length > 0) {
-          console.log(`📝 Environment variables loaded from provider config:`, envVarKeys);
+          log.info(`📝 Environment variables loaded from provider config:`, envVarKeys);
           // Log proxy-related variables specifically
           const proxyVars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'NO_PROXY', 'no_proxy', 'ALL_PROXY', 'all_proxy'];
           const loadedProxyVars = proxyVars.filter(key => environmentVariables[key]);
           if (loadedProxyVars.length > 0) {
-            console.log(`🌐 Proxy variables detected:`, loadedProxyVars.reduce((acc, key) => {
-              acc[key] = environmentVariables[key];
-              return acc;
-            }, {} as Record<string, string>));
+            log.info(`🌐 Proxy variables detected:`, loadedProxyVars.join(', '));
           }
         }
       } else {
-        console.log(`📦 Using SDK bundled CLI (no provider found)`);
+        log.info(`📦 Using SDK bundled CLI (no provider found)`);
       }
     }
   } catch (error) {
-    console.error('Failed to resolve config:', error);
-    console.log(`📦 Using SDK bundled CLI (fallback due to error)`);
+    log.error('Failed to resolve config:', error);
+    log.info(`📦 Using SDK bundled CLI (fallback due to error)`);
   }
 
   // When engine is claude-internal-sdk and no explicit path was resolved from
@@ -596,17 +480,17 @@ export async function buildQueryOptions(
       const internalPath = await getSystemClaudeExecutablePath(internalCliName).catch(() => null);
       if (internalPath) {
         executablePath = internalPath;
-        console.log(`🎯 Auto-detected ${internalCliName} CLI at: ${executablePath}`);
+        log.info(`🎯 Auto-detected ${internalCliName} CLI at: ${executablePath}`);
       } else {
-        console.warn(`⚠️  ${internalCliName} CLI not found — SDK will use bundled claude CLI (engine mismatch possible)`);
+        log.warn(`⚠️  ${internalCliName} CLI not found — SDK will use bundled claude CLI (engine mismatch possible)`);
       }
     }
   }
 
   if (executablePath) {
-    console.log(`🎯 Custom Claude executable path: ${executablePath}`);
+    log.info(`🎯 Custom Claude executable path: ${executablePath}`);
   } else {
-    console.log(`📦 No custom path specified, SDK will use bundled CLI`);
+    log.info(`📦 No custom path specified, SDK will use bundled CLI`);
   }
 
   // Determine final system prompt
@@ -637,9 +521,9 @@ export async function buildQueryOptions(
     // The actual node.exe location is handled via PATH below
     queryOptions.executable = 'node';
     if (windowsNodeDir) {
-      console.log(`🔧 [Windows] Found system Node.js at: ${windowsNodeDir}`);
+      log.info(`🔧 [Windows] Found system Node.js at: ${windowsNodeDir}`);
     } else {
-      console.warn(`⚠️ [Windows] Could not find system Node.js directory`);
+      log.warn(`⚠️ [Windows] Could not find system Node.js directory`);
     }
   }
 
@@ -658,7 +542,7 @@ export async function buildQueryOptions(
         projectEnv = projectMeta.env;
       }
     } catch (e) {
-      console.warn(`⚠️ Failed to load project environment variables for ${projectPath}:`, e);
+      log.warn(`⚠️ Failed to load project environment variables for ${projectPath}:`, e);
     }
   }
 
@@ -685,12 +569,12 @@ export async function buildQueryOptions(
   const adminBinDir = getAdminCliBinDir();
   let currentPath = queryOptions.env['PATH'] || '';
   const pathSep = process.platform === 'win32' ? ';' : ':';
-  
+
   // On Windows, ensure Node.js directory is first in PATH
   if (process.platform === 'win32' && windowsNodeDir && !currentPath.includes(windowsNodeDir)) {
     currentPath = `${windowsNodeDir}${pathSep}${currentPath}`;
   }
-  
+
   if (!currentPath.includes(adminBinDir)) {
     currentPath = `${adminBinDir}${pathSep}${currentPath}`;
   }
@@ -733,10 +617,10 @@ export async function buildQueryOptions(
     const apiKeys = ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_AUTH_TOKEN'];
     const configuredApiKeys = apiKeys.filter(key => queryOptions.env?.[key]);
     if (configuredApiKeys.length > 0) {
-      console.log(`🔑 API keys configured:`, configuredApiKeys);
+      log.info(`🔑 API keys configured:`, configuredApiKeys);
     }
   } else {
-    console.log(`🌍 Using process environment variables (no custom variables defined)`);
+    log.info(`🌍 Using process environment variables (no custom variables defined)`);
   }
 
   // Add MCP configuration: merge frontend-selected tools + engine-native MCP servers
@@ -778,7 +662,7 @@ export async function buildQueryOptions(
           }
         }
       } catch (error) {
-        console.error('Failed to parse MCP configuration:', error);
+        log.error('Failed to parse MCP configuration:', error);
       }
     }
 
@@ -806,12 +690,12 @@ export async function buildQueryOptions(
         }
       }
     } catch (error) {
-      console.error('Failed to load engine MCP configuration:', error);
+      log.error('Failed to load engine MCP configuration:', error);
     }
 
     if (Object.keys(mcpServers).length > 0) {
       queryOptions.mcpServers = mcpServers;
-      console.log('🔧 MCP Servers configured:', Object.keys(mcpServers));
+      log.info('🔧 MCP Servers configured:', Object.keys(mcpServers));
     }
   }
 
@@ -826,7 +710,7 @@ export async function buildQueryOptions(
     // Use require() instead of dynamic import() for compatibility with Worker threads
     // running under tsx/cjs loader. Dynamic import() bypasses the CJS tsx loader and
     // uses ESM resolution which cannot resolve .js -> .ts file mappings.
-     
+
     const { integrateLAVSMcpServer } = require('../lavs/lavs-integration') as typeof import('../lavs/lavs-integration.js');
     await integrateLAVSMcpServer(queryOptions, agent.id, projectPath);
   }

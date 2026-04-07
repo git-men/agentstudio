@@ -230,6 +230,18 @@ const getUserHomeDir = () => homedir();
 const getGlobalMemoryPath = () => join(getSdkDir(), 'CLAUDE.md');
 
 // GET /api/settings/global-memory - Read global memory file
+/**
+ * @swagger
+ * /api/settings/global-memory:
+ *   get:
+ *     tags: [Settings]
+ *     summary: 读取全局记忆（CLAUDE.md）内容
+ *     responses:
+ *       200:
+ *         description: 成功（text/plain）
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/global-memory', async (req, res) => {
   try {
     const filePath = getGlobalMemoryPath();
@@ -255,6 +267,26 @@ router.get('/global-memory', async (req, res) => {
 });
 
 // POST /api/settings/global-memory - Write global memory file
+/**
+ * @swagger
+ * /api/settings/global-memory:
+ *   post:
+ *     tags: [Settings]
+ *     summary: 写入全局记忆文件
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         text/plain:
+ *           schema:
+ *             type: string
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/global-memory', express.text({ type: 'text/plain' }), async (req, res) => {
   try {
     const content = req.body;
@@ -285,6 +317,18 @@ router.post('/global-memory', express.text({ type: 'text/plain' }), async (req, 
 });
 
 // GET /api/settings/global-memory/path - Get the path to the global memory file
+/**
+ * @swagger
+ * /api/settings/global-memory/path:
+ *   get:
+ *     tags: [Settings]
+ *     summary: 获取全局记忆文件路径
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/global-memory/path', (req, res) => {
   try {
     const filePath = getGlobalMemoryPath();
@@ -302,6 +346,18 @@ router.get('/global-memory/path', (req, res) => {
 });
 
 // GET /api/settings/versions - Get version information for Claude Code, Node.js, and package managers
+/**
+ * @swagger
+ * /api/settings/versions:
+ *   get:
+ *     tags: [Settings]
+ *     summary: 获取 Node、包管理器与 Claude Code 版本信息
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/versions', async (req, res) => {
   try {
     const availableManagers = await detectPackageManagers();
@@ -384,6 +440,18 @@ router.get('/versions', async (req, res) => {
 // Claude 版本管理 API
 
 // GET /api/settings/claude-versions - 获取所有 Claude 版本
+/**
+ * @swagger
+ * /api/settings/claude-versions:
+ *   get:
+ *     tags: [Settings]
+ *     summary: 获取已配置的 Claude 版本列表
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/claude-versions', async (req, res) => {
   try {
     // 注意：系统版本已在服务器启动时初始化，这里不再重复初始化
@@ -406,6 +474,28 @@ router.get('/claude-versions', async (req, res) => {
 });
 
 // POST /api/settings/claude-versions - 创建新的 Claude 版本
+/**
+ * @swagger
+ * /api/settings/claude-versions:
+ *   post:
+ *     tags: [Settings]
+ *     summary: 创建 Claude 版本配置
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       409:
+ *         description: 冲突
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/claude-versions', async (req, res) => {
   try {
     const data: ClaudeVersionCreate = req.body;
@@ -431,6 +521,31 @@ router.post('/claude-versions', async (req, res) => {
 });
 
 // PUT /api/settings/claude-versions/:id - 更新 Claude 版本
+/**
+ * @swagger
+ * /api/settings/claude-versions/{id}:
+ *   put:
+ *     tags: [Settings]
+ *     summary: 更新 Claude 版本配置
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/claude-versions/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -453,6 +568,25 @@ router.put('/claude-versions/:id', async (req, res) => {
 });
 
 // DELETE /api/settings/claude-versions/:id - 删除 Claude 版本
+/**
+ * @swagger
+ * /api/settings/claude-versions/{id}:
+ *   delete:
+ *     tags: [Settings]
+ *     summary: 删除 Claude 版本配置
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/claude-versions/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -473,6 +607,25 @@ router.delete('/claude-versions/:id', async (req, res) => {
 });
 
 // PUT /api/settings/claude-versions/:id/set-default - 设置默认版本
+/**
+ * @swagger
+ * /api/settings/claude-versions/{id}/set-default:
+ *   put:
+ *     tags: [Settings]
+ *     summary: 设为默认 Claude 版本
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/claude-versions/:id/set-default', async (req, res) => {
   try {
     const { id } = req.params;
@@ -491,6 +644,25 @@ router.put('/claude-versions/:id/set-default', async (req, res) => {
 
 // GET /api/settings/claude-versions/:id/command - 生成 Claude 版本的可执行命令
 // 此端点返回完整的命令，包含完整的敏感信息（如 ANTHROPIC_AUTH_TOKEN）
+/**
+ * @swagger
+ * /api/settings/claude-versions/{id}/command:
+ *   get:
+ *     tags: [Settings]
+ *     summary: 生成指定 Claude 版本的启动命令（含敏感环境变量）
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/claude-versions/:id/command', async (req, res) => {
   try {
     const { id } = req.params;
@@ -550,6 +722,25 @@ router.get('/claude-versions/:id/command', async (req, res) => {
 
 
 // POST /api/settings/claude-versions/:id/test - 测试 Claude 版本的 API 可用性
+/**
+ * @swagger
+ * /api/settings/claude-versions/{id}/test:
+ *   post:
+ *     tags: [Settings]
+ *     summary: 测试 Claude 版本 API 是否可用
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/claude-versions/:id/test', async (req, res) => {
   try {
     const { id } = req.params;

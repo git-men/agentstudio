@@ -26,5 +26,10 @@ setup('authenticate', async ({ page }) => {
   });
 
   await page.waitForLoadState('networkidle');
+
+  await page.evaluate(() => {
+    localStorage.setItem('agentstudio:meta-agent-open', '0');
+  });
+
   await page.context().storageState({ path: authFile });
 });

@@ -1,7 +1,9 @@
 import express from 'express';
-import { z } from 'zod';
 import * as path from 'path';
 import * as fs from 'fs';
+import { logger } from '../utils/logger.js';
+
+const log = logger.child('agents');
 
 import type {
   SDKMessage,
@@ -9,8 +11,7 @@ import type {
   SDKResultMessage,
   SDKCompactBoundaryMessage
 } from '@anthropic-ai/claude-agent-sdk';
-import { AgentStorage } from '../services/agentStorage';
-import { AgentConfig } from '../types/agents';
+import crudRouter, { globalAgentStorage } from './agentCrud.js';
 // getAllProjectsDirs import removed — Claude SDK handles history persistence natively
 import { resolvePath } from '../config/paths.js';
 import { sessionManager } from '../services/sessionManager';
@@ -31,6 +32,10 @@ import { runOnRunFinishedHook } from '../services/runFinishedHooks.js';
 import { sessionEventBus } from '../services/sessionEventBus.js';
 import { getHookManager } from '../services/hooks/index.js';
 import type { HookEvent } from '../types/platformHooks.js';
+import {
+  ChatRequestSchema,
+  ImageSchema,
+} from './agentSchemas.js';
 
 // 类型守卫函数
 function isSDKSystemMessage(message: any): message is SDKSystemMessage {
@@ -49,326 +54,8 @@ function isSDKCompactBoundaryMessage(message: any): message is SDKCompactBoundar
 
 const router: express.Router = express.Router();
 
-// Storage instances
-const globalAgentStorage = new AgentStorage();
-
-
-// Validation schemas
-// 定义 SystemPrompt schema，支持字符串或预设对象格式
-const PresetSystemPromptSchema = z.object({
-  type: z.literal('preset'),
-  preset: z.literal('claude_code'),
-  append: z.string().optional()
-});
-
-const SystemPromptSchema = z.union([
-  z.string().min(1),
-  PresetSystemPromptSchema
-]);
-
-const CreateAgentSchema = z.object({
-  id: z.string().min(1).regex(/^[a-z0-9-_]+$/, 'ID must contain only lowercase letters, numbers, hyphens, and underscores'),
-  name: z.string().min(1),
-  description: z.string(),
-  systemPrompt: SystemPromptSchema,
-  // maxTurns 可以是数字（1-100）、null（不限制）或 undefined（使用默认值）
-  maxTurns: z.union([z.number().min(1).max(100), z.null()]).optional().default(25),
-  permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional().default('acceptEdits'),
-  model: z.string().min(1).optional().default('sonnet'),
-  allowedTools: z.array(z.object({
-    name: z.string(),
-    enabled: z.boolean(),
-    permissions: z.object({
-      requireConfirmation: z.boolean().optional(),
-      allowedPaths: z.array(z.string()).optional(),
-      blockedPaths: z.array(z.string()).optional(),
-    }).optional()
-  })),
-  ui: z.object({
-    icon: z.string().optional().default('🤖'),
-    primaryColor: z.string().optional().default('#3B82F6'),
-    headerTitle: z.string(),
-    headerDescription: z.string(),
-    welcomeMessage: z.string().optional(),
-    customComponent: z.string().optional()
-  }),
-  workingDirectory: z.string().optional(),
-  dataDirectory: z.string().optional(),
-  fileTypes: z.array(z.string()).optional(),
-  author: z.string().min(1),
-  homepage: z.string().url().optional(),
-  tags: z.array(z.string()).optional().default([]),
-  enabled: z.boolean().optional().default(true),
-});
-
-const UpdateAgentSchema = CreateAgentSchema.partial().omit({ id: true });
-
-
-// 获取活跃会话列表 (需要在通用获取agents路由之前)
-router.get('/sessions', (req, res) => {
-  try {
-    const activeCount = sessionManager.getActiveSessionCount();
-    const sessionsInfo = sessionManager.getSessionsInfo();
-
-    res.json({
-      activeSessionCount: activeCount,
-      sessions: sessionsInfo,
-      message: `${activeCount} active Claude sessions`
-    });
-  } catch (error) {
-    console.error('Failed to get sessions:', error);
-    res.status(500).json({ error: 'Failed to retrieve session info' });
-  }
-});
-
-// 手动关闭指定会话
-router.delete('/sessions/:sessionId', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    const removed = await sessionManager.removeSession(sessionId);
-
-    if (removed) {
-      res.json({ success: true, message: `Session ${sessionId} closed` });
-    } else {
-      res.status(404).json({ error: 'Session not found' });
-    }
-  } catch (error) {
-    console.error('Failed to close session:', error);
-    res.status(500).json({ error: 'Failed to close session' });
-  }
-});
-
-// 清除所有会话
-router.delete('/sessions', async (req, res) => {
-  try {
-    const clearedCount = await sessionManager.clearAllSessions();
-    res.json({ 
-      success: true, 
-      clearedCount,
-      message: `Successfully cleared ${clearedCount} sessions` 
-    });
-  } catch (error) {
-    console.error('Failed to clear all sessions:', error);
-    res.status(500).json({ error: 'Failed to clear all sessions' });
-  }
-});
-
-// 中断指定会话的当前请求
-router.post('/sessions/:sessionId/interrupt', async (req, res) => {
-  try {
-    const { sessionId } = req.params;
-    console.log(`🛑 API: Interrupt request for session: ${sessionId}`);
-
-    const result = await sessionManager.interruptSession(sessionId);
-
-    if (result.success) {
-      res.json({
-        success: true,
-        message: `Session ${sessionId} interrupted successfully`
-      });
-    } else {
-      res.status(result.error === 'Session not found' ? 404 : 500).json({
-        success: false,
-        error: result.error || 'Failed to interrupt session'
-      });
-    }
-  } catch (error) {
-    console.error('Failed to interrupt session:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    res.status(500).json({
-      success: false,
-      error: 'Failed to interrupt session',
-      details: errorMessage
-    });
-  }
-});
-
-// Get all agents
-router.get('/', (req, res) => {
-  try {
-    const { enabled } = req.query;
-    let agents = globalAgentStorage.getAllAgents();
-
-    // Filter by enabled status
-    if (enabled !== undefined) {
-      const isEnabled = enabled === 'true';
-      agents = agents.filter(agent => agent.enabled === isEnabled);
-    }
-
-    // Filter by component type
-    // componentType filtering removed - no longer needed
-
-    res.json({ agents });
-  } catch (error) {
-    console.error('Failed to get agents:', error);
-    res.status(500).json({ error: 'Failed to retrieve agents' });
-  }
-});
-
-
-
-
-// Get specific agent
-router.get('/:agentId', (req, res) => {
-  try {
-    const { agentId } = req.params;
-    const agent = globalAgentStorage.getAgent(agentId);
-
-    if (!agent) {
-      return res.status(404).json({ error: 'Agent not found' });
-    }
-
-    res.json({ agent });
-  } catch (error) {
-    console.error('Failed to get agent:', error);
-    res.status(500).json({ error: 'Failed to retrieve agent' });
-  }
-});
-
-// Create new agent
-router.post('/', (req, res) => {
-  try {
-    const validation = CreateAgentSchema.safeParse(req.body);
-    if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid agent data', details: validation.error });
-    }
-
-    const agentData = validation.data;
-
-    // Check if agent ID already exists
-    const existingAgent = globalAgentStorage.getAgent(agentData.id);
-    if (existingAgent) {
-      return res.status(409).json({ error: 'Agent with this ID already exists' });
-    }
-
-    const agent = globalAgentStorage.createAgent({
-      ...agentData,
-      version: '1.0.0',
-      model: 'sonnet',
-      source: 'local'
-    } as Omit<AgentConfig, 'createdAt' | 'updatedAt'>);
-
-    res.json({ agent, message: 'Agent created successfully' });
-  } catch (error) {
-    console.error('Failed to create agent:', error);
-    res.status(500).json({ error: 'Failed to create agent' });
-  }
-});
-
-// Update agent
-router.put('/:agentId', (req, res) => {
-  try {
-    const { agentId } = req.params;
-    const validation = UpdateAgentSchema.safeParse(req.body);
-
-    if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid agent data', details: validation.error });
-    }
-
-    const existingAgent = globalAgentStorage.getAgent(agentId);
-    if (!existingAgent) {
-      return res.status(404).json({ error: 'Agent not found' });
-    }
-
-    // 过滤并转换 validation.data，将 maxTurns: null 转换为 undefined
-    const updateData: Partial<AgentConfig> = { ...validation.data as any };
-    if (updateData.maxTurns === null) {
-      updateData.maxTurns = undefined;
-    }
-
-    // 构建更新后的 agent
-    const updatedAgent: AgentConfig = {
-      ...existingAgent,
-      ...updateData,
-      id: agentId, // Ensure ID doesn't change
-      updatedAt: new Date().toISOString()
-    };
-
-    globalAgentStorage.saveAgent(updatedAgent);
-    res.json({ agent: updatedAgent, message: 'Agent updated successfully' });
-  } catch (error) {
-    console.error('Failed to update agent:', error);
-    res.status(500).json({ error: 'Failed to update agent' });
-  }
-});
-
-// Delete agent
-router.delete('/:agentId', (req, res) => {
-  try {
-    const { agentId } = req.params;
-    console.log(`🗑️ [ROUTE DEBUG] DELETE request for agent: ${agentId}`);
-
-    const deleted = globalAgentStorage.deleteAgent(agentId);
-    console.log(`🗑️ [ROUTE DEBUG] Delete result:`, deleted);
-
-    if (!deleted) {
-      console.log(`❌ [ROUTE DEBUG] Agent not found: ${agentId}`);
-      return res.status(404).json({ error: 'Agent not found' });
-    }
-
-    console.log(`✅ [ROUTE DEBUG] Agent deleted successfully: ${agentId}`);
-    res.json({ success: true, message: 'Agent deleted successfully' });
-  } catch (error) {
-    console.error('❌ [ROUTE DEBUG] Failed to delete agent:', error);
-    res.status(500).json({ error: 'Failed to delete agent' });
-  }
-});
-
-
-// Validation schemas for chat
-const ImageSchema = z.object({
-  id: z.string(),
-  data: z.string(), // base64 encoded image data
-  mediaType: z.enum(['image/jpeg', 'image/png', 'image/gif', 'image/webp']),
-  filename: z.string().optional()
-});
-
-const ChatRequestSchema = z.object({
-  message: z.string(),
-  images: z.array(ImageSchema).optional(),
-  agentId: z.string().min(1),
-  sessionId: z.string().optional().nullable(),
-  projectPath: z.string().optional(),
-  mcpTools: z.array(z.string()).optional(),
-  permissionMode: z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan']).optional(),
-  model: z.string().optional(),
-  claudeVersion: z.string().optional(), // Claude版本ID
-  channel: z.enum(['web', 'slack']).optional().default('web'), // Channel for streaming control
-  outputFormat: z.enum(['default', 'agui']).optional().default('default'), // Output format: default (SDK format) or agui (AGUI protocol)
-  reconnect: z.boolean().optional(), // When true, re-attach to an in-progress SSE stream instead of sending a new message
-  context: z.object({
-    currentSlide: z.number().optional().nullable(),
-    slideContent: z.string().optional(),
-    allSlides: z.array(z.object({
-      index: z.number(),
-      title: z.string(),
-      path: z.string(),
-      exists: z.boolean().optional()
-    })).optional(),
-    // Generic context for other agent types
-    currentItem: z.any().optional(),
-    allItems: z.array(z.any()).optional(),
-    customContext: z.record(z.string(), z.any()).optional(),
-    environmentContext: z.string().optional(),
-  }).optional(),
-  envVars: z.record(z.string(), z.string()).optional(),
-  frontendTools: z.array(z.object({
-    name: z.string(),
-    description: z.string(),
-    parameters: z.object({
-      type: z.literal('object'),
-      properties: z.record(z.string(), z.any()),
-      required: z.array(z.string()).optional(),
-    }),
-    mcpServerName: z.string().optional(),
-    resultFormat: z.enum(['json', 'text']).optional(),
-  })).optional(),
-}).refine(data => {
-  // Either message text or images must be provided
-  return data.message.trim().length > 0 || (data.images && data.images.length > 0);
-}, {
-  message: "Either message text or images must be provided"
-});
+// Mount CRUD and session management routes
+router.use(crudRouter);
 
 // Helper functions for chat endpoint
 
@@ -387,7 +74,7 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
     if (isConnectionClosed) return;
 
     isConnectionClosed = true;
-    console.log(`🔚 Closing SSE connection for agent ${agentId}: ${reason}`);
+    log.info(`🔚 Closing SSE connection for agent ${agentId}: ${reason}`);
 
     // 清理超时定时器
     if (connectionTimeout) {
@@ -399,12 +86,12 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
     if (currentRequestId && claudeSession) {
       claudeSession.cancelRequest(currentRequestId);
       if (reason === 'request completed') {
-        console.log(`✅ Cleaned up Claude request ${currentRequestId}: ${reason}`);
+        log.info(`✅ Cleaned up Claude request ${currentRequestId}: ${reason}`);
       } else if (reason === 'client disconnected') {
         // 客户端断开（刷新页面、关闭标签页等）：仅移除回调，不立即中断 session
         // 用户可能会刷新后重新连接并复用同一 session
         // 设置延迟中断：如果用户在宽限期内未重新连接，则中断 session 防止资源泄漏
-        console.log(`🔌 Client disconnected, detached callback for request ${currentRequestId} (session kept alive with grace period)`);
+        log.info(`🔌 Client disconnected, detached callback for request ${currentRequestId} (session kept alive with grace period)`);
         const DISCONNECT_GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 分钟宽限期
         setTimeout(() => {
           // 检查 session 是否仍在处理中（说明没有新的客户端接管）
@@ -412,21 +99,21 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
             // If a reconnect happened, replaceActiveCallback() re-inserted a
             // callback (cancelRequest cleared it on disconnect). Skip interrupt.
             if (claudeSession.hasActiveCallback?.()) {
-              console.log(`⏰ Grace period expired but session was reconnected for agent ${agentId}, skipping interrupt`);
+              log.info(`⏰ Grace period expired but session was reconnected for agent ${agentId}, skipping interrupt`);
               return;
             }
-            console.log(`⏰ Grace period expired, interrupting orphaned session for agent ${agentId}`);
+            log.info(`⏰ Grace period expired, interrupting orphaned session for agent ${agentId}`);
             claudeSession.interrupt().catch((e: unknown) => {
-              console.error(`❌ Failed to interrupt orphaned session:`, e);
+              log.error(`❌ Failed to interrupt orphaned session:`, e);
             });
           }
         }, DISCONNECT_GRACE_PERIOD_MS);
       } else {
-        console.log(`🚫 Cancelled Claude request ${currentRequestId} due to: ${reason}`);
+        log.info(`🚫 Cancelled Claude request ${currentRequestId} due to: ${reason}`);
         // 非正常完成且非客户端断开时，中断底层 Claude SDK 进程，防止命令继续在后台执行
         if (typeof claudeSession.interrupt === 'function') {
           claudeSession.interrupt().catch((e: unknown) => {
-            console.error(`❌ Failed to interrupt session on disconnect:`, e);
+            log.error(`❌ Failed to interrupt session on disconnect:`, e);
           });
         }
       }
@@ -442,7 +129,7 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
           timestamp: Date.now()
         })}\n\n`);
       } catch (writeError: unknown) {
-        console.error('Failed to write connection close event:', writeError);
+        log.error('Failed to write connection close event:', writeError);
       }
     }
 
@@ -451,7 +138,7 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
         res.end();
       }
     } catch (endError: unknown) {
-      console.error('Failed to end response:', endError);
+      log.error('Failed to end response:', endError);
     }
   };
 
@@ -464,18 +151,18 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
 
   // 监听请求完成
   req.on('end', () => {
-    console.log('📤 Request data received completely');
+    log.info('📤 Request data received completely');
   });
 
   // 监听连接错误
   req.on('error', (error) => {
-    console.error('SSE request error:', error);
+    log.error('SSE request error:', error);
     safeCloseConnection(`request error: ${error.message}`);
   });
 
   // 监听响应错误
   res.on('error', (error) => {
-    console.error('SSE response error:', error);
+    log.error('SSE response error:', error);
     safeCloseConnection(`response error: ${error.message}`);
   });
 
@@ -493,7 +180,39 @@ function setupSSEConnectionManagement(req: express.Request, res: express.Respons
   };
 }
 
-// POST /api/agents/chat - Agent-based AI chat using Claude Code SDK with session management
+/**
+ * @swagger
+ * /api/agents/chat:
+ *   post:
+ *     tags: [Agents]
+ *     summary: Agent 对话（Claude SDK，SSE 流式响应，支持重连）
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: ChatRequest（见 ChatRequestSchema）
+ *     responses:
+ *       200:
+ *         description: text/event-stream SSE 事件流
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ *       400:
+ *         description: 请求体无效
+ *       403:
+ *         description: Agent 已禁用
+ *       404:
+ *         description: Agent 或会话不存在（重连场景）
+ *       409:
+ *         description: 重连时会话未在处理中
+ *       422:
+ *         description: Hook 拦截拒绝发送
+ *       500:
+ *         description: 服务错误（未开始 SSE 时返回 JSON）
+ */
 router.post('/chat', async (req, res) => {
   // 重试逻辑：最多重试1次
   let retryCount = 0;
@@ -503,26 +222,26 @@ router.post('/chat', async (req, res) => {
   let _ensureAguiRunFinished: () => void = () => {};
 
   try {
-    console.log('Chat request received:', req.body);
+    log.info('Chat request received:', req.body);
 
     // 输出当前Session Manager的状态
-    console.log('📊 SessionManager状态 - 收到/chat消息时:');
-    console.log(`   活跃会话总数: ${sessionManager.getActiveSessionCount()}`);
+    log.info('📊 SessionManager状态 - 收到/chat消息时:');
+    log.info(`   活跃会话总数: ${sessionManager.getActiveSessionCount()}`);
     const sessionsInfo = sessionManager.getSessionsInfo();
-    console.log('   会话详情:');
+    log.info('   会话详情:');
     sessionsInfo.forEach(session => {
-      console.log(`     - SessionId: ${session.sessionId}`);
-      console.log(`       AgentId: ${session.agentId}`);
-      console.log(`       状态: ${session.status}`);
-      console.log(`       是否活跃: ${session.isActive}`);
-      console.log(`       空闲时间: ${Math.round(session.idleTimeMs / 1000)}秒`);
-      console.log(`       最后活动: ${new Date(session.lastActivity).toISOString()}`);
+      log.info(`     - SessionId: ${session.sessionId}`);
+      log.info(`       AgentId: ${session.agentId}`);
+      log.info(`       状态: ${session.status}`);
+      log.info(`       是否活跃: ${session.isActive}`);
+      log.info(`       空闲时间: ${Math.round(session.idleTimeMs / 1000)}秒`);
+      log.info(`       最后活动: ${new Date(session.lastActivity).toISOString()}`);
     });
 
     // 验证请求数据
     const validation = ChatRequestSchema.safeParse(req.body);
     if (!validation.success) {
-      console.log('Validation failed:', validation.error);
+      log.info('Validation failed:', validation.error);
       return res.status(400).json({ error: 'Invalid request body', details: validation.error });
     }
 
@@ -530,7 +249,7 @@ router.post('/chat', async (req, res) => {
     const environmentContext = requestContext?.environmentContext;
     let sessionId = initialSessionId;
     
-    console.log(`📡 Output format: ${outputFormat}`);
+    log.info(`📡 Output format: ${outputFormat}`);
 
     // Broadcast an AGUI event to session observers via sessionEventBus
     const broadcastToObservers = (event: AGUIEvent, sid: string | null | undefined) => {
@@ -539,7 +258,7 @@ router.post('/chat', async (req, res) => {
       }
     };
 
-    console.log('[Backend] Received chat request:', {
+    log.info('[Backend] Received chat request:', {
       agentId,
       sessionId,
       reconnect: !!reconnect,
@@ -549,16 +268,16 @@ router.post('/chat', async (req, res) => {
 
     // ── Reconnect branch: re-attach to an in-progress SSE stream ──────────
     if (reconnect && sessionId) {
-      console.log(`🔄 [Reconnect] Attempting to re-attach to session: ${sessionId}`);
+      log.info(`🔄 [Reconnect] Attempting to re-attach to session: ${sessionId}`);
 
       const claudeSession = sessionManager.getSession(sessionId);
       if (!claudeSession || !claudeSession.isSessionActive()) {
-        console.log(`❌ [Reconnect] Session ${sessionId} is not active`);
+        log.info(`❌ [Reconnect] Session ${sessionId} is not active`);
         return res.status(404).json({ error: 'Session not found or not active' });
       }
 
       if (!claudeSession.isCurrentlyProcessing()) {
-        console.log(`ℹ️ [Reconnect] Session ${sessionId} is active but not processing`);
+        log.info(`ℹ️ [Reconnect] Session ${sessionId} is active but not processing`);
         return res.status(409).json({ reconnected: false, reason: 'not_processing' });
       }
 
@@ -684,7 +403,7 @@ router.post('/chat', async (req, res) => {
             }
           }
         } catch (writeError) {
-          console.error('[Reconnect] Failed to write SSE data:', writeError);
+          log.error('[Reconnect] Failed to write SSE data:', writeError);
           isReconnectClosed = true;
         }
 
@@ -707,11 +426,11 @@ router.post('/chat', async (req, res) => {
       });
 
       if (!replaced) {
-        console.log(`❌ [Reconnect] Failed to replace callback for session ${sessionId}`);
+        log.info(`❌ [Reconnect] Failed to replace callback for session ${sessionId}`);
         clearInterval(heartbeat);
         try { res.end(); } catch { /* ignore */ }
       } else {
-        console.log(`✅ [Reconnect] Successfully re-attached to session ${sessionId}`);
+        log.info(`✅ [Reconnect] Successfully re-attached to session ${sessionId}`);
       }
 
       return; // Don't continue to the normal chat flow
@@ -720,7 +439,7 @@ router.post('/chat', async (req, res) => {
 
     // Configure partial message streaming based on channel
     const includePartialMessages = channel === 'web';
-    console.log(`📡 Channel: ${channel}, includePartialMessages: ${includePartialMessages}`);
+    log.info(`📡 Channel: ${channel}, includePartialMessages: ${includePartialMessages}`);
 
     // 获取 agent 配置
     const agent = globalAgentStorage.getAgent(agentId);
@@ -752,7 +471,7 @@ router.post('/chat', async (req, res) => {
         };
 
         const evalResult = await hookManager.evaluate(hookEvent);
-        console.log('[HookInterceptor] message.pre_send evaluated:', {
+        log.info('[HookInterceptor] message.pre_send evaluated:', {
           decision: evalResult.decision,
           evaluatedCount: evalResult.evaluatedCount,
           skippedCount: evalResult.skippedCount,
@@ -773,11 +492,11 @@ router.post('/chat', async (req, res) => {
 
         if (evalResult.rewrittenMessage) {
           message = evalResult.rewrittenMessage;
-          console.log('[HookInterceptor] Message rewritten by hook interceptor');
+          log.info('[HookInterceptor] Message rewritten by hook interceptor');
         }
       }
     } catch (hookError) {
-      console.error('[HookInterceptor] Error evaluating message.pre_send hooks:', hookError);
+      log.error('[HookInterceptor] Error evaluating message.pre_send hooks:', hookError);
     }
     // ── End Hook Interceptor ──────────────────────────────────────────────
 
@@ -820,7 +539,7 @@ router.post('/chat', async (req, res) => {
         };
         writeAguiAndBroadcast(runFinishedEvent, sessionId);
         aguiRunFinishedSent = true;
-        console.log('🛡️ [Safety Net] Sent RUN_FINISHED before connection close');
+        log.info('🛡️ [Safety Net] Sent RUN_FINISHED before connection close');
       } catch {
         // Connection already gone, nothing we can do
       }
@@ -890,7 +609,7 @@ router.post('/chat', async (req, res) => {
             })}\n\n`);
           }
         } catch (writeError) {
-          console.error('Failed to write A2A stream start event:', writeError);
+          log.error('Failed to write A2A stream start event:', writeError);
         }
       }
     };
@@ -909,7 +628,7 @@ router.post('/chat', async (req, res) => {
             })}\n\n`);
           }
         } catch (writeError) {
-          console.error('Failed to write A2A stream data event:', writeError);
+          log.error('Failed to write A2A stream data event:', writeError);
         }
       }
     };
@@ -929,7 +648,7 @@ router.post('/chat', async (req, res) => {
             })}\n\n`);
           }
         } catch (writeError) {
-          console.error('Failed to write A2A stream end event:', writeError);
+          log.error('Failed to write A2A stream end event:', writeError);
         }
       }
     };
@@ -950,17 +669,17 @@ router.post('/chat', async (req, res) => {
     // 重试循环：处理会话失败的情况
     while (retryCount <= MAX_RETRIES) {
       try {
-        console.log(`🔄 Attempt ${retryCount + 1}/${MAX_RETRIES + 1} for session: ${sessionId || 'new'}`);
+        log.info(`🔄 Attempt ${retryCount + 1}/${MAX_RETRIES + 1} for session: ${sessionId || 'new'}`);
         const { queryOptions, frontendToolSessionRef } = await buildQueryOptions(agent, projectPath, mcpTools, permissionMode, model, claudeVersion, undefined, envVars, tempSessionId, agentId, true, frontendTools as any);
 
         // 📊 输出传到 query 中的模型参数
-        console.log('📊 [Chat API] QueryOptions 模型参数:');
-        console.log(`   请求中的 model 参数: ${model || '(未指定)'}`);
-        console.log(`   请求中的 claudeVersion: ${claudeVersion || '(未指定)'}`);
-        console.log(`   最终 queryOptions.model: ${queryOptions.model}`);
-        console.log(`   queryOptions.pathToClaudeCodeExecutable: ${queryOptions.pathToClaudeCodeExecutable || '(未指定)'}`);
-        console.log(`   queryOptions.cwd: ${queryOptions.cwd}`);
-        console.log(`   queryOptions.permissionMode: ${queryOptions.permissionMode}`);
+        log.info('📊 [Chat API] QueryOptions 模型参数:');
+        log.info(`   请求中的 model 参数: ${model || '(未指定)'}`);
+        log.info(`   请求中的 claudeVersion: ${claudeVersion || '(未指定)'}`);
+        log.info(`   最终 queryOptions.model: ${queryOptions.model}`);
+        log.info(`   queryOptions.pathToClaudeCodeExecutable: ${queryOptions.pathToClaudeCodeExecutable || '(未指定)'}`);
+        log.info(`   queryOptions.cwd: ${queryOptions.cwd}`);
+        log.info(`   queryOptions.permissionMode: ${queryOptions.permissionMode}`);
 
         // ⚡ CRITICAL: Add includePartialMessages BEFORE creating session
         // This must be set before handleSessionManagement because ClaudeSession
@@ -977,7 +696,7 @@ router.post('/chat', async (req, res) => {
             .filter((tool: any) => tool.enabled)
             .map((tool: any) => tool.name)
         };
-        console.log('📸 [Chat API] Config snapshot:', configSnapshot);
+        log.info('📸 [Chat API] Config snapshot:', configSnapshot);
 
         // 处理会话管理（传入配置快照）
         const { claudeSession, actualSessionId: initialSessionId } = await handleSessionManagement(
@@ -993,17 +712,17 @@ router.post('/chat', async (req, res) => {
         const actualSessionId = initialSessionId;
 
         // 📊 输出 Session 初始化后的信息
-        console.log('📊 [Chat API] Session 初始化后的信息:');
-        console.log(`   Session ID: ${claudeSession.getClaudeSessionId?.() || '(无法获取)'}`);
-        console.log(`   actualSessionId: ${actualSessionId || '(新会话)'}`);
-        console.log(`   Agent ID: ${agentId}`);
+        log.info('📊 [Chat API] Session 初始化后的信息:');
+        log.info(`   Session ID: ${claudeSession.getClaudeSessionId?.() || '(无法获取)'}`);
+        log.info(`   actualSessionId: ${actualSessionId || '(新会话)'}`);
+        log.info(`   Agent ID: ${agentId}`);
         // 尝试获取 session 的内部配置
         try {
           const sessionOptions = claudeSession.getOptions?.() || claudeSession.options || queryOptions;
-          console.log(`   Session 使用的 model: ${sessionOptions?.model || '(未知)'}`);
-          console.log(`   Session pathToClaudeCodeExecutable: ${sessionOptions?.pathToClaudeCodeExecutable || '(未知)'}`);
+          log.info(`   Session 使用的 model: ${sessionOptions?.model || '(未知)'}`);
+          log.info(`   Session pathToClaudeCodeExecutable: ${sessionOptions?.pathToClaudeCodeExecutable || '(未知)'}`);
         } catch (e) {
-          console.log(`   无法获取 Session 内部配置`);
+          log.info(`   无法获取 Session 内部配置`);
         }
 
         // 设置会话到连接管理器
@@ -1042,9 +761,14 @@ router.post('/chat', async (req, res) => {
         // which previously caused duplicate messages when loading session history.
         const currentRequestId = await claudeSession.sendMessage(userMessage, async (sdkMessage: SDKMessage) => {
           if (isSDKSystemMessage(sdkMessage) && sdkMessage.subtype === "init") {
-            // 📊 打印完整的 system.init 消息体，用于调试模型使用情况
-            console.log('📊 [Chat API] System Init Message 完整消息体:');
-            console.log(JSON.stringify(sdkMessage, null, 2));
+            // Log summary only (full message may contain sensitive MCP/env data)
+            const initSummary = {
+              subtype: sdkMessage.subtype,
+              model: (sdkMessage as any).model,
+              mcp_servers: (sdkMessage as any).mcp_servers?.map((s: any) => ({ name: s.name, status: s.status })),
+              tools_count: (sdkMessage as any).tools?.length,
+            };
+            log.info('📊 [Chat API] System Init:', JSON.stringify(initSummary));
             
             // 检查 MCP 服务器连接状态
             if (sdkMessage.mcp_servers && Array.isArray(sdkMessage.mcp_servers)) {
@@ -1053,7 +777,7 @@ router.post('/chat', async (req, res) => {
               );
 
               if (failedServers.length > 0) {
-                console.warn("🚨 [MCP] Failed to connect MCP servers:", failedServers.map((s: any) => ({
+                log.warn("🚨 [MCP] Failed to connect MCP servers:", failedServers.map((s: any) => ({
                   name: s.name,
                   status: s.status,
                   error: s.error
@@ -1074,13 +798,13 @@ router.post('/chat', async (req, res) => {
                     res.write(`data: ${JSON.stringify(mcpStatusEvent)}\n\n`);
                   }
                 } catch (writeError: unknown) {
-                  console.error('Failed to write MCP status event:', writeError);
+                  log.error('Failed to write MCP status event:', writeError);
                 }
               } else {
                 // 所有 MCP 服务器连接成功
                 const connectedServers = sdkMessage.mcp_servers.filter((s: any) => s.status === "connected");
                 if (connectedServers.length > 0) {
-                  console.log("✅ [MCP] Successfully connected MCP servers:", connectedServers.map((s: any) => s.name));
+                  log.info("✅ [MCP] Successfully connected MCP servers:", connectedServers.map((s: any) => s.name));
 
                   // 发送成功连接通知给前端
                   const mcpStatusEvent = {
@@ -1097,7 +821,7 @@ router.post('/chat', async (req, res) => {
                       res.write(`data: ${JSON.stringify(mcpStatusEvent)}\n\n`);
                     }
                   } catch (writeError: unknown) {
-                    console.error('Failed to write MCP success event:', writeError);
+                    log.error('Failed to write MCP success event:', writeError);
                   }
                 }
               }
@@ -1107,7 +831,7 @@ router.post('/chat', async (req, res) => {
           // 🚨 MCP 工具日志观察 - 检查执行错误
           if (isSDKResultMessage(sdkMessage) && sdkMessage.subtype === "error_during_execution") {
             const errorMessage = sdkMessage as any; // 临时类型断言以访问错误详情
-            console.error("❌ [MCP] Execution failed:", {
+            log.error("❌ [MCP] Execution failed:", {
               error: errorMessage.error,
               details: errorMessage.details,
               tool: errorMessage.tool,
@@ -1131,14 +855,14 @@ router.post('/chat', async (req, res) => {
                 res.write(`data: ${JSON.stringify(mcpErrorEvent)}\n\n`);
               }
             } catch (writeError: unknown) {
-              console.error('Failed to write MCP error event:', writeError);
+              log.error('Failed to write MCP error event:', writeError);
             }
           }
 
           // 🔍 添加详细日志来观察消息结构
           if (message === '/compact') {
             const msgWithContent = sdkMessage as any;  // 临时使用 any 访问 message 属性
-            console.log('📦 [COMPACT] Received SDK message:', {
+            log.info('📦 [COMPACT] Received SDK message:', {
               type: sdkMessage.type,
               subtype: (sdkMessage as any).subtype,
               hasMessage: !!msgWithContent.message,
@@ -1157,7 +881,7 @@ router.post('/chat', async (req, res) => {
           if (message !== '/compact' && isSDKCompactBoundaryMessage(sdkMessage)) {
             const compactMsg = sdkMessage as SDKCompactBoundaryMessage;
             const compactMetadata = (compactMsg as any).compact_metadata;
-            console.log('🔄 [AUTO-COMPACT] Detected auto-compaction event:', {
+            log.info('🔄 [AUTO-COMPACT] Detected auto-compaction event:', {
               trigger: compactMetadata?.trigger,
               preTokens: compactMetadata?.pre_tokens,
             });
@@ -1192,7 +916,7 @@ router.post('/chat', async (req, res) => {
                 }
               }
             } catch (writeError: unknown) {
-              console.error('Failed to write auto-compact event:', writeError);
+              log.error('Failed to write auto-compact event:', writeError);
             }
             return; // 不继续处理，避免重复发送
           }
@@ -1200,7 +924,7 @@ router.post('/chat', async (req, res) => {
           // 处理 /compact 命令的特殊消息序列
           if (message === '/compact' && isSDKCompactBoundaryMessage(sdkMessage)) {
             compactMessageBuffer.push(sdkMessage);
-            console.log('📦 [COMPACT] Detected compact_boundary, buffering messages...');
+            log.info('📦 [COMPACT] Detected compact_boundary, buffering messages...');
             return; // 不发送给前端，等待完整的消息序列
           }
 
@@ -1210,7 +934,7 @@ router.post('/chat', async (req, res) => {
 
             // 检查是否有足够的消息来构成完整的 compact 序列
             if (compactMessageBuffer.length >= 5) {
-              console.log('📦 [COMPACT] Processing complete compact sequence...');
+              log.info('📦 [COMPACT] Processing complete compact sequence...');
 
               // 提取摘要内容（第二个消息应该是 isCompactSummary）
               const summaryMsg = compactMessageBuffer.find(msg => msg.isCompactSummary);
@@ -1241,14 +965,14 @@ router.post('/chat', async (req, res) => {
                 isCompactSummary: true
               };
 
-              console.log('📦 [COMPACT] Sending compact summary to frontend:', compactContent.substring(0, 100));
+              log.info('📦 [COMPACT] Sending compact summary to frontend:', compactContent.substring(0, 100));
 
               try {
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
                   res.write(`data: ${JSON.stringify(compactSummaryMessage)}\n\n`);
                 }
               } catch (writeError: unknown) {
-                console.error('Failed to write compact summary:', writeError);
+                log.error('Failed to write compact summary:', writeError);
               }
 
               // 清空缓存
@@ -1259,7 +983,7 @@ router.post('/chat', async (req, res) => {
 
           // 检查连接是否已关闭
           if (connectionManager.isConnectionClosed()) {
-            console.log(`⚠️ Skipping response for closed connection, agent: ${agentId}`);
+            log.info(`⚠️ Skipping response for closed connection, agent: ${agentId}`);
             return;
           }
 
@@ -1270,7 +994,7 @@ router.post('/chat', async (req, res) => {
               // 新会话：保存session ID
               claudeSession.setClaudeSessionId(responseSessionId);
               sessionManager.confirmSessionId(claudeSession, responseSessionId, configSnapshot);
-              console.log(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
+              log.info(`✅ Confirmed session ${responseSessionId} for agent: ${agentId}`);
 
               // When the frontend sent an existing session ID (actualSessionId) but
               // the SDK issued a different ID (responseSessionId), also register an
@@ -1278,7 +1002,7 @@ router.post('/chat', async (req, res) => {
               // still find this session in memory.
               if (actualSessionId && actualSessionId !== responseSessionId) {
                 sessionManager.registerSessionAlias(actualSessionId, claudeSession);
-                console.log(`🔗 Aliased frontend session ${actualSessionId} → SDK session ${responseSessionId}`);
+                log.info(`🔗 Aliased frontend session ${actualSessionId} → SDK session ${responseSessionId}`);
               }
 
               if (tempSessionId !== responseSessionId) {
@@ -1293,7 +1017,7 @@ router.post('/chat', async (req, res) => {
               // We keep the original sessionId as the public-facing ID so the
               // frontend sees a consistent session. The SDK's internal session ID
               // is stored on the ClaudeSession object for future SDK calls.
-              console.log(`🔄 Session resumed: SDK returned ${responseSessionId}, keeping public sessionId as ${currentSessionId} for agent: ${agentId}`);
+              log.info(`🔄 Session resumed: SDK returned ${responseSessionId}, keeping public sessionId as ${currentSessionId} for agent: ${agentId}`);
 
               // Track the SDK's real session ID internally (do NOT replace the
               // session manager mapping — the session stays indexed under the
@@ -1301,7 +1025,7 @@ router.post('/chat', async (req, res) => {
               claudeSession.setClaudeSessionId(responseSessionId);
             } else {
               // 继续会话：使用现有session ID
-              console.log(`♻️  Continued session ${currentSessionId} for agent: ${agentId}`);
+              log.info(`♻️  Continued session ${currentSessionId} for agent: ${agentId}`);
             }
 
             // 🎯 Deferred RUN_STARTED: now that we have the real session ID from init,
@@ -1317,10 +1041,10 @@ router.post('/chat', async (req, res) => {
                 if (!res.destroyed && !connectionManager.isConnectionClosed()) {
                   writeAguiAndBroadcast(runStartedEvent, actualSessionId || currentSessionId);
                   aguiRunStartedSent = true;
-                  console.log(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${aguiThreadId}`);
+                  log.info(`🚀 [AGUI] Sent deferred RUN_STARTED with threadId: ${aguiThreadId}`);
                 }
               } catch (writeError) {
-                console.error('Failed to write AGUI RUN_STARTED event:', writeError);
+                log.error('Failed to write AGUI RUN_STARTED event:', writeError);
               }
             }
           }
@@ -1333,7 +1057,7 @@ router.post('/chat', async (req, res) => {
           if (isSidechain) {
             const contentBlocks = msgAny.message?.content || [];
             const blockTypes = contentBlocks.map((b: any) => b.type);
-            console.log('🎯 [SIDECHAIN] Sub-agent message:', {
+            log.info('🎯 [SIDECHAIN] Sub-agent message:', {
               type: sdkMessage.type,
               parentToolUseId,
               blockTypes,
@@ -1379,7 +1103,7 @@ router.post('/chat', async (req, res) => {
               }
             }
           } catch (writeError: unknown) {
-            console.error('Failed to write SSE data:', writeError);
+            log.error('Failed to write SSE data:', writeError);
             const errorMessage = writeError instanceof Error ? writeError.message : 'unknown write error';
             ensureAguiRunFinished();
             connectionManager.safeCloseConnection(`write error: ${errorMessage}`);
@@ -1392,7 +1116,7 @@ router.post('/chat', async (req, res) => {
 
             // 检查是否为错误类型的 result
             if (resultMsg.subtype !== 'success') {
-              console.error(`❌ Received error result (subtype: ${resultMsg.subtype}):`, resultMsg.errors);
+              log.error(`❌ Received error result (subtype: ${resultMsg.subtype}):`, resultMsg.errors);
 
               // 发送错误事件给前端
               const errorEvent = {
@@ -1410,7 +1134,7 @@ router.post('/chat', async (req, res) => {
                   res.write(`data: ${JSON.stringify(errorEvent)}\n\n`);
                 }
               } catch (writeError: unknown) {
-                console.error('Failed to write error event:', writeError);
+                log.error('Failed to write error event:', writeError);
               }
             }
 
@@ -1446,7 +1170,7 @@ router.post('/chat', async (req, res) => {
                       }
                     }
                   } catch (hookError: any) {
-                    console.warn(`[onRunFinished hook] Error: ${hookError.message}`);
+                    log.warn(`[onRunFinished hook] Error: ${hookError.message}`);
                   }
                 }
 
@@ -1457,13 +1181,13 @@ router.post('/chat', async (req, res) => {
 
                 aguiRunFinishedSent = true; // finalize() includes RUN_FINISHED
               } catch (finalizeError) {
-                console.error('Failed to write AGUI finalize events:', finalizeError);
+                log.error('Failed to write AGUI finalize events:', finalizeError);
               }
             }
 
             // Safety net: ensure RUN_FINISHED is sent even if finalize() failed
             ensureAguiRunFinished();
-            console.log(`✅ Received result event (subtype: ${resultMsg.subtype}), closing SSE connection for sessionId: ${actualSessionId || currentSessionId}`);
+            log.info(`✅ Received result event (subtype: ${resultMsg.subtype}), closing SSE connection for sessionId: ${actualSessionId || currentSessionId}`);
             connectionManager.safeCloseConnection('request completed');
           }
         });
@@ -1471,13 +1195,13 @@ router.post('/chat', async (req, res) => {
         // 设置当前请求ID到连接管理器
         connectionManager.setCurrentRequestId(currentRequestId);
 
-        console.log(`📨 Started Claude request for agent: ${agentId}, sessionId: ${currentSessionId || 'new'}, requestId: ${currentRequestId}`);
+        log.info(`📨 Started Claude request for agent: ${agentId}, sessionId: ${currentSessionId || 'new'}, requestId: ${currentRequestId}`);
 
         // 如果成功发送消息，跳出重试循环
         break;
 
       } catch (sessionError) {
-        console.error(`❌ Claude session error (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, sessionError);
+        log.error(`❌ Claude session error (attempt ${retryCount + 1}/${MAX_RETRIES + 1}):`, sessionError);
 
         const errorMessage = sessionError instanceof Error ? sessionError.message : 'Unknown error';
         const originalSessionId = sessionId; // 使用外部作用域的sessionId
@@ -1487,31 +1211,31 @@ router.post('/chat', async (req, res) => {
 
         if (shouldRetry && originalSessionId) {
           // 尝试重试：从SessionManager中移除失败的会话
-          console.log(`🔄 Attempting to recover from session failure for session: ${originalSessionId}`);
-          console.log(`   Error details: ${errorMessage}`);
+          log.info(`🔄 Attempting to recover from session failure for session: ${originalSessionId}`);
+          log.info(`   Error details: ${errorMessage}`);
 
           try {
             // 从SessionManager中移除失败的会话
             const removed = await sessionManager.removeSession(originalSessionId);
             if (removed) {
-              console.log(`✅ Removed failed session ${originalSessionId} from SessionManager`);
+              log.info(`✅ Removed failed session ${originalSessionId} from SessionManager`);
             } else {
-              console.log(`⚠️  Session ${originalSessionId} was not found in SessionManager (may have been cleaned up already)`);
+              log.info(`⚠️  Session ${originalSessionId} was not found in SessionManager (may have been cleaned up already)`);
             }
           } catch (removeError) {
-            console.error(`⚠️  Failed to remove session ${originalSessionId}:`, removeError);
+            log.error(`⚠️  Failed to remove session ${originalSessionId}:`, removeError);
           }
 
           // 将sessionId设为null，下次循环将创建新会话
           sessionId = null;
           retryCount++;
 
-          console.log(`🔄 Retrying with new session (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
+          log.info(`🔄 Retrying with new session (attempt ${retryCount + 1}/${MAX_RETRIES + 1})...`);
           continue; // 继续下一次循环
         }
 
         // 不再重试，发送错误给前端
-        console.log(`❌ Maximum retries reached or no sessionId to retry. Sending error to frontend.`);
+        log.info(`❌ Maximum retries reached or no sessionId to retry. Sending error to frontend.`);
 
         if (!connectionManager.isConnectionClosed()) {
           try {
@@ -1523,7 +1247,7 @@ router.post('/chat', async (req, res) => {
               retriesExhausted: retryCount >= MAX_RETRIES
             })}\n\n`);
           } catch (writeError) {
-            console.error('Failed to write error message:', writeError);
+            log.error('Failed to write error message:', writeError);
           }
           ensureAguiRunFinished();
           connectionManager.safeCloseConnection(`session error: ${errorMessage}`);
@@ -1533,7 +1257,7 @@ router.post('/chat', async (req, res) => {
     } // End of while loop
 
   } catch (error) {
-    console.error('Error in AI chat:', error);
+    log.error('Error in AI chat:', error);
 
     // 使用安全关闭连接函数（如果在 try 块内部定义的话）
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -1555,70 +1279,17 @@ router.post('/chat', async (req, res) => {
           res.end();
         }
       } catch (writeError) {
-        console.error('Failed to write final error message:', writeError);
+        log.error('Failed to write final error message:', writeError);
         try {
           if (!res.destroyed) {
             res.end();
           }
         } catch (endError) {
-          console.error('Failed to end response in error handler:', endError);
+          log.error('Failed to end response in error handler:', endError);
         }
       }
     }
   }
 });
-
-// =================================================================================
-// Frontend Tool Result API
-// =================================================================================
-// Generic endpoint for submitting frontend tool execution results.
-// Replaces the previous /user-response endpoint with a tool-agnostic version.
-
-const FrontendToolResultSchema = z.object({
-  toolCallId: z.string().min(1, 'toolCallId is required'),
-  result: z.union([z.string(), z.record(z.string(), z.any()), z.array(z.any())]),
-  isError: z.boolean().optional(),
-  sessionId: z.string().min(1, 'sessionId is required'),
-  agentId: z.string().min(1, 'agentId is required'),
-  toolName: z.string().optional(),
-});
-
-router.post('/frontend-tool-result', async (req, res) => {
-  try {
-    const validation = FrontendToolResultSchema.safeParse(req.body);
-    if (!validation.success) {
-      return res.status(400).json({ error: 'Invalid request body', details: validation.error.issues });
-    }
-
-    const { toolCallId, result: rawResult, isError, sessionId, agentId, toolName } = validation.data;
-
-    const resultStr = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult);
-
-    if (isError) {
-      const cancelOk = frontendToolBridge.cancel(toolCallId, resultStr, sessionId, agentId, toolName);
-      if (cancelOk) {
-        return res.json({ success: true });
-      }
-      return res.status(404).json({ success: false, error: 'No pending tool call found' });
-    }
-
-    const outcome = frontendToolBridge.submitResult(toolCallId, resultStr, sessionId, agentId, toolName);
-
-    if (outcome.success) {
-      res.json({ success: true });
-    } else {
-      const status = outcome.error?.includes('mismatch') ? 403 : 404;
-      res.status(status).json({ success: false, error: outcome.error });
-    }
-  } catch (error) {
-    console.error('[FrontendToolResult] Error:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
-  }
-});
-
-
-// NOTE: The old POST /register-frontend-tools endpoint has been removed.
-// Frontend tool schemas are now sent inline with each chat request via the
-// `frontendTools` field in the chat request body.
 
 export default router;

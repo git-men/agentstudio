@@ -4,6 +4,7 @@ import { join, dirname } from 'path';
 import { ClaudeVersion, ClaudeVersionCreate, ClaudeVersionUpdate, ModelConfig } from '../types/claude-versions';
 import { CLAUDE_AGENT_DIR, CLAUDE_VERSIONS_FILE, CLAUDE_INTERNAL_VERSIONS_FILE } from '../config/paths.js';
 import { isClaudeInternalEngine } from '../config/engineConfig.js';
+import { encryptEnvVars, decryptEnvVars, migrateToEncrypted } from './secretStore.js';
 
 const DEFAULT_MODELS: ModelConfig[] = [
   {
@@ -128,11 +129,30 @@ export async function loadClaudeVersions(): Promise<VersionStorage> {
   // Try primary file first
   const primary = await tryReadVersionStorage(versionsFile);
   if (primary) {
-    const { storage, changed } = migrateVersionData(primary);
-    if (changed) {
-      await atomicWriteJSON(versionsFile, storage);
+    const { storage: migrated, changed: dataMigrated } = migrateVersionData(primary);
+
+    // Migrate plaintext secrets to encrypted form
+    let secretsMigrated = false;
+    for (const version of migrated.versions) {
+      if (version.environmentVariables && Object.keys(version.environmentVariables).length > 0) {
+        const { migrated: didMigrate, result } = await migrateToEncrypted(
+          version.environmentVariables,
+          `version:${version.id}`,
+        );
+        if (didMigrate) {
+          version.environmentVariables = result;
+          secretsMigrated = true;
+        }
+      }
     }
-    return storage;
+
+    if (dataMigrated || secretsMigrated) {
+      await atomicWriteJSON(versionsFile, migrated);
+      if (secretsMigrated) {
+        console.log('[VersionStorage] Migrated plaintext credentials to encrypted storage');
+      }
+    }
+    return migrated;
   }
 
   // Primary file failed or missing — try backup recovery
@@ -140,7 +160,6 @@ export async function loadClaudeVersions(): Promise<VersionStorage> {
   if (backup) {
     console.warn(`[VersionStorage] Primary file unreadable, recovered from backup: ${backupFile}`);
     const { storage, changed } = migrateVersionData(backup);
-    // Restore primary from backup
     await atomicWriteJSON(versionsFile, storage);
     return storage;
   }
@@ -229,6 +248,17 @@ export async function getAllVersions(): Promise<ClaudeVersion[]> {
 
 export async function getAllVersionsInternal(): Promise<ClaudeVersion[]> {
   const storage = await loadClaudeVersions();
+
+  // Decrypt sensitive environment variables for runtime use
+  for (const version of storage.versions) {
+    if (version.environmentVariables && Object.keys(version.environmentVariables).length > 0) {
+      version.environmentVariables = await decryptEnvVars(
+        version.environmentVariables,
+        `version:${version.id}`,
+      );
+    }
+  }
+
   return storage.versions;
 }
 
@@ -244,6 +274,14 @@ export async function getVersionByIdInternal(versionId: string): Promise<ClaudeV
       console.log(`   Environment variables: ${envVarKeys.join(', ')}`);
     } else {
       console.log(`   No environment variables configured`);
+    }
+
+    // Decrypt sensitive environment variables for runtime use
+    if (version.environmentVariables && Object.keys(version.environmentVariables).length > 0) {
+      version.environmentVariables = await decryptEnvVars(
+        version.environmentVariables,
+        `version:${versionId}`,
+      );
     }
   } else {
     console.log(`⚠️ Version not found: ${versionId}`);
@@ -281,15 +319,22 @@ export async function createVersion(data: ClaudeVersionCreate): Promise<ClaudeVe
     }
 
     const now = new Date().toISOString();
+    const versionId = generateId();
+
+    // Encrypt sensitive environment variables before persisting
+    const encryptedEnv = data.environmentVariables
+      ? await encryptEnvVars(data.environmentVariables, `version:${versionId}`)
+      : {};
+
     const newVersion: ClaudeVersion = {
-      id: generateId(),
+      id: versionId,
       name: data.name,
       alias: data.alias,
       description: data.description,
       executablePath: data.executablePath,
       isDefault: storage.versions.length === 0,
       isSystem: false,
-      environmentVariables: data.environmentVariables || {},
+      environmentVariables: encryptedEnv,
       models: data.models || DEFAULT_MODELS,
       createdAt: now,
       updatedAt: now
@@ -352,6 +397,14 @@ export async function updateVersion(versionId: string, data: ClaudeVersionUpdate
         ...data.environmentVariables,
         ANTHROPIC_AUTH_TOKEN: originalToken
       };
+    }
+
+    // Encrypt sensitive environment variables before persisting
+    if (updatedVersion.environmentVariables && Object.keys(updatedVersion.environmentVariables).length > 0) {
+      updatedVersion.environmentVariables = await encryptEnvVars(
+        updatedVersion.environmentVariables,
+        `version:${versionId}`,
+      );
     }
 
     storage.versions[versionIndex] = updatedVersion;

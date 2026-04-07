@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { join } from 'path';
 import { readFileSync } from 'fs';
 import * as net from 'net';
+import { logger } from './utils/logger.js';
 
 import filesRouter from './routes/files';
 import agentsRouter from './routes/agents';
@@ -20,7 +21,6 @@ import subagentsRouter from './routes/subagents';
 import projectsRouter from './routes/projects';
 import authRouter from './routes/auth';
 import configRouter from './routes/config';
-import slackRouter from './routes/slack';
 import skillsRouter from './routes/skills';
 import pluginsRouter from './routes/plugins';
 import marketplaceSkillsRouter from './routes/marketplaceSkills';
@@ -28,6 +28,7 @@ import a2aRouter from './routes/a2a';
 import a2aJsonRpcRouter from './routes/a2aJsonRpc';
 import a2aManagementRouter from './routes/a2aManagement';
 import scheduledTasksRouter from './routes/scheduledTasks';
+import { setupSwagger } from './swagger';
 import mcpAdminRouter from './routes/mcpAdmin';
 import mcpAdminManagementRouter from './routes/mcpAdminManagement';
 import { autoBootstrapMcpAdmin } from './services/mcpAdmin/autoBootstrap.js';
@@ -51,7 +52,7 @@ import { authMiddleware } from './middleware/auth';
 import { callChainMiddleware } from './middleware/callChain';
 import { requestIdMiddleware } from './middleware/requestId';
 import { httpsOnly } from './middleware/httpsOnly';
-import { loadConfig, getSlidesDir } from './config/index';
+import { loadConfig } from './config/index';
 import { runMigrations } from './config/migration.js';
 import { cleanupOrphanedTasks } from './services/a2a/taskCleanup';
 import { initializeScheduler, shutdownScheduler } from './services/schedulerService';
@@ -234,6 +235,13 @@ const app: express.Express = express();
 (async () => {
   // Load configuration (including port and host)
   const config = await loadConfig();
+
+  // Initialize structured logger
+  logger.init({ level: config.logLevel, logDir: process.env.LOG_DIR });
+  if (process.env.LOG_DIR) {
+    console.log(`📁 Log directory: ${logger.getLogDir()}`);
+    console.log(`📝 Log file: ${logger.getLogFilePath()}`);
+  }
   const configuredPort = parseInt(process.env.PORT || String(config.port || 4936), 10);
   const HOST = config.host || '0.0.0.0';
   const PORT = await findAvailablePort(configuredPort);
@@ -270,6 +278,9 @@ const app: express.Express = express();
   } catch (error) {
     console.warn('[Engines] Failed to get engine status:', error);
   }
+
+  // Swagger API docs (before helmet to avoid CSP issues with Swagger UI assets)
+  setupSwagger(app);
 
   // Middleware
   app.use(helmet({
@@ -324,11 +335,6 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
-      // Allow Vercel preview URLs (*.vercel.app)
-      if (origin.endsWith('.vercel.app')) {
-        return callback(null, true);
-      }
-
       // Allow agentstudio.cc and its subdomains (*.agentstudio.cc) - hardcoded
       if (origin === 'https://agentstudio.cc' || origin === 'http://agentstudio.cc' ||
         origin.endsWith('.agentstudio.cc')) {
@@ -374,31 +380,29 @@ const app: express.Express = express();
         return callback(null, true);
       }
 
-      // For embedded/network mode: Allow requests from IP-based origins
+      // For embedded/network mode: Allow requests from same-port IP-based origins
       // when the server is bound to all interfaces (0.0.0.0 / ::).
-      // This covers tunnel/proxy scenarios (e.g. as-dispatch on a different port)
-      // where the browser's origin IP+port differs from the server's own port.
       try {
         const originUrl = new URL(origin);
-        const serverHost = `${originUrl.protocol}//${originUrl.host}`;
-
-        const serverPort = PORT;
-        const possibleServerUrls = [
-          `http://${HOST}:${serverPort}`,
-          `https://${HOST}:${serverPort}`,
-          `http://localhost:${serverPort}`,
-          `https://localhost:${serverPort}`,
-          `http://127.0.0.1:${serverPort}`,
-          `https://127.0.0.1:${serverPort}`,
-        ];
+        const originPort = originUrl.port || (originUrl.protocol === 'https:' ? '443' : '80');
 
         if (HOST === '0.0.0.0' || HOST === '::') {
           const hostname = originUrl.hostname;
           const isIPOrigin = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
-          if (isIPOrigin) {
+          if (isIPOrigin && originPort === String(PORT)) {
             return callback(null, true);
           }
         }
+
+        const serverHost = `${originUrl.protocol}//${originUrl.host}`;
+        const possibleServerUrls = [
+          `http://${HOST}:${PORT}`,
+          `https://${HOST}:${PORT}`,
+          `http://localhost:${PORT}`,
+          `https://localhost:${PORT}`,
+          `http://127.0.0.1:${PORT}`,
+          `https://127.0.0.1:${PORT}`,
+        ];
 
         if (possibleServerUrls.includes(serverHost)) {
           return callback(null, true);
@@ -421,21 +425,14 @@ const app: express.Express = express();
   // X-Request-ID: pass through or generate, set on request and response
   app.use(requestIdMiddleware);
 
-  // JSON parser - skip /api/slack (needs raw body for signature verification)
-  app.use((req, res, next) => {
-    if (req.path.startsWith('/api/slack')) {
-      return next();
-    }
-    express.json({ limit: '10mb' })(req, res, next);
-  });
+  // JSON parser
+  app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
   // Product gate middleware - enforce feature module access based on product edition
   app.use(productGateMiddleware);
 
-  // Static files - serve slides directory
-  const slidesDir = await getSlidesDir();
-  app.use('/slides', express.static(slidesDir));
+  // Slides directory serving removed (no longer used)
 
   // ============================================================================
   // Initialize Background Services
@@ -592,7 +589,6 @@ const app: express.Express = express();
       // Skip API routes and other specific routes
       if (req.path.startsWith('/api') ||
         req.path.startsWith('/media') ||
-        req.path.startsWith('/slides') ||
         req.path.startsWith('/a2a')) {
         return next();
       }
@@ -618,17 +614,6 @@ const app: express.Express = express();
   app.use('/api/auth', authRouter);
   // MCP Admin - uses its own API key authentication
   app.use('/api/mcp-admin', mcpAdminRouter);
-  // Slack webhook - needs raw body for signature verification
-  app.use('/api/slack',
-    express.json({
-      limit: '10mb',
-      verify: (req: any, res, buf) => {
-        req.rawBody = buf.toString('utf8');
-      }
-    }),
-    slackRouter
-  );
-
   // A2A Protocol routes - Public but require API key authentication and HTTPS in production
   // JSON-RPC router handles standard A2A protocol; mounted first for priority
   app.use('/a2a/:a2aAgentId', httpsOnly, a2aJsonRpcRouter);
@@ -638,7 +623,17 @@ const app: express.Express = express();
   // HTTP MCP Bridge - Public (accessed by local CLI processes like Cursor CLI)
   app.use('/api/mcp-bridge', express.json(), createHttpMcpRouter());
 
-  // Health check
+  /**
+   * @swagger
+   * /api/health:
+   *   get:
+   *     tags: [Health]
+   *     summary: 健康检查
+   *     security: []
+   *     responses:
+   *       200:
+   *         description: 服务正常
+   */
   app.get('/api/health', (req, res) => {
     try {
       const engineStatus = getEngineStatus();
@@ -660,6 +655,17 @@ const app: express.Express = express();
         name: 'agentstudio-backend'
       });
     }
+  });
+
+  // Log info endpoint (authenticated) — provides log path for IT security
+  app.get('/api/log-info', authMiddleware, (req, res) => {
+    res.json({
+      logDir: logger.getLogDir(),
+      logFile: logger.getLogFilePath(),
+      logLevel: config.logLevel || 'info',
+      traceEnabled: config.traceEnabled || false,
+      traceEndpoint: config.traceEndpoint ? '[configured]' : null,
+    });
   });
 
   // A2A Health check (public endpoint, no authentication required)
@@ -701,8 +707,14 @@ const app: express.Express = express();
 
   // Protected routes - Require authentication
   app.use('/api/files', authMiddleware, filesRouter);
-  // TEMPORARY: LAVS routes without auth for PoC testing (must come before agentsRouter)
-  app.use('/api/agents', lavsRouter);
+  // LAVS routes: GET endpoints (manifest, view, subscribe) are public for iframe embedding;
+  // POST endpoints (execute, publish, cache-clear) require authentication
+  app.use('/api/agents', (req, res, next) => {
+    const isLavsPath = req.path.includes('/lavs');
+    if (!isLavsPath) return next('route');
+    if (req.method === 'GET') return next();
+    return authMiddleware(req, res, next);
+  }, lavsRouter);
   app.use('/api/agents', authMiddleware, agentsRouter);
   app.use('/api/mcp', authMiddleware, mcpRouter);
   app.use('/api/sessions', authMiddleware, sessionsRouter);
@@ -740,11 +752,28 @@ const app: express.Express = express();
   app.use('/api/hooks', authMiddleware, hooksRouter); // Hooks management (Claude only)
   app.use('/api/platform-hooks', authMiddleware, platformHooksRouter); // Platform hooks (engine-agnostic)
   app.use('/api/media', mediaAuthRouter); // Media auth endpoints
-  app.use('/media', mediaRouter); // Remove authMiddleware - media files are now public
+  app.use('/media', mediaRouter); // Public: required for HTML preview (iframe loads images/CSS/JS dynamically)
   app.use('/api/feedback', authMiddleware, feedbackRouter); // Feedback / log upload
 
   // Error handling
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (err.type === 'entity.parse.failed') {
+      const isA2ARoute = req.originalUrl.startsWith('/a2a/');
+      if (isA2ARoute) {
+        res.status(400).json({
+          jsonrpc: '2.0',
+          id: null,
+          error: { code: -32700, message: 'Parse error: invalid JSON in request body' },
+        });
+      } else {
+        res.status(400).json({
+          error: 'Bad Request',
+          message: 'Invalid JSON in request body',
+        });
+      }
+      return;
+    }
+
     console.error('Error:', err);
     res.status(500).json({
       error: 'Internal server error',
@@ -832,7 +861,7 @@ const app: express.Express = express();
       // All other diagnostic output goes to stderr to avoid polluting the signal channel.
       process.stdout.write(`BACKEND_PORT=${PORT}\n`);
       process.stderr.write(`[System] Backend running on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}\n`);
-      process.stderr.write(`[System] Serving slides from: ${slidesDir}\n`);
+      process.stderr.write(`[System] Static assets served from frontend build\n`);
     });
 
     server.on('error', (error: NodeJS.ErrnoException) => {

@@ -136,8 +136,8 @@ describe('A2A Async Task Dispatch — New Behaviors', () => {
     });
 
     it('should skip transition if task is already running', async () => {
-      // Return a task that is already 'running'
-      mockGetTask.mockResolvedValueOnce({ id: 'already-running', status: 'running' });
+      // Return a task that is already 'running' for all getTask calls
+      mockGetTask.mockResolvedValue({ id: 'already-running', status: 'running' });
 
       const task = makeA2ATask('already-running');
       await executor.submitTask(task);

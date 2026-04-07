@@ -13,6 +13,8 @@ export interface TaskSchedule {
   cronExpression?: string;
   /** ISO 8601 timestamp for one-time execution (for 'once' type) */
   executeAt?: string;
+  /** IANA timezone for cron scheduling (e.g., 'Asia/Shanghai'). Defaults to 'Asia/Shanghai'. */
+  timezone?: string;
 }
 
 /**
@@ -176,4 +178,18 @@ export const CRON_PRESETS = [
   { label: '每天 18:00', value: '0 18 * * *' },
   { label: '每周一 9:00', value: '0 9 * * 1' },
   { label: '每月 1 日 9:00', value: '0 9 1 * *' },
+] as const;
+
+export const DEFAULT_TIMEZONE = 'Asia/Shanghai';
+
+export const TIMEZONE_OPTIONS = [
+  { value: 'Asia/Shanghai', label: 'Asia/Shanghai (UTC+8)', short: 'CST' },
+  { value: 'Asia/Tokyo', label: 'Asia/Tokyo (UTC+9)', short: 'JST' },
+  { value: 'Asia/Singapore', label: 'Asia/Singapore (UTC+8)', short: 'SGT' },
+  { value: 'Asia/Kolkata', label: 'Asia/Kolkata (UTC+5:30)', short: 'IST' },
+  { value: 'Europe/London', label: 'Europe/London (UTC+0/+1)', short: 'GMT' },
+  { value: 'Europe/Berlin', label: 'Europe/Berlin (UTC+1/+2)', short: 'CET' },
+  { value: 'America/New_York', label: 'America/New_York (UTC-5/-4)', short: 'EST' },
+  { value: 'America/Los_Angeles', label: 'America/Los_Angeles (UTC-8/-7)', short: 'PST' },
+  { value: 'UTC', label: 'UTC (UTC+0)', short: 'UTC' },
 ] as const;

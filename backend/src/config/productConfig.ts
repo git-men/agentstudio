@@ -260,14 +260,6 @@ export const FEATURE_MODULES: FeatureModule[] = [
     routePatterns: ['/api/speech-to-text'],
     frontendPaths: ['/settings/voice'],
   },
-  {
-    id: 'system.integrations',
-    name: 'External Integrations',
-    description: 'Slack webhook and other integrations',
-    category: 'system',
-    routePatterns: ['/api/slack'],
-    frontendPaths: [],
-  },
 ];
 
 // =============================================================================

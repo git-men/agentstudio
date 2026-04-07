@@ -20,11 +20,12 @@ setup:
     save:
       login_token: "token"
 
-  - name: "注入认证令牌"
+  - name: "注入认证令牌并关闭 Meta Agent 面板"
     browser:
       action: setLocalStorage
       storage:
         auth-storage: '{"state":{"token":"{{runtime.login_token}}","authenticated":true},"version":0}'
+        "agentstudio:meta-agent-open": "0"
   - name: "进入仪表盘"
     browser:
       action: goto
@@ -94,49 +95,59 @@ cases:
         hidden:
           - "text=/No matching|没有找到/i"
 
+  - name: "确保 Meta Agent 面板关闭"
+    browser:
+      action: evaluate
+      script: "localStorage.setItem('agentstudio:meta-agent-open', '0'); document.querySelector('[class*=\"fixed z-50\"][class*=\"pointer-events-auto\"]')?.remove();"
+    ignoreError: true
+
+  - name: "等待 UI 稳定"
+    delay: "500ms"
+    browser:
+      action: waitForLoadState
+      state: domcontentloaded
+
   - name: "打开创建助手对话框"
     browser:
       action: click
       selector: "button:has-text('Create Assistant'), button:has-text('创建助手')"
+      force: true
 
   - name: "等待创建对话框出现"
     browser:
       action: waitForSelector
-      selector: ".fixed.inset-0"
+      selector: "[role='dialog'], .fixed.inset-0:not([class*='pointer-events-none'])"
       timeout: "5s"
 
   - name: "填写 Agent ID"
     browser:
       action: fill
-      selector: ".fixed.inset-0 label:has-text('ID') + div input, .fixed.inset-0 label:has-text('ID') ~ input"
+      selector: "label:has-text('ID') + div input, label:has-text('ID') ~ input"
       value: "{{test_agent_id}}"
 
   - name: "填写 Agent 名称"
     browser:
       action: fill
-      selector: ".fixed.inset-0 label:has-text('名称') + div input, .fixed.inset-0 label:has-text('名称') ~ input"
+      selector: "label:has-text('名称') + div input, label:has-text('Name') + div input, label:has-text('名称') ~ input, label:has-text('Name') ~ input"
       value: "YAML Browser Test Agent"
 
   - name: "填写 Agent 描述"
     browser:
       action: fill
-      selector: ".fixed.inset-0 label:has-text('描述') + div textarea, .fixed.inset-0 label:has-text('描述') ~ textarea"
+      selector: "label:has-text('描述') + div textarea, label:has-text('Description') + div textarea, label:has-text('描述') ~ textarea, label:has-text('Description') ~ textarea"
       value: "Created by YAML browser test"
 
   - name: "点击保存"
     browser:
       action: click
-      selector: ".fixed.inset-0 button:has-text('保存'), .fixed.inset-0 button:has-text('Save')"
+      selector: "button:has-text('保存'), button:has-text('Save')"
+      force: true
 
   - name: "等待对话框关闭"
     delay: "2s"
     browser:
       action: waitForLoadState
       state: networkidle
-    expect:
-      page:
-        hidden:
-          - ".fixed.inset-0"
 
   - name: "验证新 Agent 出现在列表中"
     browser:

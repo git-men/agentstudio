@@ -395,7 +395,7 @@ class TunnelService {
     const wsUrl = cfg.websocketUrl || getWebSocketUrl(cfg.serverUrl);
 
     console.log(`[Tunnel:${tunnelId}] Connecting to ${wsUrl}...`);
-    console.log(`[Tunnel:${tunnelId}] Token: ${cfg.token.slice(0, 10)}...`);
+    console.log(`[Tunnel:${tunnelId}] Token: ${cfg.token.slice(0, 4)}***`);
     console.log(`[Tunnel:${tunnelId}] Target: ${targetUrl}`);
     if (force) console.log(`[Tunnel:${tunnelId}] Force mode enabled`);
 
@@ -526,6 +526,7 @@ class TunnelService {
           available: false,
           reason:
             errorData.reason ||
+            errorData.detail ||
             errorData.message ||
             errorData.error ||
             `检查失败: HTTP ${response.status}`,
@@ -573,13 +574,27 @@ class TunnelService {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
+        const detail =
+          typeof errorData.detail === 'string'
+            ? errorData.detail
+            : Array.isArray(errorData.detail)
+              ? errorData.detail[0]?.msg ?? JSON.stringify(errorData.detail)
+              : undefined;
+        const serverMsg =
+          errorData.reason || detail || errorData.message || errorData.error;
+
+        if (response.status === 401) {
+          return {
+            success: false,
+            error: serverMsg
+              ? `认证失败: ${serverMsg}`
+              : '隧道服务器要求认证，请在「Access Token」字段填写有效的 JWT Token',
+          };
+        }
+
         return {
           success: false,
-          error:
-            errorData.reason ||
-            errorData.message ||
-            errorData.error ||
-            `创建失败: HTTP ${response.status}`,
+          error: serverMsg || `创建失败: HTTP ${response.status}`,
         };
       }
 

@@ -1,0 +1,85 @@
+name: 文件系统安全
+sequential: true
+
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
+cases:
+  - name: "文件浏览接口正常工作"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=."
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        isDirectory: true
+        items: { exists: true }
+
+  - name: "路径穿越 (../) 回退到安全目录"
+    description: "包含 .. 的路径不会暴露上级目录内容，而是回退到用户主目录"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=../../etc"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 200
+      body:
+        isDirectory: true
+
+  - name: "敏感目录 .ssh 不暴露内容"
+    description: "请求 .ssh 时不会返回其中的文件列表"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=.ssh"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [200, 403]
+
+  - name: "敏感目录 .aws 不暴露内容"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=.aws"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [200, 403]
+
+  - name: "敏感目录 .gnupg 不暴露内容"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=.gnupg"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [200, 403]
+
+  - name: "文件浏览需要认证"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/browse?path=."
+    expect:
+      status: 401
+
+  - name: "文件读取需要认证"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/files/read?path=package.json"
+    expect:
+      status: 401

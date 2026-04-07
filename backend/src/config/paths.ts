@@ -20,7 +20,6 @@
  * │   └── speech-to-text.json
  * ├── run/                       # Runtime files (PID, instance ID)
  * ├── scripts/                   # Service management scripts (Linux)
- * ├── slack-session-locks/       # Slack session locks
  * └── scheduled-tasks/           # Scheduled tasks
  *     ├── tasks.json
  *     └── history/
@@ -54,7 +53,7 @@ export const LEGACY_AGENT_STUDIO_DIR = join(homedir(), '.agent-studio');
 export const CONFIG_DIR = join(AGENTSTUDIO_HOME, 'config');
 
 /**
- * Main application config file (port, password, JWT, CORS, Slack, etc.)
+ * Main application config file (port, password, JWT, CORS, etc.)
  * Default: ~/.agentstudio/config/config.json
  */
 export const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
@@ -176,14 +175,6 @@ export const PID_FILE = join(RUN_DIR, 'agentstudio.pid');
  * Default: ~/.agentstudio/scripts
  */
 export const SCRIPTS_DIR = join(AGENTSTUDIO_HOME, 'scripts');
-
-// ─── Slack ───────────────────────────────────────────────────────────────────
-
-/**
- * Directory for Slack session locks.
- * Default: ~/.agentstudio/slack-session-locks
- */
-export const SLACK_SESSION_LOCKS_DIR = join(AGENTSTUDIO_HOME, 'slack-session-locks');
 
 // ─── Platform Hooks ─────────────────────────────────────────────────────────
 

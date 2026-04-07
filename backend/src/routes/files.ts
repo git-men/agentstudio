@@ -23,6 +23,21 @@ const encodeProjectPath = (projectPath: string): string => {
 
 const router: express.Router = express.Router();
 
+const SENSITIVE_DIRS = new Set([
+  '.ssh', '.gnupg', '.gpg', '.aws', '.azure', '.kube', '.docker',
+  '.password-store', '.vault-token', '.credentials',
+  '.config/gcloud', '.config/op',
+]);
+
+function isSensitivePath(targetPath: string): boolean {
+  const homedir = os.homedir();
+  const rel = path.relative(homedir, targetPath);
+  if (rel.startsWith('..') || path.isAbsolute(rel)) return false;
+  const firstSegment = rel.split(path.sep)[0];
+  const firstTwo = rel.split(path.sep).slice(0, 2).join('/');
+  return SENSITIVE_DIRS.has(firstSegment) || SENSITIVE_DIRS.has(firstTwo);
+}
+
 // Get working directory (project root or specified project path)
 const getWorkingDir = (projectPath?: string) => {
   if (projectPath) {
@@ -60,7 +75,26 @@ const resolveSafePath = (filePath: string, projectPath?: string): string => {
   return resolvedPath;
 };
 
-// GET /api/files/resolve - Resolve a path (expand ~ and relative paths)
+/**
+ * @swagger
+ * /api/files/resolve:
+ *   get:
+ *     tags: [Files]
+ *     summary: 解析路径（展开 ~ 等）
+ *     parameters:
+ *       - in: query
+ *         name: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: 成功，返回 resolved 绝对路径
+ *       400:
+ *         description: 缺少 path 参数
+ *       500:
+ *         description: 解析失败
+ */
 router.get('/resolve', (req, res) => {
   try {
     const rawPath = req.query.path as string;
@@ -78,7 +112,39 @@ router.get('/resolve', (req, res) => {
   }
 });
 
-// GET /api/files/read - Read a single file
+/**
+ * @swagger
+ * /api/files/read:
+ *   get:
+ *     tags: [Files]
+ *     summary: 读取单个文件（文本或二进制流）
+ *     parameters:
+ *       - in: query
+ *         name: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: projectPath
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: binary
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *     responses:
+ *       200:
+ *         description: JSON（文本）或文件流（binary=true）
+ *       400:
+ *         description: 参数无效或路径不是文件
+ *       403:
+ *         description: 路径越权
+ *       404:
+ *         description: 文件不存在
+ *       500:
+ *         description: 读取失败
+ */
 router.get('/read', async (req, res) => {
   try {
     const { path, projectPath, binary } = req.query;
@@ -154,7 +220,37 @@ router.get('/read', async (req, res) => {
   }
 });
 
-// POST /api/files/read-multiple - Read multiple files
+/**
+ * @swagger
+ * /api/files/read-multiple:
+ *   post:
+ *     tags: [Files]
+ *     summary: 批量读取文件
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [paths]
+ *             properties:
+ *               paths:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *     responses:
+ *       200:
+ *         description: 成功，返回 files 数组
+ *       400:
+ *         description: 请求体无效
+ *       500:
+ *         description: 读取失败
+ */
 router.post('/read-multiple', async (req, res) => {
   try {
     const validation = ReadFilesSchema.safeParse(req.body);
@@ -217,7 +313,42 @@ router.post('/read-multiple', async (req, res) => {
   }
 });
 
-// PUT /api/files/write - Write to a single file (100mb limit for base64 binary uploads)
+/**
+ * @swagger
+ * /api/files/write:
+ *   put:
+ *     tags: [Files]
+ *     summary: 写入单个文件（最大约 100MB JSON）
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [path, content]
+ *             properties:
+ *               path:
+ *                 type: string
+ *               content:
+ *                 type: string
+ *               encoding:
+ *                 type: string
+ *                 enum: [utf-8, base64]
+ *     responses:
+ *       200:
+ *         description: 写入成功
+ *       400:
+ *         description: 请求体无效
+ *       403:
+ *         description: 路径越权
+ *       500:
+ *         description: 写入失败
+ */
 router.put('/write', express.json({ limit: '100mb' }), async (req, res) => {
   try {
     const validation = WriteFileSchema.safeParse(req.body);
@@ -261,7 +392,26 @@ router.put('/write', express.json({ limit: '100mb' }), async (req, res) => {
   }
 });
 
-// GET /api/files/project-id - Get project ID for a given project path
+/**
+ * @swagger
+ * /api/files/project-id:
+ *   get:
+ *     tags: [Files]
+ *     summary: 根据项目路径计算 projectId（base64url）
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 缺少 projectPath
+ *       500:
+ *         description: 计算失败
+ */
 router.get('/project-id', async (req, res) => {
   try {
     const { projectPath } = req.query;
@@ -284,7 +434,30 @@ router.get('/project-id', async (req, res) => {
 
 // ========== FILESYSTEM ROUTES MIGRATED FROM AGENTS.TS ==========
 
-// GET /api/files/browse - Browse file system
+/**
+ * @swagger
+ * /api/files/browse:
+ *   get:
+ *     tags: [Files]
+ *     summary: 浏览目录（列出子项）
+ *     parameters:
+ *       - in: query
+ *         name: path
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: showHiddenFiles
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *     responses:
+ *       200:
+ *         description: 当前路径、父路径、items 列表或单文件信息
+ *       403:
+ *         description: 敏感目录拒绝访问
+ *       500:
+ *         description: 浏览失败
+ */
 router.get('/browse', (req, res) => {
   try {
     const { path: requestedPath, showHiddenFiles } = req.query;
@@ -303,6 +476,10 @@ router.get('/browse', (req, res) => {
     // Security check: ensure path is safe; fall back to home if invalid
     if (browsePath.includes('..') || !path.isAbsolute(browsePath)) {
       browsePath = os.homedir();
+    }
+
+    if (isSensitivePath(browsePath)) {
+      return res.status(403).json({ error: 'Access to sensitive directory is denied' });
     }
     
     if (!fs.existsSync(browsePath)) {
@@ -343,7 +520,8 @@ router.get('/browse', (req, res) => {
         }
       })
       .filter(item => item !== null)
-      .filter(item => includeHidden || !item.isHidden) // Filter hidden files based on parameter
+      .filter(item => !isSensitivePath(item.path))
+      .filter(item => includeHidden || !item.isHidden)
       .sort((a, b) => {
         // Directories first, then by name
         if (a.isDirectory !== b.isDirectory) {
@@ -369,7 +547,36 @@ router.get('/browse', (req, res) => {
   }
 });
 
-// POST /api/files/create-directory - Create new directory
+/**
+ * @swagger
+ * /api/files/create-directory:
+ *   post:
+ *     tags: [Files]
+ *     summary: 创建目录
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [parentPath, directoryName]
+ *             properties:
+ *               parentPath:
+ *                 type: string
+ *               directoryName:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 创建成功
+ *       400:
+ *         description: 参数无效
+ *       404:
+ *         description: 父目录不存在
+ *       409:
+ *         description: 目录已存在
+ *       500:
+ *         description: 创建失败
+ */
 router.post('/create-directory', (req, res) => {
   try {
     const { parentPath, directoryName } = req.body;
@@ -414,7 +621,32 @@ router.post('/create-directory', (req, res) => {
   }
 });
 
-// POST /api/files/open-in-explorer - Open a folder in the system file explorer
+/**
+ * @swagger
+ * /api/files/open-in-explorer:
+ *   post:
+ *     tags: [Files]
+ *     summary: 在系统文件管理器中打开文件夹
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [folderPath]
+ *             properties:
+ *               folderPath:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: 已调用系统打开命令
+ *       400:
+ *         description: 缺少 folderPath
+ *       404:
+ *         description: 路径不存在
+ *       500:
+ *         description: 打开失败
+ */
 router.post('/open-in-explorer', (req, res) => {
   try {
     const { folderPath } = req.body;

@@ -97,23 +97,34 @@ class PluginSymlink {
 
   private async createSymlink(sourcePath: string, symlinkPath: string, type: string): Promise<void> {
     try {
-      if (fs.existsSync(symlinkPath)) {
-        const stats = fs.lstatSync(symlinkPath);
-        if (stats.isSymbolicLink()) {
+      let existingStats: fs.Stats | null = null;
+      try {
+        existingStats = fs.lstatSync(symlinkPath);
+      } catch (e: any) {
+        if (e.code !== 'ENOENT') throw e;
+      }
+
+      if (existingStats !== null) {
+        if (existingStats.isSymbolicLink()) {
           const existingTarget = fs.readlinkSync(symlinkPath);
           if (existingTarget === sourcePath) {
-            return;
+            return; // already points to correct target, idempotent skip
           }
           fs.unlinkSync(symlinkPath);
         } else {
-          console.warn(`Skipping ${type} symlink, file exists and is not a symlink: ${symlinkPath}`);
+          console.warn(`Skipping ${type} symlink, path exists and is not a symlink: ${symlinkPath}`);
           return;
         }
       }
 
       fs.symlinkSync(sourcePath, symlinkPath);
       console.log(`Created ${type} symlink: ${symlinkPath} -> ${sourcePath}`);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'EEXIST') {
+        // Last-resort guard: concurrent or race condition, idempotent ignore
+        console.warn(`Skipping ${type} symlink (EEXIST race condition): ${symlinkPath}`);
+        return;
+      }
       console.error(`Failed to create ${type} symlink at ${symlinkPath}:`, error);
       throw error;
     }
@@ -121,12 +132,17 @@ class PluginSymlink {
 
   private async removeSymlink(symlinkPath: string, type: string): Promise<void> {
     try {
-      if (fs.existsSync(symlinkPath)) {
-        const stats = fs.lstatSync(symlinkPath);
-        if (stats.isSymbolicLink()) {
-          fs.unlinkSync(symlinkPath);
-          console.log(`Removed ${type} symlink: ${symlinkPath}`);
-        }
+      let stats: fs.Stats | null = null;
+      try {
+        stats = fs.lstatSync(symlinkPath);
+      } catch (e: any) {
+        if (e.code === 'ENOENT') return; // 路径不存在，无需删除
+        throw e;
+      }
+
+      if (stats.isSymbolicLink()) {
+        fs.unlinkSync(symlinkPath);
+        console.log(`Removed ${type} symlink: ${symlinkPath}`);
       }
     } catch (error) {
       console.error(`Failed to remove ${type} symlink at ${symlinkPath}:`, error);

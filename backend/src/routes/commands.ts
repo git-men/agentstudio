@@ -188,6 +188,31 @@ async function scanCommands(dirPath: string, scope: 'project' | 'user'): Promise
 }
 
 // GET /api/commands - List all commands
+/**
+ * @swagger
+ * /api/commands:
+ *   get:
+ *     tags: [Commands]
+ *     summary: 获取斜杠命令列表
+ *     parameters:
+ *       - in: query
+ *         name: scope
+ *         schema: { type: string }
+ *       - in: query
+ *         name: namespace
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/', async (req, res) => {
   try {
     const filter: SlashCommandFilter = {
@@ -269,6 +294,30 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/commands/:id - Get specific command
+/**
+ * @swagger
+ * /api/commands/{id}:
+ *   get:
+ *     tags: [Commands]
+ *     summary: 获取单个命令
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -335,6 +384,34 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST /api/commands - Create new command
+/**
+ * @swagger
+ * /api/commands:
+ *   post:
+ *     tags: [Commands]
+ *     summary: 创建斜杠命令
+ *     parameters:
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       201:
+ *         description: 已创建
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 只读引擎
+ *       409:
+ *         description: 已存在
+ *       500:
+ *         description: 服务器错误
+ */
 router.post('/', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)
@@ -402,6 +479,40 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /api/commands/:id - Update command
+/**
+ * @swagger
+ * /api/commands/{id}:
+ *   put:
+ *     tags: [Commands]
+ *     summary: 更新斜杠命令
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: 成功
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 只读引擎
+ *       404:
+ *         description: 未找到
+ *       409:
+ *         description: 冲突
+ *       500:
+ *         description: 服务器错误
+ */
 router.put('/:id', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)
@@ -520,6 +631,32 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/commands/:id - Delete command
+/**
+ * @swagger
+ * /api/commands/{id}:
+ *   delete:
+ *     tags: [Commands]
+ *     summary: 删除斜杠命令
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: projectPath
+ *         schema: { type: string }
+ *     responses:
+ *       204:
+ *         description: 已删除
+ *       400:
+ *         description: 参数错误
+ *       403:
+ *         description: 只读引擎
+ *       404:
+ *         description: 未找到
+ *       500:
+ *         description: 服务器错误
+ */
 router.delete('/:id', async (req, res) => {
   try {
     // Check if in read-only mode (non-Claude engines)

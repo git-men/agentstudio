@@ -2,144 +2,159 @@ version: "1"
 
 project:
   name: agentstudio
-  description: "AgentStudio 完整功能性端到端测试套件"
+  description: "AgentStudio E2E 测试套件 — Docker 全栈测试"
+  version: "1.0.0"
 
 service:
   build:
+    image: agentstudio:e2e
     dockerfile: Dockerfile
     context: .
-    image: agentstudio:e2e
-
   container:
     name: agentstudio-e2e
     ports:
       - "14936:4936"
     environment:
       NODE_ENV: production
+      HOST: "0.0.0.0"
       PORT: "4936"
-      JWT_SECRET: e2e-test-secret
-      JWT_EXPIRES_IN: 365d
-      ENGINE: claude-internal-sdk
-
+    healthcheck:
+      path: /api/health
+      port: 4936
+      interval: 5s
+      timeout: 3s
+      retries: 40
+      startPeriod: 30s
   vars:
     base_url: http://localhost:14936
 
-isolation:
-  portRange: [14900, 14999]
+resilience:
+  preflight:
+    enabled: false
 
-mocks:
-  anthropic-api:
-    port: 9091
-    routes:
-      - method: POST
-        path: /v1/messages
-        response:
-          status: 200
-          headers:
-            content-type: application/json
-          body:
-            id: "msg_e2e_test"
-            type: "message"
-            role: "assistant"
-            content:
-              - type: "text"
-                text: "h"
-            model: "claude-sonnet-4-20250514"
-            stop_reason: "max_tokens"
-            usage:
-              input_tokens: 8
-              output_tokens: 1
+history:
+  enabled: true
+  storage: local
+  retention:
+    maxAge: "30d"
+    maxRuns: 200
+  flakyWindow: 10
 
 tests:
   suites:
-    # ━━━ API 测试套件（YAML Runner） ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-    - name: "健康检查与认证"
+    # ─── API 基础测试 ─────────────────────────────────────────
+    - name: 健康检查与认证
       id: health-auth
       file: tests/e2e/api/health-auth.yaml
 
-    - name: "Agent 管理 CRUD"
-      id: agents-crud
-      file: tests/e2e/api/agents-crud.yaml
-
-    - name: "项目管理 CRUD"
-      id: projects-crud
-      file: tests/e2e/api/projects-crud.yaml
-
-    - name: "MCP 服务器管理"
-      id: mcp-crud
-      file: tests/e2e/api/mcp-crud.yaml
-
-    - name: "MCP Admin 自动初始化"
-      id: mcp-admin-bootstrap
-      file: tests/e2e/api/mcp-admin-bootstrap.yaml
-
-    - name: "斜杠命令管理"
-      id: commands-crud
-      file: tests/e2e/api/commands-crud.yaml
-
-    - name: "规则管理"
-      id: rules-crud
-      file: tests/e2e/api/rules-crud.yaml
-
-    - name: "Skills 管理"
-      id: skills-crud
-      file: tests/e2e/api/skills-crud.yaml
-
-    - name: "系统设置与配置"
+    - name: 设置与配置信息
       id: settings-config
       file: tests/e2e/api/settings-config.yaml
 
-    - name: "模型供应商可用性检查"
-      id: provider-health-check
-      file: tests/e2e/api/provider-health-check.yaml
+    # ─── 资源 CRUD ────────────────────────────────────────────
+    - name: Agent CRUD 生命周期
+      id: agents-crud
+      file: tests/e2e/api/agents-crud.yaml
 
-    - name: "定时任务管理"
+    - name: 项目 CRUD 生命周期
+      id: projects-crud
+      file: tests/e2e/api/projects-crud.yaml
+
+    - name: 斜杠命令 CRUD 生命周期
+      id: commands-crud
+      file: tests/e2e/api/commands-crud.yaml
+
+    - name: 技能 CRUD 生命周期
+      id: skills-crud
+      file: tests/e2e/api/skills-crud.yaml
+
+    - name: 规则管理 CRUD 生命周期
+      id: rules-crud
+      file: tests/e2e/api/rules-crud.yaml
+
+    # ─── MCP 管理 ─────────────────────────────────────────────
+    - name: MCP 服务管理 CRUD
+      id: mcp-crud
+      file: tests/e2e/api/mcp-crud.yaml
+
+    - name: MCP Admin 自动初始化
+      id: mcp-admin-bootstrap
+      file: tests/e2e/api/mcp-admin-bootstrap.yaml
+
+    # ─── 定时任务 ──────────────────────────────────────────────
+    - name: 定时任务 CRUD 生命周期
       id: scheduler-crud
       file: tests/e2e/api/scheduler-crud.yaml
 
-    - name: "定时任务 IM 通知配置"
+    - name: 定时任务 IM 通知配置
       id: scheduler-notification
       file: tests/e2e/api/scheduler-notification.yaml
 
-    - name: "插件与市场"
+    # ─── 插件与市场 ────────────────────────────────────────────
+    - name: 插件与市场
       id: plugins-marketplace
       file: tests/e2e/api/plugins-marketplace.yaml
 
-    - name: "A2A 允许调用管理"
-      id: a2a-allow-call
-      file: tests/e2e/api/a2a-allow-call.yaml
-
-    - name: "隧道管理"
+    # ─── 隧道 ─────────────────────────────────────────────────
+    - name: 隧道列表与 CRUD 生命周期
       id: tunnel-crud
       file: tests/e2e/api/tunnel-crud.yaml
 
-    - name: "隧道连接与批量操作"
+    - name: 隧道连接与批量操作
       id: tunnel-ops
       file: tests/e2e/api/tunnel-ops.yaml
 
-    # ━━━ 浏览器测试套件（YAML Browser DSL） ━━━━━━━━━━━━━━━━━━━━━━━━━
+    # ─── A2A ──────────────────────────────────────────────────
+    - name: A2A 允许调用管理
+      id: a2a-allow-call
+      file: tests/e2e/api/a2a-allow-call.yaml
 
-    - name: "登录与认证流程"
-      id: ui-login
+    # ─── 模型供应商 ────────────────────────────────────────────
+    - name: 模型供应商可用性检查
+      id: provider-health-check
+      file: tests/e2e/api/provider-health-check.yaml
+
+    # ─── 安全验证 ──────────────────────────────────────────────
+    - name: 文件系统安全
+      id: file-security
+      file: tests/e2e/api/file-security.yaml
+
+    - name: Claude 版本管理
+      id: claude-versions
+      file: tests/e2e/api/claude-versions.yaml
+
+    # ─── 错误处理与边界 ─────────────────────────────────────────
+    - name: API 错误处理
+      id: error-handling
+      file: tests/e2e/api/error-handling.yaml
+
+    # ─── 浏览器 E2E (YAML) ──────────────────────────────────────
+    - name: 登录与认证流程
+      id: browser-login
       file: tests/e2e/browser-yaml/login.yaml
 
-    - name: "仪表盘与导航"
-      id: ui-navigation
+    - name: 导航与布局
+      id: browser-navigation
       file: tests/e2e/browser-yaml/navigation.yaml
 
-    - name: "Agent 管理界面"
-      id: ui-agents
+    - name: Agent 管理页面
+      id: browser-agents
       file: tests/e2e/browser-yaml/agents.yaml
 
-    - name: "项目管理界面"
-      id: ui-projects
+    - name: 项目管理页面
+      id: browser-projects
       file: tests/e2e/browser-yaml/projects.yaml
 
-    - name: "设置页面"
-      id: ui-settings
+    - name: 设置页面
+      id: browser-settings
       file: tests/e2e/browser-yaml/settings.yaml
 
-    - name: "后端服务自动发现"
-      id: ui-backend-detection
+    - name: 后端服务检测
+      id: browser-backend-detection
       file: tests/e2e/browser-yaml/backend-service-detection.yaml
+
+    # ─── Playwright 浏览器 E2E ───────────────────────────────
+    - name: Playwright 浏览器测试
+      id: browser-playwright
+      runner: playwright
+      config: tests/e2e/browser/playwright.config.ts

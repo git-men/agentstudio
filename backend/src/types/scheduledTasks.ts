@@ -35,6 +35,12 @@ export interface TaskSchedule {
    * Examples: "2026-01-05T14:30:00.000Z"
    */
   executeAt?: string;
+
+  /**
+   * IANA timezone for cron scheduling (e.g., 'Asia/Shanghai').
+   * Defaults to 'Asia/Shanghai' if not specified.
+   */
+  timezone?: string;
 }
 
 /**

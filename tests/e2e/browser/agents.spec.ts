@@ -4,6 +4,12 @@ const TEST_AGENT_NAME = `E2E Test Agent ${Date.now()}`;
 const EDITED_AGENT_NAME = `${TEST_AGENT_NAME} Edited`;
 
 test.describe('Agent management', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('agentstudio:meta-agent-open', '0');
+    });
+  });
+
   test('agent list page loads with table', async ({ page }) => {
     await page.goto('/agents');
     await page.waitForLoadState('networkidle');

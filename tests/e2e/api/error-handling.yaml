@@ -1,0 +1,174 @@
+name: API 错误处理
+description: "验证各类 API 的异常输入和边界情况处理"
+sequential: true
+
+setup:
+  - name: "登录获取 token"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: ""
+    expect:
+      status: 200
+      body:
+        token: { exists: true, type: string }
+    save:
+      login_token: "token"
+
+cases:
+  # ─── 认证错误 ─────────────────────────────────────────
+  - name: "无效 token 被拒绝"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "Bearer invalid-token-xxxxx"
+    expect:
+      status: 401
+
+  - name: "过期格式 token 被拒绝"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE1MDAwMDAwMDB9.invalid"
+    expect:
+      status: 401
+
+  - name: "缺少 Authorization header"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents"
+    expect:
+      status: 401
+
+  - name: "错误密码登录被拒绝"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/auth/login"
+      headers:
+        Content-Type: application/json
+      body:
+        password: "wrong-password-12345"
+    expect:
+      status: [401, 200]
+
+  # ─── Agent API 异常输入 ─────────────────────────────────
+  - name: "创建 Agent 缺少必填字段"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body: {}
+    expect:
+      status: [400, 422]
+
+  - name: "获取不存在的 Agent"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/agents/non-existent-agent-id-xxxxx"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 404
+
+  - name: "删除不存在的 Agent"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/agents/non-existent-agent-id-xxxxx"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [404, 200]
+
+  # ─── 项目 API 异常输入 ─────────────────────────────────
+  - name: "创建项目缺少名称"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/projects/create"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        agentId: "meta-agent"
+    expect:
+      status: [400, 422]
+
+  - name: "获取不存在的项目"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/projects/by-id/non-existent-project-id"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 404
+
+  # ─── MCP API 异常输入 ──────────────────────────────────
+  - name: "添加 MCP 缺少必填字段"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/mcp"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body: {}
+    expect:
+      status: [400, 422]
+
+  # ─── Claude 版本 API 异常输入 ─────────────────────────
+  - name: "创建版本缺少 alias"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/settings/claude-versions"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: application/json
+      body:
+        name: "Test"
+    expect:
+      status: 400
+
+  - name: "删除不存在的版本"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/settings/claude-versions/non-existent-id"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [400, 404]
+
+  - name: "删除系统版本被拒绝"
+    request:
+      method: DELETE
+      url: "{{config.base_url}}/api/settings/claude-versions/claude"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: [400, 403]
+
+  # ─── 不存在的路由 ──────────────────────────────────────
+  - name: "不存在的 API 路由返回 404"
+    request:
+      method: GET
+      url: "{{config.base_url}}/api/nonexistent-endpoint"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+    expect:
+      status: 404
+
+  # ─── 请求体格式错误 ───────────────────────────────────
+  - name: "非 JSON 请求体被拒绝"
+    request:
+      method: POST
+      url: "{{config.base_url}}/api/agents"
+      headers:
+        Authorization: "Bearer {{runtime.login_token}}"
+        Content-Type: text/plain
+      body: "this is not json"
+    expect:
+      status: [400, 415, 422]

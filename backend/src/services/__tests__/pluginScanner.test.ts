@@ -96,7 +96,9 @@ describe('PluginScanner', () => {
       vi.mocked(pluginPaths.listPlugins).mockReturnValue([]);
 
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        return p.toString().includes('.git') || !p.toString().includes('marketplace.json');
+        const s = p.toString();
+        if (s.includes('.agentstudio-metadata.json')) return false;
+        return s.includes('.git') || !s.includes('marketplace.json');
       });
       vi.mocked(fs.readFileSync).mockReturnValue('url = https://github.com/test/repo.git');
 

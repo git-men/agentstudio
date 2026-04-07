@@ -93,6 +93,7 @@ const TaskScheduleSchema = z.object({
   intervalMinutes: z.number().min(1).max(10080).optional(), // Max 1 week
   cronExpression: z.string().max(100).optional(),
   executeAt: z.string().optional(), // ISO 8601 timestamp for one-time execution
+  timezone: z.string().max(50).optional(), // IANA timezone (e.g., 'Asia/Shanghai')
 }).refine(
   data => {
     if (data.type === 'interval') return !!data.intervalMinutes;

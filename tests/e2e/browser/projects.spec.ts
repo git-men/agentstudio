@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Project management', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.setItem('agentstudio:meta-agent-open', '0');
+    });
+  });
+
   test('projects page loads', async ({ page }) => {
     await page.goto('/projects');
     await page.waitForLoadState('networkidle');

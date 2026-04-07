@@ -84,7 +84,6 @@ describe('resolveModule', () => {
       ['/api/mcp-admin', 'system.mcp-admin'],
       ['/api/version', 'system.versions'],
       ['/api/speech-to-text', 'system.voice'],
-      ['/api/slack', 'system.integrations'],
     ])('resolves %s → %s', (path, expected) => {
       expect(resolveModule(path)).toBe(expected);
     });

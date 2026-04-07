@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir } from 'fs/promises';
 import { dirname } from 'path';
 import { authMiddleware } from '../middleware/auth';
 import { loadConfig, clearConfigCache, CONFIG_FILE } from '../config/index';
+import { encryptSecret } from '../services/secretStore.js';
 
 const router: Router = Router();
 
@@ -21,12 +22,6 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         tokenRefreshThreshold: config.tokenRefreshThreshold,
         corsOrigins: config.corsOrigins,
         corsAllowedDomains: config.corsAllowedDomains,
-        // Slack configuration
-        slackSigningSecret: config.slackSigningSecret ? '***' : undefined,
-        slackBotToken: config.slackBotToken ? '***' : undefined,
-        slackDefaultAgentId: config.slackDefaultAgentId,
-        slackDefaultProject: config.slackDefaultProject,
-        enableSlackStreaming: config.enableSlackStreaming,
       }
     });
   } catch (error) {
@@ -103,9 +98,6 @@ router.post('/', authMiddleware, async (req, res) => {
     const allowedUpdates = [
       'port', 'host', 'adminPassword', 'jwtSecret', 'jwtExpiresIn', 
       'tokenRefreshThreshold', 'corsOrigins', 'corsAllowedDomains',
-      // Slack configuration
-      'slackSigningSecret', 'slackBotToken', 'slackDefaultAgentId', 
-      'slackDefaultProject', 'enableSlackStreaming'
     ];
     const filteredUpdates: any = {};
     
@@ -113,6 +105,11 @@ router.post('/', authMiddleware, async (req, res) => {
       if (updates[key] !== undefined) {
         filteredUpdates[key] = updates[key];
       }
+    }
+
+    // Encrypt sensitive fields before persisting
+    if (filteredUpdates.adminPassword) {
+      filteredUpdates.adminPassword = await encryptSecret(filteredUpdates.adminPassword, 'config:adminPassword');
     }
 
     // Update config
