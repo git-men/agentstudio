@@ -341,6 +341,7 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
     if (projectPath) {
       componentURL += `?projectPath=${encodeURIComponent(projectPath)}`;
     }
+
     console.log('[LAVS] Loading iframe from:', componentURL);
 
     // Create iframe
@@ -375,17 +376,9 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
             }, '*');
           });
       }
-    };
-    window.addEventListener('message', handleMessage);
-    messageHandlerCleanupRef.current = () => window.removeEventListener('message', handleMessage);
 
-    console.log('[LAVS] Iframe created, appending to DOM');
-
-    const loadPromise = new Promise<void>((resolve, reject) => {
-      iframe.onload = () => {
-        console.log('[LAVS] Iframe loaded successfully');
-
-        // Send auth token to iframe so it can make authenticated API calls
+      // Token request from iframe: resolve fresh JWT on every call
+      if (event.data.type === 'lavs-get-token') {
         try {
           const backendServices = localStorage.getItem('backend-services-storage');
           let serviceId: string | null = null;
@@ -396,13 +389,28 @@ export const LAVSViewContainer: React.FC<LAVSViewContainerProps> = ({
           const { getToken, token: legacyToken } = useAuthStore.getState();
           const tokenData = serviceId ? getToken(serviceId) : legacyToken;
           const jwt = extractToken(tokenData);
-          if (jwt && iframe.contentWindow) {
-            iframe.contentWindow.postMessage({ type: 'lavs-auth-token', token: jwt }, '*');
-          }
+          iframe.contentWindow?.postMessage({
+            type: 'lavs-token',
+            id: event.data.id,
+            token: jwt || '',
+          }, '*');
         } catch (e) {
-          console.warn('[LAVS] Failed to send auth token to iframe:', e);
+          iframe.contentWindow?.postMessage({
+            type: 'lavs-token',
+            id: event.data.id,
+            token: '',
+          }, '*');
         }
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    messageHandlerCleanupRef.current = () => window.removeEventListener('message', handleMessage);
 
+    console.log('[LAVS] Iframe created, appending to DOM');
+
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      iframe.onload = () => {
+        console.log('[LAVS] Iframe loaded successfully');
         resolve();
       };
       iframe.onerror = (err) => {
