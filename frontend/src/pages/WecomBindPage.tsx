@@ -222,7 +222,7 @@ export const WecomBindPage: React.FC = () => {
           startAuth();
           return;
         }
-        throw new Error(data.error || data.message || `HTTP ${resp.status}`);
+        throw new Error(data.message || data.error || `HTTP ${resp.status}`);
       }
 
       setProcessingSteps((prev) => prev.map((s) => ({ ...s, status: 'done' as const })));

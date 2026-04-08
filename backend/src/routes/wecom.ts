@@ -80,13 +80,31 @@ async function ensureTunnelConnected(): Promise<{ domain: string; protocol: stri
     accessToken: enterpriseToken,
   });
 
-  if (!result.success || !result.tunnelId) return null;
-
-  const newStatus = tunnelService.getStatus(result.tunnelId!);
-  if (newStatus?.connected && newStatus.domain) {
-    return { domain: newStatus.domain, protocol: 'https' };
+  if (!result.success || !result.tunnelId) {
+    console.warn('[Wecom] Tunnel auto-create failed:', result.error);
+    return null;
   }
 
+  const maxWaitMs = 15_000;
+  const pollInterval = 500;
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    const newStatus = tunnelService.getStatus(result.tunnelId!);
+    if (newStatus?.connected && newStatus.domain) {
+      return { domain: newStatus.domain, protocol: 'https' };
+    }
+    if (newStatus?.lastError) {
+      console.warn(`[Wecom] Tunnel connection error: ${newStatus.lastError}`);
+    }
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+
+  const finalStatus = tunnelService.getStatus(result.tunnelId!);
+  console.warn(
+    `[Wecom] Tunnel did not connect within ${maxWaitMs / 1000}s.`,
+    `Status: connected=${finalStatus?.connected}, lastError=${finalStatus?.lastError}`,
+  );
   return null;
 }
 
@@ -210,9 +228,13 @@ router.post('/bind', async (req: Request, res: Response) => {
     // --- Step 1: Ensure tunnel is connected (auto-provision if needed) ---
     const tunnel = await ensureTunnelConnected();
     if (!tunnel) {
+      const statuses = tunnelService.getAllStatuses();
+      const lastError = statuses.find(s => s.lastError)?.lastError;
       return res.status(400).json({
         error: 'tunnel_required',
-        message: '无法建立隧道连接。请先完成 AS Enterprise 登录，程序将自动创建并连接隧道。',
+        message: lastError
+          ? `隧道连接失败: ${lastError}`
+          : '无法建立隧道连接。请先完成 AS Enterprise 登录，程序将自动创建并连接隧道。',
       });
     }
 
