@@ -10,7 +10,10 @@ import type {
 } from '../types/skills';
 
 class SkillsAPI {
-  private baseURL = `${getApiBase()}/skills`;
+  // 使用 getter 动态获取，避免在 Tauri Desktop 模式下模块加载时 baseURL 被固化为错误地址
+  private get baseURL() {
+    return `${getApiBase()}/skills`;
+  }
 
   async getAllSkills(options?: {
     scope?: 'user' | 'project';
