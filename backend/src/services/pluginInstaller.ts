@@ -5,6 +5,7 @@ import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { pipeline } from 'stream/promises';
 import { createWriteStream } from 'fs';
+import * as tar from 'tar';
 import { pluginPaths } from './pluginPaths';
 import { pluginParser } from './pluginParser';
 import { getPluginInstaller, cleanBeforeInstall, flushMCPConfig } from './pluginInstallStrategy';
@@ -859,6 +860,21 @@ class PluginInstaller {
   }
 
   /**
+   * Extract a .zip archive to targetPath using Node.js zlib + built-in tooling.
+   * Falls back to system commands if available.
+   */
+  private async extractZip(archivePath: string, targetPath: string): Promise<void> {
+    if (process.platform === 'win32') {
+      // PowerShell Expand-Archive is always available on Windows 10+
+      await execAsync(
+        `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${targetPath.replace(/'/g, "''")}' -Force"`
+      );
+    } else {
+      await execAsync(`unzip -o "${archivePath}" -d "${targetPath}"`);
+    }
+  }
+
+  /**
    * Sanitize name for directory usage
    */
   private sanitizeName(name: string): string {
@@ -946,11 +962,15 @@ class PluginInstaller {
       // Create target directory
       fs.mkdirSync(targetPath, { recursive: true });
 
-      // Extract archive
+      // Extract archive using Node.js libraries (no system command dependency)
       if (isZip) {
-        await execAsync(`unzip -o "${archivePath}" -d "${targetPath}"`);
+        await this.extractZip(archivePath, targetPath);
       } else {
-        await execAsync(`tar -xzf "${archivePath}" -C "${targetPath}" --strip-components=1`);
+        await tar.extract({
+          file: archivePath,
+          cwd: targetPath,
+          strip: 1,
+        });
       }
 
       console.info(`[ArchiveExtract] Extracted archive to ${targetPath}`);
