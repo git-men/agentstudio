@@ -1,7 +1,8 @@
 import express from 'express';
 import * as path from 'path';
 import * as fs from 'fs';
-import { spawn, exec } from 'child_process';
+import { exec } from 'child_process';
+import spawn from 'cross-spawn';
 import { promisify } from 'util';
 import { parse as parseToml } from '@iarna/toml';
 import { MCP_SERVER_CONFIG_FILE } from '../config/paths.js';
@@ -846,7 +847,7 @@ async function validateStdioMcpServer(
     };
   }
 
-  const child = spawn(serverConfig.command, serverConfig.args, spawnOptions);
+  const child = spawn(serverConfig.command, serverConfig.args ?? [], spawnOptions);
 
   let stdout = '';
   let stderr = '';
