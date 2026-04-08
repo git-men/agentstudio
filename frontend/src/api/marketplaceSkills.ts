@@ -72,7 +72,9 @@ export interface BatchToggleResult {
 // ============================================
 
 class MarketplaceSkillsAPI {
-  private baseURL = `${getApiBase()}/marketplace-skills`;
+  private get baseURL() {
+    return `${getApiBase()}/marketplace-skills`;
+  }
 
   /**
    * Get all marketplace skills grouped by plugin.
