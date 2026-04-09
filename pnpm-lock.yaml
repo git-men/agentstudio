@@ -159,8 +159,8 @@ importers:
         specifier: ^7.5.13
         version: 7.5.13
       tunely:
-        specifier: ^0.2.1
-        version: 0.2.1
+        specifier: ^0.2.2
+        version: 0.2.2
       undici:
         specifier: ^7.16.0
         version: 7.16.0
@@ -4006,7 +4006,7 @@ packages:
 
   glob@7.1.6:
     resolution: {integrity: sha512-LwaxwyZ72Lk7vZINtNNrywX0ZuLyStrdDtabefZKAY5ZGJhVtgdznluResxNmPitE0SAO+O26sWTHeKSI2wMBA==}
-    deprecated: Glob versions prior to v9 are no longer supported
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   globals@14.0.0:
     resolution: {integrity: sha512-oahGvuMGQlPw/ivIYBjVSrWAfWLBeku5tpPE2fOPLi+WHffIWbuh2tCjhyQhTBPMf5E9jDEH4FOmTYgYwbKwtQ==}
@@ -5942,8 +5942,8 @@ packages:
     engines: {node: '>=18.0.0'}
     hasBin: true
 
-  tunely@0.2.1:
-    resolution: {integrity: sha512-JdOG1o458nm2MdD9XjsAik3mxJNS1Yok6IzV2GL3mXzYIPe/oXlFkX92PIRn/oYER8YjSk/bxIuLzIGocXncjA==}
+  tunely@0.2.2:
+    resolution: {integrity: sha512-yVu9oqXvI/VLT68VFcNqgl4hwA0m0+fQFUB6WoQrsNpnFpAd8KSTfVuFynLtzmbgrG6Qnf1l29GMBrIYnkX75Q==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -5982,6 +5982,10 @@ packages:
 
   undici@7.16.0:
     resolution: {integrity: sha512-QEg3HPMll0o3t2ourKwOeUAZ159Kn9mx5pnzHRQO8+Wixmh88YdZRiIwat0iNzNNXn0yoEtXJqFpyW7eM8BV7g==}
+    engines: {node: '>=20.18.1'}
+
+  undici@7.24.7:
+    resolution: {integrity: sha512-H/nlJ/h0ggGC+uRL3ovD+G0i4bqhvsDOpbDv7At5eFLlj2b41L8QliGbnl2H7SnDiYhENphh1tQFJZf+MyfLsQ==}
     engines: {node: '>=20.18.1'}
 
   unified@11.0.5:
@@ -12407,9 +12411,10 @@ snapshots:
     optionalDependencies:
       fsevents: 2.3.3
 
-  tunely@0.2.1:
+  tunely@0.2.2:
     dependencies:
       commander: 12.1.0
+      undici: 7.24.7
       ws: 8.19.0
     transitivePeerDependencies:
       - bufferutil
@@ -12452,6 +12457,8 @@ snapshots:
   undici-types@6.21.0: {}
 
   undici@7.16.0: {}
+
+  undici@7.24.7: {}
 
   unified@11.0.5:
     dependencies:

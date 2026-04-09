@@ -72,7 +72,7 @@
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1",
     "tar": "^7.5.13",
-    "tunely": "^0.2.1",
+    "tunely": "^0.2.2",
     "undici": "^7.16.0",
     "uuid": "^9.0.1",
     "zod": "^4.3.6"
