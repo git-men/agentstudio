@@ -23,6 +23,8 @@ const router: RouterType = Router();
  * Port 8083 is the FastAPI application port; port 80 is NGINX.
  */
 const DEFAULT_DISPATCH_DIRECT = 'http://21.6.243.90:8083';
+const DEFAULT_DISPATCH_SERVER = 'https://agentstudio.woa.com';
+const DEFAULT_DISPATCH_WS = 'ws://21.6.243.90:8083/ws/tunnel';
 
 function getDispatchClient(): { baseUrl: string; headers: Record<string, string> } | null {
   const configs = tunnelService.getAllConfigs();
@@ -65,15 +67,70 @@ function getDispatchAdminClient(): { baseUrl: string; headers: Record<string, st
   return { baseUrl, headers };
 }
 
-function getConnectedTunnel(): { domain: string; protocol: string } | null {
+async function ensureTunnelConnected(): Promise<{ domain: string; protocol: string } | null> {
   const statuses = tunnelService.getAllStatuses();
-  const configs = tunnelService.getAllConfigs();
+  const tunnelConfigs = tunnelService.getAllConfigs();
   const status = statuses[0];
-  const config = configs[0];
+  const config = tunnelConfigs[0];
 
   if (status?.connected && status.domain) {
     return { domain: status.domain, protocol: (config as any)?.protocol || 'https' };
   }
+
+  const existingCfg = tunnelConfigs.find(c => c.token);
+  if (existingCfg) {
+    try {
+      await tunnelService.connect(existingCfg.id, true);
+      const refreshed = tunnelService.getStatus(existingCfg.id);
+      if (refreshed?.connected && refreshed.domain) {
+        return { domain: refreshed.domain, protocol: existingCfg.protocol || 'https' };
+      }
+    } catch {
+      // fall through to auto-create
+    }
+  }
+
+  const enterpriseToken = enterpriseAuthService.getToken();
+  if (!enterpriseToken) return null;
+
+  const serverUrl = config?.serverUrl || DEFAULT_DISPATCH_SERVER;
+  const tunnelName = `wechat-auto-${Date.now().toString(36)}`;
+
+  const result = await tunnelService.createAndSave({
+    name: tunnelName,
+    serverUrl,
+    label: '微信自动隧道',
+    autoConnect: true,
+    protocol: 'https',
+    websocketUrl: (config as any)?.websocketUrl || DEFAULT_DISPATCH_WS,
+    accessToken: enterpriseToken,
+  });
+
+  if (!result.success || !result.tunnelId) {
+    console.warn('[WeChat] Tunnel auto-create failed:', result.error);
+    return null;
+  }
+
+  const maxWaitMs = 15_000;
+  const pollInterval = 500;
+  const deadline = Date.now() + maxWaitMs;
+
+  while (Date.now() < deadline) {
+    const newStatus = tunnelService.getStatus(result.tunnelId!);
+    if (newStatus?.connected && newStatus.domain) {
+      return { domain: newStatus.domain, protocol: 'https' };
+    }
+    if (newStatus?.lastError) {
+      console.warn(`[WeChat] Tunnel connection error: ${newStatus.lastError}`);
+    }
+    await new Promise(r => setTimeout(r, pollInterval));
+  }
+
+  const finalStatus = tunnelService.getStatus(result.tunnelId!);
+  console.warn(
+    `[WeChat] Tunnel did not connect within ${maxWaitMs / 1000}s.`,
+    `Status: connected=${finalStatus?.connected}, lastError=${finalStatus?.lastError}`,
+  );
   return null;
 }
 
@@ -85,7 +142,13 @@ router.get('/preflight', async (_req: Request, res: Response) => {
   try {
     const isAuth = enterpriseAuthService.isAuthenticated();
     const profile = enterpriseAuthService.getProfile();
-    const tunnel = getConnectedTunnel();
+    const configs = tunnelService.getAllConfigs();
+    const serverUrl = configs[0]?.serverUrl || '';
+    const hasToken = !!configs[0]?.token;
+
+    const statuses = tunnelService.getAllStatuses();
+    const tunnelConnected = statuses.length > 0 && statuses[0].connected;
+    const tunnelDomain = statuses[0]?.domain || null;
 
     res.json({
       auth: {
@@ -94,8 +157,12 @@ router.get('/preflight', async (_req: Request, res: Response) => {
         email: profile?.email,
       },
       tunnel: {
-        connected: !!tunnel,
-        domain: tunnel?.domain || null,
+        configured: !!serverUrl,
+        connected: tunnelConnected,
+        domain: tunnelDomain,
+        server_url: serverUrl,
+        has_token: hasToken,
+        can_auto_provision: isAuth && !!(serverUrl || DEFAULT_DISPATCH_SERVER),
       },
     });
   } catch (error) {
@@ -130,15 +197,19 @@ router.post('/bind', async (req: Request, res: Response) => {
     });
   }
 
-  const tunnel = getConnectedTunnel();
-  if (!tunnel) {
-    return res.status(400).json({
-      error: 'tunnel_required',
-      message: '隧道未连接，请确保隧道已建立',
-    });
-  }
-
   try {
+    // --- Ensure tunnel is connected (auto-provision if needed) ---
+    const tunnel = await ensureTunnelConnected();
+    if (!tunnel) {
+      const statuses = tunnelService.getAllStatuses();
+      const lastError = statuses.find(s => s.lastError)?.lastError;
+      return res.status(400).json({
+        error: 'tunnel_required',
+        message: lastError
+          ? `隧道连接失败: ${lastError}`
+          : '无法建立隧道连接。请先完成 AS Enterprise 登录，程序将自动创建并连接隧道。',
+      });
+    }
     const projectId = `proj_${Buffer.from(project_path)
       .toString('base64')
       .replace(/[+/=]/g, '')

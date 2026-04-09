@@ -40,7 +40,14 @@ interface BindResult {
 
 interface PreflightData {
   auth: { ready: boolean; name?: string; email?: string };
-  tunnel: { connected: boolean; domain: string | null };
+  tunnel: {
+    configured: boolean;
+    connected: boolean;
+    domain: string | null;
+    server_url: string;
+    has_token?: boolean;
+    can_auto_provision?: boolean;
+  };
 }
 
 interface ProcessingStep {
@@ -352,7 +359,9 @@ export const QQBotBindPage: React.FC = () => {
                     隧道未连接
                   </p>
                   <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-                    请先在设置中配置并连接隧道，确保外部能访问本地 Agent。
+                    {preflight.tunnel.can_auto_provision
+                      ? '点击绑定时将自动创建并连接隧道，无需手动配置。'
+                      : '需要先在设置中配置隧道连接，确保外部能访问本地 Agent。'}
                   </p>
                 </div>
               </div>

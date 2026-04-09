@@ -34,7 +34,14 @@ interface BindResult {
 
 interface PreflightData {
   auth: { ready: boolean; name?: string; email?: string };
-  tunnel: { connected: boolean; domain: string | null };
+  tunnel: {
+    configured: boolean;
+    connected: boolean;
+    domain: string | null;
+    server_url: string;
+    has_token?: boolean;
+    can_auto_provision?: boolean;
+  };
 }
 
 function CopyField({ label, value }: { label: string; value: string }) {
@@ -457,14 +464,16 @@ export const WechatBindPage: React.FC = () => {
               </div>
             )}
 
-            {/* Tunnel + dispatch status */}
+            {/* Tunnel status banner */}
             {preflight && preflight.auth.ready && !preflight.tunnel.connected && (
               <div className="mb-4 flex items-start gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700/50 rounded-xl">
                 <AlertCircle className="w-5 h-5 text-blue-500 shrink-0 mt-0.5" />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-blue-800 dark:text-blue-200">隧道未连接</p>
                   <p className="text-xs text-blue-600 dark:text-blue-300 mt-1">
-                    请先在设置中配置并连接隧道，确保外部能访问本地 Agent。
+                    {preflight.tunnel.can_auto_provision
+                      ? '点击绑定时将自动创建并连接隧道，无需手动配置。'
+                      : '需要先在设置中配置隧道连接，确保外部能访问本地 Agent。'}
                   </p>
                 </div>
               </div>
